@@ -34,12 +34,6 @@ const INDEXES = [
   },
   {
     collection: "orders",
-    spec: { createdAt: -1 },
-    options: { name: "recent" },
-    why: "The admin orders list sorts every order by date. Without this it is a full collection scan plus an in-memory sort.",
-  },
-  {
-    collection: "orders",
     spec: { orderId: 1 },
     options: { unique: true, name: "orderId_unique" },
     why: "Order lookup and tracking resolve by the human-readable order id.",

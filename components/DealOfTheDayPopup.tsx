@@ -34,9 +34,9 @@ export default function DealOfTheDayPopup() {
     let timer: ReturnType<typeof setTimeout>
 
     fetchWithCache(
-      "products-card",
+      "products",
       async () => {
-        const r = await fetch("/api/products?fields=card")
+        const r = await fetch("/api/products")
         if (!r.ok) throw new Error("Failed to fetch products")
         return r.json()
       },

@@ -115,8 +115,8 @@ export default function HomeContent() {
 
     const fetchCatalogRails = async () => {
       try {
-        const products = await fetchWithCache("products-card", async () => {
-          const res = await fetch('/api/products?fields=card')
+        const products = await fetchWithCache("products", async () => {
+          const res = await fetch('/api/products')
           if (!res.ok) throw new Error("Failed to fetch products")
           return res.json()
         }, DATA_TTL)

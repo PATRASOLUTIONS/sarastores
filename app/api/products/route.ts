@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getAll, create, COLLECTIONS, findOne, update, count } from "@/lib/db-service"
+import { getAll, create, COLLECTIONS, findOne, update } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { generateProductSlug } from "@/utils/slug"
@@ -9,18 +9,9 @@ interface ProductFilter {
   category?: string
   featured?: boolean
   sku?: string
-  $or?: Record<string, unknown>[]
-  $and?: Record<string, unknown>[]
+  $or?: Record<string, string>[]
   active?: boolean
 }
-
-// Upper bound on any single response. Measured at 10,000 products, an unbounded
-// response is 17.9 MB raw / 6.1 MB with `fields=card` — both over Vercel's 4.5 MB
-// serverless response limit, which is a hard 500 rather than a slow page.
-const MAX_LIMIT = 1000
-// Applied when the caller does not ask for a limit. ~0.3 MB at `fields=card`.
-// Callers that need the whole catalogue must page with `skip`.
-const DEFAULT_LIMIT = 500
 
 interface ProductRecord {
   id?: string
@@ -86,35 +77,9 @@ export async function GET(request: NextRequest) {
       filter.active = true
     }
 
-    // Search runs in MongoDB, not in Node. It used to fetch the whole
-    // collection and Array.filter() it, which also meant `?search=x&limit=6`
-    // limited to the first 6 documents *before* filtering and so almost always
-    // returned nothing. A case-insensitive regex keeps the substring semantics
-    // the header autocomplete depends on ("sam" -> "Samsung"), which the
-    // `product_search` text index cannot do.
-    const searchTerm = search?.trim()
-    if (searchTerm) {
-      const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      const matches = { $regex: escaped, $options: "i" }
-      const searchOr = [{ name: matches }, { description: matches }]
-      if (filter.$or) {
-        filter.$and = [{ $or: filter.$or }, { $or: searchOr }]
-        delete filter.$or
-      } else {
-        filter.$or = searchOr
-      }
-    }
-
-    const parsedLimit = limit ? Number.parseInt(limit, 10) : 0
-    const parsedSkip = Number.parseInt(searchParams.get("skip") ?? "", 10)
-    const effectiveLimit =
-      Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, MAX_LIMIT) : DEFAULT_LIMIT
-    const skip = Number.isFinite(parsedSkip) && parsedSkip > 0 ? parsedSkip : 0
-
-    const options: { limit?: number; skip?: number; projection?: Record<string, 1> } = {
-      limit: effectiveLimit,
-      skip,
-    }
+    const limitNum = limit ? Number.parseInt(limit) : 0
+    const options: { limit?: number; projection?: Record<string, 1> } = {}
+    if (limitNum > 0) options.limit = limitNum
 
     // `fields=card` serves listing pages: every field a product card renders and
     // nothing else. Omitting `raw`, `description` and `technical_details` cuts the
@@ -132,7 +97,6 @@ export async function GET(request: NextRequest) {
     }
 
     const products = await getAll(COLLECTIONS.PRODUCTS, filter, options)
-    const total = await count(COLLECTIONS.PRODUCTS, filter)
 
     const productsWithMrp = (products || []).map((prod: ProductRecord) => {
       try {
@@ -154,17 +118,19 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(productsWithMrp, {
+    let filteredProducts = productsWithMrp
+    if (search) {
+      const searchLower = search.toLowerCase()
+      filteredProducts = productsWithMrp.filter(
+        (product: ProductRecord) =>
+          product.name?.toLowerCase().includes(searchLower) ||
+          (product.description && String(product.description).toLowerCase().includes(searchLower)),
+      )
+    }
+
+    return NextResponse.json(filteredProducts, {
       headers: {
-        // Inactive products are staff-only, so that response must never land in
-        // a shared CDN cache.
-        'Cache-Control': includeInactive
-          ? 'private, no-store'
-          : 'public, s-maxage=60, stale-while-revalidate=300',
-        // The body is a bare array, so paging metadata has to travel in headers.
-        'X-Total-Count': String(total),
-        'X-Returned-Count': String(productsWithMrp.length),
-        'X-Has-More': String(skip + productsWithMrp.length < total),
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },
     })
   } catch (error) {

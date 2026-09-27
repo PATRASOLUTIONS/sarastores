@@ -38,26 +38,7 @@
       ]
     },
     {
-      "source": "/api/products/:path(export|bulk|upload-excel|activate-all|google-sheet-price-sync|specifications/export|specifications/upload)(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "private, no-store"
-        }
-      ]
-    },
-    {
-      "source": "/api/products",
-      "missing": [{ "type": "query", "key": "include_inactive" }],
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=60, stale-while-revalidate=300"
-        }
-      ]
-    },
-    {
-      "source": "/api/products/:path((?!(?:export|bulk|upload-excel|activate-all|google-sheet-price-sync|specifications/(?:export|upload))).*)",
+      "source": "/api/products(.*)",
       "missing": [{ "type": "query", "key": "include_inactive" }],
       "headers": [
         {
@@ -77,16 +58,25 @@
       ]
     },
     {
-      "source": "/api/:path(categories|sub-categories|brands|brand-logos|home-components)(.*)",
+      "source": "/api/categories(.*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, s-maxage=120, stale-while-revalidate=600"
+          "value": "public, s-maxage=120, stale-while-revalidate=300"
         }
       ]
     },
     {
-      "source": "/api/:path(settings|footer|theme|hero-slides|posters|poster|advertisements|product-advertisements|product-slides|listing-banners|split-cards|animated-banner|featured-products|offers|offer-products|testimonials|articles|campaign-pages|content|stores|razorpay)(.*)",
+      "source": "/api/home-components",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=120, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/settings",
       "headers": [
         {
           "key": "Cache-Control",
@@ -95,16 +85,7 @@
       ]
     },
     {
-      "source": "/api/:path(india|blocked-pincodes)(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=3600, stale-while-revalidate=86400"
-        }
-      ]
-    },
-    {
-      "source": "/api/:path((?!(?:products|categories|sub-categories|brands|brand-logos|home-components|settings|footer|theme|hero-slides|posters|poster|advertisements|product-advertisements|product-slides|listing-banners|split-cards|animated-banner|featured-products|offers|offer-products|testimonials|articles|campaign-pages|content|stores|razorpay|india|blocked-pincodes|media|search)(?:/|$)).*)",
+      "source": "/api/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

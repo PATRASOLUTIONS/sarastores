@@ -28,12 +28,10 @@ export default function DealsOfTheDay() {
 
   useEffect(() => {
     let cancelled = false
-    // Same key and projection as the homepage rails, so this reuses that payload
-    // instead of pulling the full 1.7 MB catalogue a second time.
     fetchWithCache(
-      "products-card",
+      "products",
       async () => {
-        const r = await fetch("/api/products?fields=card")
+        const r = await fetch("/api/products")
         if (!r.ok) throw new Error("Failed to fetch products")
         return r.json()
       },
