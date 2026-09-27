@@ -14,7 +14,6 @@ import {
   getStoreSettings,
 } from "@/lib/jsonld-store"
 import { getOriginFromHeaders } from "@/lib/seo-metadata"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 
 export async function SiteJsonLd() {
   const [origin, settings] = await Promise.all([
@@ -33,15 +32,15 @@ export async function SiteJsonLd() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(org) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(org) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(site) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(site) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(business) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(business) }}
       />
     </>
   )

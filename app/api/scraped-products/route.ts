@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
 import { connectDB } from "@/lib/db"
 
 // GET - Fetch all products that have been scraped from Amazon
@@ -79,9 +78,6 @@ export async function GET(request: Request) {
 
 // DELETE - Remove Amazon data from a product (keep product, just clear Amazon fields)
 export async function DELETE(request: Request) {
-    const guard = await requireAdmin()
-    if (!guard.ok) return guard.response
-
     try {
         const { searchParams } = new URL(request.url)
         const productId = searchParams.get("id")

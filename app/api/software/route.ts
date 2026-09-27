@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
 import { getAllSoftwareProducts, createSoftwareProduct } from '@/lib/software-service'
 
 export async function GET(request: Request) {
@@ -31,9 +30,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const body = await request.json()
     

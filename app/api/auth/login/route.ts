@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { connectToDatabase } from "@/lib/mongodb"
+import bcrypt from "bcryptjs"
 import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
-import { buildSessionPayload, verifyCredentials } from "@/lib/auth-credentials"
 import { LoginSchema } from "@/lib/validation"
 
 export async function POST(request: NextRequest) {
@@ -63,11 +64,56 @@ export async function POST(request: NextRequest) {
 
     // Authenticate against database. DB/network failures are a genuine 500;
     // they must NOT be reported to the user as invalid credentials.
-    const credentials = await verifyCredentials(email, password)
-    if (!credentials.ok) {
-      return NextResponse.json({ message: credentials.message }, { status: credentials.status })
+    let user: any = null
+    let usersCollection: any = null
+    try {
+      const conn = await connectToDatabase()
+      usersCollection = conn.db.collection("users")
+      user = await usersCollection.findOne({ email: email.toLowerCase() })
+    } catch (dbError) {
+      console.error("Database authentication error:", dbError)
+      return NextResponse.json(
+        { message: "Unable to reach the authentication service. Please try again." },
+        { status: 503 },
+      )
     }
-    const userResponse = credentials.user
+
+    // Validate credentials
+    const isPasswordValid =
+      !!user && (await bcrypt.compare(password, user.password))
+
+    if (!user || !isPasswordValid) {
+      return NextResponse.json({ message: "Invalid email or password" }, { status: 401 })
+    }
+
+    if (user.status === "inactive") {
+      return NextResponse.json({ message: "This staff account is inactive" }, { status: 403 })
+    }
+
+    // Update last login (best-effort; never block login on this)
+    try {
+      await usersCollection.updateOne(
+        { _id: user._id },
+        { $set: { lastLogin: new Date(), updatedAt: new Date() } },
+      )
+    } catch (updateError) {
+      console.warn("[Auth] Failed to update lastLogin", updateError)
+    }
+
+    // Create user object without password
+    const userResponse = {
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role || "user",
+      emailVerified: user.emailVerified || false,
+      createdAt: user.createdAt,
+      avatar: user.avatar || null,
+      phone: user.phone || null,
+      address: user.address || null,
+      dashboardAccess: !!user.dashboardAccess,
+      allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
+    }
 
     const response = NextResponse.json({
       message: "Login successful",
@@ -76,7 +122,47 @@ export async function POST(request: NextRequest) {
 
     // Authoritative, tamper-proof session — signed and httpOnly so it
     // cannot be read or forged by client-side JavaScript / XSS.
-    const sessionToken = await createSessionToken(buildSessionPayload(userResponse))
+    // Limit allowedPages length to avoid oversized cookies which some
+    // browsers will silently reject. Also truncate each entry to a
+    // reasonable max length. If the payload is still large, drop
+    // allowedPages entirely as a last resort.
+    const rawAllowed = Array.isArray(userResponse.allowedPages)
+      ? userResponse.allowedPages
+      : []
+    const safeAllowed = rawAllowed
+      .map((p) => String(p).slice(0, 200)) // limit string length
+      .filter(Boolean)
+      .slice(0, 200) // limit number of entries
+
+    const payloadCandidate = {
+      id: userResponse.id,
+      email: userResponse.email,
+      name: String(userResponse.name || "").slice(0, 80),
+      role: userResponse.role as any,
+      dashboardAccess: userResponse.dashboardAccess,
+      allowedPages: safeAllowed,
+    }
+
+    // If the serialized payload is too large, warn and omit allowedPages.
+    // Browsers cap a single cookie at ~4096 bytes (name + value). The signed
+    // token is base64url(payload) + "." + signature, and base64 inflates the
+    // payload by ~33%, so a JSON payload over ~2500 chars can produce a cookie
+    // that exceeds the limit and is SILENTLY DROPPED by the browser — which
+    // logs the user out on the very next request (the "I logged in but every
+    // protected page bounces me to the home page" symptom for admin/staff
+    // accounts with many allowedPages). Keep the threshold conservative.
+    try {
+      const size = JSON.stringify(payloadCandidate).length
+      if (size > 2500) {
+        console.warn("[Auth] Session payload too large; omitting allowedPages", { size })
+        payloadCandidate.allowedPages = []
+      }
+    } catch (err) {
+      // Ignore JSON errors; proceed without allowedPages
+      payloadCandidate.allowedPages = []
+    }
+
+    const sessionToken = await createSessionToken(payloadCandidate)
 
     // Resolve a sane cookie domain. In production, if COOKIE_DOMAIN is not
     // set explicitly, we still want the cookie to be sent to subdomains

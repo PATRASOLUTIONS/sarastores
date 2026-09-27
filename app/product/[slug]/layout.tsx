@@ -1,8 +1,8 @@
 // 'use server'
 
 import { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { connectToDatabase } from '@/lib/mongodb'
-import { getOriginFromHeaders } from '@/lib/seo-metadata'
 import { cleanProductName, cleanProductDescription } from '@/utils/cleanProductName'
 import { ProductJsonLdServer } from './ProductJsonLdServer'
 
@@ -69,8 +69,14 @@ async function getSettings() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
 
-  // Absolute URLs matter here — WhatsApp and other crawlers ignore relative ones.
-  const origin = await getOriginFromHeaders()
+  // Get origin from headers for accurate URL (important for WhatsApp crawlers)
+  const hdrs = await headers()
+  const host = hdrs.get('x-forwarded-host') || hdrs.get('host')
+  const proto = hdrs.get('x-forwarded-proto') || 'https'
+  const origin = host
+    ? `${proto}://${host}`
+    : (process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'))
 
   try {
     const [product, settings] = await Promise.all([
@@ -242,7 +248,13 @@ export default async function ProductLayout({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const origin = await getOriginFromHeaders()
+  const hdrs = await headers()
+  const host = hdrs.get('x-forwarded-host') || hdrs.get('host')
+  const proto = hdrs.get('x-forwarded-proto') || 'https'
+  const origin = host
+    ? `${proto}://${host}`
+    : (process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'))
 
   return (
     <>

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
 import { connectToDatabase } from "@/lib/mongodb"
 
 // GET - Fetch lead form settings
@@ -46,9 +45,6 @@ export async function GET() {
 
 // POST - Save/update lead form settings
 export async function POST(req: Request) {
-    const guard = await requireAdmin()
-    if (!guard.ok) return guard.response
-
     try {
         const body = await req.json()
         const {

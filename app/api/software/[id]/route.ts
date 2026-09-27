@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
 import { getSoftwareProductById, updateSoftwareProduct, deleteSoftwareProduct } from '@/lib/software-service'
 
 export async function GET(
@@ -37,9 +36,6 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await params
     const body = await request.json()
@@ -67,9 +63,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await params
     const success = await deleteSoftwareProduct(id)

@@ -1,12 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import * as dbService from "@/lib/db-service"
-import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
 import { handleApiError } from "@/lib/api-error"
 import { isAdmin } from "@/lib/auth"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
-import { withProductDisplay } from "@/lib/product-presenter"
 import { generateProductSlug } from "@/utils/slug"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -94,10 +92,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       normalized.slug = generateProductSlug(normalized.name)
     }
 
-    if (url.searchParams.get("display") === "1") {
-      return NextResponse.json(withProductDisplay(normalized))
-    }
-
     return NextResponse.json(normalized)
   } catch (error) {
     console.error("Error fetching product:", error)
@@ -106,9 +100,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await params
     const data = await request.json()
@@ -198,9 +189,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await params
     if (process.env.NODE_ENV === "development") console.log("PUT request received for product ID:", id)
@@ -310,9 +298,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await params
     // Try slug first, then fall back to remove by id

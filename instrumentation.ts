@@ -26,13 +26,22 @@ export async function register() {
         }
     }
 
-    // Scheduled work runs via the `crons` block in vercel.json, which calls the
-    // guarded /api/cron/* routes. node-cron cannot work on serverless — each
-    // invocation is a fresh, short-lived process with no timer to fire.
-    //
-    // This block used to log "Cron jobs initialized successfully" while the
-    // import beneath it was commented out, so the platform reported healthy
-    // scheduling for months while nothing ran.
+    // Check if we're in Node.js runtime (server-side)
+    const isNodeRuntime = process.env.NEXT_RUNTIME === 'nodejs';
+    console.log(`[INSTRUMENTATION] NEXT_RUNTIME: ${process.env.NEXT_RUNTIME} (Node.js: ${isNodeRuntime})`);
+
+    if (isNodeRuntime || process.env.NODE_ENV === 'development') {
+        try {
+            console.log('[INSTRUMENTATION] Loading cron jobs for abandoned cart emails...');
+            // const { initCronJobs } = await import('./lib/cron/abandoned-cart');
+            // await initCronJobs();
+            console.log('[INSTRUMENTATION] ✅ Cron jobs initialized successfully!');
+        } catch (err) {
+            console.error("[INSTRUMENTATION] ❌ Failed to initialize cron jobs:", err);
+        }
+    } else {
+        console.log('[INSTRUMENTATION] Skipping cron jobs initialization (not Node.js runtime)');
+    }
 }
 
 

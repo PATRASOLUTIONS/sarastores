@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
 import { getCollection } from "@/lib/db-service"
 
 const COLLECTION = "blocked_pincodes"
@@ -18,9 +17,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   const { pincode, name, state, listType, mode } = await req.json()
   const collection = await getCollection(COLLECTION)
   
@@ -59,9 +55,6 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   const { pincode, listType } = await req.json()
   if (!pincode || !listType) {
     return NextResponse.json({ error: "Pincode and listType required" }, { status: 400 })

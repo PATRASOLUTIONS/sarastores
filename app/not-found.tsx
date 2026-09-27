@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 
 export default function NotFound() {
   return (
@@ -7,7 +6,7 @@ export default function NotFound() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: safeJsonLd({
+          __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebPage",
             name: "Page Not Found",

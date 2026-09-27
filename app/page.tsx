@@ -1,5 +1,4 @@
 import SaraLanding from "@/components/home/SaraLanding"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 
 const FAQ_JSON_LD = {
   "@context": "https://schema.org",
@@ -54,7 +53,7 @@ export default function Home() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: safeJsonLd(FAQ_JSON_LD),
+          __html: JSON.stringify(FAQ_JSON_LD),
         }}
       />
 

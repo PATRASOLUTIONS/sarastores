@@ -6,7 +6,6 @@ import { requireAdmin, checkAdminAuthorization, getSession } from "@/lib/auth"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
 import { rebuildCustomerProfile, recordEvent, EARNING_STATUSES } from "@/lib/customer-profile"
 import { awardPointsForOrder, reverseOrderPoints } from "@/lib/loyalty"
-import { notifyOrderStatus } from "@/lib/push"
 
 // Get a specific order
 export async function GET(
@@ -286,15 +285,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       } catch (emailError) {
         emailSent = false
         console.error("Order status notification failed:", emailError)
-      }
-
-      // Push is best-effort and must never fail the status update.
-      if (existingOrder.userId) {
-        void notifyOrderStatus(
-          String(existingOrder.userId),
-          String(existingOrder.orderId || id),
-          updateData.status,
-        )
       }
     }
 

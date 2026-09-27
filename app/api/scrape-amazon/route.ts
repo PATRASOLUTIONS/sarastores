@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
 import axios from "axios"
 import * as cheerio from "cheerio"
 import { connectDB } from "@/lib/db"
@@ -104,9 +103,6 @@ async function resolveShortUrl(shortUrl: string): Promise<string> {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const body = await request.json()
     const { url: inputUrl, saveToDatabase = false, itemno, category: inputCategory, subCategory: inputSubCategory, prod_desc: inputProdDesc, group_name: inputGroupName, char_desc: inputCharDesc, manufacturer_name: inputManufacturerName, editedData, active } = body

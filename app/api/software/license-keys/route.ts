@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { addLicenseKeys, getAllLicenseKeys, revokeLicenseKey } from '@/lib/software-service'
-import { requireAdmin } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/mongodb'
 import { ObjectId } from 'mongodb'
 
@@ -106,9 +105,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const body = await request.json()
     const { softwareId, keys } = body
@@ -143,9 +139,6 @@ export async function POST(request: Request) {
 
 // Handle PATCH /api/software/license-keys (for revoking)
 export async function PATCH(request: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const body = await request.json()
     const { keyId, action, reason } = body

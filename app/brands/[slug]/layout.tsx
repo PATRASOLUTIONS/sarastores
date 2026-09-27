@@ -1,7 +1,16 @@
 import { Metadata } from 'next'
 import { connectToDatabase } from '@/lib/mongodb'
-import { getOriginFromHeaders } from '@/lib/seo-metadata'
+import { headers } from 'next/headers'
 import { BrandJsonLdServer } from './BrandJsonLdServer'
+
+function getOrigin(hdrs: Headers): string {
+  const host = hdrs.get('x-forwarded-host') || hdrs.get('host')
+  const proto = hdrs.get('x-forwarded-proto') || 'https'
+  return host
+    ? `${proto}://${host}`
+    : (process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'))
+}
 
 async function getSettings() {
   try {
@@ -29,7 +38,8 @@ async function getBrand(slug: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
-  const origin = await getOriginFromHeaders()
+  const hdrs = await headers()
+  const origin = getOrigin(hdrs)
 
   try {
     const [brand, settings] = await Promise.all([getBrand(slug), getSettings()])
@@ -92,7 +102,8 @@ export default async function BrandSlugLayout({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const origin = await getOriginFromHeaders()
+  const hdrs = await headers()
+  const origin = getOrigin(hdrs)
 
   return (
     <>

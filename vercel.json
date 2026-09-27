@@ -139,24 +139,8 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/rebuild-profiles",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/segment-customers",
-      "schedule": "30 1 * * *"
-    },
-    {
       "path": "/api/cron/cart-recovery",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/wishlist-alerts",
-      "schedule": "30 4 * * *"
-    },
-    {
-      "path": "/api/cron/lifecycle-reminders",
-      "schedule": "30 5 * * *"
     }
   ]
 }

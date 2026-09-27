@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 import { Building2, Code2, Shield, Wrench, ChevronRight, Calendar, ExternalLink } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -183,7 +182,7 @@ export default function CreditsPage() {
         {/* JSON-LD Schema */}
         <script 
           type="application/ld+json" 
-          dangerouslySetInnerHTML={{ __html: safeJsonLd(ORG_SCHEMA) }} 
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_SCHEMA) }} 
         />
       </main>
       <Footer />
