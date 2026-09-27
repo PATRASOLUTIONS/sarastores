@@ -4,7 +4,6 @@
  */
 
 import { connectToDatabase } from "@/lib/mongodb"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 
 async function getBrand(slug: string) {
   try {
@@ -87,16 +86,16 @@ export async function BrandJsonLdServer({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(brandData) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(brandData) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbData) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbData) }}
       />
       {itemListData && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: safeJsonLd(itemListData) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListData) }}
         />
       )}
     </>

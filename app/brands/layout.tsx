@@ -1,6 +1,15 @@
 import { Metadata } from 'next'
 import { connectToDatabase } from '@/lib/mongodb'
-import { getOriginFromHeaders } from '@/lib/seo-metadata'
+import { headers } from 'next/headers'
+
+function getOrigin(hdrs: Headers): string {
+  const host = hdrs.get('x-forwarded-host') || hdrs.get('host')
+  const proto = hdrs.get('x-forwarded-proto') || 'https'
+  return host
+    ? `${proto}://${host}`
+    : (process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'))
+}
 
 async function getSettings() {
   try {
@@ -12,7 +21,8 @@ async function getSettings() {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const origin = await getOriginFromHeaders()
+  const hdrs = await headers()
+  const origin = getOrigin(hdrs)
 
   try {
     const settings = await getSettings()

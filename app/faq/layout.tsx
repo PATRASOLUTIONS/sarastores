@@ -1,5 +1,4 @@
 import type React from "react"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 import { pageMetadata } from "@/lib/seo-page"
 import { buildFaqJsonLd } from "@/lib/faq-data"
 
@@ -16,7 +15,7 @@ export default function FaqLayout({ children }: { children: React.ReactNode }) {
       {/* Emitted server-side from the same source the page renders. */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(buildFaqJsonLd()) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildFaqJsonLd()) }}
       />
       {children}
     </>

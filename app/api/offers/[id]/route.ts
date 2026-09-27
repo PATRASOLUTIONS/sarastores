@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
 import { ObjectId } from "mongodb"
 import { getCollection, normalizeId } from "@/lib/db-service"
 
@@ -29,9 +28,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 }
 
 export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
     const body = await request.json()
@@ -103,9 +99,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
 

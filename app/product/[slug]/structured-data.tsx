@@ -1,7 +1,6 @@
 import React from "react";
 import Script from "next/script";
 import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName";
-import { safeJsonLd } from "@/lib/jsonld-safe";
 
 export function ProductJsonLd({ product, companyName, pageUrl, imageUrl }: { product: any, companyName: string, pageUrl: string, imageUrl: string }) {
   if (!product) return null;
@@ -102,7 +101,7 @@ export function ProductJsonLd({ product, companyName, pageUrl, imageUrl }: { pro
       id={`product-jsonld-${product.id || product.sku || 'main'}`}
       type="application/ld+json"
       strategy="beforeInteractive"
-      dangerouslySetInnerHTML={{ __html: safeJsonLd(cleanData) }}
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(cleanData) }}
     />
   );
 }

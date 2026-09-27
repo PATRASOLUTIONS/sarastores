@@ -3,8 +3,7 @@ import { getAll, create, COLLECTIONS, findOne, update, count } from "@/lib/db-se
 import { connectToDatabase } from "@/lib/mongodb"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { generateProductSlug } from "@/utils/slug"
-import { withProductDisplay } from "@/lib/product-presenter"
-import { isAdmin, requireAdmin } from "@/lib/auth"
+import { isAdmin } from "@/lib/auth"
 
 interface ProductFilter {
   category?: string
@@ -135,10 +134,6 @@ export async function GET(request: NextRequest) {
     const products = await getAll(COLLECTIONS.PRODUCTS, filter, options)
     const total = await count(COLLECTIONS.PRODUCTS, filter)
 
-    // Native clients cannot run the React helpers the web uses to derive MRP,
-    // discount, rating, badge and EMI, so they ask for them precomputed.
-    const withDisplay = searchParams.get("display") === "1"
-
     const productsWithMrp = (products || []).map((prod: ProductRecord) => {
       try {
         const p = { ...prod }
@@ -153,7 +148,7 @@ export async function GET(request: NextRequest) {
         if (!p.slug && p.name) {
           p.slug = generateProductSlug(p.name)
         }
-        return withDisplay ? withProductDisplay(p) : p
+        return p
       } catch {
         return prod
       }
@@ -186,9 +181,6 @@ export async function GET(request: NextRequest) {
 
 // Create a new product
 export async function POST(request: NextRequest) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     try {
       await connectToDatabase()

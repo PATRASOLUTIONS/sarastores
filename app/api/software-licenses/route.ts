@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
 import { 
   bulkAddLicenses, 
   getAvailableLicenseCount,
@@ -81,9 +80,6 @@ export async function GET(request: NextRequest) {
  * }
  */
 export async function POST(request: NextRequest) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const body = await request.json()
     const { softwareId, keys } = body
@@ -126,9 +122,6 @@ export async function POST(request: NextRequest) {
  * Revoke/unassign a license
  */
 export async function DELETE(request: NextRequest) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const searchParams = request.nextUrl.searchParams
     const licenseId = searchParams.get('licenseId')

@@ -28,7 +28,7 @@ interface SearchSuggestion {
 
 export async function GET(request: NextRequest) {
   // Rate limiting
-  const rateLimitResult = await checkRateLimit(request, RATE_LIMITS.SEARCH);
+  const rateLimitResult = checkRateLimit(request, RATE_LIMITS.SEARCH);
   if (!rateLimitResult.success) {
     return NextResponse.json(
       { 

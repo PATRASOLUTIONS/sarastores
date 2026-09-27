@@ -12,7 +12,6 @@ import {
   getRelatedArticles,
   listArticles,
 } from "@/lib/articles"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 
 export const revalidate = 900
 
@@ -66,7 +65,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
       <main className="container mx-auto flex-grow px-4 py-10">

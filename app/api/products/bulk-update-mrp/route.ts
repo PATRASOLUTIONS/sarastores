@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS } from "@/lib/db-service"
 import * as XLSX from "xlsx"
 import { extractCanonicalProductMetadata } from "@/lib/product-schema"
 
 export async function POST(request: Request) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const form = await request.formData()
     const file = form.get("file") as File | null

@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   const guard = await requireUser()
   if (!guard.ok) return guard.response
 
-  const limit = await checkRateLimit(request, RATE_LIMITS.REVIEWS)
+  const limit = checkRateLimit(request, RATE_LIMITS.REVIEWS)
   if (!limit.success) {
     return NextResponse.json(
       { error: RATE_LIMITS.REVIEWS.message },

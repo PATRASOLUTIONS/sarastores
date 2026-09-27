@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { safeJsonLd } from "@/lib/jsonld-safe"
 import {
   Sparkles,
   CreditCard,
@@ -131,7 +130,7 @@ export default async function GaneshPage() {
     <div className="flex min-h-screen flex-col bg-white">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
       <Header />
 

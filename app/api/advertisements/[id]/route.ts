@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
 import * as dbService from "@/lib/db-service"
 import { COLLECTIONS } from "@/lib/db-service"
 import { getCollection } from "@/lib/db"
@@ -23,9 +22,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
     const body = await request.json()
@@ -88,9 +84,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireAdmin()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
     const result = await dbService.remove(COLLECTIONS.ADVERTISEMENTS, id)

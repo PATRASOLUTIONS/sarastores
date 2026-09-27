@@ -1,0 +1,243 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "Go to homepage" [ref=e7] [cursor=pointer]: Admin Dashboard
+        - generic [ref=e9]:
+          - generic:
+            - img
+          - textbox "Search..." [ref=e10]
+        - generic [ref=e11]:
+          - button "View notifications" [ref=e12] [cursor=pointer]:
+            - generic [ref=e13]: View notifications
+            - img [ref=e14]
+          - generic [ref=e18]:
+            - img "User avatar" [ref=e19]
+            - generic [ref=e20]: Admin User
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - generic [ref=e24]:
+          - button "Collapse sidebar" [pressed] [ref=e25] [cursor=pointer]:
+            - img [ref=e26]
+          - link "Admin Panel" [ref=e31] [cursor=pointer]:
+            - /url: /admin/dashboard
+            - heading "Admin Panel" [level=1] [ref=e32]
+        - navigation [ref=e33]:
+          - list [ref=e34]:
+            - listitem [ref=e35]:
+              - link "Dashboard" [ref=e36] [cursor=pointer]:
+                - /url: /admin/dashboard
+                - img [ref=e38]
+                - generic [ref=e43]: Dashboard
+            - listitem [ref=e44]:
+              - button "Integrations 3" [ref=e45] [cursor=pointer]:
+                - img [ref=e47]
+                - generic [ref=e51]: Integrations
+                - generic [ref=e52]: "3"
+                - img [ref=e53]
+        - button "Logout" [ref=e56] [cursor=pointer]:
+          - img [ref=e57]
+          - generic [ref=e60]: Logout
+      - main [ref=e62]:
+        - generic [ref=e63]:
+          - generic [ref=e64]:
+            - generic [ref=e65]:
+              - heading "Store Settings" [level=1] [ref=e66]
+              - paragraph [ref=e67]: Configure your store details, branding, and business settings
+            - button "Save All Settings" [ref=e68] [cursor=pointer]:
+              - img [ref=e69]
+              - text: Save All Settings
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - button "Store Information Basic store details and contact info" [ref=e121] [cursor=pointer]:
+                - generic [ref=e122]:
+                  - img [ref=e124]
+                  - generic [ref=e129]:
+                    - heading "Store Information" [level=2] [ref=e130]
+                    - paragraph [ref=e131]: Basic store details and contact info
+                - img [ref=e132]
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - generic [ref=e138]:
+                    - img [ref=e139]
+                    - text: Store Name
+                  - textbox "e.g. Sara Electronics" [ref=e144]
+                - generic [ref=e145]:
+                  - generic [ref=e146]:
+                    - img [ref=e147]
+                    - text: Store Email
+                  - textbox "e.g. contact@example.com" [ref=e150]
+                - generic [ref=e151]:
+                  - generic [ref=e152]:
+                    - img [ref=e153]
+                    - text: Store Phone
+                  - textbox "e.g. +91 98765 43210" [ref=e155]
+                - generic [ref=e156]:
+                  - generic [ref=e157]:
+                    - img [ref=e158]
+                    - text: Store Address
+                  - textbox "e.g. 123 Main St, City, State" [ref=e161]
+                - generic [ref=e162]:
+                  - generic [ref=e163]:
+                    - img [ref=e164]
+                    - text: Store Description
+                  - textbox "Brief description of your store..." [ref=e167]
+            - generic [ref=e168]:
+              - button "Branding Logo, signature, and visual identity" [ref=e169] [cursor=pointer]:
+                - generic [ref=e170]:
+                  - img [ref=e172]
+                  - generic [ref=e178]:
+                    - heading "Branding" [level=2] [ref=e179]
+                    - paragraph [ref=e180]: Logo, signature, and visual identity
+                - img [ref=e181]
+              - generic [ref=e185]:
+                - generic [ref=e186]:
+                  - generic [ref=e187]:
+                    - img [ref=e188]
+                    - text: Brand Logo
+                  - button "Choose Logo" [ref=e194] [cursor=pointer]:
+                    - img [ref=e195]
+                    - text: Choose Logo
+                - generic [ref=e199]:
+                  - generic [ref=e200]:
+                    - img [ref=e201]
+                    - text: Signature
+                  - button "Choose Signature" [ref=e206] [cursor=pointer]:
+                    - img [ref=e207]
+                    - text: Choose Signature
+                - generic [ref=e211]:
+                  - generic [ref=e212]:
+                    - img [ref=e213]
+                    - text: Primary Color
+                  - generic [ref=e219]:
+                    - textbox [ref=e220] [cursor=pointer]: "#7e22ce"
+                    - textbox "#7e22ce" [ref=e221]
+                - generic [ref=e222]:
+                  - generic [ref=e223]:
+                    - img [ref=e224]
+                    - text: Favicon URL
+                  - textbox "/favicon.ico" [ref=e228]
+            - generic [ref=e229]:
+              - button "Business Currency, tax, and pricing" [ref=e230] [cursor=pointer]:
+                - generic [ref=e231]:
+                  - img [ref=e233]
+                  - generic [ref=e235]:
+                    - heading "Business" [level=2] [ref=e236]
+                    - paragraph [ref=e237]: Currency, tax, and pricing
+                - img [ref=e238]
+              - generic [ref=e242]:
+                - generic [ref=e243]:
+                  - generic [ref=e244]:
+                    - img [ref=e245]
+                    - text: Currency
+                  - combobox [ref=e247]:
+                    - option "Indian Rupee (INR)" [selected]
+                    - option "US Dollar (USD)"
+                    - option "Euro (EUR)"
+                    - option "British Pound (GBP)"
+                - generic [ref=e248]:
+                  - generic [ref=e249]:
+                    - img [ref=e250]
+                    - text: Tax Rate (%)
+                  - generic [ref=e254]:
+                    - generic [ref=e255]: "%"
+                    - spinbutton [ref=e256]: "0"
+                - generic [ref=e257]:
+                  - generic [ref=e258]:
+                    - img [ref=e259]
+                    - text: GST Number
+                  - textbox "e.g. 22AAAAA0000A1Z5" [ref=e262]
+                - generic [ref=e263]:
+                  - generic [ref=e264]:
+                    - img [ref=e265]
+                    - text: PAN Number
+                  - textbox "e.g. ABCDE1234F" [ref=e267]
+            - generic [ref=e268]:
+              - button "Shipping Shipping fees and thresholds" [ref=e269] [cursor=pointer]:
+                - generic [ref=e270]:
+                  - img [ref=e272]
+                  - generic [ref=e277]:
+                    - heading "Shipping" [level=2] [ref=e278]
+                    - paragraph [ref=e279]: Shipping fees and thresholds
+                - img [ref=e280]
+              - generic [ref=e284]:
+                - generic [ref=e285]:
+                  - generic [ref=e286]:
+                    - img [ref=e287]
+                    - text: Shipping Fee
+                  - generic [ref=e292]:
+                    - generic [ref=e293]: INR
+                    - spinbutton [ref=e294]: "0"
+                - generic [ref=e295]:
+                  - generic [ref=e296]:
+                    - img [ref=e297]
+                    - text: Free Shipping Threshold
+                  - generic [ref=e300]:
+                    - generic [ref=e301]: INR
+                    - spinbutton [ref=e302]: "0"
+                - generic [ref=e303]:
+                  - generic [ref=e304]:
+                    - img [ref=e305]
+                    - text: COD Available
+                  - generic [ref=e308]:
+                    - button [ref=e309] [cursor=pointer]
+                    - generic [ref=e311]: Disabled
+                - generic [ref=e312]:
+                  - generic [ref=e313]:
+                    - img [ref=e314]
+                    - text: Estimated Delivery Days
+                  - spinbutton [ref=e320]: "5"
+            - generic [ref=e321]:
+              - button "Online Presence Website, social links, and SEO" [ref=e322] [cursor=pointer]:
+                - generic [ref=e323]:
+                  - img [ref=e325]
+                  - generic [ref=e328]:
+                    - heading "Online Presence" [level=2] [ref=e329]
+                    - paragraph [ref=e330]: Website, social links, and SEO
+                - img [ref=e331]
+              - generic [ref=e335]:
+                - generic [ref=e336]:
+                  - generic [ref=e337]:
+                    - img [ref=e338]
+                    - text: Website URL
+                  - textbox "https://example.com" [ref=e341]
+                - generic [ref=e342]:
+                  - generic [ref=e343]:
+                    - img [ref=e344]
+                    - text: Facebook URL
+                  - textbox "https://facebook.com/yourpage" [ref=e347]
+                - generic [ref=e348]:
+                  - generic [ref=e349]:
+                    - img [ref=e350]
+                    - text: Instagram URL
+                  - textbox "https://instagram.com/yourpage" [ref=e353]
+                - generic [ref=e354]:
+                  - generic [ref=e355]:
+                    - img [ref=e356]
+                    - text: Twitter / X URL
+                  - textbox "https://x.com/yourhandle" [ref=e359]
+                - generic [ref=e360]:
+                  - generic [ref=e361]:
+                    - img [ref=e362]
+                    - text: YouTube URL
+                  - textbox "https://youtube.com/yourchannel" [ref=e365]
+                - generic [ref=e366]:
+                  - generic [ref=e367]:
+                    - img [ref=e368]
+                    - text: WhatsApp Number
+                  - textbox "e.g. +919876543210" [ref=e370]
+                - generic [ref=e371]:
+                  - generic [ref=e372]:
+                    - img [ref=e373]
+                    - text: Meta Title
+                  - textbox "Page title for SEO" [ref=e376]
+                - generic [ref=e377]:
+                  - generic [ref=e378]:
+                    - img [ref=e379]
+                    - text: Meta Description
+                  - textbox "Page description for SEO" [ref=e382]
+            - button "Save All Settings" [ref=e384] [cursor=pointer]:
+              - img [ref=e385]
+              - text: Save All Settings

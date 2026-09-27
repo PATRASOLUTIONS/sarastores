@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireVendor } from "@/lib/auth"
 import { getById, update, deleteById, COLLECTIONS } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 
@@ -30,9 +29,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
 // Update a product
 export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireVendor()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
     await connectToDatabase()
@@ -74,9 +70,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
 // Delete a product
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireVendor()
-  if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
     await connectToDatabase()

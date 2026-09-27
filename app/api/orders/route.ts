@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
     // Guests are unauthenticated, so this endpoint becomes publicly writable.
     // Cap it per-IP to keep order spam and coupon probing bounded.
     if (isGuest) {
-      const limit = await checkRateLimit(request, RATE_LIMITS.ORDERS)
+      const limit = checkRateLimit(request, RATE_LIMITS.ORDERS)
       if (!limit.success) {
         return NextResponse.json(
           { error: RATE_LIMITS.ORDERS.message },

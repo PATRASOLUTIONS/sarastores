@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireVendor } from "@/lib/auth"
 import { getAll, create, COLLECTIONS } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 
@@ -33,9 +32,6 @@ export async function GET(request: NextRequest) {
 
 // Create a new product for vendor
 export async function POST(request: NextRequest) {
-  const guard = await requireVendor()
-  if (!guard.ok) return guard.response
-
   try {
     await connectToDatabase()
 
