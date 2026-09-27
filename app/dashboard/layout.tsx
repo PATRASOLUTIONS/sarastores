@@ -7,6 +7,9 @@ import AccountBreadcrumb from "@/components/account/AccountBreadcrumb"
 import TrustStrip from "@/components/account/TrustStrip"
 import { getSession } from "@/lib/auth"
 
+// Reads the session cookie, so it can never be prerendered at build time.
+export const dynamic = "force-dynamic"
+
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   // Server-side authoritative auth check using the signed httpOnly session
   // cookie. This is the source of truth — it works in both localhost and

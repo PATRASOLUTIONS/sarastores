@@ -5,6 +5,9 @@ import Footer from "@/components/Footer"
 import { getSession } from "@/lib/auth"
 import AccountClientShell from "./account-client-shell"
 
+// Reads the session cookie, so it can never be prerendered at build time.
+export const dynamic = "force-dynamic"
+
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   // Server-side authoritative auth check using the signed httpOnly session
   // cookie. This is the source of truth — it works in both localhost and
