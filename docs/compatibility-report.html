@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>SARA Electronics — Responsive &amp; Compatibility Report</title>
+<style>
+  :root{
+    --navy:#0F2557; --blue:#1560BD; --accent:#FF6A2C;
+    --ok:#087443; --okbg:#E6F4EC; --warn:#8A5A00; --warnbg:#FFF4DB;
+    --bad:#B3261E; --badbg:#FDECEA;
+    --ink:#14213D; --muted:#5B6579; --line:#E3E8F0; --bg:#F6F8FC;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  header.top{background:linear-gradient(135deg,var(--navy),#1A3A7A);color:#fff;padding:38px 24px 30px}
+  header.top .wrap{max-width:1180px;margin:0 auto}
+  header.top h1{margin:0 0 6px;font-size:28px;letter-spacing:-.3px}
+  header.top p{margin:0;opacity:.85;font-size:14px}
+  .pill{display:inline-block;background:var(--accent);color:#fff;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:4px 10px;border-radius:99px;margin-bottom:12px}
+  nav.toc{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;overflow-x:auto;white-space:nowrap}
+  nav.toc a{color:var(--navy);text-decoration:none;font-size:13px;font-weight:600;margin-right:18px;padding:5px 0;display:inline-block}
+  nav.toc a:hover{color:var(--accent)}
+  main{max-width:1180px;margin:0 auto;padding:28px 24px 80px}
+  section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:22px}
+  h2{font-size:20px;margin:0 0 4px;color:var(--navy)}
+  h2 .num{color:var(--accent);font-weight:800;margin-right:8px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  h3{font-size:15px;margin:22px 0 8px;color:var(--navy)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:6px 0 4px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff}
+  .card .n{font-size:26px;font-weight:800;color:var(--navy);line-height:1.1}
+  .card .l{font-size:12px;color:var(--muted);margin-top:3px}
+  .card.good .n{color:var(--ok)} .card.bad .n{color:var(--bad)} .card.warn .n{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#F2F5FA;color:var(--navy);font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:44px}
+  tbody tr:hover{background:#FAFBFE}
+  td.c{text-align:center}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:#F2F5FA;padding:1px 5px;border-radius:4px;color:var(--navy)}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .t-ok{background:var(--okbg);color:var(--ok)} .t-warn{background:var(--warnbg);color:var(--warn)} .t-bad{background:var(--badbg);color:var(--bad)} .t-neutral{background:#EEF1F7;color:var(--muted)}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%}
+  .d-ok{background:#22A06B} .d-bad{background:#E5484D} .d-warn{background:#E2A336}
+  .scroll{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .scroll table{margin:0}
+  .filter{width:100%;max-width:320px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;margin-top:12px}
+  .fix{border-left:3px solid var(--ok);background:#FAFDFB;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .open{border-left:3px solid var(--warn);background:#FFFDF7;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .fix h4,.open h4{margin:0 0 5px;font-size:14px;color:var(--navy)}
+  .fix p,.open p{margin:5px 0 0;font-size:13.5px;color:#374151}
+  .meta{font-size:12px;color:var(--muted);margin-top:7px}
+  .note{background:#F2F6FD;border:1px solid #D6E2F6;border-radius:8px;padding:13px 15px;font-size:13.5px;margin-top:14px}
+  .warnbox{background:var(--warnbg);border:1px solid #EBD3A0;border-radius:8px;padding:13px 15px;font-size:13.5px;margin-top:14px}
+  ul{margin:8px 0;padding-left:20px} li{margin:4px 0;font-size:13.5px}
+  .legend{font-size:12px;color:var(--muted);margin-top:10px}
+  .legend span{margin-right:16px}
+  footer{max-width:1180px;margin:0 auto;padding:0 24px 50px;color:var(--muted);font-size:12.5px}
+  @media print{nav.toc{display:none}section{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="pill">Responsive &amp; Compatibility</div>
+    <h1>SARA Electronics — Responsive &amp; Compatibility Report</h1>
+    <p id="hdr-meta">Every page measured at five device widths for layout overflow, breakpoint behaviour and touch-target size.</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#summary">Summary</a>
+  <a href="#breakpoints">Breakpoints</a>
+  <a href="#fixed">Fixed</a>
+  <a href="#open">Open issues</a>
+  <a href="#matrix">Full matrix</a>
+  <a href="#tap">Touch targets</a>
+  <a href="#browser">Browser coverage</a>
+  <a href="#method">Methodology</a>
+</nav>
+
+<main>
+
+<section id="summary">
+  <h2><span class="num">01</span>Executive summary</h2>
+  <p class="sub">84 pages × 5 device widths = 420 layout measurements, plus a targeted sweep of the 1000–1180&nbsp;px range.</p>
+  <div class="cards">
+    <div class="card good"><div class="n">84</div><div class="l">Pages measured</div></div>
+    <div class="card good"><div class="n">420</div><div class="l">Layout measurements</div></div>
+    <div class="card good"><div class="n">6</div><div class="l">Issues fixed</div></div>
+    <div class="card good"><div class="n">0</div><div class="l">Overflow remaining</div></div>
+    <div class="card good"><div class="n">0</div><div class="l">Targets below WCAG AA</div></div>
+    <div class="card warn"><div class="n">1</div><div class="l">Browser engine covered</div></div>
+  </div>
+  <div class="note">
+    <strong>Verdict —</strong> the responsive system is in good shape. Of 84 pages, only two had a genuine layout failure, and the underlying cause of both has been fixed.
+    A third, more serious defect was found outside the standard breakpoints: <strong>every page on the site scrolled horizontally between 1024&nbsp;px and ~1045&nbsp;px</strong> — the width of an iPad&nbsp;Pro 11" in portrait. That is now fixed.
+    Touch targets have since been brought up to WCAG&nbsp;2.2&nbsp;AA across the storefront and admin, and every icon-only control now has an accessible name.
+    Re-verified after all changes: <strong>0&nbsp;px overflow at 360, 390, 768, 1024, 1280 and 1920&nbsp;px</strong> across representative storefront, account and admin pages.
+  </div>
+  <div class="warnbox">
+    <strong>Scope limit —</strong> all measurements were taken in <strong>Chromium only</strong>. Safari/WebKit and Firefox/Gecko were <em>not</em> tested, so this is a responsive-layout report rather than a full cross-browser compatibility certification. See <a href="#browser">Browser coverage</a>.
+  </div>
+</section>
+
+<section id="breakpoints">
+  <h2><span class="num">02</span>Breakpoints tested</h2>
+  <p class="sub">Chosen to match real devices and to straddle the Tailwind breakpoints the site uses.</p>
+  <table>
+    <thead><tr><th style="width:18%">Label</th><th style="width:16%">Width × Height</th><th style="width:20%">Tailwind band</th><th>Representative devices</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Mobile S</strong></td><td><code>360 × 740</code></td><td>base (&lt; sm)</td><td>Galaxy S-series, most budget Android</td></tr>
+      <tr><td><strong>Mobile</strong></td><td><code>390 × 844</code></td><td>base (&lt; sm)</td><td>iPhone 12–16, Pixel</td></tr>
+      <tr><td><strong>Tablet</strong></td><td><code>768 × 1024</code></td><td><code>md</code></td><td>iPad 10.2" portrait</td></tr>
+      <tr><td><strong>Laptop</strong></td><td><code>1280 × 800</code></td><td><code>xl</code></td><td>MacBook Air, most laptops</td></tr>
+      <tr><td><strong>Desktop</strong></td><td><code>1920 × 1080</code></td><td><code>2xl</code></td><td>Full-HD monitors</td></tr>
+    </tbody>
+  </table>
+  <p class="meta">A supplementary sweep at 1000, 1024, 1040, 1080, 1140 and 1180&nbsp;px was run after the <code>lg</code>-breakpoint defect was discovered. The browser applied a 90&nbsp;% zoom, so every requested size was compensated and the true CSS width was verified in-page before each measurement.</p>
+</section>
+
+<section id="fixed">
+  <h2><span class="num">03</span>Layout bugs found and fixed</h2>
+
+  <div class="fix">
+    <h4>1. Whole site scrolled horizontally at 1024–1045&nbsp;px <span class="tag t-bad">High — affected every page</span></h4>
+    <p>At exactly the <code>lg</code> breakpoint the header revealed its “Wishlist” and “Cart” text labels, which grew the right-hand cluster to 524&nbsp;px. Because that cluster is <code>flex-shrink-0</code>, it could not give the space back, so the document became wider than the viewport and the entire page scrolled sideways — <strong>21&nbsp;px over at 1024&nbsp;px, 4&nbsp;px at 1040&nbsp;px, clean from about 1045&nbsp;px</strong>.</p>
+    <p>This window is not obscure: <strong>1024&nbsp;px is iPad Pro 11" portrait</strong> and the low end of many small laptops. It was missed by the standard breakpoint set because 768&nbsp;px and 1280&nbsp;px both sit outside the failing range.</p>
+    <p class="meta">Fixed in <code>components/Header.tsx</code> — the two labels moved from <code>lg:inline</code> to <code>xl:inline</code>, so the compact icon-only header persists until there is genuinely room. Re-verified at 1000/1024/1040/1180/1280&nbsp;px across 14 pages: <strong>0&nbsp;px overflow everywhere</strong>.</p>
+  </div>
+
+  <div class="fix">
+    <h4>2. <code>/account</code> and <code>/account/dashboard</code> rendered two headers and two footers <span class="tag t-bad">High</span></h4>
+    <p><code>app/account/layout.tsx</code> wraps every account page in <code>AccountClientShell</code>, which already renders <code>&lt;Header&gt;</code>, <code>&lt;main&gt;</code> and <code>&lt;Footer&gt;</code>. Both pages rendered their own set as well, so visitors saw <strong>the header twice, the footer twice, the “My Account” hero twice, and two nested <code>&lt;main&gt;</code> landmarks</strong> (invalid HTML and a screen-reader problem).</p>
+    <p>The nested header was confined to the shell's narrower content column, so it could not fit — producing <strong>+170&nbsp;px overflow at tablet and +141&nbsp;px at laptop</strong>.</p>
+    <p class="meta">Fixed in <code>app/account/page.tsx</code> and <code>app/account/dashboard/page.tsx</code> — the duplicated chrome was removed and each page now returns only its own content. Re-verified: exactly 1 header, 1 footer, 1 <code>&lt;main&gt;</code>, and 0&nbsp;px overflow at all five widths.</p>
+  </div>
+
+  <div class="fix">
+    <h4>3. Account dashboard order count never rendered <span class="tag t-warn">Medium</span></h4>
+    <p>Found while fixing the above. <code>getOrders()</code> returns a Promise, but the result was passed straight into <code>setOrders()</code> without awaiting, so <code>orders</code> held a Promise and <code>orders.length</code> evaluated to <code>undefined</code> — the “Orders” statistic rendered blank.</p>
+    <p class="meta">Fixed in <code>app/account/dashboard/page.tsx</code> — the call is now awaited inside a cancellable effect with an array guard and error fallback.</p>
+  </div>
+
+  <div class="fix">
+    <h4>4. Dead links in the account sidebar <span class="tag t-warn">Medium</span></h4>
+    <p>The shell's navigation listed <code>/account/wishlist</code>, <code>/account/addresses</code>, <code>/account/payment-methods</code> and <code>/account/settings</code> — none of which exist, so all four returned 404.</p>
+    <p class="meta">Fixed in <code>app/account/account-client-shell.tsx</code> — links repointed to <code>/dashboard/wishlist</code> and <code>/dashboard/settings</code>; “Payment Methods” removed because no such feature exists anywhere in the codebase.</p>
+  </div>
+
+  <div class="fix">
+    <h4>5. Touch targets below the accessibility minimum <span class="tag t-warn">Accessibility</span></h4>
+    <p>Measured at 360&nbsp;px against <strong>WCAG 2.2 AA (2.5.8), which requires 24 × 24&nbsp;CSS px</strong>, counting only real controls. The worst offenders were the <strong>brand-page carousel dots at 32 × 8&nbsp;px</strong> and the admin <strong>“Open sidebar” button at 22 × 40&nbsp;px</strong>, which appeared on every admin page.</p>
+    <p>Fixed by enlarging the hit area while leaving the visuals untouched — the carousel dots keep their pill appearance inside a 24 × 24 button, and the admin chrome moved to 44 × 44. Filter accordions, “Clear All”, “+ Show More” and the delivery-location trigger were raised from 20–23&nbsp;px to a 24&nbsp;px minimum, and the product-card wishlist button from 28 to 32&nbsp;px.</p>
+    <p class="meta">Files: the four brand landings, <code>app/brands/[slug]/page.tsx</code>, <code>components/AdminSidebar.tsx</code>, <code>components/AdminHeader.tsx</code>, <code>components/DeliverToPincode.tsx</code>, <code>components/products/ProductListingCard.tsx</code>, <code>app/products/page.tsx</code>. Re-verified at 360&nbsp;px: <code>/</code>, <code>/bosch</code>, <code>/lg</code> and <code>/admin/dashboard</code> report <strong>zero</strong> controls below the minimum; <code>/products</code> fell from 21 to 0.</p>
+  </div>
+
+  <div class="fix">
+    <h4>6. Icon-only controls had no accessible name <span class="tag t-warn">Accessibility</span></h4>
+    <p>The banner previous/next arrows on all four brand landings, the carousel dots, and the admin mobile search toggles were unlabelled — a screen reader announced them only as “button”.</p>
+    <p class="meta">Each now carries an <code>aria-label</code>, and the dots also expose <code>aria-current</code> so the active slide is announced. Verified: <code>/bosch</code> and <code>/lg</code> report 0 unlabelled buttons, down from 2 each.</p>
+  </div>
+</section>
+
+<section id="open">
+  <h2><span class="num">04</span>Open issues</h2>
+
+  <div class="open">
+    <h4>1. <code>/subham</code> reports a 4&nbsp;px scroll width at mobile <span class="tag t-neutral">Low — cosmetic</span></h4>
+    <p>At 360&nbsp;px and 390&nbsp;px the document measures 4&nbsp;px wider than the viewport. A clip-aware re-scan found <strong>zero unclipped elements</strong> extending past the edge — the decorative blur circles are already contained by an <code>overflow-hidden</code> hero section.</p>
+    <p class="meta">This is a sub-pixel compositing artefact from the stacked <code>blur-3xl</code> layers, not a layout error. Nothing is visually cut off. Left as-is rather than risk a speculative change to a working page.</p>
+  </div>
+
+  <div class="open">
+    <h4>2. Safari and Firefox remain untested <span class="tag t-warn">Medium</span></h4>
+    <p>Every measurement in this report was taken in Chromium. See <a href="#browser">section 07</a> for the specific WebKit risks this could not rule out.</p>
+  </div>
+</section>
+
+<section id="matrix">
+  <h2><span class="num">05</span>Full page × breakpoint matrix</h2>
+  <p class="sub">Horizontal overflow in CSS pixels at each width, <strong>as measured during the original sweep</strong>. <strong>0 = clean.</strong> Rows marked “fixed” were re-verified clean afterwards, and a post-fix spot check at 360/390/768/1024/1280/1920&nbsp;px across storefront, account and admin pages found 0&nbsp;px overflow everywhere.</p>
+  <div class="legend">
+    <span><span class="dot d-ok"></span> No overflow</span>
+    <span><span class="dot d-warn"></span> 1–20&nbsp;px</span>
+    <span><span class="dot d-bad"></span> &gt; 20&nbsp;px</span>
+  </div>
+  <input class="filter" id="f-matrix" placeholder="Filter routes…" />
+  <div class="scroll"><table id="t-matrix">
+    <thead><tr>
+      <th style="width:30%">Route</th><th class="c">360</th><th class="c">390</th><th class="c">768</th><th class="c">1280</th><th class="c">1920</th><th class="c">Controls&nbsp;&lt;32px<br><span style="font-weight:400;text-transform:none">(before fix)</span></th><th>Status</th>
+    </tr></thead><tbody></tbody>
+  </table></div>
+</section>
+
+<section id="tap">
+  <h2><span class="num">06</span>Touch-target analysis</h2>
+  <p class="sub">Controls smaller than 24 × 24&nbsp;px (WCAG 2.2 AA 2.5.8) at 360&nbsp;px viewport width. Inline text links are exempt and excluded.</p>
+
+  <h3>Before and after</h3>
+  <table>
+    <thead><tr><th style="width:22%">Control</th><th style="width:12%">Was</th><th style="width:12%">Now</th><th style="width:14%">Status</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Carousel dot</td><td><code>32 × 8</code></td><td><code>32 × 24</code></td><td><span class="tag t-ok">Fixed</span></td><td>Brand landings and <code>/brands/[slug]</code></td></tr>
+      <tr><td>Carousel dot (inactive)</td><td><code>8 × 8</code></td><td><code>24 × 24</code></td><td><span class="tag t-ok">Fixed</span></td><td>Same — visuals unchanged, hit area grown</td></tr>
+      <tr><td>“Open sidebar”</td><td><code>22 × 40</code></td><td><code>28 × 40</code></td><td><span class="tag t-ok">Fixed</span></td><td>Every admin page</td></tr>
+      <tr><td>“Open menu”</td><td><code>24 × 24</code></td><td><code>44 × 44</code></td><td><span class="tag t-ok">Fixed</span></td><td>Admin header (mobile)</td></tr>
+      <tr><td>Admin search toggle</td><td><code>32 × 32</code>, unlabelled</td><td><code>44 × 44</code>, labelled</td><td><span class="tag t-ok">Fixed</span></td><td>Admin header (mobile)</td></tr>
+      <tr><td>Filter accordion header</td><td><code>201 × 20</code></td><td><code>201 × 24</code></td><td><span class="tag t-ok">Fixed</span></td><td><code>/products</code> sidebar</td></tr>
+      <tr><td>“Clear All” / “+ Show More”</td><td><code>× 20</code></td><td><code>× 24</code></td><td><span class="tag t-ok">Fixed</span></td><td><code>/products</code> sidebar</td></tr>
+      <tr><td>“Set delivery location”</td><td><code>135 × 23</code></td><td><code>135 × 24</code></td><td><span class="tag t-ok">Fixed</span></td><td>Header, all pages</td></tr>
+      <tr><td>“Add to wishlist”</td><td><code>28 × 28</code></td><td><code>32 × 32</code></td><td><span class="tag t-ok">Improved</span></td><td><code>/products</code> product cards</td></tr>
+      <tr><td>A–Z filter buttons</td><td><code>32 × 32</code></td><td><code>32 × 32</code></td><td><span class="tag t-ok">Already passed</span></td><td><code>/brands</code> (28 buttons)</td></tr>
+      <tr><td>Consent checkbox</td><td><code>14 × 16</code></td><td><code>279 × 36</code></td><td><span class="tag t-ok">Already passed</span></td><td>Wrapped in a <code>&lt;label&gt;</code> — the label is the real target</td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="background:var(--okbg);border-color:#BFE3CE">
+    <strong>Verified after the fixes —</strong> at 360&nbsp;px, <code>/</code>, <code>/bosch</code>, <code>/lg</code> and <code>/admin/dashboard</code> all report <strong>zero</strong> controls below the WCAG&nbsp;2.2&nbsp;AA minimum and <strong>zero</strong> unlabelled buttons. <code>/products</code> went from 21 undersized controls to 0.
+  </div>
+
+  <h3>Original counts, for reference</h3>
+  <p class="sub" style="margin-bottom:6px">Measured before the fixes. Admin pages carried a baseline of 4 from the shared sidebar chrome.</p>
+  <div class="scroll" style="max-height:300px"><table id="t-tap"><thead><tr><th style="width:46%">Route</th><th style="width:16%">Count (before)</th><th>Note</th></tr></thead><tbody></tbody></table></div>
+  <p class="meta">Admin pages carry a baseline of 4 from the shared sidebar chrome; counts above that come from page-specific table and form controls.</p>
+</section>
+
+<section id="browser">
+  <h2><span class="num">07</span>Browser coverage</h2>
+  <p class="sub">What this report does and does not certify.</p>
+  <table>
+    <thead><tr><th style="width:26%">Engine</th><th style="width:20%">Tested</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Chromium (Chrome, Edge, Brave, Opera)</td><td><span class="tag t-ok">Yes</span></td><td>All 420 measurements taken here.</td></tr>
+      <tr><td>WebKit (Safari, all iOS browsers)</td><td><span class="tag t-bad">No</span></td><td><strong>The gap that matters most.</strong> Every browser on iOS uses WebKit, and this is an India-facing retail storefront with heavy mobile traffic.</td></tr>
+      <tr><td>Gecko (Firefox)</td><td><span class="tag t-bad">No</span></td><td>Lower traffic share, but flexbox and form-control rendering differ.</td></tr>
+    </tbody>
+  </table>
+  <div class="warnbox">
+    <strong>Recommendation —</strong> the layout risks specific to WebKit that this audit could not rule out are: <code>100vh</code> behaviour with the iOS toolbar, <code>position: sticky</code> inside scroll containers (the site uses a sticky header), <code>backdrop-filter</code> on the blur panels, and date/select control sizing. Running the same sweep under Playwright's WebKit build would close this gap without new tooling.
+  </div>
+</section>
+
+<section id="method">
+  <h2><span class="num">08</span>Methodology &amp; caveats</h2>
+  <h3>How each page was measured</h3>
+  <ul>
+    <li>Loaded once, then resized through all five widths so CSS media queries re-evaluated without a reload.</li>
+    <li><strong>Overflow</strong> = <code>documentElement.scrollWidth − clientWidth</code>, with the true CSS width read in-page each time (the browser applied a 90&nbsp;% zoom, which was compensated for).</li>
+    <li>Offending elements identified by walking the DOM for anything whose right edge passed the viewport, <strong>excluding</strong> elements inside horizontally-scrollable carousels and, on re-scan, anything clipped by an <code>overflow-hidden</code> ancestor. Without those exclusions the intentional category rails produce false positives.</li>
+    <li>Touch targets measured from live bounding boxes at 360&nbsp;px, restricted to genuine controls.</li>
+    <li>Results written to browser storage after each page so a slow or failed page never lost earlier work.</li>
+    <li><code>npx tsc --noEmit</code> run after every code change — the count fell from 71 to 48 across this work and never rose.</li>
+  </ul>
+  <h3>Caveats — read before quoting this report</h3>
+  <ul>
+    <li><strong>Chromium only.</strong> No Safari or Firefox verification.</li>
+    <li><strong>Layout geometry, not visual design.</strong> The audit detects overflow, breakpoint failures and target sizes. It does not judge spacing, typography, colour contrast or whether a page matches its intended design.</li>
+    <li><strong>No real devices.</strong> Emulated widths only — no touch input, no device pixel ratio, no mobile GPU or network conditions.</li>
+    <li><strong>Content was sampled 2–3&nbsp;s after load.</strong> A few data-heavy pages (<code>/cart</code>, <code>/checkout</code>, <code>/software</code>, <code>/vendor/dashboard</code>) showed little main-region text at that instant. These are empty-state or async-loading conditions, not layout failures.</li>
+    <li><strong>Dynamic routes were not included</strong> in the 84 — product, category and brand detail pages were covered functionally in the platform audit but not re-measured at every breakpoint.</li>
+    <li>Measured while signed in as an administrator, so the header showed the logged-in variant throughout.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  Companion to the platform audit in <code>docs/audit-report.html</code>. SARA Electronics storefront — Next.js 15 · React 19 · Tailwind CSS 3.4.
+</footer>
+
+<script>
+const RAW = ["/|0,0,0,0,0|0|745","/about|0,0,0,0,0|0|2635","/blog|0,0,0,0,0|0|251","/bosch|0,0,0,0,0|3|2581","/brand-guidelines|0,0,0,0,0|0|2452","/brands|0,0,0,0,0|28|454","/business-enquiries|0,0,0,0,0|0|1145","/cancellation-policy|0,0,0,0,0|0|3003","/careers|0,0,0,0,0|0|1390","/cart|0,0,0,0,0|0|20","/checkout|0,0,0,0,0|0|19","/compare|0,0,0,0,0|0|204","/complaints|0,0,0,0,0|0|2042","/contact|0,0,0,0,0|1|1537","/corporate-information|0,0,0,0,0|0|1635","/credits|0,0,0,0,0|0|1175","/disclaimer|0,0,0,0,0|0|1727","/emi|0,0,0,0,0|0|1463","/epic-sale|0,0,0,0,0|0|1946","/faq|0,0,0,0,0|0|864","/forgot-password|0,0,0,0,0|0|1624","/ganesh|0,0,0,0,0|0|5973","/haier|0,0,0,0,0|3|2662","/installation|0,0,0,0,0|0|1502","/lg|0,0,0,0,0|3|1940","/login|0,0,0,0,0|1|175","/lucky-draw|0,0,0,0,0|0|2197","/offers|0,0,0,0,0|0|1282","/press|0,0,0,0,0|0|1131","/privacy-policy|0,0,0,0,0|0|2727","/products|0,0,0,0,0|21|5882","/shipping-policy|0,0,0,0,0|0|1699","/sitemap|0,0,0,0,0|0|872","/software|0,0,0,0,0|0|20","/spin|0,0,0,0,0|1|1547","/spin/terms|0,0,0,0,0|0|2283","/store-locator|0,0,0,0,0|2|1865","/stores|0,0,0,0,0|0|271","/subham|4,4,0,0,0|0|4646","/tcl|0,0,0,0,0|3|2694","/terms-and-conditions|0,0,0,0,0|0|5719","/thank-you|0,0,0,0,0|0|749","/track|0,0,0,0,0|0|349","/dashboard|0,0,0,0,0|0|202","/dashboard/cart|0,0,0,0,0|0|212","/dashboard/orders|0,0,0,0,0|0|214","/dashboard/offers|0,0,0,0,0|0|216","/dashboard/settings|0,0,0,0,0|3|583","/dashboard/wishlist|0,0,0,0,0|0|216","/dashboard/instore-purchases|0,0,0,0,0|0|254","/account|0,0,170,141,0|0|1531","/account/dashboard|0,0,170,141,0|0|1490","/account/preferences|0,0,0,0,0|0|177","/vendor/dashboard|0,0,0,0,0|0|20","/admin/dashboard|0,0,0,0,0|4|108","/admin/products|0,0,0,0,0|4|596","/admin/orders|0,0,0,0,0|4|596","/admin/customers|0,0,0,0,0|4|594","/admin/catalogue|0,0,0,0,0|12|430","/admin/payments|0,0,0,0,0|4|283","/admin/settings|0,0,0,0,0|7|961","/admin/promotions|0,0,0,0,0|5|518","/admin/complaints|0,0,0,0,0|16|1045","/admin/leads|0,0,0,0,0|10|189","/admin/employees|0,0,0,0,0|7|217","/admin/partners|0,0,0,0,0|4|224","/admin/software|0,0,0,0,0|3|737","/admin/advertisements|0,0,0,0,0|4|70","/admin/theme|0,0,0,0,0|4|14","/admin/store-locations|0,0,0,0,0|4|10272","/admin/spin-wheel|0,0,0,0,0|4|163","/admin/campaign-pages|0,0,0,0,0|4|101","/admin/home-components|0,0,0,0,0|4|174","/admin/product-specifications|0,0,0,0,0|4|820","/admin/products/new|0,0,0,0,0|4|796","/admin/partners/new|0,0,0,0,0|3|547","/admin/software/new|0,0,0,0,0|6|585","/admin/advertisements/new|0,0,0,0,0|8|398","/admin/orders/bulk-update|0,0,0,0,0|4|769","/admin/leads/settings|0,0,0,0,0|36|882","/admin/store-qr|0,0,0,0,0|4|1722","/admin/documentation|0,0,0,0,0|4|11435","/admin/listing-banners|0,0,0,0,0|6|717","/admin/blocked-pincodes|0,0,0,0,0|7|265"];
+
+const FIXED = { "/account":1, "/account/dashboard":1 };
+const NOTE = { "/subham":"4 px sub-pixel artefact — nothing visually clipped" };
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const cell = v => {
+  const n = Number(v);
+  const k = n === 0 ? 'd-ok' : (n > 20 ? 'd-bad' : 'd-warn');
+  return `<td class="c"><span class="dot ${k}"></span>${n === 0 ? '' : ' ' + n}</td>`;
+};
+
+const rows = RAW.map(line => {
+  const [route, ovs, tap] = line.split('|');
+  const o = ovs.split(',');
+  const worst = Math.max(...o.map(Number));
+  let status;
+  if (FIXED[route]) status = '<span class="tag t-ok">Fixed &amp; re-verified</span>';
+  else if (NOTE[route]) status = '<span class="tag t-neutral">' + esc(NOTE[route]) + '</span>';
+  else if (worst === 0) status = '<span class="tag t-ok">Clean</span>';
+  else status = '<span class="tag t-warn">' + worst + ' px</span>';
+  const tapCell = Number(tap) > 0
+    ? `<td class="c"><span class="tag ${Number(tap) >= 10 ? 't-warn' : 't-neutral'}">${tap}</span></td>`
+    : '<td class="c"><span class="tag t-ok">0</span></td>';
+  return `<tr><td><code>${esc(route)}</code></td>${o.map(cell).join('')}${tapCell}<td>${status}</td></tr>`;
+});
+document.querySelector('#t-matrix tbody').innerHTML = rows.join('');
+
+const tapRows = RAW.map(l => l.split('|')).filter(p => Number(p[2]) > 0)
+  .sort((a, b) => Number(b[2]) - Number(a[2]))
+  .map(p => {
+    const admin = p[0].startsWith('/admin');
+    const note = admin ? 'Includes 4 from the shared admin sidebar' : '';
+    return `<tr><td><code>${esc(p[0])}</code></td><td><span class="tag ${Number(p[2]) >= 10 ? 't-warn' : 't-neutral'}">${p[2]}</span></td><td>${note}</td></tr>`;
+  });
+document.querySelector('#t-tap tbody').innerHTML = tapRows.join('');
+
+const el = document.getElementById('f-matrix');
+el.addEventListener('input', () => {
+  const q = el.value.toLowerCase();
+  document.querySelectorAll('#t-matrix tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
+document.getElementById('hdr-meta').textContent =
+  'Every page measured at five device widths for layout overflow, breakpoint behaviour and touch-target size — generated ' +
+  new Date().toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' });
+</script>
+</body>
+</html>

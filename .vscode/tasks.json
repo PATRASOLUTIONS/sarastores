@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "dev:3005",
+			"type": "shell",
+			"command": "npx next dev -p 3005",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "sara dev 3005",
+			"type": "shell",
+			"command": "npm run dev:3005",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "none"
+		}
+	]
+}

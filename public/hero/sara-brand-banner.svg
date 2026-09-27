@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 600" width="1920" height="600" role="img" aria-label="Sara Electronics — see it, touch it, take it home today">
+  <title>Sara Electronics — see it, touch it, take it home today</title>
+
+  <defs>
+    <linearGradient id="sBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F2557"/>
+      <stop offset="55%" stop-color="#16336F"/>
+      <stop offset="100%" stop-color="#0A1A40"/>
+    </linearGradient>
+
+    <radialGradient id="sGlow" cx="76%" cy="42%" r="46%">
+      <stop offset="0%" stop-color="#FF6A2C" stop-opacity="0.42"/>
+      <stop offset="60%" stop-color="#FF6A2C" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#FF6A2C" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="sAccent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FF8A4C"/>
+      <stop offset="100%" stop-color="#FF6A2C"/>
+    </linearGradient>
+
+    <linearGradient id="sScreen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B4A94"/>
+      <stop offset="100%" stop-color="#12245A"/>
+    </linearGradient>
+
+    <!-- Faint diagonal weave, adds depth without competing with the copy. -->
+    <pattern id="sWeave" width="48" height="48" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="48" height="48" fill="none"/>
+      <rect width="2" height="48" fill="#FFFFFF" opacity="0.045"/>
+    </pattern>
+  </defs>
+
+  <rect width="1920" height="600" fill="url(#sBg)"/>
+  <rect width="1920" height="600" fill="url(#sWeave)"/>
+  <rect width="1920" height="600" fill="url(#sGlow)"/>
+
+  <!-- Appliance silhouettes: television, refrigerator, washing machine -->
+  <g opacity="0.97">
+    <!-- Television -->
+    <g transform="translate(1226 176)">
+      <rect x="0" y="0" width="420" height="248" rx="12" fill="#0B1B44" stroke="#3A5AA8" stroke-width="3"/>
+      <rect x="12" y="12" width="396" height="212" rx="6" fill="url(#sScreen)"/>
+      <path d="M12 176 L132 108 L214 160 L300 92 L408 158 V218 a6 6 0 0 1 -6 6 H18 a6 6 0 0 1 -6 -6 Z" fill="#FF6A2C" opacity="0.30"/>
+      <rect x="186" y="248" width="48" height="26" fill="#0B1B44"/>
+      <rect x="140" y="274" width="140" height="12" rx="6" fill="#3A5AA8"/>
+    </g>
+
+    <!-- Refrigerator -->
+    <g transform="translate(1690 150)">
+      <rect x="0" y="0" width="150" height="330" rx="16" fill="#12275C" stroke="#3A5AA8" stroke-width="3"/>
+      <line x1="0" y1="124" x2="150" y2="124" stroke="#3A5AA8" stroke-width="3"/>
+      <rect x="122" y="36"  width="9" height="62" rx="4.5" fill="#FF6A2C"/>
+      <rect x="122" y="152" width="9" height="90" rx="4.5" fill="#FF6A2C"/>
+    </g>
+
+    <!-- Washing machine -->
+    <g transform="translate(1074 330)">
+      <rect x="0" y="0" width="150" height="150" rx="14" fill="#12275C" stroke="#3A5AA8" stroke-width="3"/>
+      <circle cx="75" cy="86" r="44" fill="#0B1B44" stroke="#3A5AA8" stroke-width="3"/>
+      <circle cx="75" cy="86" r="26" fill="#2B4A94" opacity="0.55"/>
+      <circle cx="34" cy="28" r="7" fill="#FF6A2C"/>
+      <rect x="54" y="22" width="72" height="11" rx="5.5" fill="#3A5AA8"/>
+    </g>
+  </g>
+
+  <!-- Copy -->
+  <g font-family="Poppins, Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <g transform="translate(140 150)">
+      <rect x="0" y="0" width="330" height="46" rx="23" fill="#FF6A2C"/>
+      <text x="165" y="31" text-anchor="middle" font-size="20" font-weight="700"
+            fill="#FFFFFF" letter-spacing="3">SARA ELECTRONICS</text>
+    </g>
+
+    <text x="140" y="278" font-size="80" font-weight="800" fill="#FFFFFF">See it. Touch it.</text>
+    <text x="140" y="368" font-size="80" font-weight="800" fill="#FF8A4C">Take it home today.</text>
+
+    <text x="140" y="428" font-size="30" font-weight="500" fill="#C7D3EC">
+      54 stores across Karnataka — with delivery and installation handled for you.
+    </text>
+
+    <g transform="translate(140 468)">
+      <rect x="0" y="0" width="238" height="64" rx="32" fill="url(#sAccent)"/>
+      <text x="119" y="41" text-anchor="middle" font-size="25" font-weight="800"
+            fill="#FFFFFF" letter-spacing="1">SHOP NOW</text>
+
+      <rect x="262" y="0" width="256" height="64" rx="32" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.75"/>
+      <text x="390" y="41" text-anchor="middle" font-size="25" font-weight="700"
+            fill="#FFFFFF" letter-spacing="1">FIND A STORE</text>
+    </g>
+  </g>
+</svg>

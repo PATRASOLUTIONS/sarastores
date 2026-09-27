@@ -1,0 +1,12 @@
+# ✅ Admin Sidebar Updated
+
+## Change
+Added "Site Features" link to the main navigation sidebar in the Admin Panel.
+
+## Details
+- **Menu Item:** Site Features
+- **Icon:** Star ⭐️
+- **Location:** Under "Product Specifications"
+- **Target:** `/admin/features`
+
+Now you can quickly access the feature management page without typing the URL.

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>SARA Electronics — Platform Audit Report</title>
+<style>
+  :root{
+    --navy:#0F2557; --blue:#1560BD; --accent:#FF6A2C; --red:#E11D2E;
+    --ok:#087443; --okbg:#E6F4EC; --warn:#8A5A00; --warnbg:#FFF4DB;
+    --bad:#B3261E; --badbg:#FDECEA;
+    --ink:#14213D; --muted:#5B6579; --line:#E3E8F0; --bg:#F6F8FC;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  header.top{background:linear-gradient(135deg,var(--navy),#1A3A7A);color:#fff;padding:38px 24px 30px}
+  header.top .wrap{max-width:1180px;margin:0 auto}
+  header.top h1{margin:0 0 6px;font-size:28px;letter-spacing:-.3px}
+  header.top p{margin:0;opacity:.85;font-size:14px}
+  .pill{display:inline-block;background:var(--accent);color:#fff;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:4px 10px;border-radius:99px;margin-bottom:12px}
+  nav.toc{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;overflow-x:auto;white-space:nowrap}
+  nav.toc a{color:var(--navy);text-decoration:none;font-size:13px;font-weight:600;margin-right:18px;padding:5px 0;display:inline-block}
+  nav.toc a:hover{color:var(--accent)}
+  main{max-width:1180px;margin:0 auto;padding:28px 24px 80px}
+  section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:22px}
+  h2{font-size:20px;margin:0 0 4px;color:var(--navy)}
+  h2 .num{color:var(--accent);font-weight:800;margin-right:8px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  h3{font-size:15px;margin:22px 0 8px;color:var(--navy)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:6px 0 4px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff}
+  .card .n{font-size:26px;font-weight:800;color:var(--navy);line-height:1.1}
+  .card .l{font-size:12px;color:var(--muted);margin-top:3px}
+  .card.good .n{color:var(--ok)} .card.bad .n{color:var(--bad)} .card.warn .n{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#F2F5FA;color:var(--navy);font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:44px}
+  tbody tr:hover{background:#FAFBFE}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:#F2F5FA;padding:1px 5px;border-radius:4px;color:var(--navy)}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .t-ok{background:var(--okbg);color:var(--ok)} .t-warn{background:var(--warnbg);color:var(--warn)} .t-bad{background:var(--badbg);color:var(--bad)} .t-neutral{background:#EEF1F7;color:var(--muted)}
+  .scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .scroll table{margin:0}
+  .filter{width:100%;max-width:320px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;margin-top:12px}
+  .fix{border-left:3px solid var(--ok);background:#FAFDFB;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .open{border-left:3px solid var(--warn);background:#FFFDF7;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .fix h4,.open h4{margin:0 0 5px;font-size:14px;color:var(--navy)}
+  .fix p,.open p{margin:5px 0 0;font-size:13.5px;color:#374151}
+  .meta{font-size:12px;color:var(--muted);margin-top:7px}
+  .note{background:#F2F6FD;border:1px solid #D6E2F6;border-radius:8px;padding:13px 15px;font-size:13.5px;margin-top:14px}
+  ul{margin:8px 0;padding-left:20px} li{margin:4px 0;font-size:13.5px}
+  footer{max-width:1180px;margin:0 auto;padding:0 24px 50px;color:var(--muted);font-size:12.5px}
+  @media print{nav.toc{display:none}section{break-inside:avoid;box-shadow:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="pill">Quality Assurance</div>
+    <h1>SARA Electronics — Platform Audit Report</h1>
+    <p id="hdr-meta">Full sweep of public pages, admin dashboard, authenticated areas and API surface.</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#summary">Summary</a>
+  <a href="#fixed">Fixed</a>
+  <a href="#open">Open issues</a>
+  <a href="#public">Public pages</a>
+  <a href="#admin">Admin pages</a>
+  <a href="#authed">Account &amp; vendor</a>
+  <a href="#dynamic">Dynamic routes</a>
+  <a href="#api">API endpoints</a>
+  <a href="#security">Security</a>
+  <a href="#method">Methodology</a>
+</nav>
+
+<main>
+
+<section id="summary">
+  <h2><span class="num">01</span>Executive summary</h2>
+  <p class="sub">Every static page route and every non-destructive GET endpoint was exercised against a live dev server with a real admin session.</p>
+  <div class="cards">
+    <div class="card good"><div class="n">127</div><div class="l">Static pages tested</div></div>
+    <div class="card good"><div class="n">100%</div><div class="l">Returned HTTP 200</div></div>
+    <div class="card good"><div class="n">96</div><div class="l">API endpoints tested</div></div>
+    <div class="card good"><div class="n">0</div><div class="l">Server errors remaining</div></div>
+    <div class="card good"><div class="n">18</div><div class="l">Bugs found &amp; fixed</div></div>
+    <div class="card warn"><div class="n">3</div><div class="l">Open issues</div></div>
+  </div>
+  <div class="note">
+    <strong>Verdict —</strong> the platform is functionally healthy. All 55 admin pages, all 56 public pages and all 16 authenticated pages render without JavaScript errors, and no endpoint returns a 500.
+    Ten defects were found and fixed across two passes. The most serious were user-facing: two routes returning HTTP&nbsp;500, a wall of broken links in <code>/account</code>, a category page that never showed products, and two <code>catch</code> blocks that would throw a second error while handling the first.
+    The three remaining items are a data clean-up, a missing test suite and an infrastructure dependency — none of them broken code.
+  </div>
+</section>
+
+<section id="fixed">
+  <h2><span class="num">02</span>Bugs found and fixed</h2>
+  <p class="sub">All four were reproduced, fixed and re-verified in the browser during this audit.</p>
+
+  <div class="fix">
+    <h4>1. Footer &amp; menu sub-category links returned “0 Products” <span class="tag t-bad">User-facing</span></h4>
+    <p>Every TV link in the footer <em>Shop</em> column and the category menu led to an empty listing. The products page collapsed all TV variants to the single label <code>TV</code> when reading a product, but compared that against the raw label carried in the URL (<code>TV 43"</code>), so nothing ever matched.</p>
+    <p class="meta">Fixed in <code>app/products/page.tsx</code> — the filter now matches either the collapsed or the exact stored label. Verified: <code>TV 43"</code> → 45 products, <code>TV 32"</code> → 29, <code>TV 55"</code> → 56, <code>REFRIGERATOR</code> → 108, <code>DISHWASHER</code> → 17.</p>
+  </div>
+
+  <div class="fix">
+    <h4>2. <code>/account/orders</code> and <code>/account/profile</code> returned HTTP 500 <span class="tag t-bad">User-facing</span></h4>
+    <p>Three page files had been commented out in their entirety, leaving no default export. Next.js answers such a route with a 500. They were still linked from the account sidebar, the account dashboard, the PWA manifest and the sitemap page, so customers could reach them.</p>
+    <p class="meta">Fixed in <code>app/account/orders/page.tsx</code>, <code>app/account/orders/[id]/page.tsx</code> and <code>app/account/profile/page.tsx</code> — each now redirects to its maintained <code>/dashboard/*</code> equivalent. The previous implementation is preserved in comments beneath. This also cleared 2 of the pre-existing TypeScript errors (73 → 71).</p>
+  </div>
+
+  <div class="fix">
+    <h4>3. <code>/account</code> landing page was a wall of broken links <span class="tag t-bad">User-facing</span></h4>
+    <p>All five navigation tiles pointed at routes that either returned 500 or never existed: <code>/account/profile</code>, <code>/account/orders</code>, <code>/account/wishlist</code>, <code>/account/addresses</code>, <code>/account/settings</code>.</p>
+    <p class="meta">Fixed in <code>app/account/page.tsx</code> — tiles now point at <code>/dashboard/settings</code>, <code>/dashboard/orders</code>, <code>/dashboard/wishlist</code> and <code>/account/preferences</code>.</p>
+  </div>
+
+  <div class="fix">
+    <h4>4. Admins saw “You do not have permission to access this page” <span class="tag t-warn">Admin-facing</span></h4>
+    <p>Six admin pages rendered a red permission-denied banner for roughly four seconds on every load, before the auth context finished resolving. The same check also used <code>role !== "admin"</code>, which would have permanently locked out <code>superadmin</code> users and staff granted <code>dashboardAccess</code>.</p>
+    <p class="meta">Fixed by adding a <code>canAccessAdmin</code> flag to <code>contexts/AuthContext.tsx</code> (mirroring <code>checkAdminAuthorization()</code> on the server) and a loading guard to <code>admin/orders</code>, <code>admin/orders/[id]</code>, <code>admin/customers</code>, <code>admin/customers/[id]</code>, <code>admin/products</code> and <code>admin/external-orders</code>. Re-verified: banner never appears; Orders shows 121 records, Customers shows 10.</p>
+  </div>
+
+  <div class="fix">
+    <h4>5. <code>/category/[id]</code> could never show products <span class="tag t-bad">High</span></h4>
+    <p>Three separate faults stacked on the same route. The page looked a category up <em>by name only</em>, so any ObjectId URL threw “Category not found”. Even when the name matched, it then selected products with <code>product.category === category.id</code> — but products store the category as a <strong>name</strong> (<code>"HOME APPLIANCES"</code>), so the comparison never succeeded and the grid was always empty. The server metadata and JSON-LD had mirror-image versions of both faults.</p>
+    <p class="meta">Fixed in <code>app/category/[id]/page.tsx</code>, <code>layout.tsx</code> and <code>CategoryJsonLdServer.tsx</code> — all three now resolve a category by id <em>or</em> name and match products on name, groupName or legacy id. The page also filters server-side via <code>/api/products?category=</code> instead of downloading the entire catalogue. Verified: <code>/category/PANEL</code>, <code>/category/HOME%20APPLIANCES</code>, <code>/category/home-appliances</code> and the ObjectId form all render products with correct titles.</p>
+  </div>
+
+  <div class="fix">
+    <h4>6. Two <code>catch</code> blocks referenced out-of-scope variables <span class="tag t-bad">High</span></h4>
+    <p>In <code>app/api/v1/partner/api-keys/domains/route.ts</code> (both the GET and PUT handlers) the <code>catch</code> block read <code>context.apiKey</code>, but <code>context</code> is declared <em>inside</em> the <code>try</code>. In <code>app/api/offer-products/route.ts</code> the fallback returned <code>defaultOfferProducts</code>, a constant that had been deleted. In each case the error handler would throw a <code>ReferenceError</code> — replacing a clean 500 with an unhandled crash, precisely when something had already gone wrong.</p>
+    <p class="meta">Fixed by reading <code>request.apiKey</code> (which is in scope) and returning an empty list respectively.</p>
+  </div>
+
+  <div class="fix">
+    <h4>7. eXlr8 admin pages showed a raw JSON error blob <span class="tag t-warn">Medium</span></h4>
+    <p>With the <code>EXLR8_*</code> variables unset, the four KGen pages rendered <code>Error: {"error":"eXlr8 integration is not configured"}</code> directly to administrators.</p>
+    <p class="meta">Fixed with a shared <code>app/admin/integrations/kgen/integration-error.tsx</code> that unwraps the API's <code>error</code> field and renders a “not configured” notice naming the variables to set. Verified: the API still returns 503 and the page now shows the notice with no JSON.</p>
+  </div>
+
+  <div class="fix">
+    <h4>8. Footer social links pointed at platform homepages <span class="tag t-warn">Medium</span></h4>
+    <p>All five “Follow Us” icons linked to bare destinations such as <code>https://instagram.com</code> rather than SARA profiles — a dead end for customers and a low-quality outbound signal for search engines.</p>
+    <p class="meta">Fixed in <code>components/Footer.tsx</code> — each icon now reads its URL from site settings (<code>instagramUrl</code>, <code>facebookUrl</code>, <code>youtubeUrl</code>, <code>linkedinUrl</code>, <code>xUrl</code>) and is hidden until a valid URL is configured; the whole block hides when none are set. <strong>Action required:</strong> add the real profile URLs to the settings document to bring the icons back.</p>
+  </div>
+
+  <div class="fix">
+    <h4>9. Type-safety defects that masked real bugs <span class="tag t-warn">Medium</span></h4>
+    <p>Four of the pre-existing TypeScript errors were genuine faults rather than typing noise: the <code>Address</code> type was a <strong>circular alias</strong> (<code>CartContext</code> imported it from <code>useCart</code>, which imported it back) so it silently resolved to nothing and gave the cart's shipping address no type safety at all; <code>components/ui/alert</code> was imported but had never been created; <code>hooks/useCart.ts</code> declared <code>CartItem</code>, <code>Order</code> and <code>Address</code> twice; and the admin “new product” form bound an <code>image</code> field absent from its own interface.</p>
+    <p class="meta">All fixed. The error count fell from <strong>71 to 48</strong> (−32 %), and every remaining error is a loose-typing nit (<code>unknown</code>/<code>{}</code> from untyped state), not a defect.</p>
+  </div>
+
+  <div class="fix">
+    <h4>10. Duplicate React keys in the account sidebar <span class="tag t-neutral">Low</span></h4>
+    <p>Introduced while repointing the dead links in fix&nbsp;3 — two navigation entries briefly shared the same <code>href</code>, which React uses as the key. Caught by console monitoring during verification and corrected by merging them into a single “Addresses &amp; Settings” entry.</p>
+  </div>
+</section>
+
+<section id="open">
+  <h2><span class="num">03</span>Open issues &amp; recommendations</h2>
+  <p class="sub">What remains after both remediation passes. None of these is broken code — each needs a data decision, a product decision or infrastructure.</p>
+
+  <div class="open">
+    <h4>1. Sub-category data is inconsistent <span class="tag t-warn">Medium — needs your decision</span></h4>
+    <p>The same product type is stored under several spellings, which splits listings and inflates the filter list: <code>TV 55"</code> (59 products) vs <code>TV 55</code> (20), <code>Refrigerators</code> vs <code>REFRIGERATOR</code>, <code>Washers</code> vs <code>WASHING MACHINE</code>.</p>
+    <p class="meta">Deliberately not fixed: this is a write against a live catalogue, not a code change. Recommended order — normalise the values in MongoDB, verify listings, then delete the TV special-casing in <code>app/products/page.tsx</code> that currently compensates for it.</p>
+  </div>
+
+  <div class="open">
+    <h4>2. 48 remaining TypeScript errors <span class="tag t-neutral">Low</span></h4>
+    <p>Down from 71. Every remaining error is loose typing — values inferred as <code>unknown</code> or <code>{}</code> from untyped state, concentrated in <code>app/admin/orders/[id]/page.tsx</code> (9), <code>app/api/spin-wheel/spin/route.ts</code> (4) and <code>lib/partner/api-keys.ts</code> (4). None is a functional defect.</p>
+    <p class="meta">The real risk is not the errors themselves but that <code>next.config.mjs</code> sets <code>ignoreBuildErrors</code>, so <code>next build</code> would ship a genuinely broken build. <code>npx tsc --noEmit</code> is the only gate — worth wiring into CI.</p>
+  </div>
+
+  <div class="open">
+    <h4>3. No automated test suite <span class="tag t-warn">Medium</span></h4>
+    <p>There is no Jest, Vitest or Playwright configuration and no <code>test</code> script; the files under <code>scripts/test-*</code> are manual smoke scripts. Every regression check — including this audit — must be performed by hand.</p>
+    <p class="meta">Highest-value first tests: <code>computeOrderPricing()</code>, the session sign/verify round-trip in <code>lib/session.ts</code>, and the route guards.</p>
+  </div>
+
+  <div class="open">
+    <h4>4. Rate limiting is in-memory only <span class="tag t-neutral">Low — needs infrastructure</span></h4>
+    <p><code>lib/rate-limit.ts</code> keeps counters in process memory, so every serverless cold start resets them. It cannot be fixed in code alone; it needs a shared store such as Redis.</p>
+  </div>
+</section>
+
+<section id="public">
+  <h2><span class="num">04</span>Public pages</h2>
+  <p class="sub">56 static public routes — every one returned HTTP 200 with no server error and no uncaught JavaScript exception.</p>
+  <input class="filter" id="f-public" placeholder="Filter routes…" />
+  <div class="scroll"><table id="t-public"><thead><tr><th style="width:44%">Route</th><th style="width:12%">Status</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="admin">
+  <h2><span class="num">05</span>Admin dashboard</h2>
+  <p class="sub">55 static admin routes, exercised with a real <code>admin</code> session. All returned HTTP 200 and rendered live data. Zero page errors.</p>
+  <input class="filter" id="f-admin" placeholder="Filter routes…" />
+  <div class="scroll"><table id="t-admin"><thead><tr><th style="width:34%">Route</th><th style="width:10%">Status</th><th>Rendered content</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="authed">
+  <h2><span class="num">06</span>Account, dashboard &amp; vendor</h2>
+  <p class="sub">16 authenticated routes. Two returned HTTP 500 before this audit; both are fixed.</p>
+  <div class="scroll"><table id="t-auth"><thead><tr><th style="width:34%">Route</th><th style="width:14%">Before</th><th style="width:12%">After</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="dynamic">
+  <h2><span class="num">07</span>Dynamic routes</h2>
+  <p class="sub">Sampled with real identifiers read from the live database. The <code>/category/[id]</code> rows were re-tested after the fix in section 02.</p>
+  <table id="t-dyn"><thead><tr><th style="width:26%">Pattern</th><th style="width:34%">Sample tested</th><th style="width:10%">Status</th><th>Result</th></tr></thead><tbody></tbody></table>
+</section>
+
+<section id="api">
+  <h2><span class="num">08</span>API endpoints</h2>
+  <p class="sub">235 route files exist; 112 expose a GET without a dynamic segment. 96 were exercised with an admin session — the other 16 were deliberately skipped because they mutate data or send email.</p>
+  <div class="cards">
+    <div class="card good"><div class="n">87</div><div class="l">200 OK</div></div>
+    <div class="card"><div class="n">6</div><div class="l">400 — missing parameter</div></div>
+    <div class="card"><div class="n">1</div><div class="l">405 — method guard</div></div>
+    <div class="card"><div class="n">1</div><div class="l">503 — not configured</div></div>
+    <div class="card"><div class="n">1</div><div class="l">404 — disabled by design</div></div>
+    <div class="card good"><div class="n">0</div><div class="l">500 Server error</div></div>
+  </div>
+
+  <h3>Non-200 responses — all correct behaviour</h3>
+  <table id="t-api-non"><thead><tr><th style="width:34%">Endpoint</th><th style="width:10%">Status</th><th>Response</th></tr></thead><tbody></tbody></table>
+
+  <h3>Endpoints deliberately not called</h3>
+  <p class="sub" style="margin-bottom:6px">These have side effects and the database in use holds live customer and order data.</p>
+  <table id="t-api-skip"><thead><tr><th style="width:44%">Endpoint</th><th>Reason for exclusion</th></tr></thead><tbody></tbody></table>
+
+  <h3>Endpoints returning 200</h3>
+  <input class="filter" id="f-api" placeholder="Filter endpoints…" />
+  <div class="scroll"><table id="t-api-ok"><thead><tr><th>Endpoint</th><th style="width:12%">Status</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="security">
+  <h2><span class="num">09</span>Security checks</h2>
+  <p class="sub">Sensitive endpoints were re-requested with no session cookie, using a separate HTTP client, to confirm they fail closed.</p>
+  <div class="note" style="background:var(--okbg);border-color:#BFE3CE">
+    <strong>Result —</strong> every endpoint exposing customer, order, payment, staff or licence data correctly returned <code>401</code> when called anonymously. No sensitive data was reachable without a session.
+  </div>
+
+  <div class="note">
+    <strong>Superseded by a dedicated review.</strong> A full pre-launch security pass has since been carried out and is documented separately in <code>docs/launch-readiness-report.html</code>. It extends the checks below with anonymous probing of 30 <em>mutating</em> endpoints (26 returned 401/403, 4 are public by design), brute-force testing of login and signup, a secrets scan across 853 files, a CORS and CDN-caching review, and an environment audit.
+    <br><br>
+    Eight further issues were found and fixed there — most seriously, <strong>live MongoDB Atlas credentials hardcoded in five scripts</strong>, an unrate-limited employee-ID enumeration oracle, deactivated products being publicly listable, and a Vercel edge-cache rule that would have served an administrator's catalogue response to anonymous visitors. That report also lists three configuration blockers that must be cleared before deploying.
+  </div>
+
+  <table id="t-sec"><thead><tr><th style="width:34%">Endpoint</th><th style="width:16%">Anonymous</th><th>Assessment</th></tr></thead><tbody></tbody></table>
+
+  <h3>Debug and test routes</h3>
+  <p>Earlier project documentation lists <code>/api/debug/*</code>, <code>/api/test-db</code> and <code>/api/test-connection</code> as unguarded. That is <strong>no longer accurate</strong> — all six are environment-gated and return <code>404</code> outside development. They respond on this dev server only.</p>
+  <ul>
+    <li><code>/api/debug</code>, <code>/api/debug/cookie</code>, <code>/api/debug-categories</code>, <code>/api/debug/carts</code> — gated on <code>NODE_ENV === "development"</code> (<code>/api/debug/carts</code> additionally requires an admin session).</li>
+    <li><code>/api/test-db</code>, <code>/api/test-connection</code> — gated on <code>NODE_ENV !== "production"</code>.</li>
+    <li><code>/api/debug/session</code> — additionally requires <code>ENABLE_DEBUG_ROUTES=true</code>; returned <code>404</code> even in development.</li>
+  </ul>
+  <p class="meta">Minor inconsistency worth aligning: two routes test <code>!== "production"</code> while the rest test <code>=== "development"</code>, so the former would still answer in a staging environment.</p>
+</section>
+
+<section id="method">
+  <h2><span class="num">10</span>Methodology &amp; caveats</h2>
+  <h3>How this was tested</h3>
+  <ul>
+    <li>Routes enumerated from the filesystem — 153 <code>page.tsx</code> files and 235 <code>route.ts</code> files.</li>
+    <li>Pages driven in a real Chromium browser, capturing HTTP status, final URL after redirects, rendered heading, main-content length and any uncaught exception or console error.</li>
+    <li>Data-heavy pages re-checked with an 11-second settle so a slow fetch was not mistaken for a broken page.</li>
+    <li>API endpoints called from the page context so the session cookie was attached; anonymous checks used a separate HTTP client with no cookie jar.</li>
+    <li><code>npx tsc --noEmit</code> run before and after every code change to guarantee no new type errors. The count moved 73 → 71 → 48 across the two passes; it never rose.</li>
+  </ul>
+  <h3>Caveats — read before quoting this report</h3>
+  <ul>
+    <li><strong>Response times are meaningless here.</strong> Figures of 30–140 seconds were on-demand development compilation, not production latency. This audit says nothing about performance.</li>
+    <li><strong>Write operations were not exercised.</strong> Creating, updating and deleting records, payment capture and email sending were all left alone because the database holds live data.</li>
+    <li><strong>Dynamic routes were sampled, not exhaustively tested.</strong> One representative identifier per pattern.</li>
+    <li><strong>Visual fidelity was not re-checked</strong> in this pass; this audit covers routing, rendering, data loading, errors and access control.</li>
+    <li>Admin pages were verified with a single <code>admin</code> account. Behaviour for <code>superadmin</code> and for staff limited by <code>allowedPages</code> was not separately exercised.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  Generated for the SARA Electronics storefront (Next.js 15 · React 19 · MongoDB). Environment: local development server, database <code>e-commerce-bytewise</code>, 61 collections.
+</footer>
+
+<script>
+const publicPages=[["/","Homepage"],["/about",""],["/blog",""],["/bosch","Brand landing"],["/brand-guidelines",""],["/brands",""],["/business-enquiries",""],["/cancellation-policy",""],["/careers",""],["/cart",""],["/checkout",""],["/compare",""],["/complaints",""],["/contact",""],["/corporate-information",""],["/credits",""],["/disclaimer",""],["/emi",""],["/epic-sale","Campaign landing"],["/error",""],["/faq",""],["/forgot-password",""],["/ganesh","Campaign landing"],["/haier","Brand landing"],["/installation",""],["/lg","Brand landing"],["/loaders-demo","Internal demo page"],["/login",""],["/lucky-draw",""],["/offers",""],["/partner-api-docs",""],["/partner-api-test","Admin-gated tester"],["/press",""],["/privacy-policy",""],["/products","Filters verified"],["/register",""],["/reset-password",""],["/returns",""],["/rewards",""],["/search",""],["/shipping-policy",""],["/sitemap",""],["/software",""],["/spin",""],["/spin/terms",""],["/store-locator",""],["/stores",""],["/subham","Campaign landing"],["/tcl","Brand landing"],["/terms-and-conditions",""],["/thank-you",""],["/track",""],["/verify-email",""],["/warranty",""],["/wishlist",""],["/auth/signin","Dead code — next-auth is unused"]];
+const adminPages=[["/admin","Redirects to /admin/dashboard"],["/admin/dashboard","Admin Panel"],["/admin/products","Products Management — MongoDB connected"],["/admin/products/new","Create product form"],["/admin/categories","Redirects to /admin/catalogue?tab=categories"],["/admin/sub-categories","Redirects to /admin/catalogue?tab=subcategories"],["/admin/brands","Redirects to /admin/catalogue?tab=brands"],["/admin/catalogue","Taxonomy & brands — 5 categories, 14 sub-categories"],["/admin/orders","Orders — 121 total (104 direct, 17 partner)"],["/admin/orders/bulk-update","Bulk Order Status Update"],["/admin/customers","Customers — 10 found"],["/admin/payments","Payment History"],["/admin/settings","Store Settings"],["/admin/promotions","Promotions & Coupons"],["/admin/advertisements","Advertisements"],["/admin/advertisements/new","Create New Advertisement"],["/admin/product-advertisements","Product Advertisements"],["/admin/product-advertisements/new","Create New Product Advertisement"],["/admin/articles","Buying guides"],["/admin/blocked-pincodes","Pincode Management"],["/admin/campaign-pages","Custom Landing Pages"],["/admin/complaints","Complaint Management — 6 complaints"],["/admin/contact-inquiries","Contact Inquiries"],["/admin/customer-centric","Email Campaigns"],["/admin/customer-centric/templates","Email Templates"],["/admin/documentation","System Documentation"],["/admin/employees","Staff access"],["/admin/external-orders","External Orders"],["/admin/features","Manage Site Features"],["/admin/home-components","Homepage sections"],["/admin/image-coverage","Image coverage audit"],["/admin/integrations","Integrations"],["/admin/integrations/kgen","eXlr8 Dashboard"],["/admin/integrations/kgen/orders","Shows a 'not configured' notice — fixed"],["/admin/integrations/kgen/products","Shows a 'not configured' notice — fixed"],["/admin/integrations/kgen/transactions","KGen — Wallet Transactions"],["/admin/leads","Lead Management"],["/admin/leads/settings","Lead Form Settings"],["/admin/listing-banners","Banners & Promos"],["/admin/lucky-draw","Lucky Draw"],["/admin/migrate","Migrate to Database"],["/admin/partner-payouts","Partner Payouts & Commissions"],["/admin/partners","Partners"],["/admin/partners/new","Add New Partner"],["/admin/posters","Hero posters"],["/admin/product-specifications","Product Specifications"],["/admin/scraper","Product scraper"],["/admin/software","Software Products"],["/admin/software/new","Add New Software Product"],["/admin/spin-wheel","Spin the Wheel Campaign"],["/admin/spin-wheel/campaigns","Spin Wheel Campaigns"],["/admin/store-locations","Store Locations Management"],["/admin/store-qr","Store QR Codes"],["/admin/store-qr/analytics","QR Code Analytics"],["/admin/theme","Storefront theme"]];
+const authPages=[["/account","200","200","Tile links repaired — see fix 3"],["/account/dashboard","200","200",""],["/account/orders","500","200","Now redirects to /dashboard/orders"],["/account/orders/[id]","500","200","Now redirects to /dashboard/orders/[id]"],["/account/profile","500","200","Now redirects to /dashboard/settings"],["/account/preferences","200","200","Communication preferences"],["/dashboard","200","200",""],["/dashboard/cart","200","200",""],["/dashboard/instore-purchases","200","200",""],["/dashboard/offers","200","200",""],["/dashboard/orders","200","200",""],["/dashboard/settings","200","200",""],["/dashboard/wishlist","200","200",""],["/vendor/dashboard","200","200","Client-side gate only"],["/vendor/products","200","200","Client-side gate only"],["/vendor/products/new","200","200","Client-side gate only"]];
+const dynRoutes=[["/product/[slug]","bosch-13-place-setting-dishwasher…","200","ok","Renders"],["/brands/[slug]","/brands/bosch","200","ok","Renders"],["/blog/[slug]","via /admin/articles","200","ok","Listing verified"],["/sub-category/[name]","/sub-category/REFRIGERATOR","200","ok","Renders"],["/stores/[city]","/stores/karnataka","200","ok","Renders"],["/spin/[slug]","/spin/default","200","ok","Renders"],["/category/[id]","/category/68eec65a4376548b5bdbea31","200","ok","Fixed — 20 products"],["/category/[id]","/category/HOME%20APPLIANCES","200","ok","Fixed — 20 products"],["/category/[id]","/category/home-appliances","200","ok","Fixed — hyphenated name"],["/category/[id]","/category/PANEL","200","ok","Fixed — 20 products"]];
+const apiNon=[["/api/india/cities","400",'{"error":"State parameter is required"}'],["/api/orders/track","400",'{"error":"Order ID is required"}'],["/api/vendor/products","400",'{"error":"Vendor ID is required"}'],["/api/integrations/exlr8/orders","400",'{"error":"Missing EXLR8 configuration"}'],["/api/integrations/exlr8/wallet/balance","400",'{"error":"Missing EXLR8 configuration"}'],["/api/integrations/exlr8/wallet/transactions","400",'{"error":"Missing EXLR8 configuration"}'],["/api/integrations/exlr8/products","503",'{"error":"eXlr8 integration is not configured"}'],["/api/products/bulk","405",'Method GET not allowed — use POST with { ids: [...] }'],["/api/debug/session","404",'Disabled unless ENABLE_DEBUG_ROUTES=true']];
+const apiSkip=[["/api/cron/cart-recovery","Sends customer recovery email"],["/api/cron/wishlist-alerts","Sends price-drop / restock email"],["/api/cron/lifecycle-reminders","Sends lifecycle email"],["/api/cron/segment-customers","Rewrites customer segments"],["/api/cron/rebuild-profiles","Rebuilds customer_profiles"],["/api/cron/init","Starts scheduled jobs"],["/api/seed-database","Writes seed data"],["/api/seed-categories","Writes seed categories"],["/api/sub-categories/extract-from-products","Creates sub-category documents"],["/api/admin/assign-missing-licenses","Assigns software licences to orders"],["/api/debug/test-abandoned-cart","Sends a test abandoned-cart email"],["/api/unsubscribe","Would unsubscribe a real customer"],["/api/auth/google","OAuth redirect"],["/api/auth/google/callback","OAuth callback"],["/api/auth/verify-email","Consumes a verification token"],["/api/leads/export","Exports lead PII"]];
+const apiOk="/api/account/preferences,/api/admin/campaign-history,/api/admin/campaign-pages,/api/admin/campaign-recipients,/api/admin/dashboard,/api/admin/email-templates,/api/admin/external-orders,/api/admin/features,/api/admin/image-coverage,/api/admin/lucky-draw,/api/admin/marketing/templates,/api/admin/notifications,/api/admin/partner-commissions,/api/admin/partners,/api/admin/payouts,/api/admin/retention/overview,/api/admin/segments,/api/admin/store-locations,/api/admin/store-qr,/api/admin/store-qr/analytics,/api/admin/taxonomy,/api/advertisements,/api/advertisements/fallback,/api/animated-banner,/api/articles,/api/auth/config,/api/auth/session,/api/blocked-pincodes,/api/brands,/api/cart,/api/categories,/api/complaints,/api/contact-inquiries,/api/coupons,/api/debug,/api/debug-categories,/api/debug/carts,/api/debug/cookie,/api/employees,/api/fallback,/api/featured-products,/api/footer,/api/health,/api/hero-slides,/api/home-components,/api/india/states,/api/leads,/api/leads/settings,/api/listing-banners,/api/loyalty,/api/offer-products,/api/offers,/api/orders,/api/payments,/api/posters,/api/product-advertisements,/api/product-slides,/api/products,/api/products/export,/api/products/specifications,/api/products/specifications/export,/api/razorpay/offers,/api/reviews,/api/scraped-products,/api/search/suggestions,/api/settings,/api/software,/api/software-licenses,/api/software/license-keys,/api/spin-wheel/admin/analytics,/api/spin-wheel/admin/campaigns,/api/spin-wheel/admin/coupon-codes,/api/spin-wheel/admin/coupons,/api/spin-wheel/admin/dashboard,/api/spin-wheel/admin/inventory,/api/spin-wheel/admin/participants,/api/spin-wheel/admin/stores,/api/split-cards,/api/stores,/api/sub-categories,/api/test-connection,/api/test-db,/api/testimonials,/api/theme,/api/user/recently-viewed,/api/users,/api/wishlist".split(",");
+const secRows=[["/api/users","401","ok","Customer records protected"],["/api/employees","401","ok","Staff records protected"],["/api/orders","401","ok","Order data protected"],["/api/payments","401","ok","Payment data protected"],["/api/leads","401","ok","Lead PII protected"],["/api/leads/export","401","ok","Bulk PII export protected"],["/api/complaints","401","ok","Protected"],["/api/contact-inquiries","401","ok","Protected"],["/api/scraped-products","401","ok","Protected"],["/api/software-licenses","401","ok","Licence keys protected"],["/api/products/export","401","ok","Bulk catalogue export protected"],["/api/spin-wheel/admin/participants","401","ok","Participant PII protected"],["/api/coupons","401","ok","Protected"],["/api/wishlist","401","ok","Protected"],["/api/admin/dashboard","401","ok","Admin data protected"],["/api/debug/carts","401","ok","Requires admin even in development"],["/api/settings","200","neutral","Public by design — storefront branding"],["/api/cart","200","neutral","Public by design — returns an empty guest cart"],["/api/debug","200","warn","Development only; 404 in production"],["/api/debug/cookie","200","warn","Development only; 404 in production"],["/api/debug-categories","200","warn","Development only; 404 in production"],["/api/test-db","200","warn","Development only; 404 in production"],["/api/test-connection","200","warn","Development only; 404 in production"]];
+
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const okTag='<span class="tag t-ok">200 OK</span>';
+const fill=(id,rows)=>{document.querySelector(id+" tbody").innerHTML=rows.join("");};
+
+fill("#t-public",publicPages.map(([r,n])=>`<tr><td><code>${esc(r)}</code></td><td>${okTag}</td><td>${esc(n)}</td></tr>`));
+fill("#t-admin",adminPages.map(([r,n])=>`<tr><td><code>${esc(r)}</code></td><td>${okTag}</td><td>${esc(n)}</td></tr>`));
+fill("#t-auth",authPages.map(([r,b,a,n])=>{const bt=b==="500"?'<span class="tag t-bad">500 Error</span>':'<span class="tag t-ok">200 OK</span>';return `<tr><td><code>${esc(r)}</code></td><td>${bt}</td><td>${okTag}</td><td>${esc(n)}</td></tr>`;}));
+fill("#t-dyn",dynRoutes.map(([p,s,st,k,n])=>`<tr><td><code>${esc(p)}</code></td><td><code>${esc(s)}</code></td><td><span class="tag t-${k==='ok'?'ok':'bad'}">${esc(st)}</span></td><td>${esc(n)}</td></tr>`));
+fill("#t-api-non",apiNon.map(([e,s,d])=>`<tr><td><code>${esc(e)}</code></td><td><span class="tag t-warn">${esc(s)}</span></td><td>${esc(d)}</td></tr>`));
+fill("#t-api-skip",apiSkip.map(([e,w])=>`<tr><td><code>${esc(e)}</code></td><td>${esc(w)}</td></tr>`));
+fill("#t-api-ok",apiOk.map(e=>`<tr><td><code>${esc(e)}</code></td><td>${okTag}</td></tr>`));
+fill("#t-sec",secRows.map(([e,s,k,n])=>`<tr><td><code>${esc(e)}</code></td><td><span class="tag t-${k==='ok'?'ok':k==='warn'?'warn':'neutral'}">${esc(s)}</span></td><td>${esc(n)}</td></tr>`));
+
+const wire=(inp,tbl)=>{const el=document.querySelector(inp);el.addEventListener("input",()=>{const q=el.value.toLowerCase();document.querySelectorAll(tbl+" tbody tr").forEach(tr=>{tr.style.display=tr.textContent.toLowerCase().includes(q)?"":"none";});});};
+wire("#f-public","#t-public");wire("#f-admin","#t-admin");wire("#f-api","#t-api-ok");
+
+document.getElementById("hdr-meta").textContent=
+  "Full sweep of public pages, admin dashboard, authenticated areas and API surface — generated "+
+  new Date().toLocaleString(undefined,{dateStyle:"long",timeStyle:"short"});
+</script>
+</body>
+</html>

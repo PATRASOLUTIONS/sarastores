@@ -1,0 +1,14 @@
+Document Keys: [
+  '_id',            'orderId',
+  'partnerId',      'partnerOrderId',
+  'customer',       'items',
+  'summary',        'paymentMethod',
+  'status',         'statusHistory',
+  'commission',     'notes',
+  'paymentDetails', 'paymentVerification',
+  'createdAt',      'updatedAt'
+]
+Field: customer, Type: object, Content: {"name":"Admin User","email":"admin@bytewise.com","phone":"+919876543210","address":{"line1":"B8 116 kendriya vihar tamando","line2":"","city":"Bhubaneswar","state":"Odisha","pincode":"752054","country":"India"}}
+Field: paymentDetails, Type: object, Content: {"razorpayOrderId":"order_SKTJs6zZbpvtz0","transactionId":"pay_SKTKTDmGs4awSz","method":"Razorpay","amount":"249950.00"}
+Field: summary, Type: object, Content: {"subtotal":249950,"tax":44991,"shipping":0,"total":294941}
+Field: statusHistory, Type: object, Content: [{"status":"pending","timestamp":"2026-02-25T18:09:01.730Z"}]

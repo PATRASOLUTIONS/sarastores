@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sara Mobiles × Bytewise — One-Time Investment & Support SLA</title>
+<style>
+  :root{
+    --navy:#0b1f3a; --navy2:#12305c; --blue:#1d6fe0; --blue-soft:#eaf2fe;
+    --cyan:#17b6c9; --amber:#f5a623; --green:#1faa6b; --ink:#1c2733;
+    --muted:#5b6b7c; --line:#e2e8f0; --bg-soft:#f6f9fc; --white:#ffffff; --red:#d64545;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; color:var(--ink);
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; font-size:12px; line-height:1.5;
+  }
+  @page{ size:A4; margin:0; }
+  .page{ position:relative; width:210mm; min-height:297mm; padding:18mm 16mm 16mm 16mm; background:var(--white); page-break-after:always; overflow:hidden; }
+  .page:last-child{ page-break-after:auto; }
+
+  h1,h2,h3,h4{ color:var(--navy); line-height:1.2; }
+  .eyebrow{ display:inline-block; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--blue); font-weight:700; margin-bottom:8px; }
+  .section-title{ font-size:23px; margin-bottom:4px; }
+  .section-sub{ color:var(--muted); font-size:12.5px; margin-bottom:16px; max-width:165mm; }
+  p{ margin-bottom:9px; } strong{ color:var(--navy); }
+  ul{ margin:4px 0 10px 18px; } li{ margin-bottom:5px; }
+
+  .page-head{ display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--line); padding-bottom:8px; margin-bottom:18px; }
+  .page-head .brand{ font-weight:800; color:var(--navy); font-size:12px; letter-spacing:.04em; }
+  .page-head .brand span{ color:var(--blue); }
+  .page-head .tag{ font-size:10px; color:var(--muted); }
+  .footer{ position:absolute; bottom:10mm; left:16mm; right:16mm; display:flex; justify-content:space-between; font-size:9px; color:var(--muted); border-top:1px solid var(--line); padding-top:6px; }
+
+  .cover{ padding:0; }
+  .cover-inner{ padding:24mm 18mm; min-height:297mm; display:flex; flex-direction:column;
+    background: radial-gradient(900px 500px at 80% -10%, rgba(29,111,224,.45), transparent 60%),
+      radial-gradient(700px 500px at -10% 110%, rgba(23,182,201,.35), transparent 55%),
+      linear-gradient(150deg,#0b1f3a 0%, #12305c 55%, #0a2b54 100%); color:#fff; }
+  .cover .logos{ display:flex; align-items:center; gap:14px; font-weight:800; }
+  .chip{ background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); padding:6px 12px; border-radius:30px; font-size:11px; }
+  .cover h1{ color:#fff; font-size:42px; line-height:1.06; margin-top:auto; }
+  .cover h1 .hl{ color:#7fc0ff; }
+  .cover .lead{ font-size:15px; color:#cfe0f5; margin-top:16px; max-width:150mm; }
+  .cover .target-band{ margin-top:26px; display:flex; gap:14px; flex-wrap:wrap; }
+  .target-card{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:16px 18px; min-width:42mm; }
+  .target-card .num{ font-size:25px; font-weight:800; color:#fff; }
+  .target-card .lbl{ font-size:10.5px; color:#bcd2ee; margin-top:2px; }
+  .cover .meta{ margin-top:auto; display:flex; justify-content:space-between; font-size:11px; color:#aebfd6; border-top:1px solid rgba(255,255,255,.2); padding-top:14px; }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .card{ border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--white); }
+  .card.soft{ background:var(--bg-soft); }
+  .card h4{ font-size:13px; margin-bottom:6px; }
+  .card .ic{ width:30px;height:30px;border-radius:8px;background:var(--blue-soft);color:var(--blue); display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;margin-bottom:8px;}
+
+  .kpi-row{ display:flex; gap:12px; margin:6px 0 16px; }
+  .kpi{ flex:1; border:1px solid var(--line); border-left:4px solid var(--blue); border-radius:10px; padding:12px 14px; background:var(--white); }
+  .kpi .v{ font-size:21px; font-weight:800; color:var(--navy); }
+  .kpi .l{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+
+  table{ width:100%; border-collapse:collapse; font-size:11px; margin:6px 0 12px; }
+  th{ background:var(--navy); color:#fff; text-align:left; padding:8px 10px; font-weight:600; }
+  td{ padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:nth-child(even) td{ background:var(--bg-soft); }
+  .t-right{ text-align:right; } .t-center{ text-align:center; }
+  .total-row td{ background:var(--blue-soft); font-weight:800; color:var(--navy); border-bottom:none; }
+
+  .pill{ display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:700; }
+  .pill.b{ background:var(--blue-soft); color:var(--blue); }
+  .pill.g{ background:#e4f7ee; color:var(--green); }
+  .pill.a{ background:#fef1da; color:#b9750d; }
+  .pill.r{ background:#fbe6e6; color:var(--red); }
+
+  .callout{ border-left:4px solid var(--amber); background:#fff8ec; padding:12px 16px; border-radius:0 10px 10px 0; margin:10px 0; }
+  .callout.blue{ border-color:var(--blue); background:var(--blue-soft); }
+  .callout.green{ border-color:var(--green); background:#e9f8f0; }
+
+  .sla-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:8px 0 12px; }
+  .sla{ border:1px solid var(--line); border-radius:12px; overflow:hidden; text-align:center; }
+  .sla .top{ padding:8px; color:#fff; font-weight:800; font-size:11px; }
+  .sla .time{ font-size:20px; font-weight:800; color:var(--navy); padding:10px 6px 2px; }
+  .sla .desc{ font-size:9.2px; color:var(--muted); padding:0 8px 10px; }
+
+  .milestone{ display:flex; gap:10px; margin-top:8px; }
+  .ms{ flex:1; border:1px solid var(--line); border-top:4px solid var(--blue); border-radius:10px; padding:12px; text-align:center; }
+  .ms .pct{ font-size:22px; font-weight:800; color:var(--blue); }
+  .ms .amt{ font-size:11px; font-weight:700; color:var(--navy); margin:2px 0; }
+  .ms .when{ font-size:9.5px; color:var(--muted); }
+
+  .check li{ list-style:none; position:relative; padding-left:20px; }
+  .check li::before{ content:"✓"; position:absolute; left:0; color:var(--green); font-weight:800; }
+  .cross li{ list-style:none; position:relative; padding-left:20px; }
+  .cross li::before{ content:"✕"; position:absolute; left:0; color:var(--red); font-weight:800; }
+
+  .sign-grid{ display:grid; grid-template-columns:1fr 1fr; gap:30px; margin-top:26px; }
+  .sign{ border-top:1.5px solid var(--ink); padding-top:6px; font-size:11px; }
+  .sign .role{ color:var(--muted); font-size:10px; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="page cover">
+  <div class="cover-inner">
+    <div class="logos">
+      <span class="chip">SARA MOBILES</span>
+      <span style="opacity:.6;font-size:18px;">×</span>
+      <span class="chip">BYTEWISE CONSULTING LLP</span>
+    </div>
+
+    <h1>One-Time <span class="hl">Development Investment</span><br/>&amp; Annual Support SLA</h1>
+    <p class="lead">An ownership-first commercial option: a single, fixed development fee to build and launch the
+      Sara Mobiles eCommerce platform — followed by a clear, predictable annual support &amp; maintenance plan.</p>
+
+    <div class="target-band">
+      <div class="target-card"><div class="num">₹2–3 Lakh</div><div class="lbl">One-time development fee</div></div>
+      <div class="target-card"><div class="num">4 Wks</div><div class="lbl">Build &amp; go-live</div></div>
+      <div class="target-card"><div class="num">4 Hr</div><div class="lbl">Critical SLA response</div></div>
+      <div class="target-card"><div class="num">2,000+</div><div class="lbl">SKUs at launch</div></div>
+    </div>
+
+    <div class="meta">
+      <div><strong style="color:#fff">Commercial Proposal — Option B (Own It)</strong> · Confidential</div>
+      <div>Prepared for Sara Mobiles · Bytewise Consulting LLP</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MODEL OVERVIEW ============ -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>×</span>SARA</div><div class="tag">One-Time Investment Model</div></div>
+
+  <span class="eyebrow">01 · The Commercial Model</span>
+  <h2 class="section-title">Build it once. Own it outright.</h2>
+  <p class="section-sub">This option replaces the revenue-share model with a fixed one-time development fee plus a transparent
+    annual support plan. Sara pays a defined amount, the platform is delivered, and ownership transfers on final payment.</p>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="v">₹2–3 L</div><div class="l">One-time build (fixed)</div></div>
+    <div class="kpi"><div class="v">0%</div><div class="l">Revenue share / commission</div></div>
+    <div class="kpi"><div class="v">100%</div><div class="l">Ownership to Sara on payment</div></div>
+    <div class="kpi"><div class="v">AMC</div><div class="l">Annual support plan</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Why choose the one-time model</h4>
+      <ul>
+        <li><strong>Full ownership</strong> of source code, database & platform on final payment.</li>
+        <li><strong>No revenue share</strong> — 100% of online sales stay with Sara.</li>
+        <li><strong>Predictable cost</strong> — one fixed bill, then a known annual support fee.</li>
+        <li><strong>A real digital asset</strong> on Sara's books, not a rented service.</li>
+      </ul>
+    </div>
+    <div class="card soft">
+      <h4>What to keep in mind</h4>
+      <ul>
+        <li>Sara funds the build upfront (vs. ₹0 in the revenue-share model).</li>
+        <li>Hosting (Azure) and support are billed separately as ongoing costs.</li>
+        <li>Bytewise carries no sales risk — so the incentive alignment differs from revenue-share.</li>
+        <li>New modules beyond agreed scope are handled as paid change requests.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout blue">
+    <strong>Two ways to partner:</strong> <span class="pill b">Option A</span> Revenue-share (₹0 upfront, 12–15% of sales — Bytewise runs it) ·
+    <span class="pill g">Option B</span> One-time build (₹2–3 lakh, Sara owns it). This document covers <strong>Option B</strong>.
+  </div>
+
+  <span class="eyebrow">Quick comparison</span>
+  <table>
+    <tr><th>Dimension</th><th>Option A — Revenue Share</th><th>Option B — One-Time Build</th></tr>
+    <tr><td>Upfront cost</td><td>₹0</td><td><strong>₹2–3 lakh (one-time)</strong></td></tr>
+    <tr><td>Ongoing to Bytewise</td><td>12–15% of sales</td><td>Annual support (AMC) + hosting</td></tr>
+    <tr><td>Ownership of platform</td><td>Transfers on settlement</td><td><strong>On final payment</strong></td></tr>
+    <tr><td>Sales risk</td><td>Shared with Bytewise</td><td>Sara's</td></tr>
+    <tr><td>Best for</td><td>Fast start, low risk</td><td>Control & long-term cost efficiency</td></tr>
+  </table>
+
+  <div class="footer"><span>Bytewise Consulting LLP · Strictly Confidential</span><span>Page 2</span></div>
+</section>
+
+<!-- ============ COST BREAKDOWN ============ -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>×</span>SARA</div><div class="tag">Development Cost Breakdown</div></div>
+
+  <span class="eyebrow">02 · The Investment</span>
+  <h2 class="section-title">One-time development cost breakdown</h2>
+  <p class="section-sub">A fixed-scope build delivered in ~4 weeks. The range reflects catalogue size and the depth of customisation
+    Sara chooses at kick-off. Final figure is locked in the signed scope document.</p>
+
+  <table>
+    <tr><th>Work package</th><th>What it covers</th><th class="t-right">Investment (₹)</th></tr>
+    <tr><td>Platform setup &amp; configuration</td><td>Environment, domain, SSL, branding, theme, security baseline</td><td class="t-right">30,000 – 45,000</td></tr>
+    <tr><td>Storefront &amp; catalogue</td><td>Up to 2,000 SKUs, categories, search, product & brand pages</td><td class="t-right">45,000 – 65,000</td></tr>
+    <tr><td>Checkout &amp; payments</td><td>Razorpay (UPI/cards/EMI), COD, bank-offers, GST invoicing</td><td class="t-right">35,000 – 50,000</td></tr>
+    <tr><td>Admin &amp; operations panel</td><td>Bulk upload, pricing tools, order & customer management</td><td class="t-right">40,000 – 60,000</td></tr>
+    <tr><td>SEO, analytics &amp; performance</td><td>Metadata, sitemap, speed optimisation, dashboards</td><td class="t-right">20,000 – 30,000</td></tr>
+    <tr><td>Testing, deployment &amp; go-live</td><td>QA, data migration, training & handover</td><td class="t-right">30,000 – 50,000</td></tr>
+    <tr class="total-row"><td colspan="2">Total one-time development</td><td class="t-right">₹2,00,000 – ₹3,00,000</td></tr>
+  </table>
+
+  <p style="font-size:10px;color:var(--muted);margin-top:-4px;">Indicative range, exclusive of GST. Third-party costs (payment-gateway fees, domain, SMS/email credits, hosting) are billed at actuals.</p>
+
+  <h4 style="margin:14px 0 4px;">Payment milestones</h4>
+  <div class="milestone">
+    <div class="ms"><div class="pct">40%</div><div class="amt">₹80k – ₹1.2L</div><div class="when">On sign-off &amp; kick-off</div></div>
+    <div class="ms"><div class="pct">30%</div><div class="amt">₹60k – ₹90k</div><div class="when">On staging / UAT approval</div></div>
+    <div class="ms"><div class="pct">30%</div><div class="amt">₹60k – ₹90k</div><div class="when">On go-live &amp; handover</div></div>
+  </div>
+
+  <div class="callout green">
+    <strong>Ownership transfer:</strong> On clearance of the final milestone, Bytewise transfers source code, database export,
+    deployment files and documentation to Sara — a 30-day handover window applies.
+  </div>
+
+  <div class="footer"><span>Bytewise Consulting LLP · Strictly Confidential</span><span>Page 3</span></div>
+</section>
+
+<!-- ============ SCOPE IN/OUT ============ -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>×</span>SARA</div><div class="tag">Scope of Delivery</div></div>
+
+  <span class="eyebrow">03 · What's Included</span>
+  <h2 class="section-title">Exactly what the one-time fee delivers</h2>
+  <p class="section-sub">A complete, production-grade storefront and admin system — the same platform described in the partnership proposal,
+    delivered as a fixed-scope build.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h4 style="color:var(--green)">Included in the build</h4>
+      <ul class="check">
+        <li>Mobile-first storefront with up to 2,000 SKUs</li>
+        <li>Search, compare, wishlist, recently-viewed</li>
+        <li>Razorpay payments, EMI, COD, bank-offer engine</li>
+        <li>Customer accounts, orders, GST PDF invoices</li>
+        <li>Admin panel: bulk upload, pricing, orders, analytics</li>
+        <li>SEO suite, sitemap, performance optimisation</li>
+        <li>Reviews, campaign pages, banners & offers</li>
+        <li>Deployment, QA, training & documentation</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--red)">Not included (paid change requests)</h4>
+      <ul class="cross">
+        <li>New custom modules beyond agreed scope</li>
+        <li>Additional third-party integrations</li>
+        <li>SKUs beyond the 2,000 baseline</li>
+        <li>Native mobile apps (iOS / Android)</li>
+        <li>Ongoing marketing / ad management</li>
+        <li>Content creation, photography, copywriting</li>
+        <li>Hosting, gateway, SMS/email running costs</li>
+        <li>Major redesigns after go-live</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4 style="margin:14px 0 4px;">Hosting &amp; infrastructure (ongoing, billed separately)</h4>
+  <table>
+    <tr><th>Item</th><th>Detail</th><th class="t-right">Indicative / month</th></tr>
+    <tr><td>Azure hosting &amp; database</td><td>App hosting, managed DB, CDN, SSL, backups, monitoring</td><td class="t-right">₹8,000 – ₹18,000</td></tr>
+    <tr><td>Email / SMS / OTP</td><td>Transactional notifications, OTP credits</td><td class="t-right">At actuals</td></tr>
+    <tr><td>Payment gateway</td><td>Razorpay transaction fees</td><td class="t-right">Per Razorpay rates</td></tr>
+  </table>
+  <p style="font-size:10px;color:var(--muted);margin-top:-4px;">Hosting can be managed by Bytewise or transferred to Sara's own Azure account after handover.</p>
+
+  <div class="footer"><span>Bytewise Consulting LLP · Strictly Confidential</span><span>Page 4</span></div>
+</section>
+
+<!-- ============ SUPPORT & SLA ============ -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>×</span>SARA</div><div class="tag">Support &amp; SLA</div></div>
+
+  <span class="eyebrow">04 · Annual Support &amp; SLA</span>
+  <h2 class="section-title">Support &amp; Service Level Agreement</h2>
+  <p class="section-sub">After go-live, an Annual Maintenance Contract (AMC) keeps the platform secure, updated and reliable,
+    with guaranteed response times by issue severity.</p>
+
+  <h4 style="margin-bottom:6px;">Guaranteed response times</h4>
+  <div class="sla-grid">
+    <div class="sla"><div class="top" style="background:var(--red)">Critical</div><div class="time">4 Hrs</div><div class="desc">Site/checkout down, payments failing</div></div>
+    <div class="sla"><div class="top" style="background:var(--amber)">High</div><div class="time">8 Hrs</div><div class="desc">Major feature broken, no workaround</div></div>
+    <div class="sla"><div class="top" style="background:var(--blue)">Medium</div><div class="time">1 Day</div><div class="desc">Minor bug, workaround available</div></div>
+    <div class="sla"><div class="top" style="background:var(--green)">Low</div><div class="time">3 Days</div><div class="desc">Cosmetic / informational request</div></div>
+  </div>
+  <p style="font-size:10px;color:var(--muted);margin-top:-4px;">Support hours: Monday–Friday, 10 AM – 6 PM IST. Response time = time to first action; resolution time varies by complexity. Planned maintenance is scheduled outside business hours.</p>
+
+  <h4 style="margin:12px 0 4px;">Annual Maintenance Contract (AMC) plans</h4>
+  <table>
+    <tr><th>Plan</th><th>Includes</th><th class="t-center">Support hrs/mo</th><th class="t-right">Annual fee</th></tr>
+    <tr><td><strong>Essential</strong></td><td>Bug fixes, security patches, uptime monitoring, backups</td><td class="t-center">Up to 8</td><td class="t-right">₹36,000</td></tr>
+    <tr><td><strong>Growth</strong> <span class="pill b">Recommended</span></td><td>Essential + minor enhancements, priority queue, monthly health report</td><td class="t-center">Up to 16</td><td class="t-right">₹60,000</td></tr>
+    <tr><td><strong>Premium</strong></td><td>Growth + faster response, quarterly feature credits, dedicated POC</td><td class="t-center">Up to 30</td><td class="t-right">₹96,000</td></tr>
+  </table>
+  <p style="font-size:10px;color:var(--muted);margin-top:-4px;">AMC billed annually in advance, ~15–20% of development cost. Unused monthly hours do not carry forward. Excludes hosting & third-party costs.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h4 style="color:var(--green)">AMC covers</h4>
+      <ul class="check">
+        <li>Bug fixes &amp; error resolution</li>
+        <li>Security patches &amp; dependency updates</li>
+        <li>Uptime monitoring &amp; incident response</li>
+        <li>Backup verification &amp; restore support</li>
+        <li>Minor content/config changes within hours</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--red)">AMC excludes</h4>
+      <ul class="cross">
+        <li>New modules &amp; major features (change request)</li>
+        <li>New third-party integrations</li>
+        <li>Marketing, campaigns &amp; ad management</li>
+        <li>Hosting, gateway, SMS/email running costs</li>
+        <li>Issues from Sara-side unauthorised edits</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Uptime target:</strong> 99.5% monthly availability (excluding planned maintenance &amp; force-majeure such as gateway outage or government restrictions).
+    Liability is limited to the support fees paid for the affected period.
+  </div>
+
+  <div class="footer"><span>Bytewise Consulting LLP · Strictly Confidential</span><span>Page 5</span></div>
+</section>
+
+<!-- ============ SUMMARY & ACCEPTANCE ============ -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>×</span>SARA</div><div class="tag">Summary &amp; Acceptance</div></div>
+
+  <span class="eyebrow">05 · Cost Summary</span>
+  <h2 class="section-title">Total cost of ownership — Year 1</h2>
+  <p class="section-sub">A clear, all-in view of what the one-time model costs in the first year, using the recommended Growth AMC and mid-range hosting.</p>
+
+  <table>
+    <tr><th>Component</th><th>Type</th><th class="t-right">Amount (₹)</th></tr>
+    <tr><td>One-time platform development</td><td>One-time</td><td class="t-right">2,00,000 – 3,00,000</td></tr>
+    <tr><td>Annual support (Growth AMC)</td><td>Yearly</td><td class="t-right">60,000</td></tr>
+    <tr><td>Azure hosting (≈ ₹12k/mo)</td><td>Yearly</td><td class="t-right">~1,44,000</td></tr>
+    <tr class="total-row"><td colspan="2">Indicative Year-1 total</td><td class="t-right">₹4,04,000 – ₹5,04,000</td></tr>
+  </table>
+  <p style="font-size:10px;color:var(--muted);margin-top:-4px;">Year 2 onward (no development cost): AMC + hosting ≈ ₹2,00,000 / year. Exclusive of GST and transaction-based third-party fees.</p>
+
+  <div class="callout green">
+    <strong>The trade-off in one line:</strong> Pay ₹2–3 lakh once and keep 100% of every sale, or pay ₹0 upfront and share 12–15% of sales.
+    For a store doing ₹1.5 Cr/month, the one-time model becomes far cheaper once volume scales — at the cost of carrying the upfront investment and sales risk.
+  </div>
+
+  <span class="eyebrow">Next steps</span>
+  <ul>
+    <li>Confirm preferred model (one-time vs. revenue-share) and AMC plan.</li>
+    <li>Lock scope &amp; final fixed price in the signed scope document.</li>
+    <li>Pay 40% kick-off milestone — build begins, go-live in ~4 weeks.</li>
+  </ul>
+
+  <div class="sign-grid">
+    <div>
+      <div class="sign">For Sara Mobiles</div>
+      <div class="sign role" style="margin-top:34px;border-top:1.5px solid var(--ink);padding-top:6px;">Name, Designation &amp; Date</div>
+    </div>
+    <div>
+      <div class="sign">For Bytewise Consulting LLP</div>
+      <div class="sign role" style="margin-top:34px;border-top:1.5px solid var(--ink);padding-top:6px;">Name, Designation &amp; Date</div>
+    </div>
+  </div>
+
+  <p style="margin-top:20px;font-size:10px;color:var(--muted);">This document is an indicative commercial proposal. Final pricing, scope, SLA and terms are governed by the executed
+    agreement / scope document between Bytewise Consulting LLP and Sara Mobiles. All figures exclude GST unless stated.</p>
+
+  <div class="footer"><span>Bytewise Consulting LLP · Strictly Confidential</span><span>Page 6</span></div>
+</section>
+
+</body>
+</html>

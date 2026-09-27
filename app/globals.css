@@ -1,0 +1,1482 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import "tw-animate-css";
+
+/* ─── Performance: CSS-only fade-in (replaces framer-motion wrapper) ─── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+/* Design tokens.
+   tailwind.config.ts wraps every one of these in hsl(), so they MUST stay bare
+   HSL channels. An oklch()/hex value here produces hsl(oklch(...)) — invalid CSS
+   that the browser silently drops, leaving bg-primary, bg-muted, border-input and
+   friends with no colour at all. */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 3.9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 96.1%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --accent: 0 0% 96.1%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+  --ring: 0 0% 63.9%;
+  --chart-1: 12 76% 61%;
+  --chart-2: 173 58% 39%;
+  --chart-3: 197 37% 24%;
+  --chart-4: 43 74% 66%;
+  --chart-5: 27 87% 67%;
+  --radius: 0.625rem;
+  --sidebar: 0 0% 98%;
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 0 0% 3.9%;
+  --sidebar-primary: 0 0% 9%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 0 0% 96.1%;
+  --sidebar-accent-foreground: 0 0% 9%;
+  --sidebar-border: 0 0% 89.8%;
+  --sidebar-ring: 0 0% 63.9%;
+
+  /* Brand Design Tokens.
+     These are the fallback palette. The active theme overrides them with an
+     inline :root block rendered server-side in app/layout.tsx, so the page
+     never paints with the wrong colours. Every token also has an -rgb channel
+     triple because Tailwind needs it for opacity modifiers. */
+  --brand-primary: #0F2557;
+  --brand-primary-rgb: 15 37 87;
+  --brand-primary-hover: #0A1A40;
+  --brand-primary-hover-rgb: 10 26 64;
+  --brand-primary-light: #E6EBF5;
+  --brand-primary-light-rgb: 230 235 245;
+  --brand-primary-subtle: #F2F5FA;
+  --brand-primary-subtle-rgb: 242 245 250;
+  --brand-accent: #FF6A2C;
+  --brand-accent-rgb: 255 106 44;
+  --brand-accent-hover: #E85618;
+  --brand-accent-hover-rgb: 232 86 24;
+  --brand-surface: #FAFBFC;
+  --brand-surface-rgb: 250 251 252;
+  --brand-surface-raised: #FFFFFF;
+  --brand-surface-raised-rgb: 255 255 255;
+  --brand-text-primary: #0F172A;
+  --brand-text-primary-rgb: 15 23 42;
+  --brand-text-secondary: #475569;
+  --brand-text-secondary-rgb: 71 85 105;
+  --brand-text-tertiary: #94A3B8;
+  --brand-text-tertiary-rgb: 148 163 184;
+  --brand-border: #E2E8F0;
+  --brand-border-rgb: 226 232 240;
+  --brand-border-hover: #CBD5E1;
+  --brand-border-hover-rgb: 203 213 225;
+  --brand-success: #059669;
+  --brand-success-rgb: 5 150 105;
+  --brand-warning: #D97706;
+  --brand-warning-rgb: 217 119 6;
+  --brand-hero-from: #0F2557;
+  --brand-hero-from-rgb: 15 37 87;
+  --brand-hero-via: #16336F;
+  --brand-hero-via-rgb: 22 51 111;
+  --brand-hero-to: #0A1A40;
+  --brand-hero-to-rgb: 10 26 64;
+  --brand-glow: #FF6A2C;
+  --brand-glow-rgb: 255 106 44;
+  --brand-ribbon: #DC2626;
+  --brand-ribbon-rgb: 220 38 38;
+  --brand-ribbon-text: #FFFFFF;
+  --brand-ribbon-text-rgb: 255 255 255;
+
+  /* Elevation System */
+  --shadow-low: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-high: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── Themed surfaces ────────────────────────────────────────────────────
+   Utility classes that read the active theme, so festival palettes reach
+   gradients and glows — not just flat colours. */
+
+.themed-hero {
+  background-image: linear-gradient(
+    135deg,
+    var(--brand-hero-from) 0%,
+    var(--brand-hero-via) 50%,
+    var(--brand-hero-to) 100%
+  );
+}
+
+.themed-glow::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgb(var(--brand-glow-rgb) / var(--theme-glow-opacity, 0.28)),
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.themed-ribbon {
+  background-color: var(--brand-ribbon);
+  color: var(--brand-ribbon-text);
+}
+
+.themed-text-gradient {
+  background-image: linear-gradient(90deg, var(--brand-accent), var(--brand-glow));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ─── Festive layout scale ───────────────────────────────────────────────
+   `intensity` is what makes a festival feel bigger rather than just
+   differently coloured: taller bands, heavier headings, visible ornament. */
+
+.themed-band {
+  padding-block: calc(1.5rem * var(--theme-band-scale, 1));
+}
+
+[data-theme-intensity="grand"] .themed-band {
+  letter-spacing: 0.01em;
+}
+
+[data-theme-intensity="grand"] .themed-hero {
+  box-shadow: inset 0 -1px 0 rgb(var(--brand-accent-rgb) / 0.35);
+}
+
+/* A gold hairline under the header reads as "something is on" at a glance. */
+[data-theme-intensity="grand"] .themed-accent-rule {
+  border-bottom: 2px solid rgb(var(--brand-accent-rgb) / 0.9);
+}
+
+[data-theme-intensity="subtle"] .themed-ornament {
+  display: none;
+}
+
+/* ─── Festival patterns ──────────────────────────────────────────────────
+   Tiled motifs drawn with gradients rather than image files, so they inherit
+   the palette and cost no extra requests. Opacity is driven by intensity. */
+
+.themed-pattern {
+  position: relative;
+  isolation: isolate;
+}
+
+.themed-pattern::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: var(--theme-ornament-opacity, 0.35);
+  background-image: var(--theme-pattern-image, none);
+  background-size: var(--theme-pattern-size, auto);
+}
+
+[data-theme-pattern="none"] .themed-pattern::after {
+  display: none;
+}
+
+[data-theme-pattern="rangoli"] {
+  --theme-pattern-image:
+    radial-gradient(circle at 50% 50%, rgb(var(--brand-accent-rgb) / 0.5) 0 2px, transparent 3px),
+    radial-gradient(circle at 0 0, rgb(var(--brand-glow-rgb) / 0.35) 0 3px, transparent 4px);
+  --theme-pattern-size: 28px 28px, 56px 56px;
+}
+
+[data-theme-pattern="floral"] {
+  --theme-pattern-image:
+    radial-gradient(ellipse 6px 12px at 50% 20%, rgb(var(--brand-accent-rgb) / 0.4), transparent 70%),
+    radial-gradient(ellipse 12px 6px at 20% 60%, rgb(var(--brand-glow-rgb) / 0.3), transparent 70%);
+  --theme-pattern-size: 48px 48px, 64px 64px;
+}
+
+[data-theme-pattern="geometric"] {
+  --theme-pattern-image:
+    repeating-linear-gradient(45deg, rgb(var(--brand-accent-rgb) / 0.18) 0 2px, transparent 2px 14px),
+    repeating-linear-gradient(-45deg, rgb(var(--brand-glow-rgb) / 0.14) 0 2px, transparent 2px 14px);
+  --theme-pattern-size: auto;
+}
+
+[data-theme-pattern="lights"] {
+  --theme-pattern-image:
+    radial-gradient(circle at 50% 0, rgb(var(--brand-glow-rgb) / 0.75) 0 3px, transparent 4px);
+  --theme-pattern-size: 40px 40px;
+}
+
+[data-theme-pattern="rays"] {
+  --theme-pattern-image:
+    repeating-conic-gradient(
+      from 0deg at 50% 0%,
+      rgb(var(--brand-accent-rgb) / 0.16) 0deg 6deg,
+      transparent 6deg 18deg
+    );
+  --theme-pattern-size: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .themed-pattern::after {
+    opacity: calc(var(--theme-ornament-opacity, 0.35) * 0.5);
+  }
+}
+
+/* ─── Festival effects ───────────────────────────────────────────────────
+   Purely decorative, GPU-friendly transforms only. All are suppressed under
+   prefers-reduced-motion. */
+
+@keyframes theme-fall {
+  0% { transform: translate3d(0, -10vh, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0px), 110vh, 0) rotate(360deg); opacity: 0; }
+}
+
+@keyframes theme-twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.8); }
+  50% { opacity: 0.9; transform: scale(1.15); }
+}
+
+/* Opacity only — `theme-fall` owns transform, and animating scale here would
+   cancel the fall entirely. */
+@keyframes theme-flicker {
+  0%, 100% { opacity: 0.85; }
+  45% { opacity: 1; }
+  55% { opacity: 0.7; }
+}
+
+@keyframes theme-burst {
+  0% { transform: scale(0); opacity: 1; }
+  70% { opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Petals and modak drift sideways as they fall rather than dropping straight,
+   which reads as flowers being showered rather than rain. */
+@keyframes theme-sway {
+  0%, 100% { margin-left: -14px; }
+  50% { margin-left: 14px; }
+}
+
+@keyframes theme-garland-sway {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50% { transform: rotate(1.2deg); }
+}
+
+/* A rocket climbs, then blooms at its apex — one timeline, no second element. */
+@keyframes theme-rocket {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  8%   { opacity: 1; }
+  62%  { transform: translateY(-62vh) scale(1); opacity: 1; }
+  78%  { transform: translateY(-70vh) scale(2.6); opacity: 0.85; }
+  100% { transform: translateY(-72vh) scale(4.2); opacity: 0; }
+}
+
+/* Gulal thrown into the air: blooms outward and disperses. */
+@keyframes theme-splash {
+  0%   { transform: scale(0.15); opacity: 0; }
+  18%  { opacity: 0.9; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+@keyframes theme-flip {
+  0%, 100% { transform: rotateY(0deg); }
+  50%      { transform: rotateY(180deg); }
+}
+
+/* Coins and dandiya must fall *and* spin. Listing two animations that both
+   drive `transform` doesn't work — the later one wins and the particle never
+   moves — so the spin is folded into the fall. */
+@keyframes theme-fall-flip {
+  0%   { transform: translate3d(0, -10vh, 0) rotateY(0deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0px), 110vh, 0) rotateY(1440deg); opacity: 0; }
+}
+
+.theme-particle {
+  position: absolute;
+  top: 0;
+  will-change: transform, opacity;
+  animation: theme-fall linear infinite;
+}
+
+.theme-rocket {
+  position: absolute;
+  bottom: 0;
+  will-change: transform, opacity;
+  animation: theme-rocket ease-out infinite;
+}
+
+.theme-splash {
+  will-change: transform, opacity;
+  animation: theme-splash ease-out infinite;
+}
+
+.theme-twinkle { animation: theme-twinkle ease-in-out infinite; }
+.theme-flicker { animation: theme-fall linear infinite, theme-flicker ease-in-out infinite; }
+.theme-burst { animation: theme-burst ease-out infinite; }
+.theme-sway { animation: theme-fall linear infinite, theme-sway ease-in-out infinite; }
+.theme-flip { animation: theme-fall-flip linear infinite; }
+
+/* ─── Festive toran ──────────────────────────────────────────────────────
+   A hanging garland across the top of the hero. Drawn from the palette, so
+   Ganesh gets marigold and Diwali gets gold from the same markup. Only shown
+   at `grand` intensity. */
+
+.themed-toran {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 26px;
+  z-index: 5;
+  pointer-events: none;
+  display: none;
+  transform-origin: top center;
+  background-image:
+    radial-gradient(circle at 12px 6px, var(--brand-accent) 0 6px, transparent 7px),
+    radial-gradient(circle at 30px 12px, var(--brand-glow) 0 5px, transparent 6px);
+  background-size: 42px 26px, 42px 26px;
+  background-repeat: repeat-x;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.25));
+}
+
+[data-theme-intensity="grand"][data-theme-toran="on"] .themed-toran {
+  display: block;
+  animation: theme-garland-sway 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-particle,
+  .theme-twinkle,
+  .theme-flicker,
+  .theme-burst,
+  .theme-sway,
+  .theme-flip,
+  .theme-rocket,
+  .theme-splash {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  /* The garland is decoration, not motion — keep it, just stop it moving. */
+  [data-theme-intensity="grand"][data-theme-toran="on"] .themed-toran {
+    animation: none;
+  }
+
+  .ganesh-blessing {
+    display: none;
+  }
+}
+
+/* ─── Ganesh Chaturthi blessing ──────────────────────────────────────────
+   Arrival, blessing, departure — the shape of the festival itself. One
+   timeline so the exit is as graceful as the entrance. */
+
+@keyframes ganesh-arrive-depart {
+  0%   { transform: translateX(120%) scale(0.9); opacity: 0; }
+  12%  { transform: translateX(0) scale(1); opacity: 1; }
+  78%  { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(120%) scale(0.9); opacity: 0; }
+}
+
+@keyframes ganesh-aura {
+  0%, 100% { transform: scale(0.85); opacity: 0.35; }
+  50%      { transform: scale(1.15); opacity: 0.75; }
+}
+
+@keyframes ganesh-shower {
+  0%   { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translateY(85vh) rotate(320deg); opacity: 0; }
+}
+
+.ganesh-blessing-figure {
+  position: absolute;
+  right: clamp(12px, 4vw, 56px);
+  bottom: clamp(72px, 12vh, 140px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: ganesh-arrive-depart 7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ganesh-blessing-aura {
+  position: absolute;
+  inset: -28% -28% -18%;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-glow-rgb) / 0.55) 0%,
+    rgb(var(--brand-accent-rgb) / 0.22) 45%,
+    transparent 72%
+  );
+  animation: ganesh-aura 2.6s ease-in-out infinite;
+}
+
+.ganesh-blessing-art {
+  position: relative;
+  width: clamp(110px, 16vw, 190px);
+  height: auto;
+  filter: drop-shadow(0 8px 22px rgb(0 0 0 / 0.3));
+}
+
+.ganesh-blessing-om {
+  position: relative;
+  font-size: clamp(64px, 10vw, 118px);
+  line-height: 1;
+  color: var(--brand-accent);
+  text-shadow: 0 0 26px rgb(var(--brand-glow-rgb) / 0.8);
+}
+
+.ganesh-blessing-caption {
+  position: relative;
+  margin-top: 10px;
+  padding: 5px 16px;
+  border-radius: 9999px;
+  background-color: rgb(var(--brand-primary-rgb) / 0.9);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.28);
+}
+
+.ganesh-blessing-shower span {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 7px;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  animation: ganesh-shower 4.5s ease-in forwards;
+}
+
+.dark {
+  --background: 0 0% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 14.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 14.9%;
+  --muted-foreground: 0 0% 63.9%;
+  --accent: 0 0% 14.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 14.9%;
+  --input: 0 0% 14.9%;
+  --ring: 0 0% 32%;
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+  --sidebar: 0 0% 9%;
+  --sidebar-background: 0 0% 9%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 220 70% 50%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 0 0% 14.9%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 14.9%;
+  --sidebar-ring: 0 0% 32%;
+}
+
+/* Map tokens for Tailwind v4 utility resolution */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* ========================================
+   BRAND DESIGN SYSTEM UTILITIES
+   ======================================== */
+
+/* Consistent container for all sections */
+.section-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* Typography Hierarchy (uses Poppins heading font) */
+.heading-display {
+  font-family: var(--font-heading), 'Poppins', sans-serif;
+  @apply text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight;
+  color: var(--brand-text-primary);
+}
+
+.heading-1 {
+  font-family: var(--font-heading), 'Poppins', sans-serif;
+  @apply text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight;
+  color: var(--brand-text-primary);
+}
+
+.heading-2 {
+  font-family: var(--font-heading), 'Poppins', sans-serif;
+  @apply text-xl md:text-2xl lg:text-3xl font-semibold;
+  color: var(--brand-text-primary);
+}
+
+.heading-3 {
+  font-family: var(--font-heading), 'Poppins', sans-serif;
+  @apply text-lg md:text-xl lg:text-2xl font-semibold;
+  color: var(--brand-text-primary);
+}
+
+/* Brand buttons */
+.btn-brand-primary {
+  @apply inline-flex items-center justify-center font-semibold px-6 py-3 rounded-lg;
+  background-color: var(--brand-primary);
+  color: white;
+  box-shadow: var(--shadow-low);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-brand-primary:hover {
+  background-color: var(--brand-primary-hover);
+  box-shadow: var(--shadow-medium);
+  transform: translateY(-1px);
+}
+
+.btn-brand-primary:active {
+  transform: scale(0.98) translateY(0);
+}
+
+.btn-brand-accent {
+  @apply inline-flex items-center justify-center font-semibold px-6 py-3 rounded-lg;
+  background-color: var(--brand-accent);
+  color: white;
+  box-shadow: var(--shadow-low);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-brand-accent:hover {
+  background-color: var(--brand-accent-hover);
+  box-shadow: var(--shadow-medium);
+  transform: translateY(-1px);
+}
+
+.btn-brand-accent:active {
+  transform: scale(0.98) translateY(0);
+}
+
+/* Section spacing */
+.section-spacing {
+  @apply py-12 md:py-16 lg:py-20;
+}
+
+.section-spacing-sm {
+  @apply py-8 md:py-12 lg:py-16;
+}
+
+/* Card elevation system */
+.elevation-low {
+  box-shadow: var(--shadow-low);
+}
+
+.elevation-medium {
+  box-shadow: var(--shadow-medium);
+}
+
+.elevation-high {
+  box-shadow: var(--shadow-high);
+}
+
+/* ========================================
+   MODERN DESIGN SYSTEM ENHANCEMENTS
+   ======================================== */
+
+/* Enhanced Glass Morphism */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Premium Card Styles */
+.card-premium {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-premium:hover {
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 12px 32px rgba(0, 0, 0, 0.08);
+  transform: translateY(-4px);
+}
+
+/* Product Card Enhanced */
+.product-card {
+  @apply bg-white rounded-2xl overflow-hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.product-card:hover {
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+  transform: translateY(-6px);
+}
+
+.product-card:hover .product-image {
+  transform: scale(1.05);
+}
+
+.product-image {
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Modern Button Styles */
+.btn-modern {
+  @apply relative overflow-hidden font-semibold px-6 py-3 rounded-xl;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-modern::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.btn-modern:hover::before {
+  opacity: 1;
+}
+
+.btn-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+}
+
+.btn-gradient:hover {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-outline-modern {
+  @apply border-2 border-gray-200 bg-white text-gray-700;
+}
+
+.btn-outline-modern:hover {
+  @apply border-blue-500 text-blue-600 bg-blue-50;
+}
+
+/* Badge Styles */
+.badge-sale {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.badge-new {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.badge-trusted {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+}
+
+/* Section Styles */
+.section-heading {
+  @apply text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900;
+  letter-spacing: -0.02em;
+}
+
+.section-subheading {
+  @apply text-base md:text-lg text-gray-500 mt-2;
+}
+
+/* Price Styles */
+.price-current {
+  @apply text-xl md:text-2xl font-bold text-gray-900;
+}
+
+.price-original {
+  @apply text-sm text-gray-400 line-through;
+}
+
+.price-discount {
+  @apply text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full;
+}
+
+/* Input Styles */
+.input-modern {
+  @apply w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900;
+  @apply focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none;
+  @apply transition-all duration-200;
+  @apply placeholder:text-gray-400;
+}
+
+.input-modern:hover:not(:focus) {
+  @apply border-gray-300;
+}
+
+/* Search Box Enhanced */
+.search-box {
+  @apply relative flex items-center bg-gray-50 rounded-full border border-gray-200;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-box:focus-within {
+  @apply bg-white border-blue-400 ring-4 ring-blue-500/10;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+}
+
+/* Hero Section Enhancements */
+.hero-gradient {
+  background: linear-gradient(135deg, 
+    #0f172a 0%, 
+    #1e3a5f 30%, 
+    #1e40af 70%, 
+    #0f172a 100%
+  );
+}
+
+.hero-pattern {
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+}
+
+/* Grid Patterns */
+.grid-pattern {
+  background-image: 
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Skeleton Loading */
+.skeleton {
+  @apply relative overflow-hidden bg-gray-100 rounded;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Category Pills */
+.category-pill {
+  @apply inline-flex items-center px-4 py-2 rounded-full text-sm font-medium;
+  @apply bg-gray-100 text-gray-700 border border-transparent;
+  @apply hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200;
+  @apply transition-all duration-200 cursor-pointer;
+}
+
+.category-pill.active {
+  @apply bg-blue-600 text-white border-blue-600;
+}
+
+/* Filter Panel */
+.filter-section {
+  @apply border-b border-gray-100 pb-4 mb-4;
+}
+
+.filter-title {
+  @apply flex items-center justify-between text-sm font-semibold text-gray-900 mb-3 cursor-pointer;
+}
+
+.filter-option {
+  @apply flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer;
+  @apply hover:bg-gray-50 transition-colors;
+}
+
+/* Checkout Steps */
+.checkout-step {
+  @apply flex items-center gap-3;
+}
+
+.checkout-step-number {
+  @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold;
+  @apply bg-gray-100 text-gray-400;
+}
+
+.checkout-step-number.active {
+  @apply bg-blue-600 text-white;
+}
+
+.checkout-step-number.completed {
+  @apply bg-green-500 text-white;
+}
+
+/* Trust Badges */
+.trust-badge {
+  @apply flex flex-col items-center text-center p-4;
+}
+
+.trust-badge-icon {
+  @apply w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2;
+}
+
+/* Hover Reveal */
+.hover-reveal {
+  @apply opacity-0 translate-y-2;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.group:hover .hover-reveal {
+  @apply opacity-100 translate-y-0;
+}
+
+/* Custom animations */
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(5deg);
+  }
+}
+
+@keyframes float-medium {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-15px) rotate(-3deg);
+  }
+}
+
+@keyframes float-fast {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: float-medium 4s ease-in-out infinite;
+}
+
+.animate-float-fast {
+  animation: float-fast 3s ease-in-out infinite;
+}
+
+/* Adding marquee animation for brand logos */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Bank Offers Marquee */
+.marquee-container {
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.marquee-content {
+  display: flex;
+  animation: marquee 40s linear infinite;
+  width: fit-content;
+}
+
+.marquee-content:hover {
+  animation-play-state: paused;
+}
+
+.bank-offer-card {
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.bank-offer-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Smooth scrolling (native CSS) */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Touch-friendly interactive elements */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* Mobile-specific refinements */
+@media (max-width: 768px) {
+  /* Ensure minimum touch targets on mobile */
+  button, a, [role="button"] {
+    touch-action: manipulation;
+  }
+  
+  /* Hide scrollbar on mobile for cleaner look */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  /* Prevent horizontal overflow on mobile */
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.line-clamp-3 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Responsive text sizes */
+@media (max-width: 640px) {
+  .text-responsive-xl {
+    font-size: 1.5rem;
+  }
+  .text-responsive-2xl {
+    font-size: 1.875rem;
+  }
+  .text-responsive-3xl {
+    font-size: 2.25rem;
+  }
+}
+
+@media (min-width: 641px) {
+  .text-responsive-xl {
+    font-size: 1.875rem;
+  }
+  .text-responsive-2xl {
+    font-size: 2.25rem;
+  }
+  .text-responsive-3xl {
+    font-size: 3rem;
+  }
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Focus styles for accessibility */
+.focus-visible:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Custom button styles */
+.btn-primary {
+  @apply bg-blue-800 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-900 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+}
+
+/* Gradient backgrounds */
+.gradient-blue {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-purple {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Text gradients */
+.text-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animation delays for staggered effects */
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+.delay-400 {
+  animation-delay: 400ms;
+}
+
+.delay-500 {
+  animation-delay: 500ms;
+}
+
+/* Blob animation for background shapes */
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Slide up animation for cards */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.6s ease-out;
+}
+
+/* ─── Premium Micro-Interactions ─────────────────────────────────────── */
+
+/* Button press effect — scales down on active */
+.btn-press {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Subtle glow on primary CTA hover */
+.btn-glow {
+  transition: box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-glow:hover {
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.25);
+}
+
+/* Smooth hover color transitions for buttons */
+.btn-smooth {
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Card premium hover — lift + shadow */
+.card-premium-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-premium-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.07),
+              0 8px 10px -6px rgba(0, 0, 0, 0.04);
+}
+
+/* Image scale on hover — gentle, contained */
+.img-hover-scale {
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.img-hover-scale:hover {
+  transform: scale(1.03);
+}
+
+/* ─── Reduced Motion Support ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-float-slow,
+  .animate-float-medium,
+  .animate-float-fast,
+  .animate-marquee,
+  .animate-blob,
+  .animate-slideUp,
+  .animate-spin,
+  .animate-bounce,
+  .animate-ping,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
+/* ─── GPU Acceleration Hints ─────────────────────────────────────────── */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Lenis classes (kept for compatibility, no longer actively used) */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  /* Do NOT set overflow: hidden — it breaks the native scrollbar */
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thumb-gray-600::-webkit-scrollbar-thumb {
+    background-color: #4B5563;
+    border-radius: 6px;
+  }
+  
+  .scrollbar-track-gray-800::-webkit-scrollbar-track {
+    background-color: #1F2937;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+}
+
+/* ─── TipTap / ProseMirror rich text editor styles ─── */
+.tiptap {
+  outline: none;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.tiptap h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+  line-height: 1.3;
+}
+
+.tiptap h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0.875rem 0 0.5rem;
+  line-height: 1.35;
+}
+
+.tiptap h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.375rem;
+  line-height: 1.4;
+}
+
+.tiptap p {
+  margin: 0.5rem 0;
+  line-height: 1.65;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.tiptap ul {
+  list-style-type: disc;
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+}
+
+.tiptap li {
+  margin: 0.25rem 0;
+  line-height: 1.5;
+}
+
+.tiptap a {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tiptap a:hover {
+  color: #1d4ed8;
+}
+
+.tiptap img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid #e5e7eb;
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.tiptap code {
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.tiptap pre {
+  background-color: #1f2937;
+  color: #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.tiptap pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.tiptap hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 1.25rem 0;
+}
+
+.tiptap strong {
+  font-weight: 700;
+}
+
+.tiptap em {
+  font-style: italic;
+}
+
+.tiptap u {
+  text-decoration: underline;
+}
+
+.tiptap s {
+  text-decoration: line-through;
+}

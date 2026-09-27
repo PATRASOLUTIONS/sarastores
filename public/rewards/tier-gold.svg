@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 80" fill="none" role="img" aria-label="Gold tier">
+  <defs>
+    <linearGradient id="goldBody" x1="8" y1="4" x2="64" y2="74" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE79A"/>
+      <stop offset="0.5" stop-color="#F5B942"/>
+      <stop offset="1" stop-color="#DC901F"/>
+    </linearGradient>
+  </defs>
+  <path d="M36 3 65 20v34L36 71 7 54V20Z" fill="url(#goldBody)" stroke="#FFF3CE" stroke-width="2"/>
+  <path d="M36 12 57 24v26L36 62 15 50V24Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.6" stroke-width="1.5"/>
+  <g fill="#8A4B0E">
+    <path d="M28 27l2.6 5.2 5.7.8-4.1 4 1 5.7-5.2-2.7-5.1 2.7 1-5.7-4.2-4 5.8-.8Z" transform="translate(-3 3) scale(0.82)"/>
+    <path d="M50 27l2.6 5.2 5.7.8-4.1 4 1 5.7-5.2-2.7-5.1 2.7 1-5.7-4.2-4 5.8-.8Z" transform="translate(3 3) scale(0.82)"/>
+  </g>
+</svg>

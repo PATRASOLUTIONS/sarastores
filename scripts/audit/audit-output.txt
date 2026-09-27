@@ -1,0 +1,2 @@
+﻿Total products: 161
+Products missing both id and _id: 0

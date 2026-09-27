@@ -1,0 +1,20 @@
+﻿Status: 200
+Products Length: 1
+Product Keys: [
+  'name',             'description',
+  'price',            'image',
+  'stock',            'category',
+  'featured',         'source',
+  'sku',              'manufacturer',
+  'manufacturerName', 'color',
+  'capacity',         'features',
+  'groupName',        'itemCategory',
+  'ean',              'active',
+  'raw',              'updatedAt',
+  'createdAt',        'images',
+  'subCategory',      'id',
+  'mrp'
+]
+Product _id: undefined (type: undefined )
+Product id: 6911afc6d1b32f695925a942 (type: string )
+Product Name: Bosch Built in Gas Hob Black Tempered glass Glass 4 Burner Auto Ignition 90 cm Full Brass 3D Ring Burners with Matt Black Heat Shields & Cast Iron pan supports (PNF9B6G20I)

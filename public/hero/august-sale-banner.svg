@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 525" role="img" aria-label="Sara Freedom Festival — Independence Day Sale, up to 60% off">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="525" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#132A5E"/>
+      <stop offset="0.55" stop-color="#0E1F49"/>
+      <stop offset="1" stop-color="#0A1636"/>
+    </linearGradient>
+    <linearGradient id="cta" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#FF6A2C"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE79A"/>
+      <stop offset="1" stop-color="#F5B942"/>
+    </linearGradient>
+    <radialGradient id="seal" cx="0.5" cy="0.4" r="0.7">
+      <stop offset="0" stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#E85618"/>
+    </radialGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="46"/>
+    </filter>
+    <filter id="dropSoft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Base -->
+  <rect width="1200" height="525" fill="url(#bg)"/>
+
+  <!-- Ambient colour glows -->
+  <circle cx="1000" cy="120" r="240" fill="#FF6A2C" opacity="0.20" filter="url(#soft)"/>
+  <circle cx="180" cy="470" r="220" fill="#2A7FFF" opacity="0.16" filter="url(#soft)"/>
+
+  <!-- Confetti -->
+  <g opacity="0.9">
+    <circle cx="470" cy="70" r="4" fill="#FF9933"/>
+    <circle cx="640" cy="110" r="3" fill="#FFFFFF"/>
+    <circle cx="560" cy="150" r="3.5" fill="#138808"/>
+    <rect x="720" y="60" width="7" height="7" rx="1.5" fill="#F5B942" transform="rotate(20 723 63)"/>
+    <rect x="410" y="150" width="6" height="6" rx="1.5" fill="#FFFFFF" transform="rotate(35 413 153)"/>
+    <circle cx="880" cy="430" r="3.5" fill="#FF9933"/>
+    <circle cx="815" cy="470" r="3" fill="#FFFFFF"/>
+    <rect x="1120" y="360" width="7" height="7" rx="1.5" fill="#138808" transform="rotate(25 1123 363)"/>
+    <circle cx="300" cy="120" r="3" fill="#F5B942"/>
+  </g>
+
+  <!-- Independence Day kite (top-right, tasteful tricolor) -->
+  <g transform="translate(1055 108) rotate(18)" filter="url(#dropSoft)">
+    <path d="M0 -46 L34 0 L0 46 L-34 0 Z" fill="#FFFFFF"/>
+    <path d="M0 -46 L34 0 L0 0 L0 -46 Z" fill="#FF9933"/>
+    <path d="M0 0 L34 0 L0 46 Z" fill="#138808"/>
+    <path d="M0 -46 L0 46" stroke="#0E1F49" stroke-width="1.4"/>
+    <path d="M-34 0 L34 0" stroke="#0E1F49" stroke-width="1.4"/>
+  </g>
+  <path d="M1036 150 q-40 60 -120 96 q40 6 44 44 q28 -34 68 -70 q-24 -28 8 -70Z" fill="none" stroke="#F5B942" stroke-width="2" stroke-dasharray="1 10" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- Discount seal -->
+  <g transform="translate(958 268)" filter="url(#dropSoft)">
+    <circle r="118" fill="url(#seal)"/>
+    <circle r="118" fill="none" stroke="#FFE79A" stroke-width="3"/>
+    <circle r="104" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1.5" stroke-dasharray="2 6"/>
+    <text x="0" y="-44" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="3" fill="#FFF3CE">UP TO</text>
+    <text x="0" y="34" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="92" font-weight="800" fill="#FFFFFF">60%</text>
+    <text x="0" y="72" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="8" fill="#FFF3CE">OFF</text>
+  </g>
+
+  <!-- Brand wordmark -->
+  <text x="80" y="78" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="800" letter-spacing="4" fill="#FFFFFF">SARA<tspan fill="#FF8A3D"> ELECTRONICS</tspan></text>
+
+  <!-- Eyebrow pill -->
+  <g>
+    <rect x="80" y="104" width="440" height="38" rx="19" fill="#FF6A2C" fill-opacity="0.16" stroke="#FF8A3D" stroke-opacity="0.6"/>
+    <text x="102" y="129" font-family="'Segoe UI',Arial,sans-serif" font-size="16" font-weight="700" letter-spacing="1.5" fill="#FFB27A">15 AUGUST &#183; INDEPENDENCE DAY SALE</text>
+  </g>
+
+  <!-- Headline -->
+  <text x="76" y="238" font-family="'Segoe UI',Arial,sans-serif" font-size="86" font-weight="800" letter-spacing="1" fill="#FFFFFF">FREEDOM</text>
+  <text x="80" y="298" font-family="'Segoe UI',Arial,sans-serif" font-size="46" font-weight="800" letter-spacing="2" fill="url(#gold)">FESTIVAL SALE</text>
+
+  <!-- Subtext -->
+  <text x="82" y="352" font-family="'Segoe UI',Arial,sans-serif" font-size="24" font-weight="500" fill="#DCE4F2">Up to 60% off on TVs &#183; ACs &#183; Appliances &#183; Mobiles</text>
+
+  <!-- Feature line -->
+  <text x="82" y="392" font-family="'Segoe UI',Arial,sans-serif" font-size="18" font-weight="600" fill="#9FB2D4">No&#8209;Cost EMI &#160;&#8226;&#160; Free Installation &#160;&#8226;&#160; Exchange Offers</text>
+
+  <!-- CTA -->
+  <g filter="url(#dropSoft)">
+    <rect x="82" y="418" width="216" height="58" rx="14" fill="url(#cta)"/>
+    <text x="120" y="454" font-family="'Segoe UI',Arial,sans-serif" font-size="22" font-weight="800" letter-spacing="1" fill="#FFFFFF">Shop Now</text>
+    <path d="M256 447 h22 m0 0 l-8 -8 m8 8 l-8 8" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Tricolor accent ribbon -->
+  <rect x="0" y="513" width="400" height="12" fill="#FF9933"/>
+  <rect x="400" y="513" width="400" height="12" fill="#F4F6FA"/>
+  <rect x="800" y="513" width="400" height="12" fill="#138808"/>
+</svg>

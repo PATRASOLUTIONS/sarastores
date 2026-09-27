@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sara Electronics — Customer Retention Programme</title>
+<style>
+  :root{
+    --navy:#0F2557;--navy2:#0A1A40;--navy-soft:#E6EBF5;--navy-subtle:#F2F5FA;
+    --orange:#FF6A2C;--orange-dark:#E85618;--orange-soft:#FFF0E8;
+    --gold:#F5B942;--green:#0B7A4B;--green-soft:#E7F5EE;--red:#D2264B;--red-soft:#FDEAEF;
+    --ink:#1C2733;--muted:#5B6B7C;--line:#E2E8F0;--bg-soft:#F6F9FC;--white:#fff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;color:var(--ink);
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:12px;line-height:1.5;background:#8794a5;}
+  @page{size:A4;margin:0;}
+  .page{position:relative;width:210mm;min-height:297mm;padding:16mm 15mm 18mm;background:var(--white);
+    page-break-after:always;overflow:hidden;margin:0 auto 8mm;box-shadow:0 4px 24px rgba(0,0,0,.25);}
+  .page:last-child{page-break-after:auto;}
+  @media print{body{background:#fff;}.page{margin:0;box-shadow:none;}}
+  h1,h2,h3,h4{color:var(--navy);line-height:1.2;}
+  .eyebrow{display:inline-block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--orange);font-weight:800;margin-bottom:3px;}
+  .section-title{font-size:23px;margin-bottom:2px;}
+  .section-sub{color:var(--muted);font-size:12px;margin-bottom:8px;max-width:170mm;}
+  p{margin-bottom:4px;}strong{color:var(--navy);}
+  ul{margin:2px 0 4px 18px;}li{margin-bottom:2px;}
+  .page-head{display:flex;justify-content:space-between;align-items:center;
+    border-bottom:2px solid var(--line);padding-bottom:4px;margin-bottom:8px;}
+  .page-head .brand{font-weight:800;color:var(--navy);font-size:12px;letter-spacing:.04em;}
+  .page-head .brand span{color:var(--orange);}
+  .page-head .tag{font-size:10px;color:var(--muted);}
+  .footer{position:absolute;bottom:9mm;left:15mm;right:15mm;display:flex;justify-content:space-between;
+    font-size:9px;color:var(--muted);border-top:1px solid var(--line);padding-top:5px;}
+
+  /* Cover */
+  .cover{padding:0;color:#fff;
+    background:radial-gradient(900px 520px at 82% -12%,rgba(255,106,44,.42),transparent 60%),
+               radial-gradient(700px 500px at -10% 110%,rgba(42,127,255,.30),transparent 55%),
+               linear-gradient(150deg,#0F2557 0%,#0C1E48 55%,#081431 100%);}
+  .cover-inner{padding:22mm 17mm;min-height:297mm;display:flex;flex-direction:column;}
+  .cover .logos{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:.03em;font-size:14px;}
+  .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);
+    padding:6px 12px;border-radius:30px;font-size:11px;font-weight:600;}
+  .cover h1{color:#fff;font-size:41px;line-height:1.06;margin-top:auto;}
+  .cover h1 .hl{background:linear-gradient(90deg,#FFE79A,#F5B942);-webkit-background-clip:text;
+    background-clip:text;color:transparent;}
+  .cover .lead{font-size:13.5px;color:#CFD9EC;margin-top:14px;max-width:150mm;}
+  .cover .target-band{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap;}
+  .target-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+    border-radius:14px;padding:12px 14px;min-width:36mm;}
+  .target-card .num{font-size:23px;font-weight:800;color:#fff;}
+  .target-card .lbl{font-size:9.5px;color:#BCD0EE;margin-top:2px;}
+  .cover .meta{margin-top:auto;display:flex;justify-content:space-between;font-size:11px;
+    color:#AEBFD6;border-top:1px solid rgba(255,255,255,.2);padding-top:14px;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--white);}
+  .card.soft{background:var(--bg-soft);}
+  .card h4{font-size:12.5px;margin-bottom:3px;}
+  .card p{font-size:10.5px;color:var(--muted);margin:0;}
+
+  .kpi-row{display:flex;gap:7px;margin:4px 0 8px;}
+  .kpi{flex:1;border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:8px;
+    padding:7px 9px;background:var(--white);}
+  .kpi .v{font-size:17px;font-weight:800;color:var(--navy);}
+  .kpi .l{font-size:8.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+
+  table{width:100%;border-collapse:collapse;font-size:10.5px;margin:4px 0 6px;}
+  th{background:var(--navy);color:#fff;text-align:left;padding:5px 7px;font-weight:600;font-size:10px;}
+  td{padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tr:nth-child(even) td{background:var(--bg-soft);}
+
+  .pill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:8.5px;font-weight:800;
+    letter-spacing:.03em;white-space:nowrap;}
+  .pill.o{background:var(--orange-soft);color:var(--orange-dark);}
+  .pill.g{background:var(--green-soft);color:var(--green);}
+  .pill.n{background:var(--navy-soft);color:var(--navy);}
+  .pill.r{background:var(--red-soft);color:var(--red);}
+  .pill.a{background:#FEF3DC;color:#B9750D;}
+
+  .callout{border-left:3px solid var(--orange);background:var(--orange-soft);padding:7px 11px;
+    border-radius:0 8px 8px 0;margin:6px 0;font-size:10.5px;}
+  .callout.navy{border-color:var(--navy);background:var(--navy-soft);}
+  .callout.green{border-color:var(--green);background:var(--green-soft);}
+  .callout.red{border-color:var(--red);background:var(--red-soft);}
+  .big-quote{font-size:15px;color:var(--navy);font-weight:700;line-height:1.35;
+    border-left:4px solid var(--orange);padding-left:12px;margin:6px 0 8px;}
+
+  /* Strategy cards */
+  .strat{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px;
+    background:var(--white);page-break-inside:avoid;}
+  .strat .top{display:flex;align-items:flex-start;gap:9px;}
+  .strat .no{flex:none;width:24px;height:24px;border-radius:7px;background:var(--navy);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11.5px;}
+  .strat.hero .no{background:linear-gradient(135deg,#FF8A3D,#E85618);}
+  .strat .hd{flex:1;}
+  .strat h4{font-size:12.5px;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .strat .why{font-size:10px;color:var(--muted);font-style:italic;margin:2px 0 4px;}
+  .strat .rows{display:grid;grid-template-columns:20mm 1fr;gap:2px 8px;font-size:10px;}
+  .strat .rows .k{color:var(--orange-dark);font-weight:700;text-transform:uppercase;
+    font-size:8.5px;letter-spacing:.05em;padding-top:1px;}
+  .strat .rows .v{color:var(--ink);}
+
+  /* Roadmap */
+  .road .phase{display:grid;grid-template-columns:40mm 1fr;gap:9px;border-left:3px solid var(--orange);
+    padding:5px 0 7px 13px;margin-left:4px;position:relative;page-break-inside:avoid;}
+  .road .phase::before{content:"";position:absolute;left:-8px;top:8px;width:12px;height:12px;
+    border-radius:50%;background:#fff;border:3px solid var(--orange);}
+  .road .when{font-weight:800;color:var(--navy);font-size:12px;}
+  .road .when .t{display:block;font-size:8.5px;color:var(--orange);font-weight:800;
+    letter-spacing:.06em;text-transform:uppercase;}
+  .road .when .goal{display:block;font-size:9.5px;color:var(--muted);font-weight:600;margin-top:3px;}
+  .road .what h4{font-size:11.5px;margin-bottom:2px;}
+  .road .what ul{margin:2px 0 0 14px;}
+  .road .what li{font-size:10px;color:var(--muted);}
+
+  .flow{display:flex;align-items:stretch;gap:0;margin:6px 0 8px;}
+  .flow .step{flex:1;background:var(--navy-subtle);border:1px solid var(--line);padding:7px 8px;
+    text-align:center;}
+  .flow .step:first-child{border-radius:8px 0 0 8px;}
+  .flow .step:last-child{border-radius:0 8px 8px 0;}
+  .flow .step .n{font-size:8.5px;color:var(--orange);font-weight:800;text-transform:uppercase;letter-spacing:.06em;}
+  .flow .step .t{font-size:10.5px;font-weight:700;color:var(--navy);margin-top:2px;}
+  .flow .step .d{font-size:9px;color:var(--muted);margin-top:1px;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ COVER ══════════════ -->
+<div class="page cover">
+  <div class="cover-inner">
+    <div class="logos">
+      <span>SARA <span style="color:#FF8A3D">ELECTRONICS</span></span>
+      <span class="chip">Growth Strategy</span>
+    </div>
+
+    <h1>Turning one-time buyers<br />into a <span class="hl">lifetime customer base</span></h1>
+    <p class="lead">
+      A 12-strategy customer retention programme built on what Sara already owns &mdash; live WhatsApp
+      automation, a full email engine, a spin-the-wheel platform, and 40+ physical stores.
+      Most of the infrastructure exists. This plan connects it.
+    </p>
+
+    <div class="target-band">
+      <div class="target-card"><div class="num">12</div><div class="lbl">Retention strategies</div></div>
+      <div class="target-card"><div class="num">4</div><div class="lbl">Delivery phases</div></div>
+      <div class="target-card"><div class="num">7</div><div class="lbl">Systems already built</div></div>
+      <div class="target-card"><div class="num">1</div><div class="lbl">Critical gap to close</div></div>
+    </div>
+
+    <div class="meta">
+      <span>Customer Retention Programme &middot; Sara Mobiles &amp; Electronics</span>
+      <span>Prepared August 2026</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ 1. WHY RETENTION ══════════════ -->
+<div class="page">
+  <div class="page-head">
+    <div class="brand">SARA <span>ELECTRONICS</span></div>
+    <div class="tag">Customer Retention Programme</div>
+  </div>
+
+  <span class="eyebrow">The Opportunity</span>
+  <h2 class="section-title">Why retention, and why now</h2>
+  <p class="section-sub">
+    Electronics retail has a structural problem: customers buy a TV, then disappear for four years.
+    Every sale is won again from scratch against Amazon, Flipkart and Croma &mdash; usually on price.
+    Retention is how Sara stops competing on price alone.
+  </p>
+
+  <div class="big-quote">
+    A repeat customer costs nothing to acquire, converts faster, and rarely asks for the lowest price.
+    The goal is simple &mdash; give people a reason to come back that competitors cannot copy.
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="v">5&ndash;25&times;</div><div class="l">Cheaper to retain than acquire</div></div>
+    <div class="kpi"><div class="v">~2&times;</div><div class="l">Repeat buyer conversion rate</div></div>
+    <div class="kpi"><div class="v">4 yrs</div><div class="l">Typical appliance repurchase gap</div></div>
+    <div class="kpi"><div class="v">40+</div><div class="l">Stores as a retention asset</div></div>
+  </div>
+
+  <h3 style="font-size:14px;margin:10px 0 4px;">The three retention levers for an appliance retailer</h3>
+  <div class="grid3">
+    <div class="card">
+      <div class="pill o">LEVER 1</div>
+      <h4 style="margin-top:4px;">Stored value</h4>
+      <p>Sara Coins that only spend at Sara. A balance you would forfeit by shopping elsewhere is the
+      single strongest switching cost in retail.</p>
+    </div>
+    <div class="card">
+      <div class="pill o">LEVER 2</div>
+      <h4 style="margin-top:4px;">Useful contact</h4>
+      <p>Warranty expiry, service due, filter replacement. Reasons to message a customer that they
+      genuinely want &mdash; not discount spam.</p>
+    </div>
+    <div class="card">
+      <div class="pill o">LEVER 3</div>
+      <h4 style="margin-top:4px;">Human advantage</h4>
+      <p>Installation, service and 40+ stores. A marketplace cannot send an engineer to your home or
+      let you see the product first.</p>
+    </div>
+  </div>
+
+  <div class="callout navy">
+    <strong>The strategic point:</strong> Sara cannot out-discount a marketplace, and should not try.
+    It can out-<em>serve</em> them. Every strategy in this plan is built on service and relationship,
+    not on cutting price.
+  </div>
+
+  <h3 style="font-size:14px;margin:12px 0 4px;">What this programme is designed to move</h3>
+  <table>
+    <tr><th style="width:34%">Metric</th><th style="width:33%">What it tells us</th><th>Target direction</th></tr>
+    <tr><td><strong>Repeat purchase rate</strong></td><td>% of customers who buy a second time</td><td>The headline number &mdash; up</td></tr>
+    <tr><td><strong>90-day retention</strong></td><td>Customers still active a quarter later</td><td>Up</td></tr>
+    <tr><td><strong>Customer lifetime value</strong></td><td>Total margin per customer over time</td><td>Up</td></tr>
+    <tr><td><strong>Cart recovery rate</strong></td><td>Abandoned carts converted to orders</td><td>Up &mdash; fastest win</td></tr>
+    <tr><td><strong>Coin redemption rate</strong></td><td>Whether the loyalty programme is believed</td><td>Healthy, not maximal</td></tr>
+    <tr><td><strong>Unsubscribe rate</strong></td><td>Whether we are annoying people</td><td>Down &mdash; the guardrail</td></tr>
+  </table>
+
+  <div class="footer"><span>Customer Retention Programme</span><span>Page 1</span></div>
+</div>
+
+<!-- ══════════════ 2. WHERE WE STAND ══════════════ -->
+<div class="page">
+  <div class="page-head">
+    <div class="brand">SARA <span>ELECTRONICS</span></div>
+    <div class="tag">Current State Audit</div>
+  </div>
+
+  <span class="eyebrow">Starting Position</span>
+  <h2 class="section-title">Where we stand today</h2>
+  <p class="section-sub">
+    An audit of the existing platform found that most retention plumbing is already built &mdash;
+    it is simply switched off or not connected to anything. That materially reduces the work ahead.
+  </p>
+
+  <h3 style="font-size:14px;margin:8px 0 4px;">Already built &mdash; reuse, do not rebuild</h3>
+  <table>
+    <tr><th style="width:32%">Capability</th><th style="width:20%">Status</th><th>What it means for us</th></tr>
+    <tr><td><strong>Email engine</strong></td><td><span class="pill g">LIVE</span></td>
+        <td>Template library, campaign sending, history and recipient targeting already in the admin panel</td></tr>
+    <tr><td><strong>WhatsApp messaging</strong></td><td><span class="pill g">LIVE</span></td>
+        <td>Integrated and proven for spin-wheel alerts &mdash; can be generalised to all lifecycle messages</td></tr>
+    <tr><td><strong>Spin the wheel</strong></td><td><span class="pill g">LIVE</span></td>
+        <td>Multi-campaign, prize inventory, coupon issuance, per-store QR entry</td></tr>
+    <tr><td><strong>Coupons</strong></td><td><span class="pill g">LIVE</span></td>
+        <td>Create, validate and redeem &mdash; the reward delivery mechanism already works</td></tr>
+    <tr><td><strong>Wishlist &amp; cart</strong></td><td><span class="pill g">LIVE</span></td>
+        <td>Highest-intent customer signal in the business, currently unused for messaging</td></tr>
+    <tr><td><strong>Wallet ledger pattern</strong></td><td><span class="pill g">PROVEN</span></td>
+        <td>The B2B partner wallet is a working, tested blueprint to clone for Sara Coins</td></tr>
+    <tr><td><strong>Abandoned-cart recovery</strong></td><td><span class="pill a">BUILT, OFF</span></td>
+        <td>Fully written and documented &mdash; but disabled. Switching it on is the fastest revenue win</td></tr>
+  </table>
+
+  <h3 style="font-size:14px;margin:12px 0 4px;">The gaps we must close</h3>
+  <table>
+    <tr><th style="width:36%">Missing</th><th style="width:16%">Severity</th><th>Consequence</th></tr>
+    <tr><td><strong>Sara Coins backend</strong></td><td><span class="pill r">CRITICAL</span></td>
+        <td>The loyalty programme is currently a promise with nothing behind it</td></tr>
+    <tr><td><strong>Customer profile &amp; history rollup</strong></td><td><span class="pill r">CRITICAL</span></td>
+        <td>We cannot segment, target or personalise without it &mdash; it blocks most other work</td></tr>
+    <tr><td><strong>Messaging consent records</strong></td><td><span class="pill r">CRITICAL</span></td>
+        <td>Legally required before automated marketing messages</td></tr>
+    <tr><td><strong>Warranty &amp; service reminders</strong></td><td><span class="pill a">HIGH</span></td>
+        <td>The single biggest untapped differentiator for an appliance retailer</td></tr>
+    <tr><td><strong>Back-in-stock &amp; price-drop alerts</strong></td><td><span class="pill a">HIGH</span></td>
+        <td>Wishlist demand signals are being thrown away</td></tr>
+    <tr><td><strong>Referral programme</strong></td><td><span class="pill n">MEDIUM</span></td>
+        <td>No structured word-of-mouth engine</td></tr>
+    <tr><td><strong>Customer segmentation</strong></td><td><span class="pill n">MEDIUM</span></td>
+        <td>Every customer is treated identically regardless of value</td></tr>
+  </table>
+
+  <div class="callout red">
+    <strong>Must fix first &mdash; an integrity issue.</strong> The website currently advertises
+    &ldquo;500 welcome Coins&rdquo; and &ldquo;up to 6% back&rdquo;, but no system exists to issue,
+    track or redeem them. <strong>Because the Coins engine is scheduled for Phase 3, this wording
+    must be softened or removed now</strong> &mdash; it cannot be left live for the length of the
+    programme. This is a trust and consumer-protection risk, not a cosmetic one.
+  </div>
+
+  <div class="callout">
+    <strong>Technical note:</strong> the current scheduling method will not run reliably on the
+    production hosting platform. Automated jobs must move to a platform-native scheduler before any
+    reminder-based strategy can be trusted. This is a small, one-off piece of groundwork.
+  </div>
+
+  <div class="footer"><span>Customer Retention Programme</span><span>Page 2</span></div>
+</div>
+
+<!-- ══════════════ 3. STRATEGIES 1–6 ══════════════ -->
+<div class="page">
+  <div class="page-head">
+    <div class="brand">SARA <span>ELECTRONICS</span></div>
+    <div class="tag">The 12 Strategies &middot; Part 1</div>
+  </div>
+
+  <span class="eyebrow">Foundations &amp; Quick Wins</span>
+  <h2 class="section-title">Strategies 1&ndash;6</h2>
+  <p class="section-sub">
+    The first three are plumbing &mdash; unglamorous, but they unlock everything after them.
+    Strategies 4 to 6 are the quick wins: low effort, fast payback, and independent of the
+    loyalty programme.
+  </p>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">1</div>
+      <div class="hd">
+        <h4>Customer profile &amp; history <span class="pill n">FOUNDATION</span></h4>
+        <div class="why">You cannot retain a customer you cannot see.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">A single record per customer: total spend, order count, first and last purchase, categories bought, tier, Coin balance, contact preferences.</div>
+          <div class="k">Why</div><div class="v">Every other strategy reads from this. Without it there is no segmentation, no tiers, no personalisation.</div>
+          <div class="k">Unlocks</div><div class="v">Strategies 6, 7, 8, 9, 10, 12</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">2</div>
+      <div class="hd">
+        <h4>Consent &amp; preference centre <span class="pill n">FOUNDATION</span> <span class="pill r">COMPLIANCE</span></h4>
+        <div class="why">Permission is the licence to operate every campaign below.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Explicit opt-in per channel (email / WhatsApp), one-click unsubscribe, and a customer-facing preference page.</div>
+          <div class="k">Why</div><div class="v">Required by India&rsquo;s data protection law. Also protects sender reputation &mdash; without it, messages land in spam and the whole programme underperforms.</div>
+          <div class="k">Guardrail</div><div class="v">Frequency caps so no customer is over-contacted across campaigns.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">3</div>
+      <div class="hd">
+        <h4>Reliable automation scheduler <span class="pill n">FOUNDATION</span></h4>
+        <div class="why">Every reminder in this plan depends on jobs that actually run.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Move scheduled jobs to the hosting platform&rsquo;s native scheduler, with secured trigger endpoints.</div>
+          <div class="k">Why</div><div class="v">The current approach silently fails in production &mdash; reminders would simply never send.</div>
+          <div class="k">Unlocks</div><div class="v">Strategies 4, 5, 7, 8, 9</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat hero">
+    <div class="top">
+      <div class="no">4</div>
+      <div class="hd">
+        <h4>Abandoned-cart recovery <span class="pill g">FASTEST ROI</span></h4>
+        <div class="why">Already written. Currently switched off. Pure recovered revenue.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Automatic reminders when a customer leaves items in their cart, over email and WhatsApp.</div>
+          <div class="k">Why</div><div class="v">These are people who already chose a product and got interrupted &mdash; the highest-converting audience in e-commerce. The engine exists; switching it on is the single quickest return in this plan.</div>
+          <div class="k">Additions</div><div class="v">WhatsApp version, suppression once purchased, and strict frequency caps so it never nags.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">5</div>
+      <div class="hd">
+        <h4>Back-in-stock &amp; price-drop alerts <span class="pill g">QUICK WIN</span></h4>
+        <div class="why">Customers have already told us exactly what they want.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Notify customers when a wishlisted item returns to stock or drops in price.</div>
+          <div class="k">Why</div><div class="v">Wishlists are the strongest purchase-intent signal in the business and are currently unused. High conversion, low effort, and independent of every other strategy.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">6</div>
+      <div class="hd">
+        <h4>Review requests, rewarded</h4>
+        <div class="why">Reviews sell to new customers and pull existing ones back &mdash; a compounding loop.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">A week after delivery, invite the customer to review their purchase and thank them with a discount coupon on their next order.</div>
+          <div class="k">Why</div><div class="v">Lifts conversion for future buyers, creates a second reason to return to the site, and surfaces service problems early.</div>
+          <div class="k">Later</div><div class="v">Once Sara Coins launches (Strategy 10), the coupon reward is swapped for Coins.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><span>Customer Retention Programme</span><span>Page 3</span></div>
+</div>
+
+<!-- ══════════════ 4. STRATEGIES 7–12 ══════════════ -->
+<div class="page">
+  <div class="page-head">
+    <div class="brand">SARA <span>ELECTRONICS</span></div>
+    <div class="tag">The 12 Strategies &middot; Part 2</div>
+  </div>
+
+  <span class="eyebrow">Lifecycle, Loyalty &amp; Growth</span>
+  <h2 class="section-title">Strategies 7&ndash;12</h2>
+  <p class="section-sub">
+    These build the long-term moat &mdash; the reasons a customer stays with Sara for a decade rather
+    than a single transaction. Strategies 10 to 12 form the loyalty programme, delivered together.
+  </p>
+
+  <div class="strat hero">
+    <div class="top">
+      <div class="no">7</div>
+      <div class="hd">
+        <h4>Warranty &amp; service reminder engine <span class="pill o">BIGGEST DIFFERENTIATOR</span></h4>
+        <div class="why">Nobody else tells you your refrigerator warranty expires next month.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Track purchase date and warranty period per appliance. Alert the customer before expiry, and at natural service intervals.</div>
+          <div class="k">Why</div><div class="v">Genuinely useful &mdash; customers welcome it. It creates a legitimate reason to contact them for years after the sale, drives service revenue, and positions Sara as a caretaker rather than a shop.</div>
+          <div class="k">Edge</div><div class="v">A marketplace cannot do this credibly. Sara&rsquo;s engineers and stores can.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">8</div>
+      <div class="hd">
+        <h4>Replenishment &amp; accessory journeys</h4>
+        <div class="why">Right message, right moment, based on what they actually bought.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Category-timed follow-ups &mdash; water purifier filters at six months, air-conditioner servicing before summer, accessories two weeks after delivery.</div>
+          <div class="k">Why</div><div class="v">Converts a single appliance sale into a recurring consumables relationship, shortening the four-year repurchase gap.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">9</div>
+      <div class="hd">
+        <h4>Customer segmentation &amp; win-back</h4>
+        <div class="why">Stop treating a first-time buyer and a lapsed loyal customer the same way.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Group customers by how recently, how often and how much they buy &mdash; Champions, Loyal, At Risk, Lapsed, Lost &mdash; and message each differently.</div>
+          <div class="k">Win-back</div><div class="v">Lapsed customers receive a time-limited offer built for their category and past spend, rather than a generic discount blast.</div>
+          <div class="k">Later</div><div class="v">Once Coins exist, win-back becomes far stronger &mdash; &ldquo;your Coins expire soon&rdquo; outperforms any discount.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat hero">
+    <div class="top">
+      <div class="no">10</div>
+      <div class="hd">
+        <h4>Sara Coins loyalty engine <span class="pill o">FLAGSHIP</span></h4>
+        <div class="why">The core retention mechanic &mdash; a balance customers lose by shopping elsewhere.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Real earn-and-redeem currency. Customers earn Coins on every completed purchase and spend them at checkout. Full statement visible in their account.</div>
+          <div class="k">Design</div><div class="v"><strong>Earn on delivery</strong>, not payment &mdash; so returns do not leak money. <strong>Redemption capped</strong> at a set share of order value to protect margin. <strong>Expire after 12 months of inactivity</strong> to create urgency and cap liability.</div>
+          <div class="k">Reuses</div><div class="v">The proven B2B partner wallet ledger &mdash; a tested blueprint, not a from-scratch build.</div>
+          <div class="k">Why here</div><div class="v">The largest build in the plan, and the anchor of Phase 3 &mdash; referral and tiers both run on it. Scheduled once the quick wins are banked and customer data is trustworthy.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">11</div>
+      <div class="hd">
+        <h4>Refer &amp; earn programme</h4>
+        <div class="why">Referred customers are cheaper to acquire and stay longer.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Every customer gets a share code. Both sides earn Coins once the new customer&rsquo;s first order is delivered.</div>
+          <div class="k">Safeguards</div><div class="v">Self-referral blocking, duplicate phone and device detection, minimum order value, reward only on delivery.</div>
+          <div class="k">Depends on</div><div class="v">Strategy 10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strat">
+    <div class="top">
+      <div class="no">12</div>
+      <div class="hd">
+        <h4>Membership tiers &amp; gamified engagement</h4>
+        <div class="why">Status is a powerful, and free, retention tool.</div>
+        <div class="rows">
+          <div class="k">What</div><div class="v">Silver, Gold and Platinum tiers based on annual spend, each unlocking real benefits &mdash; free installation, extended returns, priority support, longer warranty cover.</div>
+          <div class="k">Key nudge</div><div class="v">&ldquo;You are &#8377;X away from Gold&rdquo; is consistently one of the strongest drivers of incremental spend in loyalty programmes.</div>
+          <div class="k">Gamified</div><div class="v">Tie the existing spin wheel to purchases and streaks, rather than a purely daily free spin.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><span>Customer Retention Programme</span><span>Page 4</span></div>
+</div>
+
+<!-- ══════════════ 5. ROADMAP ══════════════ -->
+<div class="page">
+  <div class="page-head">
+    <div class="brand">SARA <span>ELECTRONICS</span></div>
+    <div class="tag">Delivery Roadmap</div>
+  </div>
+
+  <span class="eyebrow">Sequencing</span>
+  <h2 class="section-title">How we roll this out</h2>
+  <p class="section-sub">
+    Ordered so that each phase is independently useful and verifiable. Nothing later is blocked by
+    an unfinished experiment earlier.
+  </p>
+
+  <div class="road">
+    <div class="phase">
+      <div class="when">
+        <span class="t">Phase 0</span>Foundations
+        <span class="goal">Goal: make customers visible &amp; contactable</span>
+      </div>
+      <div class="what">
+        <h4>Strategies 1&ndash;3 &mdash; the groundwork</h4>
+        <ul>
+          <li>Customer profile and purchase-history rollup</li>
+          <li>Consent capture, preference centre and frequency caps</li>
+          <li>Reliable production scheduler for all automated jobs</li>
+          <li><em>Blocks nearly everything else &mdash; must come first</em></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="when">
+        <span class="t">Phase 1</span>Quick wins
+        <span class="goal">Goal: fastest measurable revenue</span>
+      </div>
+      <div class="what">
+        <h4>Strategies 4&ndash;6 &mdash; low effort, fast payback</h4>
+        <ul>
+          <li><strong>Abandoned-cart recovery switched on</strong> &mdash; already built, quickest return in the plan</li>
+          <li><strong>Back-in-stock and price-drop alerts</strong> &mdash; puts unused wishlist demand to work</li>
+          <li>Review requests, thanked with a coupon</li>
+          <li><em>None of these depend on the loyalty programme &mdash; they can ship immediately</em></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="when">
+        <span class="t">Phase 2</span>Lifecycle automation
+        <span class="goal">Goal: a reason to return all year</span>
+      </div>
+      <div class="what">
+        <h4>Strategies 7&ndash;9 &mdash; the moat</h4>
+        <ul>
+          <li>Warranty and service reminder engine</li>
+          <li>Replenishment and accessory journeys</li>
+          <li>Segmentation and lapsed-customer win-back</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="when">
+        <span class="t">Phase 3</span>Loyalty programme
+        <span class="goal">Goal: stored value &amp; customers who recruit customers</span>
+      </div>
+      <div class="what">
+        <h4>Strategies 10&ndash;12 &mdash; the compounding layer</h4>
+        <ul>
+          <li><strong>Sara Coins engine</strong> &mdash; the flagship build, anchoring this phase</li>
+          <li>Refer &amp; earn with anti-abuse safeguards</li>
+          <li>Membership tiers with real, deliverable benefits</li>
+          <li>Purchase-linked gamification via the existing spin wheel</li>
+          <li><em>Referral and tiers both run on Coins &mdash; delivered as one programme</em></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size:14px;margin:12px 0 4px;">The customer journey once complete</h3>
+  <div class="flow">
+    <div class="step"><div class="n">Browse</div><div class="t">Wishlist</div><div class="d">Stock &amp; price alerts</div></div>
+    <div class="step"><div class="n">Hesitate</div><div class="t">Cart recovery</div><div class="d">Gentle reminder</div></div>
+    <div class="step"><div class="n">Buy</div><div class="t">Earn Coins</div><div class="d">Credited on delivery</div></div>
+    <div class="step"><div class="n">Own</div><div class="t">Service care</div><div class="d">Warranty &amp; reminders</div></div>
+    <div class="step"><div class="n">Return</div><div class="t">Redeem &amp; refer</div><div class="d">Tier benefits</div></div>
+  </div>
+
+  <div class="callout green">
+    <strong>Each phase stands alone.</strong> If work pauses after Phase 1, Sara still has live cart
+    recovery and wishlist alerts driving revenue &mdash; real, measurable value rather than a
+    half-built system.
+  </div>
+
+  <div class="callout navy">
+    <strong>Dependencies at a glance:</strong> Phase 0 unlocks everything. Phase 1 is fully
+    independent and can start at once. Strategy 10 (Coins) unlocks 11 and 12, which is why all three
+    are delivered together as Phase 3.
+  </div>
+
+  <div class="footer"><span>Customer Retention Programme</span><span>Page 5</span></div>
+</div>
+
+<!-- ══════════════ 6. DECISIONS ══════════════ -->
+<div class="page">
+  <div class="page-head">
+    <div class="brand">SARA <span>ELECTRONICS</span></div>
+    <div class="tag">Decisions &amp; Governance</div>
+  </div>
+
+  <span class="eyebrow">Sign-off Required</span>
+  <h2 class="section-title">Decisions we need from you</h2>
+  <p class="section-sub">
+    These are business calls, not technical ones. They directly affect margin and cannot be assumed.
+  </p>
+
+  <table>
+    <tr><th style="width:30%">Decision</th><th style="width:36%">Options</th><th>Recommendation</th></tr>
+    <tr><td><strong>Coin earn rate</strong></td>
+        <td>Flat rate for all, or 2% / 4% / 6% by tier</td>
+        <td>Tiered &mdash; rewards your best customers and drives tier chasing</td></tr>
+    <tr><td><strong>Redemption cap</strong></td>
+        <td>Uncapped, or a maximum share of order value</td>
+        <td>Capped &mdash; protects margin and prevents zero-value orders</td></tr>
+    <tr><td><strong>Coin expiry</strong></td>
+        <td>Never expire, or lapse after inactivity</td>
+        <td>Expire after 12 months inactive &mdash; drives return visits, caps liability</td></tr>
+    <tr><td><strong>Earn trigger</strong></td>
+        <td>On payment, or on delivery</td>
+        <td>On delivery &mdash; prevents refund and return abuse</td></tr>
+    <tr><td><strong>Tier benefits</strong></td>
+        <td>Which perks are genuinely deliverable in-store</td>
+        <td>Only promise what operations can honour every time</td></tr>
+    <tr><td><strong>Contact frequency</strong></td>
+        <td>Maximum messages per customer per month</td>
+        <td>Set a hard cap &mdash; over-messaging is the fastest way to kill a list</td></tr>
+  </table>
+
+  <div class="callout red">
+    <strong>Immediate action required.</strong> The homepage promises Coins that will not exist until
+    Phase 3. The wording must be softened or removed now &mdash; leaving it live risks customer
+    complaints the moment someone tries to redeem. The Coin economics below are still needed, but
+    can be decided before Phase 3 begins rather than today.
+  </div>
+
+  <h3 style="font-size:14px;margin:12px 0 4px;">Principles we will build to</h3>
+  <div class="grid2">
+    <div class="card soft">
+      <h4>Coins are treated as money</h4>
+      <p>All balances and redemptions calculated on the server and tied to the logged-in customer.
+      A customer can never influence their own balance from the browser.</p>
+    </div>
+    <div class="card soft">
+      <h4>Permission before promotion</h4>
+      <p>No automated message without recorded consent and a working unsubscribe. Frequency caps
+      applied across every campaign type.</p>
+    </div>
+    <div class="card soft">
+      <h4>Useful beats frequent</h4>
+      <p>A warranty reminder earns goodwill. A third discount email in a week loses a customer
+      permanently. Value density over volume.</p>
+    </div>
+    <div class="card soft">
+      <h4>Promise only what we deliver</h4>
+      <p>Every benefit advertised must be operationally honoured in-store and online. No feature
+      ships with unbacked marketing copy.</p>
+    </div>
+  </div>
+
+  <h3 style="font-size:14px;margin:12px 0 4px;">Deliberately out of scope</h3>
+  <table>
+    <tr><th style="width:36%">Excluded</th><th>Reason</th></tr>
+    <tr><td>Lowest-price guarantee / price matching</td><td>Confirmed not commercially viable &mdash; already removed from the site</td></tr>
+    <tr><td>Paid membership subscription</td><td>Premature until the free programme proves engagement</td></tr>
+    <tr><td>Native mobile app notifications</td><td>No mobile app today; WhatsApp covers the same need in India</td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>How we will know it is working.</strong> Repeat purchase rate and 90-day retention are the
+    headline measures, reviewed monthly. Cart recovery rate reports first, within weeks of launch.
+    Unsubscribe rate is the guardrail &mdash; if it climbs, we reduce frequency before adding campaigns.
+  </div>
+
+  <div class="footer"><span>Customer Retention Programme &middot; Sara Mobiles &amp; Electronics</span><span>Page 6</span></div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,162 @@
+{
+  "headers": [
+    {
+      "source": "/api/v1/partner/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Credentials",
+          "value": "true"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-API-Key, X-Request-ID, X-Partner-ID"
+        },
+        {
+          "key": "Access-Control-Max-Age",
+          "value": "86400"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        },
+        {
+          "key": "X-Vercel-Skip-Toolbar",
+          "value": "1"
+        },
+        {
+          "key": "Vary",
+          "value": "Origin"
+        }
+      ]
+    },
+    {
+      "source": "/api/products/:path(export|bulk|upload-excel|activate-all|google-sheet-price-sync|specifications/export|specifications/upload)(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/products",
+      "missing": [{ "type": "query", "key": "include_inactive" }],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/products/:path((?!(?:export|bulk|upload-excel|activate-all|google-sheet-price-sync|specifications/(?:export|upload))).*)",
+      "missing": [{ "type": "query", "key": "include_inactive" }],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=60, stale-while-revalidate=300"
+        }
+      ]
+    },
+    {
+      "source": "/api/products(.*)",
+      "has": [{ "type": "query", "key": "include_inactive" }],
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/:path(categories|sub-categories|brands|brand-logos|home-components)(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=120, stale-while-revalidate=600"
+        }
+      ]
+    },
+    {
+      "source": "/api/:path(settings|footer|theme|hero-slides|posters|poster|advertisements|product-advertisements|product-slides|listing-banners|split-cards|animated-banner|featured-products|offers|offer-products|testimonials|articles|campaign-pages|content|stores|razorpay)(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=300, stale-while-revalidate=600"
+        }
+      ]
+    },
+    {
+      "source": "/api/:path(india|blocked-pincodes)(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=3600, stale-while-revalidate=86400"
+        }
+      ]
+    },
+    {
+      "source": "/api/:path((?!(?:products|categories|sub-categories|brands|brand-logos|home-components|settings|footer|theme|hero-slides|posters|poster|advertisements|product-advertisements|product-slides|listing-banners|split-cards|animated-banner|featured-products|offers|offer-products|testimonials|articles|campaign-pages|content|stores|razorpay|india|blocked-pincodes|media|search)(?:/|$)).*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/ott(.*)",
+      "destination": "https://ott.systechdigital.co.in/ott$1",
+      "permanent": true
+    },
+      {
+        "source": "/customer-login",
+        "destination":  "https://ott.systechdigital.co.in/customer-login",
+        "permanent": true
+      }
+    ,
+      {
+        "source": "/redeem",
+        "destination":  "https://ott.systechdigital.co.in/redeem-now",
+        "permanent": true
+      }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/v1/partner/:path*",
+      "destination": "/api/v1/partner/:path*"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/rebuild-profiles",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/segment-customers",
+      "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/cron/cart-recovery",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/wishlist-alerts",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/lifecycle-reminders",
+      "schedule": "30 5 * * *"
+    }
+  ]
+}

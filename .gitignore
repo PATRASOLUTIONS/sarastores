@@ -1,0 +1,44 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+
+# env files (contain secrets) — keep .env.example tracked
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# next.js
+/.next/
+/out/
+
+# locally stored product media (MEDIA_DRIVER=local); real deployments use R2
+/public/media/
+.scrape-probe/
+
+# production
+/build
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# one-off debug dumps — these contain real customer PII (name, email, phone, address)
+order_dump.json
+order_debug_dump.json
+sweep-*.txt
+*.tmp.txt
+
+
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

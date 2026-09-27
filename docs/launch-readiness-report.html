@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>SARA Electronics — Production Launch Readiness Report</title>
+<style>
+  :root{
+    --navy:#0F2557; --blue:#1560BD; --accent:#FF6A2C; --red:#E11D2E;
+    --ok:#087443; --okbg:#E6F4EC; --warn:#8A5A00; --warnbg:#FFF4DB;
+    --bad:#B3261E; --badbg:#FDECEA;
+    --ink:#14213D; --muted:#5B6579; --line:#E3E8F0; --bg:#F6F8FC;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  header.top{background:linear-gradient(135deg,var(--navy),#1A3A7A);color:#fff;padding:38px 24px 30px}
+  header.top .wrap{max-width:1180px;margin:0 auto}
+  header.top h1{margin:0 0 6px;font-size:28px;letter-spacing:-.3px}
+  header.top p{margin:0;opacity:.85;font-size:14px}
+  .pill{display:inline-block;background:var(--accent);color:#fff;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:4px 10px;border-radius:99px;margin-bottom:12px}
+  nav.toc{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;overflow-x:auto;white-space:nowrap}
+  nav.toc a{color:var(--navy);text-decoration:none;font-size:13px;font-weight:600;margin-right:18px;padding:5px 0;display:inline-block}
+  nav.toc a:hover{color:var(--accent)}
+  main{max-width:1180px;margin:0 auto;padding:28px 24px 80px}
+  section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:22px}
+  h2{font-size:20px;margin:0 0 4px;color:var(--navy)}
+  h2 .num{color:var(--accent);font-weight:800;margin-right:8px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  h3{font-size:15px;margin:22px 0 8px;color:var(--navy)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:6px 0 4px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff}
+  .card .n{font-size:26px;font-weight:800;color:var(--navy);line-height:1.1}
+  .card .l{font-size:12px;color:var(--muted);margin-top:3px}
+  .card.good .n{color:var(--ok)} .card.bad .n{color:var(--bad)} .card.warn .n{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#F2F5FA;color:var(--navy);font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:44px}
+  tbody tr:hover{background:#FAFBFE}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:#F2F5FA;padding:1px 5px;border-radius:4px;color:var(--navy)}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .t-ok{background:var(--okbg);color:var(--ok)} .t-warn{background:var(--warnbg);color:var(--warn)} .t-bad{background:var(--badbg);color:var(--bad)} .t-neutral{background:#EEF1F7;color:var(--muted)}
+  .scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .scroll table{margin:0}
+  .filter{width:100%;max-width:320px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;margin-top:12px}
+  .fix{border-left:3px solid var(--ok);background:#FAFDFB;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .open{border-left:3px solid var(--warn);background:#FFFDF7;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .block{border-left:3px solid var(--bad);background:#FEF7F6;padding:14px 16px;border-radius:0 8px 8px 0;margin-bottom:14px}
+  .fix h4,.open h4,.block h4{margin:0 0 5px;font-size:14px;color:var(--navy)}
+  .fix p,.open p,.block p{margin:5px 0 0;font-size:13.5px;color:#374151}
+  .meta{font-size:12px;color:var(--muted);margin-top:7px}
+  .note{background:#F2F6FD;border:1px solid #D6E2F6;border-radius:8px;padding:13px 15px;font-size:13.5px;margin-top:14px}
+  .danger{background:#FDECEA;border:1px solid #F5C6C2;border-radius:8px;padding:13px 15px;font-size:13.5px;margin-top:14px}
+  ul{margin:8px 0;padding-left:20px} li{margin:4px 0;font-size:13.5px}
+  ol{margin:8px 0;padding-left:20px}
+  footer{max-width:1180px;margin:0 auto;padding:0 24px 50px;color:var(--muted);font-size:12.5px}
+  .chk{list-style:none;padding-left:0}
+  .chk li{padding-left:26px;position:relative;margin:7px 0}
+  .chk li::before{content:"";position:absolute;left:0;top:3px;width:16px;height:16px;border-radius:4px;border:2px solid var(--line)}
+  @media print{nav.toc{display:none}section{break-inside:avoid;box-shadow:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="pill">Launch Gate</div>
+    <h1>SARA Electronics — Production Launch Readiness Report</h1>
+    <p id="hdr-meta">Security review, bug sweep and deployment checklist ahead of the Ganesh Pooja launch.</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#verdict">Verdict</a>
+  <a href="#blockers">Blockers</a>
+  <a href="#fixed">Fixed now</a>
+  <a href="#authz">Access control</a>
+  <a href="#secrets">Secrets</a>
+  <a href="#build">Build</a>
+  <a href="#newsletter">Newsletter</a>
+  <a href="#open">Open risks</a>
+  <a href="#checklist">Deploy checklist</a>
+  <a href="#method">Methodology</a>
+</nav>
+
+<main>
+
+<section id="verdict">
+  <h2><span class="num">01</span>Verdict</h2>
+  <p class="sub">The application code is in good shape. What is not ready is the production <em>configuration</em>.</p>
+  <div class="cards">
+    <div class="card good"><div class="n">290</div><div class="l">Pages built successfully</div></div>
+    <div class="card good"><div class="n">0</div><div class="l">Build errors</div></div>
+    <div class="card good"><div class="n">8</div><div class="l">Issues fixed this pass</div></div>
+    <div class="card bad"><div class="n">3</div><div class="l">Launch blockers</div></div>
+    <div class="card warn"><div class="n">6</div><div class="l">Open risks</div></div>
+    <div class="card warn"><div class="n">48</div><div class="l">Type errors (unchanged)</div></div>
+  </div>
+
+  <div class="note">
+    <strong>Bottom line —</strong> the production build compiles cleanly and generates all 290 pages, and access control on the API surface held up under direct attack testing: 26 of 30 privileged write endpoints probed anonymously returned 401/403, and the four that answered are all public by design.
+    Eight defects were found and fixed during this pass, including a set of <strong>live database credentials hardcoded in five scripts</strong>.
+    <br><br>
+    <strong>Do not deploy until the three blockers in section 02 are cleared.</strong> All three are environment configuration, not code: Razorpay is still on a test key, no SMTP credentials are configured (so no customer ever receives an order confirmation), and the canonical site URL is unset, which would point verification-email links and every SEO canonical at <code>localhost</code> or a Vercel preview domain.
+  </div>
+</section>
+
+<section id="blockers">
+  <h2><span class="num">02</span>Launch blockers</h2>
+  <p class="sub">Three items must be resolved in the Vercel production environment before go-live. None require code changes.</p>
+
+  <div class="block">
+    <h4>B1. Razorpay is configured with a TEST key <span class="tag t-bad">Blocker</span></h4>
+    <p><code>RAZORPAY_KEY_ID</code> currently starts with <code>rzp_test_</code>. In test mode Razorpay accepts payments but never moves real money — customers would complete checkout and receive an order, and you would be paid nothing.</p>
+    <p class="meta">Action: set <code>RAZORPAY_KEY_ID</code> (<code>rzp_live_…</code>) and <code>RAZORPAY_KEY_SECRET</code> to the live pair in Vercel → Production. No code change needed; the client key is served to the browser from <code>/api/payment/create-order</code>, so there is no separate <code>NEXT_PUBLIC_</code> key to update. Confirmed live keys are available.</p>
+  </div>
+
+  <div class="block">
+    <h4>B2. No SMTP configuration — every transactional email silently fails <span class="tag t-bad">Blocker</span></h4>
+    <p><code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>EMAIL_FROM</code> are all unset. <code>lib/email.ts</code> builds its Nodemailer transport straight from those variables, so every send throws.</p>
+    <p>Because every send site is wrapped in <code>try/catch</code>, nothing crashes — which is worse: orders succeed, the customer is told to check their inbox, and no message is ever delivered. This affects order confirmations, the signup verification link, password resets, contact-form notifications, the vendor/admin order alerts and the newsletter.</p>
+    <p class="meta">Action: set all five variables plus <code>CONTACT_ADMIN_EMAIL</code>. Note the variable is <code>SMTP_PASS</code> — <code>.env.example</code> wrongly calls it <code>SMTP_PASSWORD</code>. Confirmed credentials are available. Send one live test order after deploying.</p>
+  </div>
+
+  <div class="block">
+    <h4>B3. <code>NEXT_PUBLIC_SITE_URL</code> is unset <span class="tag t-bad">Blocker</span></h4>
+    <p>27 files read this variable. With it unset the fallback chain resolves to <code>VERCEL_URL</code> (the per-deployment <code>*.vercel.app</code> hostname) or <code>http://localhost:3000</code>, depending on the file. Consequences:</p>
+    <ul>
+      <li><strong>Email verification and password-reset links point at <code>http://localhost:3000</code></strong> — new customers could never verify an account.</li>
+      <li>Every SEO canonical, the sitemap, <code>robots.txt</code> and all OG/Twitter images resolve to the Vercel preview domain instead of the real one — Google would index the wrong hostname.</li>
+      <li>The Google OAuth redirect URI would not match what is registered.</li>
+    </ul>
+    <p class="meta">Action: set <code>NEXT_PUBLIC_SITE_URL</code>, <code>NEXT_PUBLIC_APP_URL</code> and <code>NEXTAUTH_URL</code> all to <code>https://sarastores.com</code>. <code>NEXT_PUBLIC_APP_URL</code> is currently pinned to <code>http://localhost:3000</code> and must be changed.</p>
+  </div>
+
+  <div class="note">
+    A complete, verified variable list has been written to <code>.env.production.example</code>. It was derived from actual <code>process.env</code> usage in the code, not from the stale <code>.env.example</code>.
+  </div>
+</section>
+
+<section id="fixed">
+  <h2><span class="num">03</span>Issues found and fixed in this pass</h2>
+  <p class="sub">Eight items. Each was verified after the change.</p>
+
+  <div class="fix">
+    <h4>1. Live database credentials hardcoded in five scripts <span class="tag t-bad">Critical</span></h4>
+    <p>Five files contained a full MongoDB Atlas connection string with the username and password inline — <code>admin:admin</code> on the same cluster and the same <code>e-commerce-bytewise</code> database the production application uses. Anyone with a copy of the source had complete read/write access to live customer, order and payment data.</p>
+    <p class="meta">Fixed in <code>inspect_order.js</code>, <code>scripts/backfill-descriptions.js</code>, <code>scripts/mark-all-in-stock.js</code>, <code>scripts/seed-brands.js</code> — each now reads <code>process.env.MONGODB_URI</code> and exits with an error if it is absent. Two further scripts (<code>seed-database.js</code>, <code>migrate-manufacturer.js</code>) silently fell back to <code>mongodb://localhost:27017</code>, which risked seeding or migrating the wrong database entirely; those fallbacks were removed too.</p>
+  </div>
+
+  <div class="danger">
+    <strong>Action still required —</strong> removing the strings from the source does not un-leak them. The <code>admin</code> / <code>admin</code> credentials on that cluster must be <strong>rotated in MongoDB Atlas before launch</strong>, and Atlas network access should be restricted to the Vercel egress ranges. Treat those credentials as compromised: they are weak, guessable, and have been sitting in plaintext in the project folder.
+  </div>
+
+  <div class="fix">
+    <h4>2. Employee-ID enumeration oracle <span class="tag t-warn">Medium</span></h4>
+    <p><code>POST /api/employees/validate</code> is public by design — in-store checkout runs before login — but it had no rate limit. It answers <code>{"valid":true}</code> with the employee's name for a correct ID, so the entire staff list could be brute-forced from the open internet, then used to claim employee pricing.</p>
+    <p class="meta">Fixed in <code>app/api/employees/validate/route.ts</code>: wrapped in <code>withRateLimit</code> at 20 attempts per 15 minutes per IP. The handler also echoed raw exception messages back to the caller and logged full employee records to the server console; both were removed. Verified: requests 1–20 return 200, requests 21–25 return 429.</p>
+  </div>
+
+  <div class="fix">
+    <h4>3. Deactivated products were publicly listable <span class="tag t-warn">Medium</span></h4>
+    <p><code>include_inactive=true</code> was honoured for anonymous callers on <code>/api/products</code>, <code>/api/products/[id]</code> and <code>/api/products/bulk</code>. Any visitor could enumerate withdrawn or unreleased SKUs together with their pricing. <strong>14 deactivated products were exposed this way</strong> at the time of testing.</p>
+    <p class="meta">Fixed: the flag is now gated behind <code>isAdmin()</code> in all three routes and ignored for everyone else. Verified after the change — an anonymous caller receives 654 products with or without the flag, while an authenticated admin still receives all 668 and both <code>/api/products/[id]</code> and <code>/api/products/bulk</code> continue to answer 200 for staff. This interacted with the CDN — see item 4.</p>
+  </div>
+
+  <div class="fix">
+    <h4>4. CDN would have cached the admin catalogue response publicly <span class="tag t-bad">High</span></h4>
+    <p><code>vercel.json</code> applied <code>Cache-Control: public, s-maxage=60</code> to <code>/api/products(.*)</code> — every path under it. Because the edge cache is keyed on URL and not on the session cookie, an administrator's <code>?include_inactive=true</code> response would have been stored at the edge and served to the next anonymous visitor requesting that URL, re-opening item 3 through the cache. The reverse ordering would have handed the admin a stale public response and made deactivated products vanish from the admin product list for up to a minute.</p>
+    <p class="meta">Fixed in <code>vercel.json</code>: the public caching rule now carries <code>"missing": [{"type":"query","key":"include_inactive"}]</code>, and a second rule serves <code>private, no-store</code> whenever that parameter is present. Storefront caching is unchanged; only the privileged variant bypasses the edge.</p>
+  </div>
+
+  <div class="fix">
+    <h4>5. Wildcard CORS combined with credentials <span class="tag t-warn">Medium</span></h4>
+    <p><code>/api/products/bulk</code> reflected the caller's <code>Origin</code> header back in <code>Access-Control-Allow-Origin</code> while also sending <code>Access-Control-Allow-Credentials: true</code>. That combination lets any website on the internet make cookie-bearing requests to the endpoint and read the response.</p>
+    <p class="meta">Fixed in <code>app/api/products/bulk/route.ts</code> — credentials are no longer accepted and the origin is a plain <code>*</code>, which is safe once credentials are off. This was the only route in the application with that header combination.</p>
+  </div>
+
+  <div class="fix">
+    <h4>6. Site URL fell back to an unrelated domain <span class="tag t-warn">Medium</span></h4>
+    <p><code>lib/seo.tsx</code> declared <code>https://bytewise.shop</code> as the fallback site URL — a different project's domain, left over from a template. With <code>NEXT_PUBLIC_SITE_URL</code> unset it would have been emitted in the site's JSON-LD structured data. Two marketing modules used a third domain, <code>saraelectronics.in</code>.</p>
+    <p class="meta">Fixed: <code>lib/seo.tsx</code>, <code>lib/marketing/campaigns.ts</code> and <code>lib/marketing/email-layout.ts</code> now all fall back to <code>https://sarastores.com</code>, matching the store-QR modules. Setting <code>NEXT_PUBLIC_SITE_URL</code> (blocker B3) makes the fallback moot, but the values should not disagree.</p>
+  </div>
+
+  <div class="fix">
+    <h4>7. No production environment template existed <span class="tag t-neutral">Process</span></h4>
+    <p><code>.env.example</code> is unusable: every line is commented out, it names <code>SMTP_PASSWORD</code> where the code reads <code>SMTP_PASS</code>, and it omits most variables the application actually reads. Deploying from it would have produced exactly the three blockers above.</p>
+    <p class="meta">Added <code>.env.production.example</code>, derived from real <code>process.env</code> usage, with each variable annotated with what breaks when it is missing.</p>
+  </div>
+
+  <div class="fix">
+    <h4>8. Corrupted build directory produced a false build failure <span class="tag t-neutral">Tooling</span></h4>
+    <p>The first production build failed with <code>TypeError: Cannot read properties of undefined (reading 'call')</code> while prerendering <code>/_not-found</code>. This was not a code defect: the dev server and <code>next build</code> were both writing to the same <code>.next</code> directory.</p>
+    <p class="meta">Resolved by stopping the dev server and deleting <code>.next</code>. The clean rebuild succeeded. <strong>Worth knowing for deployment:</strong> always build from a clean <code>.next</code>. Vercel does this automatically, so this will not recur in CI.</p>
+  </div>
+</section>
+
+<section id="authz">
+  <h2><span class="num">04</span>Access control — attack testing</h2>
+  <p class="sub">Thirty privileged or mutating endpoints were called with no session cookie at all, using the verbs that change data.</p>
+
+  <div class="cards">
+    <div class="card good"><div class="n">26</div><div class="l">Rejected 401 / 403</div></div>
+    <div class="card good"><div class="n">4</div><div class="l">Public by design</div></div>
+    <div class="card bad"><div class="n">0</div><div class="l">Improperly exposed</div></div>
+    <div class="card good"><div class="n">16</div><div class="l">Debug routes, all gated</div></div>
+  </div>
+
+  <p>A static scan flagged 59 mutating route files that do not call a guard helper inside the handler. That figure is misleading on its own — <code>middleware.ts</code> carries a path-and-method policy table that enforces the role before the handler ever runs. Direct probing confirms the protection is real:</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Endpoint</th><th>Method</th><th>Anonymous result</th><th>Assessment</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/products</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/products/bulk-price-update</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/products/bulk-update-mrp</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/products/activate-all</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/products/upload-excel</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/products/google-sheet-price-sync</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/products/{id}</code></td><td>DELETE</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/settings</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/settings</code></td><td>PUT</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/footer</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/offers</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/offers/{id}</code></td><td>DELETE</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/coupons/{id}</code></td><td>DELETE</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/advertisements</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/product-advertisements</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/animated-banner</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/product-slides</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/blocked-pincodes</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/leads/settings</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/scraped-products</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/scrape-amazon</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/reviews</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/reviews/{id}</code></td><td>DELETE</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/orders/{id}/assign-license</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/clear_database</code></td><td>POST</td><td>401</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/seed-database</code></td><td>POST</td><td>403</td><td><span class="tag t-ok">Protected</span></td></tr>
+        <tr><td><code>/api/migrate</code></td><td>POST</td><td>200 (no-op)</td><td><span class="tag t-ok">404 in production</span></td></tr>
+        <tr><td><code>/api/employees/validate</code></td><td>POST</td><td>200</td><td><span class="tag t-ok">Public by design, now rate limited</span></td></tr>
+        <tr><td><code>/api/products/bulk</code></td><td>POST</td><td>200</td><td><span class="tag t-ok">Public catalogue lookup</span></td></tr>
+        <tr><td><code>/api/integrations/exlr8/webhook</code></td><td>POST</td><td>500</td><td><span class="tag t-ok">Fails closed — secret unset</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Brute-force resistance</h3>
+  <p>Login and signup were hammered from a fixed IP. Both cut over to HTTP 429 after the fifth attempt and stayed there, via the IP rate limiter in <code>lib/botDetection.ts</code> (5 attempts per 15 minutes):</p>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Attempts 1–5</th><th>Attempts 6+</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /api/auth/login</code></td><td>401 Invalid email or password</td><td>429 Too many login attempts</td><td><span class="tag t-ok">Enforced</span></td></tr>
+      <tr><td><code>POST /api/auth/signup</code></td><td>400 validation</td><td>429 Too many attempts</td><td><span class="tag t-ok">Enforced</span></td></tr>
+      <tr><td><code>POST /api/employees/validate</code></td><td>200 ×20</td><td>429 from #21</td><td><span class="tag t-ok">Added this pass</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Debug, seed and destructive routes</h3>
+  <p>All 16 are gated. Fifteen return <strong>404 whenever <code>NODE_ENV</code> is production</strong> regardless of any other setting — including <code>/api/clear_database</code>, <code>/api/seed-database</code>, <code>/api/migrate</code>, <code>/api/debug/session</code>, <code>/api/debug/cookie</code>, <code>/api/test-db</code> and <code>/api/test-connection</code>. The sixteenth (<code>/api/admin/email-templates/seed</code>) requires an admin session. <code>ENABLE_DEBUG_ROUTES</code> is set to <code>false</code>; keep it that way.</p>
+
+  <h3>Cross-site scripting</h3>
+  <p>Five uses of <code>dangerouslySetInnerHTML</code> exist outside JSON-LD. Reviewed:</p>
+  <ul>
+    <li><code>lib/articles.ts</code> — buying-guide HTML from the admin editor. <strong>Sanitised with DOMPurify on write</strong>, with an allow-list of tags and attributes and a URI filter that blocks <code>javascript:</code> and <code>data:</code>. Correct, and safer than sanitising on render. <span class="tag t-ok">Safe</span></li>
+    <li><code>app/layout.tsx</code> — a fixed inline script that unregisters stale service workers. No interpolated data. <span class="tag t-ok">Safe</span></li>
+    <li><code>app/admin/customer-centric/page.tsx</code> and <code>…/templates/page.tsx</code> — render email-template previews. Admin-authored and admin-viewed. Residual risk is limited to a staff member with <code>dashboardAccess</code> storing a payload that fires in another administrator's browser. <span class="tag t-warn">Accepted</span></li>
+  </ul>
+
+  <h3>Security headers</h3>
+  <p>Verified in <code>next.config.mjs</code>: HSTS (<code>max-age=63072000; includeSubDomains; preload</code>, production only), <code>X-Frame-Options: SAMEORIGIN</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code>, a <code>Permissions-Policy</code> that disables camera and microphone and scopes payment to Razorpay, and a Content-Security-Policy with an explicit host allow-list. <code>'unsafe-eval'</code> is present only in development. The former catch-all <code>hostname: "**"</code> image pattern has already been removed, so the remote-image allow-list is meaningful again.</p>
+</section>
+
+<section id="secrets">
+  <h2><span class="num">05</span>Secret handling</h2>
+  <p class="sub">Every file in the project excluding dependencies and build output was scanned for connection strings, API keys and inline credentials.</p>
+  <table>
+    <thead><tr><th>Finding</th><th>Location</th><th>Severity</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Atlas URI with <code>admin:admin</code> on the live cluster</td><td><code>inspect_order.js</code></td><td><span class="tag t-bad">Critical</span></td><td>Removed — <strong>rotate the credential</strong></td></tr>
+      <tr><td>Atlas URI with <code>admin:admin</code></td><td><code>scripts/backfill-descriptions.js</code></td><td><span class="tag t-bad">Critical</span></td><td>Removed</td></tr>
+      <tr><td>Atlas URI with <code>admin:admin</code></td><td><code>scripts/mark-all-in-stock.js</code></td><td><span class="tag t-bad">Critical</span></td><td>Removed</td></tr>
+      <tr><td>Atlas URI with <code>admin:admin</code></td><td><code>scripts/seed-brands.js</code></td><td><span class="tag t-bad">Critical</span></td><td>Removed</td></tr>
+      <tr><td>Silent fallback to <code>localhost:27017/ecommerce</code></td><td><code>scripts/seed-database.js</code></td><td><span class="tag t-warn">Medium</span></td><td>Removed — could seed the wrong DB</td></tr>
+      <tr><td>Silent fallback to <code>localhost:27017</code></td><td><code>scripts/migrate-manufacturer.js</code></td><td><span class="tag t-warn">Medium</span></td><td>Removed</td></tr>
+      <tr><td><code>PASSWORD="a-strong-password"</code></td><td><code>scripts/seed-admin.js</code></td><td><span class="tag t-neutral">None</span></td><td>Placeholder inside a usage comment — no action</td></tr>
+      <tr><td>Application source (<code>app/</code>, <code>lib/</code>, <code>components/</code>)</td><td>—</td><td><span class="tag t-ok">Clean</span></td><td>No hardcoded secrets found</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <code>.gitignore</code> correctly excludes <code>.env</code>, <code>.env.local</code>, <code>.env.production</code> and <code>.env.*.local</code> while keeping the example files tracked. The project is <strong>not currently under version control</strong>, so the credentials above were never pushed to a remote — but they were readable by anyone with a copy of the folder, and weak enough to guess regardless. Rotate them.
+  </div>
+</section>
+
+<section id="build">
+  <h2><span class="num">06</span>Production build</h2>
+  <p class="sub">Run from a clean <code>.next</code> with the dev server stopped.</p>
+  <div class="cards">
+    <div class="card good"><div class="n">290</div><div class="l">Static pages generated</div></div>
+    <div class="card good"><div class="n">2.9m</div><div class="l">Compile time</div></div>
+    <div class="card good"><div class="n">0</div><div class="l">Build errors</div></div>
+    <div class="card"><div class="n">103 kB</div><div class="l">Shared JS bundle</div></div>
+    <div class="card"><div class="n">37.8 kB</div><div class="l">Middleware bundle</div></div>
+    <div class="card warn"><div class="n">48</div><div class="l">Type errors (pre-existing)</div></div>
+  </div>
+  <p><code>✓ Compiled successfully in 2.9min</code> followed by <code>✓ Generating static pages (290/290)</code>. No prerender failures, no missing modules.</p>
+  <div class="note">
+    <strong>On the 48 type errors —</strong> the count is unchanged from before this pass, so nothing here regressed it. They are loose-typing complaints (<code>unknown</code>, <code>{}</code>, MongoDB <code>_id</code> string-versus-<code>ObjectId</code> overloads) concentrated in <code>app/admin/orders/[id]/page.tsx</code>, <code>app/api/spin-wheel/spin/route.ts</code> and <code>lib/partner/api-keys.ts</code>. They do not block the build because <code>next.config.mjs</code> sets <code>ignoreBuildErrors: true</code>. That setting is itself a risk — see open risk R4 — but flipping it off the day before launch would stop the build entirely. Leave it for now and burn the 48 down after go-live.
+  </div>
+</section>
+
+<section id="newsletter">
+  <h2><span class="num">07</span>Footer newsletter — verified working</h2>
+  <p class="sub">You asked specifically whether "Subscribe to Our Updates" actually stores anything. It does.</p>
+  <p>The footer form posts to <code>POST /api/newsletter</code>, which validates the address with Zod, lower-cases and trims it, and upserts into the <code>leads</code> collection keyed on <code>{ email, category: "Newsletter" }</code>. Records carry <code>source: "Footer newsletter"</code>, <code>status: "new"</code> and timestamps, and appear in the admin Leads screen.</p>
+  <table>
+    <thead><tr><th>Test</th><th>Result</th><th>Database effect</th></tr></thead>
+    <tbody>
+      <tr><td>Valid new address</td><td>200 — "You're subscribed. Watch your inbox for offers."</td><td>1 row created <span class="tag t-ok">Pass</span></td></tr>
+      <tr><td>Same address submitted again</td><td>200</td><td>No duplicate; <code>updatedAt</code> refreshed <span class="tag t-ok">Pass</span></td></tr>
+      <tr><td>Malformed address</td><td>400 — "Please enter a valid email address"</td><td>No row <span class="tag t-ok">Pass</span></td></tr>
+      <tr><td>Rapid repeat submissions</td><td>Rate limited</td><td>Protected by <code>RATE_LIMITS.CONTACT</code> <span class="tag t-ok">Pass</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <strong>One hardening recommendation.</strong> De-duplication relies on an upsert with no unique index behind it, so two simultaneous submissions of the same address could still both insert. Add a unique index on <code>{ email: 1, category: 1 }</code> in the <code>leads</code> collection. This must be done deliberately: three legacy rows for <code>dupe-test@example.com</code> (test data created before the upsert existed) would have to be cleared first or the index creation will fail. Not a launch blocker.
+  </div>
+</section>
+
+<section id="open">
+  <h2><span class="num">08</span>Open risks accepted for launch</h2>
+  <p class="sub">Known and understood. None of these block go-live, but R1 and R2 need an operational answer on day one.</p>
+
+  <div class="open">
+    <h4>R1. Stock is never decremented when an order is placed <span class="tag t-bad">Business-critical</span></h4>
+    <p><code>lib/order-pricing.ts</code> validates availability at checkout, but <code>app/api/orders/route.ts</code> writes the order without reducing any inventory count. The code comments this as waiting on the SAP inventory feed. The practical effect is that a single unit can be sold repeatedly and the storefront will keep showing it in stock.</p>
+    <p class="meta">Mitigation until the integration lands: watch order volume against real stock manually, especially on high-demand festival lines. This is the single most important functional gap in the platform.</p>
+  </div>
+
+  <div class="open">
+    <h4>R2. Orders can be created without payment <span class="tag t-warn">High</span></h4>
+    <p><code>/api/orders</code> defaults <code>paymentMethod</code> to <code>"cash"</code> and writes the order with status <code>pending</code>. There is no cash-on-delivery option in the checkout UI, so this is not reachable through normal use — but any authenticated customer can post directly to the endpoint and create unpaid pending orders.</p>
+    <p class="meta">Money itself is safe: totals are always recomputed server-side from the database by <code>computeOrderPricing()</code>, and Razorpay payments are verified for both capture status and amount before an order is marked confirmed. The risk is junk orders, not lost revenue. Treat <code>pending</code> + <code>cash</code> orders as unverified until reviewed.</p>
+  </div>
+
+  <div class="open">
+    <h4>R3. Rate limiting is in-memory <span class="tag t-warn">Medium</span></h4>
+    <p>Both limiters store counters in a module-level object. On Vercel every serverless instance has its own copy and counters reset on cold start, so a distributed attacker gets roughly 5 attempts per instance rather than 5 overall. It stops casual abuse, not a determined botnet.</p>
+    <p class="meta">Proper fix is a shared store (Upstash Redis integrates in under an hour). Worth doing soon after launch. Setting <code>RECAPTCHA_SECRET_KEY</code> would also help — reCAPTCHA verification is skipped entirely while that variable is unset.</p>
+  </div>
+
+  <div class="open">
+    <h4>R4. The build ignores type and lint errors <span class="tag t-warn">Medium</span></h4>
+    <p><code>ignoreBuildErrors</code> and <code>ignoreDuringBuilds</code> are both enabled, so a broken deployment can ship. <code>npm run lint</code> is also non-functional — no ESLint config or dependency is installed — and there is no automated test suite of any kind.</p>
+    <p class="meta">Until that changes, <code>npx tsc --noEmit</code> is the only real gate and must be run manually before every deploy. The current baseline is 48 errors; treat any increase as a regression.</p>
+  </div>
+
+  <div class="open">
+    <h4>R5. Catalogue data inconsistencies <span class="tag t-neutral">Low</span></h4>
+    <p>Sub-category and brand labels are stored inconsistently — <code>TV 55"</code> versus <code>TV 55</code>, <code>GODREJ</code> versus <code>Godrej</code>, <code>Refrigerators</code> versus <code>REFRIGERATOR</code>. Filtering code works around this today, but each new workaround is a place for a bug to hide.</p>
+    <p class="meta">A normalisation migration is the real fix. Cosmetic for launch.</p>
+  </div>
+
+  <div class="open">
+    <h4>R6. Repository hygiene and test data <span class="tag t-warn">Medium</span></h4>
+    <p><code>order_dump.json</code> and <code>order_debug_dump.json</code> sit in the project root and <strong>contain real order data</strong>. They are not referenced by the application and are not covered by <code>.gitignore</code>. Several other one-off debug scripts (<code>audit-ids.js</code>, <code>exhaustive-audit.js</code>, <code>check-assignments.js</code>, <code>inspect-*.js</code>) are also leftovers.</p>
+    <p class="meta">Recommend deleting the two JSON dumps before the source is shared or committed anywhere — they are personal data. A test order, <code>SARAECOM-00100125</code> (₹46,100, status pending), also remains in the live database and should be removed before launch so it does not appear in reporting.</p>
+  </div>
+</section>
+
+<section id="checklist">
+  <h2><span class="num">09</span>Deployment checklist</h2>
+  <p class="sub">In order. Steps 1–4 are the blockers.</p>
+  <ol>
+    <li><strong>Rotate the MongoDB Atlas credentials.</strong> The <code>admin</code>/<code>admin</code> pair is compromised. Create a new user with a strong password, update <code>MONGODB_URI</code>, and restrict Atlas network access to Vercel's egress ranges rather than <code>0.0.0.0/0</code>.</li>
+    <li><strong>Set the live Razorpay keys</strong> — <code>RAZORPAY_KEY_ID</code> (<code>rzp_live_…</code>) and <code>RAZORPAY_KEY_SECRET</code>.</li>
+    <li><strong>Set SMTP</strong> — <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>EMAIL_FROM</code>, <code>CONTACT_ADMIN_EMAIL</code>. Remember it is <code>SMTP_PASS</code>, not <code>SMTP_PASSWORD</code>.</li>
+    <li><strong>Set the URLs</strong> — <code>NEXT_PUBLIC_SITE_URL</code>, <code>NEXT_PUBLIC_APP_URL</code> and <code>NEXTAUTH_URL</code> all to <code>https://sarastores.com</code>.</li>
+    <li>Copy the remaining variables from <code>.env.production.example</code>: <code>SESSION_SECRET</code> (≥32 chars), <code>CRON_SECRET</code>, and the reCAPTCHA pair if bot protection is wanted.</li>
+    <li>Confirm <code>ENABLE_DEBUG_ROUTES</code> is <code>false</code> or absent.</li>
+    <li>Point the <code>sarastores.com</code> DNS at Vercel and confirm the TLS certificate is issued before announcing.</li>
+    <li>Wire the <code>/api/cron/*</code> routes to Vercel Cron. <strong>Nothing is scheduled today</strong> — <code>vercel.json</code> has no <code>crons</code> block and the <code>node-cron</code> import in <code>instrumentation.ts</code> is commented out, despite the log line claiming otherwise. Cart-recovery and wishlist alerts will not run until this is done.</li>
+    <li>Delete the two order JSON dumps and the <code>SARAECOM-00100125</code> test order.</li>
+    <li>Run <code>npx tsc --noEmit</code> and confirm the count is still 48.</li>
+  </ol>
+
+  <h3>Smoke test on the live domain, immediately after deploy</h3>
+  <ul class="chk">
+    <li>Register a new account and confirm the verification email arrives with a <code>sarastores.com</code> link.</li>
+    <li>Place one real low-value order end to end and confirm the money reaches the Razorpay live dashboard.</li>
+    <li>Confirm the order confirmation email arrives.</li>
+    <li>Log in as admin and confirm the order appears in <code>/admin/orders</code>.</li>
+    <li>Submit the footer newsletter form and confirm the address lands in admin Leads.</li>
+    <li>Fetch <code>https://sarastores.com/robots.txt</code> and <code>/sitemap.xml</code> and confirm they reference the real domain.</li>
+    <li>Confirm <code>https://sarastores.com/api/debug/session</code> returns 404.</li>
+  </ul>
+</section>
+
+<section id="method">
+  <h2><span class="num">10</span>Methodology and limits</h2>
+  <p class="sub">What was actually done, and what this report does not cover.</p>
+  <p><strong>Performed:</strong> a static scan of 853 project files (excluding dependencies and build output) for hardcoded secrets, unguarded mutating routes, debug-route gating and XSS sinks; live anonymous probing of 30 privileged endpoints with mutating verbs; brute-force testing of login, signup and employee validation; end-to-end functional testing of the newsletter including duplicate and invalid input; a full environment-variable audit against real <code>process.env</code> usage; review of <code>next.config.mjs</code> headers and <code>vercel.json</code> caching and CORS rules; manual review of every <code>dangerouslySetInnerHTML</code> site; a clean production build; and a TypeScript check before and after every change.</p>
+  <p><strong>Not performed:</strong> no penetration test by a third party; no load or stress testing; no dependency CVE audit (<code>npm audit</code> was not run as part of this pass); no cross-browser testing beyond Chromium; no verification of Razorpay live-mode behaviour, which cannot be tested until live keys are in place; and no email deliverability testing, which is impossible until SMTP is configured. Payment verification logic was read and reasoned about but only exercised against Razorpay test mode.</p>
+  <div class="note">
+    All testing ran against the development server on <code>localhost:3005</code> connected to the <strong>live production database</strong>. Probes were deliberately non-destructive — they used non-existent ObjectIds and empty payloads, and every privileged call was rejected before reaching a write. The newsletter test created one row in <code>leads</code>, which can be removed from admin Leads.
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>SARA Electronics — Production Launch Readiness Report. Generated from direct inspection and live testing of the codebase; no findings are inferred from documentation. Companion documents: <code>docs/audit-report.html</code> (platform functional audit) and <code>docs/compatibility-report.html</code> (responsive and accessibility audit).</p>
+</footer>
+
+</body>
+</html>

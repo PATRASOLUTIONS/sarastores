@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 80" fill="none" role="img" aria-label="Platinum tier">
+  <defs>
+    <linearGradient id="platBody" x1="8" y1="4" x2="64" y2="74" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EAF2FF"/>
+      <stop offset="0.5" stop-color="#9FB6D6"/>
+      <stop offset="1" stop-color="#5E77A0"/>
+    </linearGradient>
+  </defs>
+  <path d="M36 3 65 20v34L36 71 7 54V20Z" fill="url(#platBody)" stroke="#F1F6FF" stroke-width="2"/>
+  <path d="M36 12 57 24v26L36 62 15 50V24Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="1.5"/>
+  <g fill="#3C517A">
+    <path d="M36 24l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8Z" transform="translate(0 -1) scale(0.9) translate(4 3)"/>
+  </g>
+  <g fill="#3C517A" opacity="0.85">
+    <circle cx="24" cy="46" r="3"/>
+    <circle cx="36" cy="50" r="3"/>
+    <circle cx="48" cy="46" r="3"/>
+  </g>
+</svg>

@@ -1,0 +1,4 @@
+﻿Total products in API: 161
+Valid "id" count: 161
+Valid "_id" count: 0
+Both falsy count: 0

@@ -1,0 +1,662 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sara Mobiles x Bytewise - Revised Joint Venture Proposal</title>
+<style>
+  :root{--navy:#0b1f3a;--navy2:#12305c;--blue:#1d6fe0;--blue-soft:#eaf2fe;--cyan:#17b6c9;--amber:#f5a623;--green:#1faa6b;--red:#e84040;--ink:#1c2733;--muted:#5b6b7c;--line:#e2e8f0;--bg-soft:#f6f9fc;--white:#ffffff;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:12px;line-height:1.5;}
+  @page{size:A4;margin:0;}
+  .page{position:relative;width:210mm;min-height:297mm;padding:18mm 16mm 16mm 16mm;background:var(--white);page-break-after:always;overflow:hidden;}
+  .page:last-child{page-break-after:auto;}
+  h1,h2,h3,h4{color:var(--navy);line-height:1.2;}
+  .eyebrow{display:inline-block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--blue);font-weight:700;margin-bottom:2px;}
+  .section-title{font-size:24px;margin-bottom:1px;}
+  .section-sub{color:var(--muted);font-size:12.5px;margin-bottom:4px;max-width:165mm;}
+  p{margin-bottom:2px;}strong{color:var(--navy);}ul{margin:1px 0 2px 18px;}li{margin-bottom:1px;}
+  .page-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--line);padding-bottom:3px;margin-bottom:4px;}
+  .page-head .brand{font-weight:800;color:var(--navy);font-size:12px;letter-spacing:.04em;}
+  .page-head .brand span{color:var(--blue);}
+  .page-head .tag{font-size:10px;color:var(--muted);}
+  .footer{position:absolute;bottom:10mm;left:16mm;right:16mm;display:flex;justify-content:space-between;font-size:9px;color:var(--muted);border-top:1px solid var(--line);padding-top:4px;}
+  .cover{background:radial-gradient(900px 500px at 80% -10%,rgba(29,111,224,.45),transparent 60%),radial-gradient(700px 500px at -10% 110%,rgba(23,182,201,.35),transparent 55%),linear-gradient(150deg,#0b1f3a 0%,#12305c 55%,#0a2b54 100%);color:#fff;padding:0;}
+  .cover-inner{padding:24mm 18mm;min-height:297mm;display:flex;flex-direction:column;}
+  .cover .logos{display:flex;align-items:center;gap:14px;font-weight:800;letter-spacing:.03em;}
+  .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);padding:6px 12px;border-radius:30px;font-size:11px;}
+  .cover h1{color:#fff;font-size:42px;line-height:1.05;margin-top:auto;}
+  .cover h1 .hl{color:#7fc0ff;}
+  .cover .lead{font-size:14px;color:#cfe0f5;margin-top:14px;max-width:150mm;}
+  .cover .target-band{margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;}
+  .target-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:14px 16px;min-width:38mm;}
+  .target-card .num{font-size:24px;font-weight:800;color:#fff;}
+  .target-card .lbl{font-size:10px;color:#bcd2ee;margin-top:2px;}
+  .cover .meta{margin-top:auto;display:flex;justify-content:space-between;font-size:11px;color:#aebfd6;border-top:1px solid rgba(255,255,255,.2);padding-top:14px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--white);}
+  .card.soft{background:var(--bg-soft);}
+  .card h4{font-size:13px;margin-bottom:2px;}
+  .card .ic{width:24px;height:24px;border-radius:6px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;margin-bottom:3px;}
+  .kpi-row{display:flex;gap:6px;margin:2px 0 4px;}
+  .kpi{flex:1;border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:8px;padding:6px 8px;background:var(--white);}
+  .kpi .v{font-size:18px;font-weight:800;color:var(--navy);}
+  .kpi .l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  table{width:100%;border-collapse:collapse;font-size:11px;margin:2px 0 4px;}
+  th{background:var(--navy);color:#fff;text-align:left;padding:4px 6px;font-weight:600;}
+  td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tr:nth-child(even) td{background:var(--bg-soft);}
+  .t-right{text-align:right;}
+  .total-row td{background:var(--blue-soft);font-weight:800;color:var(--navy);border-bottom:none;}
+  .pill{display:inline-block;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;}
+  .pill.b{background:var(--blue-soft);color:var(--blue);}
+  .pill.g{background:#e4f7ee;color:var(--green);}
+  .pill.a{background:#fef1da;color:#b9750d;}
+  .pill.r{background:#ffe0e0;color:var(--red);}
+  .callout{border-left:3px solid var(--amber);background:#fff8ec;padding:6px 10px;border-radius:0 8px 8px 0;margin:4px 0;font-size:11px;}
+  .callout.blue{border-color:var(--blue);background:var(--blue-soft);}
+  .callout.green{border-color:var(--green);background:#e9f8f0;}
+  .callout.red{border-color:var(--red);background:#fff0f0;}
+  .big-quote{font-size:16px;color:var(--navy);font-weight:700;line-height:1.3;border-left:4px solid var(--amber);padding-left:12px;margin:4px 0 6px;}
+  .formula-box{background:#f0f7ff;border:2px dashed var(--blue);border-radius:8px;padding:6px 10px;margin:4px 0;}
+  .formula-box .formula{font-size:13px;font-weight:800;color:var(--navy);margin:2px 0;font-family:"Courier New",monospace;}
+  .formula-box .note{font-size:9px;color:var(--muted);}
+  .bar-chart{display:flex;flex-direction:column;gap:3px;margin:4px 0 6px;}
+  .bar-row{display:grid;grid-template-columns:52mm 1fr 24mm;gap:6px;align-items:center;font-size:10px;}
+  .bar-track{height:14px;background:var(--bg-soft);border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:4px;font-size:8px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;}
+  .bar-fill.cloud{background:var(--blue);}
+  .bar-fill.dev{background:var(--navy);}
+  .bar-fill.support{background:var(--cyan);}
+  .bar-fill.seo{background:var(--amber);}
+  .bar-fill.total{background:var(--green);}
+  .bar-fill.loss{background:#e84040;}
+  .bar-fill.rev{background:var(--green);}
+  .bar-val{font-weight:700;color:var(--ink);text-align:right;}
+  .cloud-note{background:#eef5ff;border:1.5px solid var(--blue);border-radius:6px;padding:4px 8px;font-size:9px;color:var(--navy);margin:2px 0;}
+  .loss-warning{background:#fff0f0;border:1.5px solid #e84040;border-radius:8px;padding:6px 8px;margin:4px 0;font-size:10px;color:#c01010;}
+  .loss-warning strong{color:#e84040;}
+  .road{position:relative;margin-top:2px;}
+  .road .phase{display:grid;grid-template-columns:42mm 1fr;gap:8px;border-left:3px solid var(--blue);padding:4px 0 6px 12px;margin-left:4px;position:relative;}
+  .road .phase::before{content:"";position:absolute;left:-8px;top:8px;width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--blue);}
+  .road .when{font-weight:800;color:var(--navy);}
+  .road .when .t{display:block;font-size:9px;color:var(--blue);font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
+  .road .when .goal{display:block;font-size:10px;color:var(--muted);font-weight:600;margin-top:2px;}
+  .road .what h4{font-size:12px;margin-bottom:1px;}
+  .road .what ul{margin:1px 0 0 14px;}
+  .road .what li{font-size:10px;color:var(--muted);}
+  .num-list{counter-reset:step;list-style:none;margin-left:0;}
+  .num-list li{position:relative;padding-left:28px;margin-bottom:4px;}
+  .num-list li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:-1px;width:20px;height:20px;border-radius:50%;background:var(--navy);color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;}
+  .resp-tag{font-weight:800;}.by{color:var(--blue);}.sa{color:var(--amber);}
+  .split-box{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0;}
+  .split-left{background:var(--blue-soft);border:2px solid var(--blue);border-radius:10px;padding:8px 10px;}
+  .split-right{background:#fef1da;border:2px solid var(--amber);border-radius:10px;padding:8px 10px;}
+  .split-left h4{color:var(--blue);font-size:12px;margin-bottom:2px;}
+  .split-right h4{color:var(--amber);font-size:12px;margin-bottom:2px;}
+  .split-left li,.split-right li{font-size:10px;color:var(--ink);}
+  .vs-badge{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;font-weight:800;font-size:10px;position:absolute;left:50%;transform:translateX(-50%);z-index:2;}
+  .arg-card{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;border-radius:10px;padding:10px 12px;margin:4px 0;}
+  .arg-card h4{color:#7fc0ff;font-size:12px;margin-bottom:3px;}
+  .arg-card p{color:#cfe0f5;font-size:10px;margin-bottom:2px;}
+  .arg-card .stat{font-size:16px;font-weight:800;color:#fff;}
+  .arg-card .stat-label{font-size:9px;color:#aebfd6;text-transform:uppercase;letter-spacing:.05em;}
+  .evidence-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:10px 0;}
+  .evidence{background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center;}
+  .evidence .num{font-size:20px;font-weight:800;color:var(--navy);}
+  .evidence .lbl{font-size:9px;color:var(--muted);text-transform:uppercase;margin-top:2px;}
+</style>
+</head>
+<body>
+<!-- COVER -->
+<section class="page cover">
+  <div class="cover-inner">
+    <div class="logos">
+      <span class="chip">SARA MOBILES</span>
+      <span style="opacity:.6;font-size:18px;">x</span>
+      <span class="chip">BYTEWISE CONSULTING LLP</span>
+    </div>
+    <h1>Revised <span class="hl">Growth Joint Venture</span><br/>Proposal</h1>
+    <p class="lead">A data-driven, phased approach to building Sara Mobiles online revenue - from Rs.60 Lakh to Rs.5 Crore+ per month. This revised proposal details the exact traffic, orders, cloud costs, and break-even analysis for each growth phase.</p>
+    <div class="target-band">
+      <div class="target-card"><div class="num">Rs.60L-5Cr+</div><div class="lbl">Monthly revenue by phase</div></div>
+      <div class="target-card"><div class="num">3 Phases</div><div class="lbl">0-48 month roadmap</div></div>
+      <div class="target-card"><div class="num">Rs.0</div><div class="lbl">Upfront build cost to Sara</div></div>
+      <div class="target-card"><div class="num">1.5-3%</div><div class="lbl">Revenue share (sliding scale)</div></div>
+    </div>
+    <div class="meta">
+      <div><strong style="color:#fff">Revised Joint Venture Proposal</strong> - Confidential</div>
+      <div>Prepared for Sara Mobiles - Bytewise Consulting LLP</div>
+    </div>
+  </div>
+</section>
+<!-- PREVIOUS ENGAGEMENT SETTLEMENT -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Previous Engagement Settlement</div></div>
+  <span class="eyebrow">01 - Previous Engagement and Settlement</span>
+  <h2 class="section-title">Prior development payments - settled and terminated</h2>
+  <p class="section-sub">Prior to this joint venture agreement, Bytewise Consulting LLP received payments from Systech IT Solutions for the development of a B2B sales platform. The scope of work was later redesigned to include both B2C and B2B sales. As of 08 June 2026, all previous invoices are settled and non-refundable. Any new development requirements for Phase 3 (estimated at Rs.59,000) are cancelled.</p>
+  <div class="big-quote">"Previous invoices for platform development are settled in full and are non-refundable. This joint venture replaces all prior commercial terms - no outstanding dues, no pending obligations."</div>
+  <span class="eyebrow">Previous Payments Received</span>
+  <table>
+    <tr><th>Invoice No.</th><th>Client</th><th>Date</th><th class="t-right">Amount (Rs.)</th><th>Status</th></tr>
+    <tr><td style="font-weight:700;">BW-INV-0010</td><td>Systech IT Solutions</td><td>13 October 2025</td><td class="t-right" style="font-weight:700;">65,000.00</td><td><span class="pill g">Settled</span></td></tr>
+    <tr><td style="font-weight:700;">BW-INV-0022</td><td>Systech IT Solutions</td><td>09 February 2026</td><td class="t-right" style="font-weight:700;">59,000.00</td><td><span class="pill g">Settled</span></td></tr>
+    <tr class="total-row"><td></td><td></td><td>Total Received</td><td class="t-right">Rs.1,24,000.00</td><td><span class="pill g">Settled</span></td></tr>
+  </table>
+  <span class="eyebrow">What These Payments Covered</span>
+  <div class="grid2">
+    <div class="card">
+      <h4>Original Scope - B2B Platform</h4>
+      <ul>
+        <li>Initial development of a B2B sales platform</li>
+        <li>Core e-commerce functionality for business-to-business transactions</li>
+        <li>Basic product catalogue and ordering system</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Redesigned Scope - B2C + B2B</h4>
+      <ul>
+        <li>Platform redesigned to support both B2C (retail) and B2B (wholesale) sales</li>
+        <li>Full consumer-facing storefront with payments, COD, invoicing</li>
+        <li>Admin panel, analytics, SEO, marketing tools</li>
+      </ul>
+    </div>
+  </div>
+  <span class="eyebrow">Settlement Terms</span>
+  <table>
+    <tr><th>Item</th><th>Detail</th></tr>
+    <tr><td style="font-weight:700;">Total payments received</td><td>Rs.1,24,000 (Rs.65,000 + Rs.59,000)</td></tr>
+    <tr><td style="font-weight:700;">Coverage</td><td>These payments cover the development cost of the B2B/B2C platform as on 08 June 2026</td></tr>
+    <tr><td style="font-weight:700;">Previous invoices</td><td>All invoices issued prior to this agreement (BW-INV-0010, BW-INV-0022, and any others) are hereby <strong>terminated and null and void</strong></td></tr>
+    <tr><td style="font-weight:700;">Outstanding dues</td><td>Nil. No pending payments from either party.</td></tr>
+    <tr><td style="font-weight:700;">New engagement</td><td>Joint venture basis - sliding revenue share (3% / 1.75% / 1.5%). No further upfront fees.</td></tr>
+  </table>
+  <div class="callout green">
+    <strong>Clean slate:</strong> Both parties start this joint venture with zero outstanding obligations. The Rs.1,24,000 previously received by Bytewise covers all development work done to date. From this date forward, the engagement operates purely on a revenue-share joint venture basis.
+  </div>
+  <div class="callout blue">
+    <strong>Why this matters:</strong> Sara does not need to pay any additional upfront fees for the platform. The development cost has already been settled through the previous payments. The only ongoing cost is the sliding revenue share (3% -> 1.75% -> 1.5%) plus Azure cloud infrastructure (shared responsibility model).
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 2</span></div>
+</section>
+<!-- EXECUTIVE SUMMARY -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand">BYTEWISE<span>x</span>SARA</div>
+    <div class="tag">Revised Proposal - Executive Summary</div>
+  </div>
+  <span class="eyebrow">02 - Executive Summary</span>
+  <h2 class="section-title">A phased growth plan with sliding-scale revenue share</h2>
+  <p class="section-sub">This revised proposal uses a percentage-based revenue share that decreases as Sara scales. Bytewise bears the technology risk - fixed costs exist regardless of sales performance, and our revenue is a percentage of what Sara earns.</p>
+  <div class="big-quote">"You manage the business. We run the technology. Our revenue share slides down as you grow - the bigger you get, the more you keep."</div>
+  <span class="eyebrow">Revenue Share Model (Percentage-Based)</span>
+  <div class="grid3" style="margin-bottom:14px;">
+    <div class="card" style="border:2px solid var(--blue);">
+      <h4 style="color:var(--blue);">Phase 1 - Month 0-6</h4>
+      <div style="font-size:28px;font-weight:800;color:var(--navy);">3%</div>
+      <p style="font-size:10px;color:var(--muted);margin:0;">of revenue when sales are Rs.60L - Rs.1Cr</p>
+    </div>
+    <div class="card" style="border:2px solid var(--green);">
+      <h4 style="color:var(--green);">Phase 2 - Month 6-12</h4>
+      <div style="font-size:28px;font-weight:800;color:var(--navy);">1.75%</div>
+      <p style="font-size:10px;color:var(--muted);margin:0;">of revenue when sales are Rs.1Cr - Rs.2Cr</p>
+    </div>
+    <div class="card" style="border:2px solid var(--amber);">
+      <h4 style="color:var(--amber);">Phase 3 - Month 12-48</h4>
+      <div style="font-size:28px;font-weight:800;color:var(--navy);">1.5%</div>
+      <p style="font-size:10px;color:var(--muted);margin:0;">of revenue when sales are Rs.2Cr+</p>
+    </div>
+  </div>
+  <span class="eyebrow">Phase Overview</span>
+  <table>
+    <tr><th>Phase</th><th>Timeline</th><th class="t-right">Revenue Target</th><th class="t-right">Visitors Needed</th><th class="t-right">Revenue Share</th></tr>
+    <tr><td><span class="pill b">Phase 1</span></td><td>Month 0-6</td><td class="t-right">Rs.60L - Rs.1 Cr</td><td class="t-right">48,000 - 80,000</td><td class="t-right" style="font-weight:800;">3%</td></tr>
+    <tr><td><span class="pill g">Phase 2</span></td><td>Month 6-12</td><td class="t-right">Rs.1 Cr - Rs.2 Cr</td><td class="t-right">80,000 - 1,60,000</td><td class="t-right" style="font-weight:800;">1.75%</td></tr>
+    <tr><td><span class="pill a">Phase 3</span></td><td>Month 12-48</td><td class="t-right">Rs.2 Cr - Rs.5 Cr+</td><td class="t-right">1,60,000 - 4,00,000</td><td class="t-right" style="font-weight:800;">1.5%</td></tr>
+  </table>
+  <div class="callout blue">
+    <strong>How it works:</strong> Bytewise charges a flat Rs.85,000/month for cloud infrastructure, plus dynamic cloud costs that scale with traffic (Rs.1.20 per visitor). The revenue share (3% / 1.75% / 1.5%) is how Bytewise earns back its investment. The percentage decreases as Sara grows - rewarding scale.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 3</span></div>
+</section>
+<!-- REVENUE AND TRAFFIC MATH -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Revenue and Traffic Math</div></div>
+  <span class="eyebrow">03 - The Revenue Equation</span>
+  <h2 class="section-title">How traffic converts to revenue - the math</h2>
+  <p class="section-sub">Every revenue target has a direct, calculable relationship with visitor traffic. This section shows the exact numbers needed at each phase.</p>
+  <span class="eyebrow">Core Assumptions</span>
+  <div class="formula-box">
+    <div class="formula">Average Order Value (AOV) = Rs.25,000</div>
+    <div class="formula">Conversion Rate = 0.5% = 0.005</div>
+    <div style="margin-top:8px;">
+      <div class="formula">Orders = Revenue / Rs.25,000</div>
+      <div class="formula">Visitors = Orders / 0.005</div>
+    </div>
+    <div class="note" style="margin-top:8px;">These are conservative benchmarks. A well-run electronics e-commerce store with Sara's brand recognition can achieve 0.5% conversion with targeted marketing.</div>
+  </div>
+  <span class="eyebrow">Traffic and Order Calculation</span>
+  <table>
+    <tr><th>Monthly Sales</th><th class="t-right">Orders Required</th><th class="t-right">Visitors Required</th></tr>
+    <tr><td>Rs.60 Lakh</td><td class="t-right">240</td><td class="t-right">48,000</td></tr>
+    <tr><td>Rs.75 Lakh</td><td class="t-right">300</td><td class="t-right">60,000</td></tr>
+    <tr><td>Rs.1 Crore</td><td class="t-right">400</td><td class="t-right">80,000</td></tr>
+    <tr><td>Rs.1.5 Crore</td><td class="t-right">600</td><td class="t-right">1,20,000</td></tr>
+    <tr><td>Rs.2 Crore</td><td class="t-right">800</td><td class="t-right">1,60,000</td></tr>
+    <tr><td>Rs.3 Crore</td><td class="t-right">1,200</td><td class="t-right">2,40,000</td></tr>
+    <tr class="total-row"><td>Rs.5 Crore</td><td class="t-right">2,000</td><td class="t-right">4,00,000</td></tr>
+  </table>
+  <span class="eyebrow">Reverse Calculation - What 1 Lakh Visitors Means</span>
+  <div class="grid2">
+    <div class="card soft">
+      <h4>If you have 1,00,000 visitors/month</h4>
+      <table style="margin:4px 0 0;">
+        <tr><th>Visitors</th><th>Conv. Rate</th><th>Orders</th><th>Revenue</th></tr>
+        <tr><td>1,00,000</td><td>0.5%</td><td>500</td><td>Rs.1.25 Cr</td></tr>
+        <tr><td>2,00,000</td><td>0.5%</td><td>1,000</td><td>Rs.2.5 Cr</td></tr>
+        <tr class="total-row"><td>4,00,000</td><td>0.5%</td><td>2,000</td><td>Rs.5 Cr</td></tr>
+      </table>
+    </div>
+    <div class="callout blue">
+      <strong>Key insight:</strong> Every additional 10,000 visitors at 0.5% conversion generates Rs.12.5 Lakh in monthly revenue. The relationship is linear - double the traffic, double the revenue.
+    </div>
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 4</span></div>
+</section>
+<!-- COST ESTIMATION BY PHASE -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Cost Estimation by Phase</div></div>
+  <span class="eyebrow">04 - Cost Estimation</span>
+  <h2 class="section-title">What it costs to run the platform at each phase</h2>
+  <p class="section-sub">Cloud infrastructure costs are dynamic - they scale with traffic. Bytewise charges Rs.85,000/month fixed plus dynamic cloud costs. The revenue share percentage is how we earn back our investment.</p>
+  <div class="cloud-note">
+    <strong>Important:</strong> Cloud bills are dynamic and based on actual usage. The costs below are estimates based on visitor volumes. Higher traffic = higher API spend = higher cloud costs.
+  </div>
+  <span class="eyebrow">Cost Formula</span>
+  <div class="formula-box">
+    <div class="formula">Total Monthly Cost = Rs.85,000 (fixed) + (Visitors x Rs.1.20) (dynamic cloud)</div>
+    <div class="note">Fixed: cloud hosting, base infrastructure, SSL, monitoring. Dynamic: API calls, CDN bandwidth, database operations, search queries - all scaling with traffic.</div>
+  </div>
+  <span class="eyebrow">Phase 1 - Month 0-6 - Rs.60L to Rs.1Cr (3% Revenue Share)</span>
+  <table>
+    <tr><th>Scenario</th><th class="t-right">Revenue</th><th class="t-right">Visitors</th><th class="t-right">Dynamic Cloud</th><th class="t-right">Fixed Cost</th><th class="t-right">Total Cost</th><th class="t-right">Revenue Share (3%)</th><th class="t-right">Bytewise Net</th></tr>
+    <tr><td>Low</td><td class="t-right">Rs.60 L</td><td class="t-right">48,000</td><td class="t-right">Rs.57,600</td><td class="t-right">Rs.85,000</td><td class="t-right" style="font-weight:800;">Rs.1,42,600</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.1,80,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.37,400</td></tr>
+    <tr><td>Mid</td><td class="t-right">Rs.75 L</td><td class="t-right">60,000</td><td class="t-right">Rs.72,000</td><td class="t-right">Rs.85,000</td><td class="t-right" style="font-weight:800;">Rs.1,57,000</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.2,25,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.68,000</td></tr>
+    <tr class="total-row"><td>High</td><td class="t-right">Rs.1 Cr</td><td class="t-right">80,000</td><td class="t-right">Rs.96,000</td><td class="t-right">Rs.85,000</td><td class="t-right">Rs.1,81,000</td><td class="t-right" style="color:var(--green);">Rs.3,00,000</td><td class="t-right" style="color:var(--green);">+Rs.1,19,000</td></tr>
+  </table>
+  <span class="eyebrow">Phase 2 - Month 6-12 - Rs.1Cr to Rs.2Cr (1.75% Revenue Share)</span>
+  <table>
+    <tr><th>Scenario</th><th class="t-right">Revenue</th><th class="t-right">Visitors</th><th class="t-right">Dynamic Cloud</th><th class="t-right">Fixed Cost</th><th class="t-right">Total Cost</th><th class="t-right">Revenue Share (1.75%)</th><th class="t-right">Bytewise Net</th></tr>
+    <tr><td>Low</td><td class="t-right">Rs.1 Cr</td><td class="t-right">80,000</td><td class="t-right">Rs.96,000</td><td class="t-right">Rs.85,000</td><td class="t-right" style="font-weight:800;">Rs.1,81,000</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.1,75,000</td><td class="t-right" style="color:var(--red);font-weight:700;">-Rs.6,000</td></tr>
+    <tr><td>Mid</td><td class="t-right">Rs.1.5 Cr</td><td class="t-right">1,20,000</td><td class="t-right">Rs.1,44,000</td><td class="t-right">Rs.85,000</td><td class="t-right" style="font-weight:800;">Rs.2,29,000</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.2,62,500</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.33,500</td></tr>
+    <tr class="total-row"><td>High</td><td class="t-right">Rs.2 Cr</td><td class="t-right">1,60,000</td><td class="t-right">Rs.1,92,000</td><td class="t-right">Rs.85,000</td><td class="t-right">Rs.2,77,000</td><td class="t-right" style="color:var(--green);">Rs.3,50,000</td><td class="t-right" style="color:var(--green);">+Rs.73,000</td></tr>
+  </table>
+  <span class="eyebrow">Phase 3 - Month 12-48 - Rs.2Cr to Rs.5Cr+ (1.5% Revenue Share)</span>
+  <table>
+    <tr><th>Scenario</th><th class="t-right">Revenue</th><th class="t-right">Visitors</th><th class="t-right">Dynamic Cloud</th><th class="t-right">Fixed Cost</th><th class="t-right">Total Cost</th><th class="t-right">Revenue Share (1.5%)</th><th class="t-right">Bytewise Net</th></tr>
+    <tr><td>Low</td><td class="t-right">Rs.2 Cr</td><td class="t-right">1,60,000</td><td class="t-right">Rs.1,92,000</td><td class="t-right">Rs.85,000</td><td class="t-right" style="font-weight:800;">Rs.2,77,000</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.3,00,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.23,000</td></tr>
+    <tr><td>Mid</td><td class="t-right">Rs.3 Cr</td><td class="t-right">2,40,000</td><td class="t-right">Rs.2,88,000</td><td class="t-right">Rs.85,000</td><td class="t-right" style="font-weight:800;">Rs.3,73,000</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.4,50,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.77,000</td></tr>
+    <tr class="total-row"><td>High</td><td class="t-right">Rs.5 Cr</td><td class="t-right">4,00,000</td><td class="t-right">Rs.4,80,000</td><td class="t-right">Rs.85,000</td><td class="t-right">Rs.5,65,000</td><td class="t-right" style="color:var(--green);">Rs.7,50,000</td><td class="t-right" style="color:var(--green);">+Rs.1,85,000</td></tr>
+  </table>
+  <div class="callout">
+    <strong>Cloud cost scaling:</strong> As traffic grows from 48K to 4,00,000 visitors, dynamic cloud costs increase from Rs.57,600 to Rs.4,80,000. The cost per visitor remains constant at Rs.1.20. Bytewise's revenue share decreases from 3% to 1.5% as Sara scales - but absolute earnings grow because revenue grows faster.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 5</span></div>
+</section>
+<!-- FIXED COST BREAKDOWN -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Fixed Cost Breakdown</div></div>
+  <span class="eyebrow">05 - Bytewise Operational Cost (After Year 1)</span>
+  <h2 class="section-title">The full cost to run the platform - regardless of sales</h2>
+  <p class="section-sub">These are Bytewise's actual monthly operational costs to maintain the platform at scale. This is what Bytewise absorbs during the joint venture period. The Rs.85,000/month fixed charge covers the base infrastructure; the remaining costs are borne by Bytewise as part of the joint venture investment.</p>
+  <table>
+    <tr><th>#</th><th>Service</th><th class="t-right">Monthly Cost (Rs.)</th></tr>
+    <tr><td>1</td><td>Cloud Hosting and Infrastructure (Production, Monitoring, CDN, SSL)</td><td class="t-right" style="font-weight:700;">75,000</td></tr>
+    <tr><td>2</td><td>Database Management and Performance Optimization</td><td class="t-right" style="font-weight:700;">15,000</td></tr>
+    <tr><td>3</td><td>Database Backup and Disaster Recovery</td><td class="t-right" style="font-weight:700;">10,000</td></tr>
+    <tr><td>4</td><td>Security Monitoring and Patching</td><td class="t-right" style="font-weight:700;">15,000</td></tr>
+    <tr><td>5</td><td>SEO/GEO Optimization</td><td class="t-right" style="font-weight:700;">40,000</td></tr>
+    <tr><td>6</td><td>L1 Support (Customer Queries and Operations)</td><td class="t-right" style="font-weight:700;">35,000</td></tr>
+    <tr><td>7</td><td>L2 Technical Support</td><td class="t-right" style="font-weight:700;">45,000</td></tr>
+    <tr><td>8</td><td>Web/Application Development and Enhancements</td><td class="t-right" style="font-weight:700;">75,000</td></tr>
+    <tr><td>9</td><td>DevOps, CI/CD and Infrastructure Management</td><td class="t-right" style="font-weight:700;">25,000</td></tr>
+    <tr><td>10</td><td>Product/Data Management and Content Updates</td><td class="t-right" style="font-weight:700;">15,000</td></tr>
+    <tr><td>11</td><td>Analytics, Reporting and Business Insights</td><td class="t-right" style="font-weight:700;">10,000</td></tr>
+    <tr class="total-row"><td></td><td>Total Bytewise Operational Cost</td><td class="t-right">Rs.3,65,000 / month</td></tr>
+  </table>
+  <span class="eyebrow">Cost Visualization</span>
+  <div class="bar-chart">
+    <div class="bar-row"><span>Cloud Infrastructure</span><div class="bar-track"><div class="bar-fill cloud" style="width:75%;">Rs.75K</div></div><span class="bar-val">Rs.75,000</span></div>
+    <div class="bar-row"><span>Database and Security</span><div class="bar-track"><div class="bar-fill dev" style="width:40%;">Rs.40K</div></div><span class="bar-val">Rs.40,000</span></div>
+    <div class="bar-row"><span>SEO/GEO Optimization</span><div class="bar-track"><div class="bar-fill seo" style="width:40%;">Rs.40K</div></div><span class="bar-val">Rs.40,000</span></div>
+    <div class="bar-row"><span>L1 + L2 Support</span><div class="bar-track"><div class="bar-fill support" style="width:80%;">Rs.80K</div></div><span class="bar-val">Rs.80,000</span></div>
+    <div class="bar-row"><span>Development and Enhancements</span><div class="bar-track"><div class="bar-fill cloud" style="width:75%;">Rs.75K</div></div><span class="bar-val">Rs.75,000</span></div>
+    <div class="bar-row"><span>DevOps + Data + Analytics</span><div class="bar-track"><div class="bar-fill dev" style="width:50%;">Rs.50K</div></div><span class="bar-val">Rs.50,000</span></div>
+    <div class="bar-row"><span style="font-weight:800;color:var(--navy);">TOTAL</span><div class="bar-track"><div class="bar-fill total" style="width:100%;">Rs.3.65L</div></div><span class="bar-val" style="color:var(--green);">Rs.3,65,000</span></div>
+  </div>
+  <div class="callout red">
+    <strong>What this means:</strong> Bytewise spends Rs.3.65 lakh/month to run the platform. During the joint venture, Sara pays Rs.85,000/month for base infrastructure. The remaining Rs.2.80 lakh is absorbed by Bytewise as joint venture investment. This investment is recovered through the revenue share percentage.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 6</span></div>
+</section>
+<!-- BREAK-EVEN AND RISK ANALYSIS -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Break-even and Risk Analysis</div></div>
+  <span class="eyebrow">06 - Break-even and Risk Analysis</span>
+  <h2 class="section-title">When does Bytewise break even? What if sales are low?</h2>
+  <p class="section-sub">This section shows the break-even point and the worst-case scenario. Bytewise takes on real financial risk - our costs exist whether Sara hits target or not.</p>
+  <span class="eyebrow">Revenue Share Summary by Phase</span>
+  <table>
+    <tr><th>Monthly Revenue</th><th>Phase</th><th class="t-right">Revenue Share %</th><th class="t-right">Bytewise Earns</th><th class="t-right">Bytewise Cost</th><th class="t-right">Bytewise Net</th></tr>
+    <tr><td>Rs.60 Lakh</td><td><span class="pill b">Phase 1</span></td><td class="t-right">3%</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.1,80,000</td><td class="t-right">Rs.1,42,600</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.37,400</td></tr>
+    <tr><td>Rs.75 Lakh</td><td><span class="pill b">Phase 1</span></td><td class="t-right">3%</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.2,25,000</td><td class="t-right">Rs.1,57,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.68,000</td></tr>
+    <tr><td>Rs.1 Crore</td><td><span class="pill b">Phase 1</span></td><td class="t-right">3%</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.3,00,000</td><td class="t-right">Rs.1,81,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.1,19,000</td></tr>
+    <tr><td>Rs.1 Crore</td><td><span class="pill g">Phase 2</span></td><td class="t-right">1.75%</td><td class="t-right" style="color:var(--red);font-weight:700;">Rs.1,75,000</td><td class="t-right">Rs.1,81,000</td><td class="t-right" style="color:var(--red);font-weight:700;">-Rs.6,000</td></tr>
+    <tr><td>Rs.1.5 Crore</td><td><span class="pill g">Phase 2</span></td><td class="t-right">1.75%</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.2,62,500</td><td class="t-right">Rs.2,29,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.33,500</td></tr>
+    <tr><td>Rs.2 Crore</td><td><span class="pill g">Phase 2</span></td><td class="t-right">1.75%</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.3,50,000</td><td class="t-right">Rs.2,77,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.73,000</td></tr>
+    <tr><td>Rs.3 Crore</td><td><span class="pill a">Phase 3</span></td><td class="t-right">1.5%</td><td class="t-right" style="color:var(--green);font-weight:700;">Rs.4,50,000</td><td class="t-right">Rs.3,73,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.77,000</td></tr>
+    <tr class="total-row"><td>Rs.5 Crore</td><td><span class="pill a">Phase 3</span></td><td class="t-right">1.5%</td><td class="t-right" style="color:var(--green);">Rs.7,50,000</td><td class="t-right">Rs.5,65,000</td><td class="t-right" style="color:var(--green);">+Rs.1,85,000</td></tr>
+  </table>
+  <span class="eyebrow">Break-even Analysis</span>
+  <div class="grid2">
+    <div style="background:var(--navy);color:#fff;border-radius:12px;padding:16px;">
+      <h4 style="color:#7fc0ff;font-size:12px;margin-bottom:6px;">Phase 1 Break-even (3%)</h4>
+      <div style="font-size:22px;font-weight:800;color:#fff;">~33,300 visitors</div>
+      <div style="font-size:10px;color:#aebfd6;margin-top:4px;">Rs.41.7 Lakh/month revenue</div>
+      <div style="font-size:10px;color:#aebfd6;margin-top:2px;">167 orders at Rs.25,000 AOV</div>
+      <div style="font-size:9px;color:#aebfd6;margin-top:8px;border-top:1px solid rgba(255,255,255,.2);padding-top:8px;">Revenue share (3%): Rs.1,25,000<br/>Total cost: Rs.1,25,000<br/>Net: break-even</div>
+    </div>
+    <div style="background:var(--green);color:#fff;border-radius:12px;padding:16px;">
+      <h4 style="color:#c5f5e0;font-size:12px;margin-bottom:6px;">Phase 2 Break-even (1.75%)</h4>
+      <div style="font-size:22px;font-weight:800;color:#fff;">~76,200 visitors</div>
+      <div style="font-size:10px;color:#c5f5e0;margin-top:4px;">Rs.95.2 Lakh/month revenue</div>
+      <div style="font-size:10px;color:#c5f5e0;margin-top:2px;">381 orders at Rs.25,000 AOV</div>
+      <div style="font-size:9px;color:#c5f5e0;margin-top:8px;border-top:1px solid rgba(255,255,255,.2);padding-top:8px;">Revenue share (1.75%): Rs.1,66,600<br/>Total cost: Rs.1,76,440<br/>Net: approximately break-even</div>
+    </div>
+  </div>
+  <span class="eyebrow" style="margin-top:12px;">Worst Case - What If Sales Are Very Low?</span>
+  <table>
+    <tr><th>Scenario</th><th class="t-right">Revenue</th><th class="t-right">Visitors</th><th class="t-right">Orders</th><th class="t-right">Bytewise Cost</th><th class="t-right">Revenue Share (3%)</th><th class="t-right">Bytewise Net</th></tr>
+    <tr><td><span class="pill r">Very Low</span></td><td class="t-right">Rs.20 L</td><td class="t-right">16,000</td><td class="t-right">80</td><td class="t-right">Rs.1,04,200</td><td class="t-right">Rs.60,000</td><td class="t-right" style="color:var(--red);font-weight:700;">-Rs.44,200</td></tr>
+    <tr><td><span class="pill a">Below Break-even</span></td><td class="t-right">Rs.33 L</td><td class="t-right">26,500</td><td class="t-right">132</td><td class="t-right">Rs.1,16,800</td><td class="t-right">Rs.99,000</td><td class="t-right" style="color:var(--red);font-weight:700;">-Rs.17,800</td></tr>
+    <tr><td><span class="pill b">Break-even</span></td><td class="t-right">Rs.41.7 L</td><td class="t-right">33,300</td><td class="t-right">167</td><td class="t-right">Rs.1,25,000</td><td class="t-right">Rs.1,25,000</td><td class="t-right" style="color:var(--amber);font-weight:700;">Rs.0</td></tr>
+    <tr><td><span class="pill g">Phase 1 Low</span></td><td class="t-right">Rs.60 L</td><td class="t-right">48,000</td><td class="t-right">240</td><td class="t-right">Rs.1,42,600</td><td class="t-right">Rs.1,80,000</td><td class="t-right" style="color:var(--green);font-weight:700;">+Rs.37,400</td></tr>
+  </table>
+  <div class="loss-warning">
+    <strong>Risk disclosure:</strong> If monthly revenue falls below Rs.41.7 Lakh (Phase 1 at 3%), Bytewise operates at a loss. At Rs.20 Lakh/month, Bytewise absorbs a loss of Rs.44,200 per month. This is the genuine financial risk Bytewise takes as your technology partner.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 7</span></div>
+</section>
+<!-- COST VS REVENUE CHART -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Cost vs Revenue Visualization</div></div>
+  <span class="eyebrow">07 - Cost vs Revenue - The Growth Picture</span>
+  <h2 class="section-title">How costs and revenue scale across phases</h2>
+  <p class="section-sub">This visualization shows that while costs grow with traffic, revenue grows much faster. The sliding revenue share (3% -> 1.75% -> 1.5%) means Sara keeps more as it scales.</p>
+  <span class="eyebrow">Phase 1 - Month 0-6 - Rs.60L to Rs.1Cr (3% Revenue Share)</span>
+  <div class="bar-chart">
+    <div class="bar-row"><span>Bytewise Cost</span><div class="bar-track"><div class="bar-fill loss" style="width:47%;">Rs.1.4-1.8L</div></div><span class="bar-val">Rs.1.4-1.8L</span></div>
+    <div class="bar-row"><span>Revenue Share (3%)</span><div class="bar-track"><div class="bar-fill rev" style="width:100%;">Rs.1.8-3.0L</div></div><span class="bar-val">Rs.1.8-3.0L</span></div>
+    <div class="bar-row"><span>Bytewise Net Profit</span><div class="bar-track"><div class="bar-fill total" style="width:40%;">+Rs.37K-1.19L</div></div><span class="bar-val" style="color:var(--green);">+Rs.37K-1.19L</span></div>
+  </div>
+  <span class="eyebrow">Phase 2 - Month 6-12 - Rs.1Cr to Rs.2Cr (1.75% Revenue Share)</span>
+  <div class="bar-chart">
+    <div class="bar-row"><span>Bytewise Cost</span><div class="bar-track"><div class="bar-fill loss" style="width:55%;">Rs.1.8-2.8L</div></div><span class="bar-val">Rs.1.8-2.8L</span></div>
+    <div class="bar-row"><span>Revenue Share (1.75%)</span><div class="bar-track"><div class="bar-fill rev" style="width:70%;">Rs.1.75-3.5L</div></div><span class="bar-val">Rs.1.75-3.5L</span></div>
+    <div class="bar-row"><span>Bytewise Net Profit</span><div class="bar-track"><div class="bar-fill total" style="width:18%;">-6K to +73K</div></div><span class="bar-val" style="color:var(--green);">-6K to +73K</span></div>
+  </div>
+  <span class="eyebrow">Phase 3 - Month 12-48 - Rs.2Cr to Rs.5Cr+ (1.5% Revenue Share)</span>
+  <div class="bar-chart">
+    <div class="bar-row"><span>Bytewise Cost</span><div class="bar-track"><div class="bar-fill loss" style="width:38%;">Rs.2.8-5.7L</div></div><span class="bar-val">Rs.2.8-5.7L</span></div>
+    <div class="bar-row"><span>Revenue Share (1.5%)</span><div class="bar-track"><div class="bar-fill rev" style="width:50%;">Rs.3.0-7.5L</div></div><span class="bar-val">Rs.3.0-7.5L</span></div>
+    <div class="bar-row"><span>Bytewise Net Profit</span><div class="bar-track"><div class="bar-fill total" style="width:25%;">+23K to +1.85L</div></div><span class="bar-val" style="color:var(--green);">+23K to +1.85L</span></div>
+  </div>
+  <span class="eyebrow">Sara's Effective Cost - What Sara Pays vs Keeps</span>
+  <table>
+    <tr><th>Revenue</th><th>Phase</th><th class="t-right">Revenue Share %</th><th class="t-right">Sara Pays Bytewise</th><th class="t-right">Sara Keeps</th><th class="t-right">Sara Keeps %</th></tr>
+    <tr><td>Rs.60 L</td><td><span class="pill b">Phase 1</span></td><td class="t-right">3%</td><td class="t-right">Rs.1,80,000</td><td class="t-right" style="font-weight:700;">Rs.58,20,000</td><td class="t-right" style="color:var(--green);font-weight:700;">97%</td></tr>
+    <tr><td>Rs.1 Cr</td><td><span class="pill b">Phase 1</span></td><td class="t-right">3%</td><td class="t-right">Rs.3,00,000</td><td class="t-right" style="font-weight:700;">Rs.97,00,000</td><td class="t-right" style="color:var(--green);font-weight:700;">97%</td></tr>
+    <tr><td>Rs.1.5 Cr</td><td><span class="pill g">Phase 2</span></td><td class="t-right">1.75%</td><td class="t-right">Rs.2,62,500</td><td class="t-right" style="font-weight:700;">Rs.1,47,37,500</td><td class="t-right" style="color:var(--green);font-weight:700;">98.25%</td></tr>
+    <tr><td>Rs.2 Cr</td><td><span class="pill g">Phase 2</span></td><td class="t-right">1.75%</td><td class="t-right">Rs.3,50,000</td><td class="t-right" style="font-weight:700;">Rs.1,96,50,000</td><td class="t-right" style="color:var(--green);font-weight:700;">98.25%</td></tr>
+    <tr><td>Rs.3 Cr</td><td><span class="pill a">Phase 3</span></td><td class="t-right">1.5%</td><td class="t-right">Rs.4,50,000</td><td class="t-right" style="font-weight:700;">Rs.2,95,50,000</td><td class="t-right" style="color:var(--green);font-weight:700;">98.5%</td></tr>
+    <tr class="total-row"><td>Rs.5 Cr</td><td><span class="pill a">Phase 3</span></td><td class="t-right">1.5%</td><td class="t-right">Rs.7,50,000</td><td class="t-right" style="font-weight:700;">Rs.4,92,50,000</td><td class="t-right" style="color:var(--green);">98.5%</td></tr>
+  </table>
+  <div class="callout green">
+    <strong>The winning formula:</strong> Sara keeps 97-98.5% of revenue. Bytewise earns 1.5-3%. The sliding scale rewards growth - as Sara scales from Rs.60L to Rs.5 Cr, the technology cost drops from 3% to 1.5% of revenue. Sara keeps more as it grows.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 8</span></div>
+</section>
+<!-- ROADMAP -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Execution Roadmap</div></div>
+  <span class="eyebrow">08 - The Roadmap</span>
+  <h2 class="section-title">From signature to Rs.5 Cr+/month in 48 months</h2>
+  <p class="section-sub">A phased plan with clear owners. Bytewise delivers technology milestones; Sara delivers catalogue, operations and marketing inputs.</p>
+  <div class="road">
+    <div class="phase">
+      <div class="when"><span class="t">Phase 0 - Weeks 0-2</span>Onboarding and Discovery<span class="goal">Goal: foundations ready</span></div>
+      <div class="what"><h4>Setup and handoff</h4>
+        <ul>
+          <li><span class="resp-tag by">Bytewise:</span> Azure environment, store branding, domain, SSL, payment and GST configuration.</li>
+          <li><span class="resp-tag sa">Sara:</span> brand assets, product data, pricing, stock and warranty info, bank/GST details.</li>
+          <li>Joint: catalogue plan for the first 2,000 SKUs, logistics partner selection.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="when"><span class="t">Phase 1 - Month 0-6</span>Foundation and Launch<span class="goal">Target: Rs.60L - Rs.1 Cr/month | 48K-80K visitors | 3% revenue share</span></div>
+      <div class="what"><h4>Go-live and early traction</h4>
+        <ul>
+          <li><span class="resp-tag by">Bytewise:</span> 2,000 SKUs uploaded, checkout + Razorpay + COD + invoicing, SEO base, analytics live.</li>
+          <li><span class="resp-tag sa">Sara:</span> dispatch SOP, customer-service desk, return/refund policy, soft-launch to existing customers.</li>
+          <li>Marketing: WhatsApp re-activation, initial Meta + Google campaigns.</li>
+          <li>Milestone: first live orders, establish 0.5% conversion baseline.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="when"><span class="t">Phase 2 - Month 6-12</span>Growth Engine<span class="goal">Target: Rs.1 Cr - Rs.2 Cr/month | 80K-160K visitors | 1.75% revenue share</span></div>
+      <div class="what"><h4>Demand ramp and optimisation</h4>
+        <ul>
+          <li><span class="resp-tag sa">Sara:</span> scale Meta + Google campaigns, influencer pilots, weekly offer calendar.</li>
+          <li><span class="resp-tag by">Bytewise:</span> conversion tuning, abandoned-cart automation, bank-offer engine, campaign pages.</li>
+          <li>Cloud costs grow proportionally with traffic - dynamic scaling on Azure.</li>
+          <li>Revenue share drops to 1.75% - Sara keeps more per sale.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="when"><span class="t">Phase 3 - Month 12-48</span>Scale to Target<span class="goal">Target: Rs.2 Cr - Rs.5 Cr+/month | 160K-400K visitors | 1.5% revenue share</span></div>
+      <div class="what"><h4>Optimise and scale</h4>
+        <ul>
+          <li><span class="resp-tag sa">Sara:</span> scale winning ad-sets, expand AOV via bundles/EMI, seasonal sale events.</li>
+          <li><span class="resp-tag by">Bytewise:</span> performance hardening, gamification, personalisation, SEO compounding.</li>
+          <li>Revenue share drops to 1.5% - maximum value for Sara.</li>
+          <li>Milestone: sustained Rs.5 Cr/month run-rate.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 9</span></div>
+</section>
+<!-- SHARED RESPONSIBILITY MODEL -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Shared Responsibility Model</div></div>
+  <span class="eyebrow">09 - Shared Responsibility - Both Parties Have Skin in the Game</span>
+  <h2 class="section-title">If sales miss target, both parties share the cost burden</h2>
+  <p class="section-sub">This is not a one-sided deal. If Sara does not reach the revenue target, Sara bears the Azure cloud infrastructure cost. Bytewise continues to bear development and support costs. Both parties are financially motivated to hit the target.</p>
+  <div class="big-quote">"A true joint venture means both sides invest. Sara pays cloud when sales are low. Bytewise pays development always. Together we win."</div>
+  <span class="eyebrow">How the Cost Split Works</span>
+  <div class="split-box">
+    <div class="split-left">
+      <h4>Sara Pays (If Sales Below Target)</h4>
+      <ul style="margin-left:14px;">
+        <li><strong>Azure Cloud Infrastructure</strong> - as per actual Azure billing</li>
+        <li>Base hosting: Rs.75,000/month (App Service, CDN, SSL, monitoring)</li>
+        <li>Dynamic cloud: Visitors x Rs.1.20 (API calls, bandwidth, DB operations)</li>
+        <li>Total Azure bill: Rs.75,000 + (Visitors x Rs.1.20)</li>
+      </ul>
+      <div style="margin-top:10px;padding:8px 12px;background:rgba(29,111,224,.1);border-radius:8px;font-size:10px;color:var(--navy);">
+        <strong>Example:</strong> At 48,000 visitors, Sara pays Rs.75,000 + Rs.57,600 = <strong>Rs.1,32,600/month</strong>
+      </div>
+    </div>
+    <div class="split-right">
+      <h4>Bytewise Pays (Always)</h4>
+      <ul style="margin-left:14px;">
+        <li><strong>Development and Enhancements</strong> - Rs.75,000/month</li>
+        <li><strong>L1 + L2 Support</strong> - Rs.80,000/month</li>
+        <li><strong>DevOps, CI/CD, Data, Analytics</strong> - Rs.50,000/month</li>
+        <li><strong>SEO/GEO, Security, DB Management</strong> - Rs.80,000/month</li>
+      </ul>
+      <div style="margin-top:10px;padding:8px 12px;background:rgba(245,166,35,.1);border-radius:8px;font-size:10px;color:var(--navy);">
+        <strong>Bytewise bears:</strong> Rs.2,85,000/month in dev + support costs regardless of sales performance
+      </div>
+    </div>
+  </div>
+  <span class="eyebrow">Shared Responsibility by Scenario</span>
+  <table>
+    <tr><th>Scenario</th><th class="t-right">Revenue</th><th class="t-right">Sara Pays (Azure)</th><th class="t-right">Bytewise Pays (Dev+Support)</th><th class="t-right">Total Platform Cost</th><th>Who Covers What</th></tr>
+    <tr><td><span class="pill r">Miss Target</span></td><td class="t-right">Below Rs.41.7L</td><td class="t-right" style="font-weight:700;">Rs.1.33-1.81L</td><td class="t-right" style="font-weight:700;">Rs.2.85L</td><td class="t-right" style="font-weight:700;">Rs.4.18-4.66L</td><td style="font-size:10px;">Sara covers cloud. Bytewise covers dev. Both absorb losses.</td></tr>
+    <tr><td><span class="pill b">At Target</span></td><td class="t-right">Rs.60L - Rs.1Cr</td><td class="t-right" style="font-weight:700;">Covered by revenue share</td><td class="t-right" style="font-weight:700;">Covered by revenue share</td><td class="t-right" style="font-weight:700;">Shared</td><td style="font-size:10px;">3% revenue share covers both costs. Both parties profitable.</td></tr>
+    <tr class="total-row"><td><span class="pill g">Above Target</span></td><td class="t-right">Rs.1Cr+</td><td class="t-right">Covered by revenue share</td><td class="t-right">Covered by revenue share</td><td class="t-right">Shared</td><td style="font-size:10px;">1.75-1.5% share covers costs. Sara keeps 97-98.5%.</td></tr>
+  </table>
+  <div class="callout blue">
+    <strong>Why this works:</strong> Neither party can afford to be passive. Sara must market to generate sales - otherwise it pays cloud costs with no revenue. Bytewise must build a converting platform - otherwise the revenue share never materialises. This creates genuine alignment.
+  </div>
+  <span class="eyebrow">Azure Cloud Cost Breakdown (What Sara Pays If Below Target)</span>
+  <table>
+    <tr><th>Visitors</th><th class="t-right">Base Cloud (Rs.)</th><th class="t-right">Dynamic Cloud (Rs.)</th><th class="t-right">Total Azure Bill (Rs.)</th><th>Equivalent to</th></tr>
+    <tr><td>16,000 (worst case)</td><td class="t-right">75,000</td><td class="t-right">19,200</td><td class="t-right" style="font-weight:700;">94,200</td><td style="font-size:10px;">Less than 1 junior employee salary</td></tr>
+    <tr><td>48,000 (Phase 1 low)</td><td class="t-right">75,000</td><td class="t-right">57,600</td><td class="t-right" style="font-weight:700;">1,32,600</td><td style="font-size:10px;">Less than 2 junior employee salaries</td></tr>
+    <tr><td>80,000 (Phase 1 high)</td><td class="t-right">75,000</td><td class="t-right">96,000</td><td class="t-right" style="font-weight:700;">1,71,000</td><td style="font-size:10px;">Cost of running a server fleet</td></tr>
+    <tr><td>1,60,000 (Phase 2)</td><td class="t-right">75,000</td><td class="t-right">1,92,000</td><td class="t-right" style="font-weight:700;">2,67,000</td><td style="font-size:10px;">Still far below custom build cost</td></tr>
+    <tr class="total-row"><td>4,00,000 (Phase 3)</td><td class="t-right">75,000</td><td class="t-right">4,80,000</td><td class="t-right">5,55,000</td><td style="font-size:10px;">Handles 2,000 orders/month at scale</td></tr>
+  </table>
+  <div class="loss-warning">
+    <strong>Important:</strong> The Azure cloud cost is the actual infrastructure cost - not a markup. Sara pays exactly what Azure bills. Bytewise does not profit from the cloud charge. This is a cost-recovery mechanism to ensure both parties share the risk of building the platform.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 10</span></div>
+</section>
+<!-- THE ARGUMENT -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Why This Joint Venture Works</div></div>
+  <span class="eyebrow">10 - The Argument - Why This Is the Right Deal</span>
+  <h2 class="section-title">The numbers don't lie - this is a win-win</h2>
+  <p class="section-sub">Let's look at the facts. This proposal is not a gamble - it's a calculated joint venture where both parties invest, both parties risk, and both parties win.</p>
+  <div class="evidence-grid">
+    <div class="evidence"><div class="num">Rs.0</div><div class="lbl">Sara pays upfront</div></div>
+    <div class="evidence"><div class="num">Rs.2.85L</div><div class="lbl">Bytewise bears monthly</div></div>
+    <div class="evidence"><div class="num">97-98.5%</div><div class="lbl">Sara keeps of revenue</div></div>
+  </div>
+  <div class="arg-card">
+    <h4>Point 1: Bytewise has already invested heavily - before earning a single rupee</h4>
+    <p>The platform is already built. Next.js 15, React 19, MongoDB, Azure hosting, Razorpay integration, admin panel, SEO engine, analytics - all production-grade code. Bytewise has invested lakhs in development. This is not a template - it's a custom-built e-commerce engine. Bytewise recovers this investment only through the revenue share - which means we only get paid when Sara gets paid.</p>
+  </div>
+  <div class="arg-card">
+    <h4>Point 2: Sara's investment is zero - but the upside is unlimited</h4>
+    <p>Sara puts Rs.0 into the technology. No platform build cost (typically Rs.25-60 lakh). No Azure hosting bill. No developer salaries. No DevOps team. In exchange, Sara gives 3% in Phase 1, dropping to 1.5% in Phase 3. Compare this to Amazon/Flipkart charging 8-25% commission AND owning your customer data. On this platform, Sara keeps 97-98.5% of revenue AND owns the customer relationship.</p>
+  </div>
+  <div class="arg-card">
+    <h4>Point 3: The shared responsibility model ensures both parties are committed</h4>
+    <p>If Sara misses sales targets, Sara pays the Azure cloud bill (Rs.1.3-2.7L/month). This is fair - Sara benefits from the platform, so Sara should share the infrastructure cost when sales are low. Bytewise continues to bear Rs.2.85L/month in development and support - because Bytewise's job is to keep the platform running and converting. Neither party can afford to be passive.</p>
+  </div>
+  <div class="arg-card">
+    <h4>Point 4: The revenue share decreases as Sara grows - this rewards success</h4>
+    <p>At Rs.60L revenue, Sara pays 3% (Rs.1.8L). At Rs.5 Cr revenue, Sara pays 1.5% (Rs.7.5L). The percentage drops by half, but Bytewise earns more in absolute terms because Sara's revenue grew 8x. Sara keeps more per rupee as it scales. This is not a penalty for success - it's a reward for growth.</p>
+  </div>
+  <div class="arg-card">
+    <h4>Point 5: The alternative is far more expensive</h4>
+    <p>Option A: Build custom - Rs.25-60 lakh upfront, 6-9 months timeline, then Rs.3-5L/month in hosting and team costs. Option B: Use Amazon/Flipkart - 8-25% commission, lose customer data, lose pricing control. Option C: This joint venture - Rs.0 upfront, 3% sliding to 1.5%, full ownership of customer data and brand. The math is clear.</p>
+  </div>
+  <div class="grid2" style="margin-top:12px;">
+    <div class="card" style="border:2px solid var(--red);">
+      <h4 style="color:var(--red);">What Sara Risks</h4>
+      <ul>
+        <li>Azure cloud bill if sales miss target (Rs.1.3-2.7L/month)</li>
+        <li>Marketing spend to drive traffic (Rs.12-15L/month)</li>
+        <li>Operations team for dispatch and customer service</li>
+      </ul>
+      <p style="font-size:10px;color:var(--muted);margin-top:6px;">Total at-risk: Rs.13-18L/month in marketing + ops (which Sara would spend anyway to sell)</p>
+    </div>
+    <div class="card" style="border:2px solid var(--green);">
+      <h4 style="color:var(--green);">What Sara Gains</h4>
+      <ul>
+        <li>Complete e-commerce platform at Rs.0 build cost</li>
+        <li>Keep 97-98.5% of all revenue</li>
+        <li>Own customer data and brand relationship</li>
+        <li>Scale from Rs.60L to Rs.5Cr+ without platform rebuild</li>
+      </ul>
+      <p style="font-size:10px;color:var(--muted);margin-top:6px;">Total gain: A digital asset worth crores, owned by Sara</p>
+    </div>
+  </div>
+  <div class="callout green" style="margin-top:10px;">
+    <strong>The bottom line:</strong> Bytewise has built the engine. Sara has the fuel (brand, customers, marketing). The shared responsibility model ensures both parties drive toward the same destination. If Sara sells, both win. If Sara doesn't, both share the cost. That's not a vendor relationship - that's a joint venture.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 11</span></div>
+</section>
+<!-- COMMERCIAL MODEL -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Commercial Model</div></div>
+  <span class="eyebrow">11 - The Commercial Model</span>
+  <h2 class="section-title">Simple, fair, and fully aligned</h2>
+  <p class="section-sub">Bytewise funds and runs the platform. Sara pays a percentage of what it sells. The percentage decreases as Sara grows - rewarding scale.</p>
+  <div class="grid3" style="margin-bottom:12px;">
+    <div class="kpi"><div class="v">Rs.0</div><div class="l">Setup / build fee</div></div>
+    <div class="kpi"><div class="v">1.5-3%</div><div class="l">Sliding revenue share</div></div>
+    <div class="kpi"><div class="v">24 mo</div><div class="l">Joint venture term</div></div>
+  </div>
+  <span class="eyebrow">Revenue Share Structure</span>
+  <table>
+    <tr><th>Phase</th><th>Sara's Minimum Monthly Revenue Target</th><th class="t-right">Revenue Share</th><th>What This Means</th></tr>
+    <tr><td><span class="pill b">Phase 1</span> Month 0-6</td><td>Rs.60 Lakh / month</td><td class="t-right" style="font-size:18px;font-weight:800;">3%</td><td>For every Rs.100 earned, Bytewise takes Rs.3. Sara keeps Rs.97.</td></tr>
+    <tr><td><span class="pill g">Phase 2</span> Month 6-12</td><td>Rs.1 Crore / month</td><td class="t-right" style="font-size:18px;font-weight:800;">1.75%</td><td>For every Rs.100 earned, Bytewise takes Rs.1.75. Sara keeps Rs.98.25.</td></tr>
+    <tr class="total-row"><td><span class="pill a">Phase 3</span> Month 12-48</td><td>Rs.2 Crore / month</td><td class="t-right" style="font-size:18px;font-weight:800;">1.5%</td><td>For every Rs.100 earned, Bytewise takes Rs.1.50. Sara keeps Rs.98.50.</td></tr>
+  </table>
+  <span class="eyebrow">Other Terms</span>
+  <table>
+    <tr><th>Term</th><th>Detail</th></tr>
+    <tr><td>Development and hosting</td><td>Fully funded and operated by Bytewise on Microsoft Azure (CDN, SSL, backups, monitoring).</td></tr>
+    <tr><td>Revenue share</td><td>Percentage of gross sales, excluding cancelled/refunded/fraud orders, GST and chargebacks. Settled monthly.</td></tr>
+    <tr><td>Catalogue scope</td><td>Up to 2,000 SKUs included; additional SKUs via simple change request.</td></tr>
+    <tr><td>Support SLA</td><td>Mon-Fri, 10 AM-6 PM IST. Critical 4h - High 8h - Medium 1 business day.</td></tr>
+    <tr><td>Data and IP</td><td>Customer and order data shared; full source-code, database and documentation transfer to Sara on settlement.</td></tr>
+    <tr style="background:#fff8ec;"><td style="font-weight:800;color:var(--amber);">Shared Responsibility</td><td style="font-weight:600;">If monthly revenue falls below the break-even threshold (Rs.41.7L in Phase 1), Sara bears the Azure cloud infrastructure cost (as per actual Azure billing). Bytewise continues to bear development and support costs (Rs.2.85L/month). Both parties share the risk of building the platform.</td></tr>
+  </table>
+  <div class="callout green">
+    <strong>Risk sits with Bytewise, not Sara.</strong> We invest our technology, team and infrastructure upfront. At Rs.60L/month revenue (Phase 1 low), Bytewise earns Rs.1.8L against Rs.1.43L cost - a thin margin. At Rs.5 Cr/month, we earn Rs.7.5L against Rs.5.65L cost. The sliding scale means Sara always keeps 97%+ of revenue.
+  </div>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 12</span></div>
+</section>
+<!-- NEXT STEPS -->
+<section class="page">
+  <div class="page-head"><div class="brand">BYTEWISE<span>x</span>SARA</div><div class="tag">Next Steps</div></div>
+  <span class="eyebrow">12 - Let's Begin</span>
+  <h2 class="section-title">Four steps to your first online order</h2>
+  <p class="section-sub">The platform is ready today. The only thing between Sara and Rs.5 Cr+/month is a decision to start.</p>
+  <ol class="num-list" style="margin-top:8px;">
+    <li><strong>Greenlight the joint venture.</strong> Confirm intent and align on the sliding revenue share (3% / 1.75% / 1.5%) and the 24-month term.</li>
+    <li><strong>Kick-off and handoff (Week 1).</strong> Sara shares brand assets, product data, pricing and GST/bank details; Bytewise spins up the Azure environment.</li>
+    <li><strong>Build and launch (Weeks 2-6).</strong> 2,000 SKUs go live with payments, COD, invoicing and analytics. Soft-launch to Sara's existing customers.</li>
+    <li><strong>Market and scale (Months 2-6).</strong> Sara runs the marketing playbook; Bytewise tunes conversion. Target the Rs.60L-1Cr/month run-rate for Phase 1 at 3% revenue share.</li>
+  </ol>
+  <div class="callout blue" style="margin-top:18px;">
+    <strong>Our commitment:</strong> Bytewise will deliver and operate a world-class platform at zero build cost to Sara, bearing Rs.3.65 lakh/month in operational costs and charging only Rs.85,000/month for base infrastructure.
+    <strong>Your commitment:</strong> manage operations well and market with discipline. As you scale, your technology cost drops from 3% to 1.5%.
+  </div>
+  <div class="card" style="margin-top:18px;background:var(--navy);color:#fff;border:none;">
+    <h4 style="color:#fff;font-size:15px;">Ready to power Sara Mobiles online?</h4>
+    <p style="color:#cfe0f5;margin:6px 0 0;font-size:11.5px;">Let's schedule a 45-minute working session to walk through the live platform, finalise the catalogue plan, and lock the launch date. Bytewise Consulting LLP is ready to start this week.</p>
+    <div style="display:flex;gap:24px;margin-top:14px;font-size:11px;color:#bcd2ee;">
+      <div><strong style="color:#fff;display:block;">Bytewise Consulting LLP</strong>Technology Partner</div>
+      <div><strong style="color:#fff;display:block;">Engagement</strong>24-month growth joint venture</div>
+      <div><strong style="color:#fff;display:block;">Target</strong>Rs.60L to Rs.5Cr+ / month</div>
+    </div>
+  </div>
+  <p style="margin-top:22px;font-size:10px;color:var(--muted);">This proposal is illustrative and indicative; final commercial terms are governed by the executed Master Service Agreement between Bytewise Consulting LLP and Sara Mobiles. Revenue projections are targets based on stated assumptions, not guarantees. Cloud infrastructure costs are estimates and may vary based on actual usage patterns.</p>
+  <div class="footer"><span>Bytewise Consulting LLP - Strictly Confidential</span><span>Page 13</span></div>
+</section>
+</body>
+</html>
+

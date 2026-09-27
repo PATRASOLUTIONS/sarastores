@@ -1,0 +1,13 @@
+﻿--- Sample Assignments for Partner 698f67bbc55edf4350e0ac3a ---
+Assignment 0: productId="temp_0" (type: string)
+Assignment 1: productId="temp_1" (type: string)
+Assignment 2: productId="temp_2" (type: string)
+Assignment 3: productId="temp_3" (type: string)
+Assignment 4: productId="temp_4" (type: string)
+Assignment 5: productId="temp_5" (type: string)
+Assignment 6: productId="temp_6" (type: string)
+Assignment 7: productId="temp_7" (type: string)
+Assignment 8: productId="temp_8" (type: string)
+Assignment 9: productId="temp_9" (type: string)
+
+Sample Product: _id=6911afc6d1b32f695925a942 (type: object), name="Bosch Built in Gas Hob Black Tempered glass Glass 4 Burner Auto Ignition 90 cm Full Brass 3D Ring Burners with Matt Black Heat Shields & Cast Iron pan supports (PNF9B6G20I)"
