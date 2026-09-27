@@ -34,6 +34,12 @@ const INDEXES = [
   },
   {
     collection: "orders",
+    spec: { createdAt: -1 },
+    options: { name: "recent" },
+    why: "The admin orders list sorts every order by date. Without this it is a full collection scan plus an in-memory sort.",
+  },
+  {
+    collection: "orders",
     spec: { orderId: 1 },
     options: { unique: true, name: "orderId_unique" },
     why: "Order lookup and tracking resolve by the human-readable order id.",
@@ -91,6 +97,60 @@ const INDEXES = [
     spec: { hashedKey: 1 },
     options: { name: "hashed_key" },
     why: "Every partner API request authenticates by hashed key.",
+  },
+  {
+    collection: "refresh_tokens",
+    spec: { tokenHash: 1 },
+    options: { unique: true, name: "token_hash_unique" },
+    why: "Every mobile token refresh resolves by this hash.",
+  },
+  {
+    collection: "refresh_tokens",
+    spec: { userId: 1 },
+    options: { name: "userId" },
+    why: "Logout-everywhere, password reset and account deletion revoke by user.",
+  },
+  {
+    collection: "refresh_tokens",
+    spec: { familyId: 1 },
+    options: { name: "familyId" },
+    why: "Token-reuse detection revokes a whole rotation family at once.",
+  },
+  {
+    collection: "refresh_tokens",
+    spec: { expiresAt: 1 },
+    options: { name: "ttl", expireAfterSeconds: 0 },
+    why: "Rotated and expired tokens must age out; without this the collection grows forever.",
+  },
+  {
+    collection: "device_tokens",
+    spec: { token: 1 },
+    options: { unique: true, name: "token_unique" },
+    why: "Push registration upserts by token so a handset moves between accounts instead of duplicating.",
+  },
+  {
+    collection: "device_tokens",
+    spec: { userId: 1 },
+    options: { name: "userId" },
+    why: "Every push send resolves a user's devices.",
+  },
+  {
+    collection: "customer_profiles",
+    spec: { userId: 1 },
+    options: { unique: true, name: "userId_unique" },
+    why: "The profile is a 1:1 rollup read by findOne({userId}) on every preferences load and retention pass. Without it each read is a COLLSCAN that grows with the customer base.",
+  },
+  {
+    collection: "customer_profiles",
+    spec: { unsubscribeTokenHash: 1 },
+    options: { name: "unsubscribe_token", sparse: true },
+    why: "Every marketing email footer links to /api/unsubscribe, which resolves the profile by this hash.",
+  },
+  {
+    collection: "products",
+    spec: { active: 1, featured: 1 },
+    options: { name: "active_featured" },
+    why: "The homepage requests featured products on every load; active_category cannot serve it, so Mongo scans the whole active catalogue.",
   },
 ]
 

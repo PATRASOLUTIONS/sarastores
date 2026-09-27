@@ -107,7 +107,39 @@ const nextConfig = {
         source: '/fonts/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
+      // Lets the Expo app running on the Metro web dev server call this API
+      // during local development. Never emitted in production, where native
+      // clients are not subject to CORS at all.
+      ...(isProd
+        ? []
+        : [
+            {
+              source: '/api/:path*',
+              headers: [
+                { key: 'Access-Control-Allow-Origin', value: 'http://localhost:8081' },
+                { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,PATCH,DELETE,OPTIONS' },
+                { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+                { key: 'Vary', value: 'Origin' },
+              ],
+            },
+          ]),
     ];
+  },
+
+  // Both stores require their association file at a fixed /.well-known path,
+  // but each must be served as application/json — which a static file with no
+  // extension is not — so they are route handlers behind a rewrite.
+  async rewrites() {
+    return [
+      {
+        source: "/.well-known/apple-app-site-association",
+        destination: "/api/well-known/apple-app-site-association",
+      },
+      {
+        source: "/.well-known/assetlinks.json",
+        destination: "/api/well-known/assetlinks.json",
+      },
+    ]
   },
 
   serverExternalPackages: [

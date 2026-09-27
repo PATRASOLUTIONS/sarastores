@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     // Reset rate limit on successful signup
     const clientIP = getClientIP(request)
-    resetRateLimit(clientIP)
+    await resetRateLimit(clientIP)
 
     // Send verification email - wrapped in try/catch to prevent build errors
     try {

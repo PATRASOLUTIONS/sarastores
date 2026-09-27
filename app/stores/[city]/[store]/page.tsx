@@ -6,6 +6,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import StoreActions from "./StoreActions"
 import { buildStoreJsonLd, getAllStoreLocations, getStore } from "@/lib/store-locations"
+import { safeJsonLd } from "@/lib/jsonld-safe"
 
 export const revalidate = 3600
 
@@ -58,7 +59,7 @@ export default async function StoreDetailPage({
 
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
 
       <main className="container mx-auto flex-grow px-4 py-10">

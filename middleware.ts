@@ -45,6 +45,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Native auth endpoints issue and rotate the tokens themselves, so they must
+  // be reachable without one. Each handler validates its own input.
+  if (request.nextUrl.pathname.startsWith("/api/v1/auth")) {
+    return NextResponse.next()
+  }
+
+  // CORS preflight carries no credentials, so authorizing it is meaningless and
+  // only blocks the real request that follows. Dev-only: production native
+  // clients never send a preflight.
+  if (request.method === "OPTIONS" && process.env.NODE_ENV !== "production") {
+    return NextResponse.next()
+  }
+
   // Skip middleware for error page itself and static files
   // if (
   //   request.nextUrl.pathname === "/error" ||
@@ -63,9 +76,15 @@ export async function middleware(request: NextRequest) {
     console.log(`[Middleware] ${request.method} ${request.nextUrl.pathname}`)
   }
 
-  // Get user from the signed, httpOnly session cookie (tamper-proof).
+  // Get user from the signed, httpOnly session cookie (tamper-proof), or from
+  // an `Authorization: Bearer` access token when the caller is a mobile app.
   // The legacy plaintext `user` cookie is NEVER trusted for authorization.
-  const sessionToken = request.cookies.get(SESSION_COOKIE)?.value
+  const authorization = request.headers.get("authorization")
+  const bearerToken =
+    authorization && authorization.slice(0, 7).toLowerCase() === "bearer "
+      ? authorization.slice(7).trim()
+      : undefined
+  const sessionToken = bearerToken || request.cookies.get(SESSION_COOKIE)?.value
   const session = await verifySessionToken(sessionToken)
   const user = session
     ? {

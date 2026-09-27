@@ -43,7 +43,8 @@ export default function CategorySection() {
       try {
         const [categoriesResponse, productsResponse] = await Promise.all([
           fetch("/api/categories"),
-          fetch("/api/products"),
+          // Only `category` is read below, so the card projection is plenty.
+          fetch("/api/products?fields=card"),
         ])
 
         if (!categoriesResponse.ok) {

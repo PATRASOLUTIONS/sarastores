@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/mongodb'
 import { ObjectId } from 'mongodb'
 
@@ -7,6 +8,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ keyId: string }> }
 ) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const { keyId } = await context.params
     const { validityYears, maxDevices } = await request.json()
@@ -55,6 +59,9 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ keyId: string }> }
 ) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const { keyId } = await context.params
     

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth"
 import { getAll, create, COLLECTIONS } from "@/lib/db-service"
 
 // Extract unique sub-categories from products sub-category field
@@ -59,6 +60,9 @@ export async function GET() {
 
 // Import extracted sub-categories into sub_categories collection
 export async function POST() {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     if (process.env.NODE_ENV === "development") console.log("Importing sub-categories from products...")
 

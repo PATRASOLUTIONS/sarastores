@@ -5,6 +5,7 @@
  */
 
 import { stores } from "@/lib/store-data"
+import { safeJsonLd } from "@/lib/jsonld-safe"
 
 export function StoreJsonLd() {
   // Build JSON-LD for top 20 stores (Google recommends max 10-20 per page)
@@ -48,7 +49,7 @@ export function StoreJsonLd() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: safeJsonLd({
             "@context": "https://schema.org",
             "@type": "ItemList",
             name: "Sara Electronics Store Locations",
@@ -77,7 +78,7 @@ export function StoreJsonLd() {
         <script
           key={`store-${idx}`}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(store) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(store) }}
         />
       ))}
     </>

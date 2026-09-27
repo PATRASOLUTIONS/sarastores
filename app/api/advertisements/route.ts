@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth"
 import * as dbService from "@/lib/db-service"
 import { COLLECTIONS } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
@@ -14,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const data = await request.json()
 

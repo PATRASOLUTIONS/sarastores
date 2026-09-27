@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCollection, normalizeId } from "@/lib/db-service"
+import { requireAdmin } from "@/lib/auth"
 import { isOfferLive, normalizeOfferSection } from "@/lib/offer-sections"
 
 export async function GET(request: Request) {
@@ -35,6 +36,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const body = await request.json()
     const { name, description, originalPrice, offerPrice, discount, image, badge, stock, active, section, storeIds, endsAt } = body

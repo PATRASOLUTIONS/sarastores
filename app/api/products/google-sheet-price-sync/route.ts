@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
+import { requireAdmin } from "@/lib/auth"
 import { getCollection } from "@/lib/db-service"
 import { extractCanonicalProductMetadata } from "@/lib/product-schema"
 
 export async function POST(request: NextRequest) {
+    const guard = await requireAdmin()
+    if (!guard.ok) return guard.response
+
     try {
         const body = await request.json()
         const { sheetId, preview } = body

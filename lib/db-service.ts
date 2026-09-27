@@ -130,6 +130,9 @@ export async function getAll(collectionName: string, filter: any = {}, options: 
     if (options.projection) {
       query = query.project(options.projection)
     }
+    if (options.skip && options.skip > 0) {
+      query = query.skip(options.skip)
+    }
     if (options.limit && options.limit > 0) {
       query = query.limit(options.limit)
     }

@@ -1,9 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth"
 import { connectToDatabase } from "@/lib/mongodb"
 import { extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { buildSpecificationPatch, SPECIFICATIONS_COLLECTION } from "@/lib/product-specification-schema"
 
 export async function POST(request: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const { specifications } = await request.json()
 

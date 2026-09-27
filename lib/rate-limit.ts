@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store';
 
 // Types
 interface RateLimitConfig {
@@ -17,12 +18,6 @@ interface RateLimitConfig {
   keyGenerator?: (request: NextRequest) => string;
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-  firstRequest: number;
-}
-
 interface RateLimitResult {
   success: boolean;
   limit: number;
@@ -31,19 +26,9 @@ interface RateLimitResult {
   retryAfter?: number;
 }
 
-// In-memory store for rate limiting (use Redis in production)
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-// Cleanup expired entries every minute
-setInterval(() => {
-  const now = Date.now();
-  const entries = Array.from(rateLimitStore.entries());
-  for (const [key, entry] of entries) {
-    if (now > entry.resetTime) {
-      rateLimitStore.delete(key);
-    }
-  }
-}, 60000);
+// Counting lives in lib/rate-limit-store (Upstash-backed when configured).
+// The module-scoped Map that used to sit here reset on every cold start, and
+// its cleanup setInterval kept a timer alive for the life of the instance.
 
 // Default rate limit configurations
 export const RATE_LIMITS = {
@@ -130,46 +115,33 @@ function getClientIdentifier(request: NextRequest): string {
 }
 
 /**
- * Check rate limit for a request
+ * Check rate limit for a request.
+ *
+ * Counting is delegated to lib/rate-limit-store, which uses Upstash when
+ * configured. The previous module-scoped Map reset on every serverless cold
+ * start, so the effective limit was `limit x instances` — no real protection.
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   request: NextRequest,
   config: RateLimitConfig
-): RateLimitResult {
+): Promise<RateLimitResult> {
   const { windowMs, maxRequests, keyGenerator } = config;
-  
+
   // Generate unique key for this client + endpoint
-  const clientId = keyGenerator 
-    ? keyGenerator(request) 
+  const clientId = keyGenerator
+    ? keyGenerator(request)
     : getClientIdentifier(request);
   const endpoint = new URL(request.url).pathname;
-  const key = `${clientId}:${endpoint}`;
-  
-  const now = Date.now();
-  let entry = rateLimitStore.get(key);
-  
-  // Reset if window has passed
-  if (!entry || now > entry.resetTime) {
-    entry = {
-      count: 0,
-      resetTime: now + windowMs,
-      firstRequest: now,
-    };
-  }
-  
-  // Increment counter
-  entry.count++;
-  rateLimitStore.set(key, entry);
-  
-  const remaining = Math.max(0, maxRequests - entry.count);
-  const isLimited = entry.count > maxRequests;
-  
+  const key = `ratelimit:${clientId}:${endpoint}`;
+
+  const hit = await rateLimitHit(key, maxRequests, windowMs);
+
   return {
-    success: !isLimited,
+    success: !hit.limited,
     limit: maxRequests,
-    remaining,
-    reset: entry.resetTime,
-    retryAfter: isLimited ? Math.ceil((entry.resetTime - now) / 1000) : undefined,
+    remaining: hit.remaining,
+    reset: Date.now() + hit.resetSeconds * 1000,
+    retryAfter: hit.limited ? hit.resetSeconds : undefined,
   };
 }
 
@@ -181,7 +153,7 @@ export function withRateLimit(
   config: RateLimitConfig = RATE_LIMITS.API
 ) {
   return async (request: NextRequest): Promise<NextResponse> => {
-    const result = checkRateLimit(request, config);
+    const result = await checkRateLimit(request, config);
     
     // Add rate limit headers to all responses
     const rateLimitHeaders = {
@@ -233,48 +205,35 @@ export function withRateLimit(
 /**
  * Rate limit by user ID (for authenticated endpoints)
  */
-export function rateLimitByUser(userId: string, endpoint: string, config: RateLimitConfig): RateLimitResult {
-  const key = `user:${userId}:${endpoint}`;
-  const now = Date.now();
-  let entry = rateLimitStore.get(key);
-  
-  if (!entry || now > entry.resetTime) {
-    entry = {
-      count: 0,
-      resetTime: now + config.windowMs,
-      firstRequest: now,
-    };
-  }
-  
-  entry.count++;
-  rateLimitStore.set(key, entry);
-  
-  const remaining = Math.max(0, config.maxRequests - entry.count);
-  const isLimited = entry.count > config.maxRequests;
-  
+export async function rateLimitByUser(
+  userId: string,
+  endpoint: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const key = `ratelimit:user:${userId}:${endpoint}`;
+  const hit = await rateLimitHit(key, config.maxRequests, config.windowMs);
+
   return {
-    success: !isLimited,
+    success: !hit.limited,
     limit: config.maxRequests,
-    remaining,
-    reset: entry.resetTime,
-    retryAfter: isLimited ? Math.ceil((entry.resetTime - now) / 1000) : undefined,
+    remaining: hit.remaining,
+    reset: Date.now() + hit.resetSeconds * 1000,
+    retryAfter: hit.limited ? hit.resetSeconds : undefined,
   };
 }
 
 /**
  * Reset rate limit for a specific key (e.g., after successful authentication)
  */
-export function resetRateLimit(clientId: string, endpoint: string): void {
-  const key = `${clientId}:${endpoint}`;
-  rateLimitStore.delete(key);
+export async function resetRateLimit(clientId: string, endpoint: string): Promise<void> {
+  await rateLimitReset(`ratelimit:${clientId}:${endpoint}`);
 }
 
 /**
- * Get current rate limit status
+ * Seconds until this client's window resets, without counting a request.
  */
-export function getRateLimitStatus(clientId: string, endpoint: string): RateLimitEntry | null {
-  const key = `${clientId}:${endpoint}`;
-  return rateLimitStore.get(key) || null;
+export async function getRateLimitStatus(clientId: string, endpoint: string): Promise<number> {
+  return rateLimitResetSeconds(`ratelimit:${clientId}:${endpoint}`);
 }
 
 /**

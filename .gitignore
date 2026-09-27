@@ -28,6 +28,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# one-off debug dumps — these contain real customer PII (name, email, phone, address)
+order_dump.json
+order_debug_dump.json
+sweep-*.txt
+*.tmp.txt
+
 
 
 # vercel

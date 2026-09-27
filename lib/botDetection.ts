@@ -1,28 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store'
 
-interface RateLimitStore {
-  [key: string]: {
-    count: number
-    resetTime: number
-  }
-}
-
-// In-memory store (for production, use Redis or similar)
-const rateLimitStore: RateLimitStore = {}
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000 // 15 minutes
 const MAX_REQUESTS_PER_WINDOW = 5 // 5 signup attempts per 15 minutes per IP
 
-/**
- * Clean up expired entries from rate limit store
- */
-function cleanupExpiredEntries() {
-  const now = Date.now()
-  Object.keys(rateLimitStore).forEach(key => {
-    if (rateLimitStore[key].resetTime < now) {
-      delete rateLimitStore[key]
-    }
-  })
-}
+const keyFor = (identifier: string) => `auth:attempts:${identifier}`
 
 /**
  * Get client IP address from request
@@ -53,42 +35,16 @@ export function getClientIP(request: NextRequest): string {
 /**
  * Check if request exceeds rate limit
  */
-export function isRateLimited(identifier: string): boolean {
-  // Periodic cleanup
-  if (Math.random() < 0.1) { // 10% chance to cleanup
-    cleanupExpiredEntries()
-  }
-  
-  const now = Date.now()
-  const record = rateLimitStore[identifier]
-  
-  if (!record || record.resetTime < now) {
-    // Create new record or reset expired one
-    rateLimitStore[identifier] = {
-      count: 1,
-      resetTime: now + RATE_LIMIT_WINDOW
-    }
-    return false
-  }
-  
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return true
-  }
-  
-  // Increment counter
-  record.count++
-  return false
+export async function isRateLimited(identifier: string): Promise<boolean> {
+  const result = await rateLimitHit(keyFor(identifier), MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW)
+  return result.limited
 }
 
 /**
  * Get remaining time until rate limit resets
  */
-export function getRateLimitResetTime(identifier: string): number {
-  const record = rateLimitStore[identifier]
-  if (!record) return 0
-  
-  const remaining = Math.max(0, record.resetTime - Date.now())
-  return Math.ceil(remaining / 1000) // Convert to seconds
+export async function getRateLimitResetTime(identifier: string): Promise<number> {
+  return rateLimitResetSeconds(keyFor(identifier))
 }
 
 /**
@@ -176,8 +132,8 @@ export async function detectBot(request: NextRequest, body: any): Promise<{
 }> {
   // 1. Check rate limit
   const clientIP = getClientIP(request)
-  if (isRateLimited(clientIP)) {
-    const waitTime = getRateLimitResetTime(clientIP)
+  if (await isRateLimited(clientIP)) {
+    const waitTime = await getRateLimitResetTime(clientIP)
     return {
       isBot: true,
       reason: 'Rate limit exceeded. Too many registration attempts.',
@@ -232,6 +188,6 @@ export async function detectBot(request: NextRequest, body: any): Promise<{
 /**
  * Reset rate limit for an identifier (useful after successful signup)
  */
-export function resetRateLimit(identifier: string): void {
-  delete rateLimitStore[identifier]
+export async function resetRateLimit(identifier: string): Promise<void> {
+  await rateLimitReset(keyFor(identifier))
 }

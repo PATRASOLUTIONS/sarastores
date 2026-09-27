@@ -1,6 +1,7 @@
 import { connectDB } from "@/lib/db"
 import { getCollection } from "@/lib/db-service"
 import { extractCanonicalProductMetadata } from "@/lib/product-schema"
+import { requireAdmin } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
 
 interface ProductUpdate {
@@ -14,6 +15,9 @@ interface ProductUpdate {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ sku: string }> }) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   const { sku } = await params
   const canonicalSku = extractCanonicalProductMetadata({ sku }).itemno || sku.trim()
 

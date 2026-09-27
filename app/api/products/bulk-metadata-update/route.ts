@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
+import { requireAdmin } from "@/lib/auth"
 import { getCollection } from "@/lib/db-service"
 import {
   buildSchemaSynchronizedRaw,
@@ -21,6 +22,9 @@ interface PreviewRow {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File

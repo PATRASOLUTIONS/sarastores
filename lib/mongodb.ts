@@ -5,13 +5,26 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI
+const isProd = process.env.NODE_ENV === "production"
+
 const options = {
-  maxPoolSize: 10,
-  // The driver's own default is 30s. A 5s budget here tripped whenever the
-  // event loop was busy — dev compilation, a serverless cold start — and
-  // surfaced as "Server selection timed out" even though the network and the
-  // cluster were healthy.
-  serverSelectionTimeoutMS: 30000,
+  // Every serverless instance opens its own pool, so the cluster sees
+  // maxPoolSize x instanceCount connections. A pool of 10 exhausts an Atlas
+  // connection limit after ~150 instances, which is well inside a traffic
+  // spike. Keep it small in production and let horizontal scale do the work;
+  // dev is a single long-lived process, so a bigger pool is free there.
+  maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE) || (isProd ? 3 : 10),
+  minPoolSize: 0,
+  // Drop idle sockets so an instance that goes quiet stops holding connections
+  // other instances need.
+  maxIdleTimeMS: 30000,
+  // A 5s budget used to trip whenever the event loop was busy — dev
+  // compilation, a cold start — and surfaced as "Server selection timed out"
+  // on a healthy cluster, so dev keeps the driver's 30s default. In
+  // production the opposite failure matters more: once the connection limit
+  // is hit, a 30s wait turns backpressure into function timeouts and retries
+  // instead of a fast 5xx the client can back off from.
+  serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || (isProd ? 5000 : 30000),
   socketTimeoutMS: 45000,
   family: 4, // Use IPv4, skip trying IPv6
 }
@@ -43,7 +56,9 @@ export function getMongoClient(): Promise<MongoClient> {
 export async function connectToDatabase() {
   try {
     const client = await getMongoClient()
-    const db = client.db("e-commerce-bytewise")
+    // Same resolution order the scripts in scripts/ already use, so a load test
+    // or a migration can point the app at another database without a code edit.
+    const db = client.db(process.env.MONGODB_DB || process.env.DB_NAME || "e-commerce-bytewise")
     return { client, db }
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error)

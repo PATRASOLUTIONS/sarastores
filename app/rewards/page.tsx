@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { safeJsonLd } from "@/lib/jsonld-safe"
 import Link from "next/link"
 import { Coins, ShoppingBag, Wallet, ShieldCheck, RefreshCw, CreditCard, Wrench, TrendingDown, ArrowRight, Sparkles } from "lucide-react"
 import Header from "@/components/Header"
@@ -79,7 +80,7 @@ const faqs = REWARDS_FAQ.mainEntity.map((q) => ({ q: q.name, a: q.acceptedAnswer
 export default function RewardsPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#EEF2F7]">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(REWARDS_FAQ) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(REWARDS_FAQ) }} />
       <Header />
 
       <main className="flex-grow">

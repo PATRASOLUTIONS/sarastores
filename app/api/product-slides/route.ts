@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth"
 import * as dbService from "@/lib/db-service"
 import { COLLECTIONS } from "@/lib/db-service"
 
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const data = await request.json()
     const slide = await dbService.create(COLLECTIONS.SLIDES, data)

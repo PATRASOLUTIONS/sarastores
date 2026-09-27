@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
+import { requireAdmin } from '@/lib/auth'
 import { getCollection, createObjectId } from '@/lib/db-service'
 import { sendEmail } from '@/lib/email'
 import { emailTemplates } from '@/lib/emailTemplates'
@@ -23,6 +24,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const { id: orderId } = await params
     console.log(`🔑 Manual license assignment requested for order: ${orderId}`)

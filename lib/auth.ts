@@ -4,7 +4,7 @@
  * This module provides authentication utilities for the application
  */
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
 
@@ -24,16 +24,41 @@ export interface AuthSession {
 }
 
 /**
- * Get the current session by verifying the signed, httpOnly `session` cookie.
+ * Read the access token from `Authorization: Bearer`, used by the mobile apps.
  *
- * The cookie is HMAC-signed with a server-only secret, so its contents cannot
- * be forged or modified by the client. A missing/invalid/expired token yields
- * `null` (fail closed). This is the single source of truth for authorization.
+ * Browsers never attach this header automatically, so supporting it alongside
+ * the cookie does not widen CSRF exposure.
+ */
+async function getBearerToken(): Promise<string | undefined> {
+  try {
+    const headerStore = await headers();
+    const authorization = headerStore.get('authorization');
+    if (!authorization) return undefined;
+    const [scheme, ...rest] = authorization.split(' ');
+    if (scheme.toLowerCase() !== 'bearer') return undefined;
+    return rest.join(' ').trim() || undefined;
+  } catch {
+    // headers() throws outside a request scope (e.g. static generation).
+    return undefined;
+  }
+}
+
+/**
+ * Get the current session from either the signed httpOnly `session` cookie
+ * (web) or an `Authorization: Bearer` access token (mobile). Both carry the
+ * same HMAC-signed payload and are verified identically, so every route that
+ * already calls this gains native-client support for free.
+ *
+ * A missing/invalid/expired token yields `null` (fail closed). This is the
+ * single source of truth for authorization.
  */
 export async function getSession(): Promise<AuthSession | null> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(SESSION_COOKIE)?.value;
+    let token = await getBearerToken();
+    if (!token) {
+      const cookieStore = await cookies();
+      token = cookieStore.get(SESSION_COOKIE)?.value;
+    }
     const payload = await verifySessionToken(token);
     if (!payload) return null;
 

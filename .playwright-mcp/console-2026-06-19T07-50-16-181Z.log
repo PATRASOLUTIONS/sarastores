@@ -1,3 +1,0 @@
-[     304ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://mozilla.github.io/pdf.js/web/viewer.html:0
-[     353ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://mozilla.github.io/favicon.ico:0
-[     720ms] [LOG] PDF 110dd61fd57444010b1ab5ff38782f0f [1.4 pdfeTeX-1.21a / TeX] (PDF.js: 6.0.397 [59df67155]) @ https://mozilla.github.io/pdf.js/web/viewer.mjs:19373

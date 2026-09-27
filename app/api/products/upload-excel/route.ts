@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS } from "@/lib/db-service"
 import * as XLSX from "xlsx"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
@@ -50,6 +51,9 @@ interface DuplicateSKU {
 }
 
 export async function POST(request: Request) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File

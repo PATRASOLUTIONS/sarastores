@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth"
 import { connectToDatabase } from "@/lib/mongodb"
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ sku: string }> }) {
@@ -40,6 +41,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function PUT(req: Request, context: { params: Promise<{ sku: string }> }) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   const { sku } = await context.params
   const data = await req.json()
   const { db } = await connectToDatabase()
@@ -61,6 +65,9 @@ export async function PUT(req: Request, context: { params: Promise<{ sku: string
 }
 
 export async function PATCH(req: Request, context: { params: Promise<{ sku: string }> }) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   const { sku } = await context.params
   const data = await req.json()
   const { db } = await connectToDatabase()
@@ -117,6 +124,9 @@ export async function PATCH(req: Request, context: { params: Promise<{ sku: stri
 }
 
 export async function DELETE(_req: Request, context: { params: Promise<{ sku: string }> }) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   const { sku } = await context.params
   const { db } = await connectToDatabase()
   const specsCollection = db.collection("product_specifications")

@@ -1,16 +1,7 @@
 import { Metadata } from 'next'
 import { connectToDatabase } from '@/lib/mongodb'
-import { headers } from 'next/headers'
+import { getOriginFromHeaders } from '@/lib/seo-metadata'
 import { CategoryJsonLdServer } from './CategoryJsonLdServer'
-
-function getOrigin(hdrs: Headers): string {
-  const host = hdrs.get('x-forwarded-host') || hdrs.get('host')
-  const proto = hdrs.get('x-forwarded-proto') || 'https'
-  return host
-    ? `${proto}://${host}`
-    : (process.env.NEXT_PUBLIC_SITE_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'))
-}
 
 async function getSettings() {
   try {
@@ -46,8 +37,7 @@ async function getCategory(id: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
-  const hdrs = await headers()
-  const origin = getOrigin(hdrs)
+  const origin = await getOriginFromHeaders()
 
   try {
     const [category, settings] = await Promise.all([getCategory(id), getSettings()])
@@ -103,8 +93,7 @@ export default async function CategoryLayout({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const hdrs = await headers()
-  const origin = getOrigin(hdrs)
+  const origin = await getOriginFromHeaders()
 
   // Decode the category name from the URL param
   const decodedName = decodeURIComponent(id).replace(/-/g, ' ')
