@@ -21,7 +21,7 @@ export default function OrderConfirmedScreen() {
 
         <Text style={[styles.title, { color: tokens.textPrimary }]}>Thank you for your order</Text>
         <Text style={[styles.body, { color: tokens.textSecondary }]}>
-          We've emailed your confirmation and will notify you here as your order moves.
+          We&apos;ve emailed your confirmation and will notify you here as your order moves.
         </Text>
 
         {orderId ? (

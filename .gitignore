@@ -42,3 +42,12 @@ sweep-*.txt
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# DPDP: never commit personal data dumps or debug exports.
+# These files previously contained real customer names, emails, phones and addresses.
+order_dump.json
+order_debug_dump.json
+*_dump.json
+*_debug_dump.json
+/dumps/
+/exports/

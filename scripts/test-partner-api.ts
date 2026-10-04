@@ -16,7 +16,7 @@ async function main() {
       testPartnerId,
       'Test API Key',
       'test',
-      'free'
+      'starter'
     );
     
     console.log('✅ API Key generated successfully!\n');

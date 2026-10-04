@@ -6,7 +6,9 @@
  */
 
 import { connectToDatabase } from "@/lib/mongodb"
+import type { NextRequest } from "next/server"
 import type { AuthenticatedUser } from "@/lib/auth-credentials"
+import { recordConsent, CONSENT_PURPOSES } from "@/lib/consent"
 
 export interface GoogleIdentity {
   email: string
@@ -83,42 +85,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<VerifyIdToke
   }
 }
 
-/** Find or create the local user behind a verified Google identity. */
-export async function findOrCreateGoogleUser(identity: GoogleIdentity): Promise<AuthenticatedUser> {
-  const { db } = await connectToDatabase()
-  const users = db.collection("users")
-
-  let user = await users.findOne({ email: identity.email })
-
-  if (!user) {
-    const now = new Date()
-    const doc = {
-      name: identity.name || identity.email.split("@")[0] || "Google User",
-      email: identity.email,
-      password: null,
-      role: "user",
-      emailVerified: true,
-      avatar: identity.picture || null,
-      authProvider: "google",
-      createdAt: now,
-      updatedAt: now,
-      cart: [],
-      wishlist: [],
-      orders: [],
-    }
-    const result = await users.insertOne(doc)
-    user = { ...doc, _id: result.insertedId }
-  } else if (!user.authProvider) {
-    // Pre-existing password account signing in with Google for the first time.
-    // Google has already proven ownership of the address, so mark it verified.
-    await users.updateOne(
-      { _id: user._id },
-      { $set: { authProvider: "google", emailVerified: true, updatedAt: new Date() } },
-    )
-    user.authProvider = "google"
-    user.emailVerified = true
-  }
-
+function toAuthenticatedUser(user: Record<string, any>): AuthenticatedUser {
   return {
     id: user._id.toString(),
     name: user.name,
@@ -132,4 +99,136 @@ export async function findOrCreateGoogleUser(identity: GoogleIdentity): Promise<
     dashboardAccess: !!user.dashboardAccess,
     allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
   }
+}
+
+export type ResolveGoogleUserResult =
+  /** The account already exists; sign them straight in. */
+  | { status: "existing"; user: AuthenticatedUser }
+  /**
+   * No local account yet. We must not create one until the person accepts the
+   * terms and has been shown the privacy notice, so the caller has to run the
+   * onboarding step before any record is written.
+   */
+  | { status: "onboarding_required" }
+
+/**
+ * Resolve a verified Google identity to a local account **without ever creating
+ * one**. Creation is deliberately a separate, consent-gated step — see
+ * `createGoogleUser`.
+ */
+export async function resolveGoogleUser(identity: GoogleIdentity): Promise<ResolveGoogleUserResult> {
+  const { db } = await connectToDatabase()
+  const users = db.collection("users")
+
+  const user = await users.findOne({ email: identity.email })
+  if (!user) return { status: "onboarding_required" }
+
+  if (!user.authProvider) {
+    // Pre-existing password account signing in with Google for the first time.
+    // Google has already proven ownership of the address, so mark it verified.
+    // This links an existing Data Principal rather than creating a new one —
+    // consent was captured at their original signup.
+    await users.updateOne(
+      { _id: user._id },
+      { $set: { authProvider: "google", emailVerified: true, updatedAt: new Date() } },
+    )
+    user.authProvider = "google"
+    user.emailVerified = true
+  }
+
+  return { status: "existing", user: toAuthenticatedUser(user) }
+}
+
+export interface GoogleOnboarding {
+  marketingEmail?: boolean
+  marketingWhatsapp?: boolean
+  marketingSms?: boolean
+  noticeVersion?: string
+}
+
+export type CreateGoogleUserResult =
+  | { ok: true; user: AuthenticatedUser }
+  | { ok: false; status: number; code: string; message: string }
+
+/**
+ * Create the local account for a verified Google identity once consent has
+ * been established.
+ */
+export async function createGoogleUser(
+  identity: GoogleIdentity,
+  onboarding: GoogleOnboarding,
+  request?: NextRequest,
+): Promise<CreateGoogleUserResult> {
+  const { db } = await connectToDatabase()
+  const users = db.collection("users")
+
+  // The form may have sat open while another tab or device created the account.
+  // Treat that as a plain sign-in rather than an error.
+  const existing = await users.findOne({ email: identity.email })
+  if (existing) return { ok: true, user: toAuthenticatedUser(existing) }
+
+  const now = new Date()
+  const doc: Record<string, any> = {
+    name: identity.name || identity.email.split("@")[0] || "Google User",
+    email: identity.email,
+    password: null,
+    role: "user",
+    emailVerified: true,
+    avatar: identity.picture || null,
+    authProvider: "google",
+    createdAt: now,
+    updatedAt: now,
+    cart: [],
+    wishlist: [],
+    orders: [],
+  }
+
+  let insertedId
+  try {
+    const result = await users.insertOne(doc)
+    insertedId = result.insertedId
+  } catch (error) {
+    // Lost a race against a concurrent signup for the same address.
+    const raced = await users.findOne({ email: identity.email })
+    if (raced) return { ok: true, user: toAuthenticatedUser(raced) }
+    throw error
+  }
+
+  const userId = insertedId.toString()
+  const noticeVersion = onboarding.noticeVersion
+
+  // Section 8(4) puts the burden of proving consent on us, so every decision
+  // made on the onboarding form is written to the ledger — refusals included.
+  await recordConsent({
+    userId,
+    source: "signup",
+    noticeVersion,
+    request,
+    decisions: [
+      { purpose: CONSENT_PURPOSES.ACCOUNT, granted: true },
+      { purpose: CONSENT_PURPOSES.MARKETING_EMAIL, granted: !!onboarding.marketingEmail },
+      { purpose: CONSENT_PURPOSES.MARKETING_WHATSAPP, granted: !!onboarding.marketingWhatsapp },
+      { purpose: CONSENT_PURPOSES.MARKETING_SMS, granted: !!onboarding.marketingSms },
+    ],
+  })
+
+  // Mirror the marketing choices onto the profile the campaign jobs read.
+  if (onboarding.marketingEmail || onboarding.marketingWhatsapp || onboarding.marketingSms) {
+    try {
+      const { setConsent } = await import("@/lib/customer-profile")
+      await setConsent(
+        userId,
+        {
+          email: !!onboarding.marketingEmail,
+          whatsapp: !!onboarding.marketingWhatsapp,
+          sms: !!onboarding.marketingSms,
+        },
+        "signup",
+      )
+    } catch (consentError) {
+      console.error("[auth/google] failed to seed marketing consent profile", consentError)
+    }
+  }
+
+  return { ok: true, user: toAuthenticatedUser({ ...doc, _id: insertedId }) }
 }

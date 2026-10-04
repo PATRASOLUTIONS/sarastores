@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useEffect, useState } from "react"
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
 import { SignInRequired } from "@/components/States"
 import { StoreHeader } from "@/components/StoreHeader"
 import { apiRequest } from "@/api/client"
@@ -89,7 +89,7 @@ export default function PreferencesScreen() {
       <StoreHeader />
       <Text style={[styles.pageTitle, { color: tokens.textPrimary }]}>Communication preferences</Text>
       <Text style={[styles.pageSub, { color: tokens.textSecondary }]}>
-        Choose how you'd like to hear from Sara. You can change this at any time.
+        Choose how you&apos;d like to hear from Sara. You can change this at any time.
       </Text>
 
       {authLoading ? (
@@ -141,8 +141,8 @@ export default function PreferencesScreen() {
           {error ? <Text style={[styles.error, { color: brand.danger }]}>{error}</Text> : null}
 
           <Text style={[styles.footnote, { color: tokens.textTertiary }]}>
-            We'll always email you about your own orders and deliveries — those are service messages, not marketing,
-            and they aren't affected by these settings.
+            We&apos;ll always email you about your own orders and deliveries — those are service messages, not
+            marketing, and they aren&apos;t affected by these settings.
           </Text>
         </ScrollView>
       )}

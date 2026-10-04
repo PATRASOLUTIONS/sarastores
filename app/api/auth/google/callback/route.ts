@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { createPendingSignupToken } from "@/lib/pending-signup"
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ""
@@ -90,24 +91,30 @@ export async function GET(request: NextRequest) {
     let user = await usersCollection.findOne({ email: googleUser.email.toLowerCase() })
 
     if (!user) {
-      const newUser = {
-        name: googleUser.name || `${googleUser.given_name || ""} ${googleUser.family_name || ""}`.trim() || "Google User",
+      /**
+       * First time we've seen this Google account. Do NOT create the user here.
+       *
+       * DPDP sections 6 and 9 require the privacy notice and an age check before
+       * any personal data is recorded, and for a child the correct outcome is
+       * that no record was ever written. The verified identity is parked in a
+       * short-lived signed token and the shopper is sent to finish onboarding;
+       * `/api/auth/google/complete` creates the account.
+       */
+      const onboardingToken = createPendingSignupToken({
         email: googleUser.email.toLowerCase(),
-        password: null,
-        role: "user",
-        emailVerified: true,
-        avatar: googleUser.picture || null,
-        authProvider: "google",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        cart: [],
-        wishlist: [],
-        orders: [],
-      }
+        name:
+          googleUser.name ||
+          `${googleUser.given_name || ""} ${googleUser.family_name || ""}`.trim() ||
+          undefined,
+        picture: googleUser.picture || null,
+      })
+      const next = state.startsWith("/") ? state : "/"
+      return NextResponse.redirect(
+        `${siteUrl}/register/complete?token=${encodeURIComponent(onboardingToken)}&next=${encodeURIComponent(next)}`,
+      )
+    }
 
-      const result = await usersCollection.insertOne(newUser)
-      user = { ...newUser, _id: result.insertedId }
-    } else if (!user.authProvider) {
+    if (!user.authProvider) {
       await usersCollection.updateOne(
         { _id: user._id },
         { $set: { authProvider: "google", emailVerified: true, updatedAt: new Date() } }

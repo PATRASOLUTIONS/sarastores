@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Document } from "mongodb"
+
+interface UserDocument extends Document {
+  _id: ObjectId | string
+}
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token")
@@ -13,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase()
-    const usersCollection = db.collection("users")
+    const usersCollection = db.collection<UserDocument>("users")
 
     let userDoc: any = null
     if (ObjectId.isValid(userId)) {
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase()
-    const usersCollection = db.collection("users")
+    const usersCollection = db.collection<UserDocument>("users")
 
     let userDoc: any = null
     if (ObjectId.isValid(userId)) {

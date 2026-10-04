@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 
 interface OrderItem {
+  id?: string
   productId: string
   name: string
   price: number
@@ -52,7 +53,10 @@ interface Order {
   shipping: number
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled"
   paymentMethod: string
-  paymentDetails?: Record<string, unknown>
+  paymentDetails?: {
+    cardLast4?: string | number
+    [key: string]: unknown
+  }
   createdAt: string
   updatedAt: string
   trackingNumber?: string
@@ -75,7 +79,10 @@ interface Order {
   partnerId?: string
   partnerName?: string
   partnerOrderId?: string
-  commission?: number
+  commission?: number | {
+    amount?: number
+    rate?: number
+  }
   razorpayPaymentDetails?: {
     razorpayOrderId?: string
     transactionId?: string
@@ -113,7 +120,16 @@ interface ExternalDetail {
   queueId?: string | null
   externalOrderId?: string | null
   error?: string
-  data?: Record<string, unknown>
+  data?: {
+    id?: string
+    response?: {
+      data?: {
+        lineItems?: LineItem[]
+        vouchers?: Voucher[]
+      }
+    }
+    [key: string]: unknown
+  }
 }
 
 interface LineItem {
@@ -1655,15 +1671,15 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                           <span className="text-emerald-700">Earnings:</span>
                           <span className="font-bold text-emerald-600">
                             ₹{typeof order.commission === 'object'
-                              ? (order.commission as Record<string, unknown>)?.amount?.toFixed(2) || '0.00'
+                              ? order.commission.amount?.toFixed(2) || '0.00'
                               : (typeof order.commission === 'number' ? order.commission.toFixed(2) : '0.00')
                             }
                           </span>
                         </div>
-                        {typeof order.commission === 'object' && (order.commission as Record<string, unknown>)?.rate && (
+                        {typeof order.commission === 'object' && order.commission.rate !== undefined && (
                           <div className="flex justify-between items-center text-[10px] text-emerald-500 uppercase tracking-wider font-semibold">
                             <span>Rate:</span>
-                            <span>{(order.commission as Record<string, unknown>).rate}%</span>
+                            <span>{order.commission.rate}%</span>
                           </div>
                         )}
                       </div>

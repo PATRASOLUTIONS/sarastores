@@ -126,8 +126,8 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
       price: product.price,
       image: product.image,
       quantity: 1,
-      color: undefined,
-      size: undefined,
+      color: null,
+      size: null,
     }
 
     await addToCart(cartItem)

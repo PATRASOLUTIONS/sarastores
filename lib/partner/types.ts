@@ -143,8 +143,8 @@ export interface PartnerAPIKey {
 }
 
 export interface Permission {
-  resource: 'products' | 'orders' | 'wallet' | '*';
-  actions: ('read' | 'create' | 'update' | 'delete')[];
+  resource: 'products' | 'orders' | 'wallet' | 'razorpay' | '*';
+  actions: ('read' | 'create' | 'update' | 'delete' | 'write')[];
 }
 
 export interface RateLimitConfig {

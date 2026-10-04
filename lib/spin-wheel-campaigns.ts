@@ -8,7 +8,7 @@
  * existing data keeps working without migration.
  */
 import { connectToDatabase } from "@/lib/mongodb"
-import { Db, Collection } from "mongodb"
+import { Db, Collection, type Document } from "mongodb"
 
 const CAMPAIGN_COLLECTIONS = [
   "participants",
@@ -36,16 +36,16 @@ function prefixName(slug: string, col: CampaignCollection): string {
 }
 
 /** Get a collection handle for a specific campaign */
-export async function getCampaignCollection(
+export async function getCampaignCollection<TSchema extends Document = Document>(
   campaignSlug: string,
   col: CampaignCollection
-): Promise<Collection> {
+): Promise<Collection<TSchema>> {
   const { db } = await connectToDatabase()
   const name =
     campaignSlug === "default"
       ? LEGACY_NAMES[col]
       : prefixName(campaignSlug, col)
-  return db.collection(name)
+  return db.collection<TSchema>(name)
 }
 
 /** Get the campaigns metadata collection */

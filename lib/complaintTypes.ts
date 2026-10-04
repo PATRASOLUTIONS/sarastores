@@ -5,8 +5,28 @@ export const COMPLAINT_TYPES = {
   ENQUIRY: 'enquiry',
   WRONG_ITEM: 'wrong_item',
   MISSING_ITEM: 'missing_item',
-  OTHER: 'other'
+  OTHER: 'other',
+  // DPDP Act 2023 s.13 — grievance redressal for data principals. These route
+  // to the Grievance Officer rather than the product support queue.
+  DATA_ACCESS: 'data_access',
+  DATA_CORRECTION: 'data_correction',
+  DATA_ERASURE: 'data_erasure',
+  CONSENT_WITHDRAWAL: 'consent_withdrawal',
+  DATA_PRIVACY_OTHER: 'data_privacy_other'
 } as const
+
+/** Grievances that must be handled by the Grievance Officer under the DPDP Act. */
+export const DPDP_COMPLAINT_TYPES: string[] = [
+  'data_access',
+  'data_correction',
+  'data_erasure',
+  'consent_withdrawal',
+  'data_privacy_other'
+]
+
+export function isDpdpComplaint(type: string | null | undefined): boolean {
+  return typeof type === 'string' && DPDP_COMPLAINT_TYPES.includes(type)
+}
 
 export const COMPLAINT_STATUS = {
   PENDING: 'pending',
@@ -24,7 +44,12 @@ export const COMPLAINT_TYPE_LABELS: Record<string, string> = {
   enquiry: 'General Enquiry',
   wrong_item: 'Wrong Item Received',
   missing_item: 'Missing Item',
-  other: 'Other Issue'
+  other: 'Other Issue',
+  data_access: 'Access the personal data you hold about me',
+  data_correction: 'Correct or update my personal data',
+  data_erasure: 'Erase my personal data',
+  consent_withdrawal: 'Withdraw my consent',
+  data_privacy_other: 'Another data privacy concern'
 }
 
 export const COMPLAINT_STATUS_LABELS: Record<string, string> = {

@@ -19,7 +19,7 @@ export default function NotFoundScreen() {
         </View>
         <Text style={[styles.title, { color: tokens.textPrimary }]}>Page not found</Text>
         <Text style={[styles.message, { color: tokens.textSecondary }]}>
-          That link doesn't exist or has moved. Let's get you back to shopping.
+          That link doesn&apos;t exist or has moved. Let&apos;s get you back to shopping.
         </Text>
 
         <Pressable style={[styles.primary, { backgroundColor: tokens.accent }]} onPress={() => router.replace("/")}>

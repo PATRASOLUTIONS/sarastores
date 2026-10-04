@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import * as WebBrowser from "expo-web-browser"
 import { useState } from "react"
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { SignInRequired } from "@/components/States"
 import { StoreHeader } from "@/components/StoreHeader"
+import { BASE_URL } from "@/api/client"
 import { useAuth } from "@/auth/context"
 import { useTheme } from "@/theme/ThemeContext"
 import { spacing } from "@/theme/tokens"
@@ -86,6 +88,21 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={16} color={tokens.textTertiary} />
               </Pressable>
             ))}
+
+            {/*
+              DPDP sections 11 and 12 — access, correction and erasure. The full
+              privacy centre (data download, consent history, cookie choices)
+              lives on the website so there is a single implementation of the
+              rights workflow; the app must still surface a route to it.
+            */}
+            <Pressable
+              style={[styles.link, { borderTopWidth: 1, borderTopColor: tokens.border }]}
+              onPress={() => void WebBrowser.openBrowserAsync(`${BASE_URL}/account/privacy`)}
+            >
+              <Ionicons name="shield-checkmark-outline" size={19} color={tokens.primary} />
+              <Text style={[styles.linkLabel, { color: tokens.textPrimary }]}>Privacy &amp; my data</Text>
+              <Ionicons name="open-outline" size={15} color={tokens.textTertiary} />
+            </Pressable>
           </View>
 
           <Pressable

@@ -8,8 +8,9 @@
  * the funnel is measurable today, before any third-party tag exists.
  */
 
-type Money = number | string
+import { hasConsent } from "@/lib/consent-client"
 
+type Money = number | string
 export type AnalyticsItem = {
   item_id: string
   item_name: string
@@ -41,6 +42,13 @@ function itemsValue(items: AnalyticsItem[]): number {
 
 export function track(event: string, params: Record<string, unknown> = {}): void {
   if (typeof window === "undefined") return
+
+  /**
+   * DPDP: usage measurement is not necessary to operate the store, so nothing
+   * is emitted until the visitor has granted the analytics category. An
+   * undecided visitor counts as a refusal.
+   */
+  if (!hasConsent("analytics")) return
 
   const payload = { event, ...params }
 

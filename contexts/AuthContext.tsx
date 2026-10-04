@@ -26,11 +26,26 @@ export interface User {
   emailVerified?: boolean
 }
 
+/**
+ * DPDP Act 2023 consent fields collected at registration.
+ *
+ * Marketing flags are deliberately separate from `acceptTerms`: Section 6(1)
+ * requires consent to be specific and unconditional, so agreeing to the Terms
+ * must not drag marketing permission along with it.
+ */
+export interface SignupDpdpFields {
+  acceptPrivacyNotice?: boolean
+  marketingEmail?: boolean
+  marketingWhatsapp?: boolean
+  marketingSms?: boolean
+  noticeVersion?: string
+}
+
 interface AuthContextType {
   user: User | null
   isLoading: boolean
     login: (email: string, password: string, recaptchaToken?: string) => Promise<boolean>
-    signup: (name: string, email: string, password: string, honeypot?: string, formTimestamp?: number, recaptchaToken?: string, confirmPassword?: string, acceptTerms?: boolean) => Promise<boolean>
+    signup: (name: string, email: string, password: string, honeypot?: string, formTimestamp?: number, recaptchaToken?: string, confirmPassword?: string, acceptTerms?: boolean, dpdp?: SignupDpdpFields) => Promise<boolean>
   logout: () => void
   isAuthenticated: boolean
   isAdmin: boolean
@@ -622,7 +637,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     formTimestamp?: number,
     recaptchaToken?: string,
     confirmPassword?: string,
-    acceptTerms?: boolean
+    acceptTerms?: boolean,
+    dpdp?: SignupDpdpFields
   ): Promise<boolean> => {
     setIsLoading(true)
     try {
@@ -637,6 +653,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           password,
           confirmPassword: confirmPassword ?? password,
           acceptTerms: acceptTerms ?? true,
+          // DPDP: per-purpose consent, kept distinct from acceptTerms.
+          acceptPrivacyNotice: dpdp?.acceptPrivacyNotice ?? true,
+          marketingEmail: dpdp?.marketingEmail ?? false,
+          marketingWhatsapp: dpdp?.marketingWhatsapp ?? false,
+          marketingSms: dpdp?.marketingSms ?? false,
+          noticeVersion: dpdp?.noticeVersion,
           website: honeypot || '', // Honeypot field
           formTimestamp: formTimestamp || Date.now(), // Form timestamp
           recaptchaToken,

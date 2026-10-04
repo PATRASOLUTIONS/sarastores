@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import crypto from "crypto"
 import { RegisterSchema } from "@/lib/validation"
+import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/consent"
 
 // Use dynamic import for email functions to prevent build-time issues
 const getEmailFunctions = async () => {
@@ -57,7 +58,15 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ message: parsed.error.errors[0].message }, { status: 400 })
     }
-    const { email, password, name } = parsed.data
+    const {
+      email,
+      password,
+      name,
+      marketingEmail,
+      marketingWhatsapp,
+      marketingSms,
+      noticeVersion,
+    } = parsed.data
 
     const { db } = await connectToDatabase()
     const usersCollection = db.collection("users")
@@ -92,6 +101,45 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await usersCollection.insertOne(newUser)
+    const newUserId = result.insertedId.toString()
+
+    /**
+     * Consent ledger (DPDP Sections 6 and 8(4)). The account purpose is
+     * necessary to provide the service; the marketing purposes are recorded
+     * individually, including the negatives, because proving someone declined
+     * matters as much as proving they agreed.
+     */
+    const decisions: ConsentDecision[] = [
+      { purpose: CONSENT_PURPOSES.ACCOUNT, granted: true },
+      { purpose: CONSENT_PURPOSES.MARKETING_EMAIL, granted: Boolean(marketingEmail) },
+      { purpose: CONSENT_PURPOSES.MARKETING_WHATSAPP, granted: Boolean(marketingWhatsapp) },
+      { purpose: CONSENT_PURPOSES.MARKETING_SMS, granted: Boolean(marketingSms) },
+    ]
+    await recordConsent({
+      userId: newUserId,
+      decisions,
+      source: "signup",
+      request,
+      noticeVersion,
+    })
+
+    // Mirror the marketing choices onto the profile the campaign jobs read.
+    if (marketingEmail || marketingWhatsapp || marketingSms) {
+      try {
+        const { setConsent } = await import("@/lib/customer-profile")
+        await setConsent(
+          newUserId,
+          {
+            email: Boolean(marketingEmail),
+            whatsapp: Boolean(marketingWhatsapp),
+            sms: Boolean(marketingSms),
+          },
+          "signup",
+        )
+      } catch (consentError) {
+        console.error("Failed to seed marketing consent profile:", consentError)
+      }
+    }
 
     // Reset rate limit on successful signup
     const clientIP = getClientIP(request)

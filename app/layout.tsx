@@ -10,6 +10,8 @@ import { Analytics } from "@vercel/analytics/next"
 import { SiteJsonLd } from "@/components/SiteJsonLd"
 import ReportWebVitals from "@/components/ReportWebVitals"
 import MarketingTags from "@/components/MarketingTags"
+import ConsentBanner from "@/components/ConsentBanner"
+import ConsentGate from "@/components/ConsentGate"
 import ThemeEffects from "@/components/theme/ThemeEffects"
 import GaneshBlessing from "@/components/theme/GaneshBlessing"
 import AnnouncementBar from "@/components/theme/AnnouncementBar"
@@ -175,10 +177,20 @@ export default async function RootLayout({
         <GaneshBlessing active={theme.id === "ganesh" && theme.blessing} />
         <AnnouncementBar message={theme.announcement} href={theme.announcementLink} />
         <Providers>{children}</Providers>
-        <SpeedInsights />
-        <Analytics />
+        {/*
+          DPDP: analytics and advertising are not necessary to run the store, so
+          they stay unmounted until the visitor grants the matching consent.
+          ReportWebVitals is self-gating on the analytics category.
+        */}
+        <ConsentGate category="analytics">
+          <SpeedInsights />
+          <Analytics />
+        </ConsentGate>
         <ReportWebVitals />
-        <MarketingTags />
+        <ConsentGate category="advertising">
+          <MarketingTags />
+        </ConsentGate>
+        <ConsentBanner />
         {/* Service Worker: disabled by default because stale workers in
             production can keep serving broken cached images or stale route
             responses after deploys. Re-enable only when explicitly opted in. */}

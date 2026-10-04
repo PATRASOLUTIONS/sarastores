@@ -12,6 +12,29 @@ import { ObjectId } from "mongodb"
 
 export const dynamic = "force-dynamic"
 
+interface OrderListDocument {
+  id: string
+  userId?: string
+  orderId?: string
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  status?: string
+  total?: number
+  subtotal?: number
+  tax?: number
+  shipping?: number
+  coupon?: unknown
+  items?: unknown[]
+  customer?: { name?: string; [key: string]: unknown }
+  shippingAddress?: unknown
+  paymentMethod?: string
+  paymentDetails?: unknown
+  trackingNumber?: string
+  timeline?: unknown[]
+  externalQueue?: unknown
+  notes?: string
+}
+
 function generateOrderNotes(orderData: Record<string, unknown>): string {
   const { items, customer, shippingAddress, paymentMethod, subtotal, tax, shipping, total, coupon } = orderData as {
     items: Array<Record<string, unknown>>
@@ -149,7 +172,7 @@ export async function GET(request: NextRequest) {
 
     const orders = await ordersQuery.toArray()
 
-    const normalizedOrders = normalizeId(orders).map((order) => ({
+    const normalizedOrders = normalizeId(orders).map((order: OrderListDocument) => ({
       userId: order.userId || null,
       id: order.id,
       orderId: order.orderId || null,
@@ -607,7 +630,7 @@ export async function POST(request: NextRequest) {
           customerName,
           status: (newOrder.status as string) || "pending",
           orderDetails: {
-            total: newOrder.total,
+            total: payableTotal,
             items: validatedItems.map((item) => ({
               name: item.name,
               quantity: item.quantity,

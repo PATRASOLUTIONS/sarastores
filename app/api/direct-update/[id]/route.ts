@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getMongoClient } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Document } from "mongodb"
 import { COLLECTIONS } from "@/lib/db-service"
 import { checkAdminAuthorization } from "@/lib/auth"
 
@@ -30,7 +30,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
     const client = await getMongoClient()
     const db = client.db("ecommerce")
-    const collection = db.collection(COLLECTIONS.PRODUCTS)
+    const collection = db.collection<Document & { _id: ObjectId | string }>(COLLECTIONS.PRODUCTS)
 
     const results: any[] = []
 

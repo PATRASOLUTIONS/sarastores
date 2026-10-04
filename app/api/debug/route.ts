@@ -8,11 +8,11 @@ export async function GET() {
 
   try {
     const client = await getMongoClient()
-    const isConnected = !!client && !!client.topology && client.topology.isConnected()
+    await client.db().command({ ping: 1 })
 
     return NextResponse.json({
       status: "ok",
-      mongodb: isConnected ? "connected" : "disconnected",
+      mongodb: "connected",
       env: {
         NODE_ENV: process.env.NODE_ENV,
         MONGODB_URI_SET: !!process.env.MONGODB_URI,

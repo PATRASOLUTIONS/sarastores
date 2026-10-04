@@ -1,0 +1,56 @@
+- generic [ref=e2]:
+  - alert
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - button "Manage pages" [ref=e8]:
+        - generic: Manage pages
+      - button "Find" [ref=e11]:
+        - generic: Find
+      - generic [ref=e12]:
+        - button "Previous" [disabled]:
+          - generic: Previous
+        - button "Next" [disabled]:
+          - generic: Next
+      - generic [ref=e14]:
+        - spinbutton "Page" [ref=e16]: "0"
+        - generic [ref=e17]: of ⁨0⁩
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - button "Zoom Out" [ref=e20]:
+          - generic: Zoom Out
+        - button "Zoom In" [ref=e22]:
+          - generic: Zoom In
+      - combobox "Zoom" [ref=e24]:
+        - option "Automatic Zoom" [selected]
+        - option "Actual Size"
+        - option "Page Fit"
+        - option "Page Width"
+        - option "⁨50⁩%"
+        - option "⁨75⁩%"
+        - option "⁨100⁩%"
+        - option "⁨125⁩%"
+        - option "⁨150⁩%"
+        - option "⁨200⁩%"
+        - option "⁨300⁩%"
+        - option "⁨400⁩%"
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - button "Highlight" [disabled]:
+            - generic: Highlight
+        - generic [ref=e28]:
+          - button "Text" [disabled]:
+            - generic: Text
+        - generic [ref=e29]:
+          - button "Draw" [disabled]:
+            - generic: Draw
+        - generic [ref=e30]:
+          - button "Add or edit images" [disabled]:
+            - generic: Add or edit images
+      - generic [ref=e32]:
+        - button "Print" [ref=e33]:
+          - generic: Print
+        - button "Save" [ref=e34]:
+          - generic: Save
+      - button "Tools" [ref=e37]:
+        - generic: Tools

@@ -5,6 +5,10 @@ import { getCurrentUserId } from "@/lib/auth";
 
 const COLLECTION = "users";
 
+interface UserRecentlyViewedDocument {
+    recentlyViewed?: string[];
+}
+
 export async function POST(req: Request) {
     try {
         const userId = await getCurrentUserId();
@@ -17,7 +21,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        const collection = await getCollection(COLLECTION);
+        const collection = await getCollection<UserRecentlyViewedDocument>(COLLECTION);
 
         // Add to beginning of array, limit to 20 items, prevent duplicates
         await collection.updateOne(

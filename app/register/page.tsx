@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, AlertTriangle, Shield, Check, X } from "lucide-react"
 import { useRateLimit, formatRemainingTime } from "@/hooks/useRateLimit"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
+import { PRIVACY_NOTICE_VERSION } from "@/lib/dpdp-config"
 import DOMPurify from "isomorphic-dompurify"
 
 function PasswordStrength({ password }: { password: string }) {
@@ -67,6 +68,10 @@ function RegisterForm() {
     password: "",
     confirmPassword: "",
     agreeToTerms: false,
+    agreePrivacyNotice: false,
+    marketingEmail: false,
+    marketingWhatsapp: false,
+    marketingSms: false,
   })
   const [formTimestamp] = useState(Date.now())
   const [honeypot, setHoneypot] = useState("")
@@ -174,6 +179,11 @@ function RegisterForm() {
       newErrors.agreeToTerms = "You must agree to the terms"
     }
 
+    // Informed consent (Section 6(1)) is its own act, separate from the Terms.
+    if (!formData.agreePrivacyNotice) {
+      newErrors.agreePrivacyNotice = "Please confirm you have read the privacy notice"
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -217,7 +227,14 @@ function RegisterForm() {
         formTimestamp,
         recaptchaToken || undefined,
         formData.confirmPassword,
-        formData.agreeToTerms
+        formData.agreeToTerms,
+        {
+          acceptPrivacyNotice: formData.agreePrivacyNotice,
+          marketingEmail: formData.marketingEmail,
+          marketingWhatsapp: formData.marketingWhatsapp,
+          marketingSms: formData.marketingSms,
+          noticeVersion: PRIVACY_NOTICE_VERSION,
+        }
       )
       if (success) {
         resetAttempts()
@@ -506,7 +523,27 @@ function RegisterForm() {
                 {errors.confirmPassword && <p className="mt-1.5 text-[12px] text-red-600">{errors.confirmPassword}</p>}
               </div>
 
-              <div>
+              {/*
+                DPDP Section 5 notice. The Act requires the person to be told what
+                is collected and why *before* consenting, not to be sent hunting
+                through a linked policy for it.
+              */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
+                <p className="text-[12.5px] font-semibold text-[#0F2557]">How we use your details</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
+                  We collect your <strong>name and email address</strong> and, later at checkout, your{" "}
+                  <strong>phone number and delivery address</strong>, so we can create your account, process your
+                  orders and issue GST invoices. We keep invoice records for 72 months because tax law requires it.
+                  You can access, correct, export or erase your data, withdraw consent at any time, or complain to
+                  the Data Protection Board of India.{" "}
+                  <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">
+                    Read the full privacy notice
+                  </Link>
+                  .
+                </p>
+              </div>
+
+              <div className="space-y-2.5">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
                     type="checkbox"
@@ -517,12 +554,79 @@ function RegisterForm() {
                   />
                   <span className="text-sm text-brand-text-secondary leading-snug">
                     I agree to the{" "}
-                    <Link href="/terms-and-conditions" className="font-medium text-[#1560BD] hover:underline">Terms</Link>
-                    {" "}and{" "}
-                    <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">Privacy Policy</Link>
+                    <Link href="/terms-and-conditions" className="font-medium text-[#1560BD] hover:underline">Terms and Conditions</Link>
                   </span>
                 </label>
-                {errors.agreeToTerms && <p className="mt-1.5 text-sm text-red-500">{errors.agreeToTerms}</p>}
+                {errors.agreeToTerms && <p className="text-sm text-red-500">{errors.agreeToTerms}</p>}
+
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="agreePrivacyNotice"
+                    checked={formData.agreePrivacyNotice}
+                    onChange={handleChange}
+                    className={`mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40 ${errors.agreePrivacyNotice ? "border-red-400" : ""}`}
+                  />
+                  <span className="text-sm text-brand-text-secondary leading-snug">
+                    I have read the{" "}
+                    <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">Privacy Notice</Link>
+                    {" "}and consent to my data being processed to run my account and orders
+                  </span>
+                </label>
+                {errors.agreePrivacyNotice && <p className="text-sm text-red-500">{errors.agreePrivacyNotice}</p>}
+              </div>
+
+              {/*
+                Optional and genuinely severable. Consent that is a condition of
+                getting the service is not "free" under Section 6(1), so these
+                default to off and never block submission.
+              */}
+              <div className="rounded-lg border border-slate-200 p-3.5">
+                <p className="text-[12.5px] font-semibold text-[#0F2557]">
+                  Keep me posted <span className="font-normal text-slate-500">(optional)</span>
+                </p>
+                <p className="mt-0.5 text-[11.5px] text-slate-500">
+                  Entirely your choice — your account works exactly the same either way, and you can change this
+                  whenever you like.
+                </p>
+                <div className="mt-2.5 space-y-2">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="marketingEmail"
+                      checked={formData.marketingEmail}
+                      onChange={handleChange}
+                      className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
+                    />
+                    <span className="text-[13px] text-brand-text-secondary leading-snug">
+                      Email me offers, price drops and new arrivals
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="marketingWhatsapp"
+                      checked={formData.marketingWhatsapp}
+                      onChange={handleChange}
+                      className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
+                    />
+                    <span className="text-[13px] text-brand-text-secondary leading-snug">
+                      Send me offers on WhatsApp
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="marketingSms"
+                      checked={formData.marketingSms}
+                      onChange={handleChange}
+                      className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
+                    />
+                    <span className="text-[13px] text-brand-text-secondary leading-snug">
+                      Send me offers by SMS
+                    </span>
+                  </label>
+                </div>
               </div>
 
               <button
