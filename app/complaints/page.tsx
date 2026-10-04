@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
-import { COMPLAINT_TYPES, COMPLAINT_TYPE_LABELS } from "@/lib/complaintTypes"
+import { COMPLAINT_TYPES, COMPLAINT_TYPE_LABELS, DPDP_COMPLAINT_TYPES, isDpdpComplaint } from "@/lib/complaintTypes"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import BrandMarquee from "@/components/BrandMarquee"
@@ -23,6 +23,21 @@ export default function ComplaintForm() {
   const [loading, setLoading] = useState(false)
   const lock = useSubmitLock()
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+
+  // `/complaints?category=data-privacy` is the link published in the Privacy
+  // Notice, so it has to land on a pre-selected DPDP grievance.
+  useEffect(() => {
+    const category = new URLSearchParams(window.location.search).get("category")
+    if (category === "data-privacy") {
+      setFormData((prev) => ({ ...prev, complaintType: COMPLAINT_TYPES.DATA_PRIVACY_OTHER }))
+    } else if (category && DPDP_COMPLAINT_TYPES.includes(category)) {
+      setFormData((prev) => ({ ...prev, complaintType: category }))
+    }
+  }, [])
+
+  // A data privacy grievance is about us, not about a product, so it has no
+  // order number and no product to name.
+  const isPrivacyGrievance = isDpdpComplaint(formData.complaintType)
 
   // Complaint types that require images
   const imageRequiredTypes = ["breakage", "return", "defective"]
@@ -185,11 +200,11 @@ export default function ComplaintForm() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number <span className="text-red-500">*</span>
+                    Phone Number {!isPrivacyGrievance && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     type="tel"
-                    required
+                    required={!isPrivacyGrievance}
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -197,19 +212,21 @@ export default function ComplaintForm() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Order Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.orderNumber}
-                    onChange={(e) => setFormData({ ...formData, orderNumber: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="ORD123456"
-                  />
-                </div>
+                {!isPrivacyGrievance && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Order Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.orderNumber}
+                      onChange={(e) => setFormData({ ...formData, orderNumber: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="ORD123456"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -228,27 +245,57 @@ export default function ComplaintForm() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">Select a complaint type</option>
-                  {Object.entries(COMPLAINT_TYPE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
+                  <optgroup label="Order &amp; product">
+                    {Object.entries(COMPLAINT_TYPE_LABELS)
+                      .filter(([value]) => !DPDP_COMPLAINT_TYPES.includes(value))
+                      .map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="My personal data (DPDP Act)">
+                    {DPDP_COMPLAINT_TYPES.map((value) => (
+                      <option key={value} value={value}>
+                        {COMPLAINT_TYPE_LABELS[value]}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Product Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.productName}
-                  onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Product name"
-                />
-              </div>
+              {isPrivacyGrievance && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  <p className="font-semibold">This is a data privacy request under the DPDP Act, 2023.</p>
+                  <p className="mt-1">
+                    It goes directly to our Grievance Officer, who will respond within the published
+                    timeframe. You can often get the same result instantly from{" "}
+                    <a href="/account/privacy" className="underline font-medium">
+                      Account → Privacy &amp; My Data
+                    </a>
+                    , where you can download or delete your data and change your consent yourself.
+                  </p>
+                  <p className="mt-1">
+                    Please use the email address on your account so we can verify who you are.
+                  </p>
+                </div>
+              )}
+
+              {!isPrivacyGrievance && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Product Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.productName}
+                    onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Product name"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

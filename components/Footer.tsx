@@ -5,6 +5,7 @@ import Image from "next/image"
 import { useRef, useState } from "react"
 import useSWR from "swr"
 import toast from "react-hot-toast"
+import CookiePreferencesLink from "@/components/CookiePreferencesLink"
 import {
   ArrowRight,
   ArrowUpRight,
@@ -50,7 +51,8 @@ const ABOUT_LINKS: LinkItem[] = [
 
 const LEGAL_LINKS: LinkItem[] = [
   { href: "/terms-and-conditions", label: "Terms & Conditions" },
-  { href: "/privacy-policy", label: "Privacy Policy" },
+  { href: "/privacy-policy", label: "Privacy Notice" },
+  { href: "/account/privacy", label: "Privacy & My Data" },
   { href: "/cancellation-policy", label: "Cancellation Policy" },
   { href: "/returns", label: "Return Policy" },
   { href: "/shipping-policy", label: "Shipping Policy" },
@@ -99,20 +101,24 @@ function XIcon({ className }: { className?: string }) {
 const categoriesFetcher = (url: string) => fetch(url).then((res) => (res.ok ? res.json() : []))
 
 function FooterColumn({ title, links }: { title: string; links: LinkItem[] }) {
+  const linkClass =
+    "-mx-3 block rounded-md px-3 py-1.5 text-left text-[13px] text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
   return (
     <nav aria-label={title}>
       <h3 className="font-heading text-[15px] font-bold text-white">{title}</h3>
       <ul className="mt-4 space-y-0.5">
         {links.map((link, i) => (
           <li key={`${link.href}-${i}`}>
-            <Link
-              href={link.href}
-              className="-mx-3 block rounded-md px-3 py-1.5 text-[13px] text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
-            >
+            <Link href={link.href} className={linkClass}>
               {link.label}
             </Link>
           </li>
         ))}
+        {title === "Legal" && (
+          <li>
+            <CookiePreferencesLink className={`${linkClass} w-full`} />
+          </li>
+        )}
       </ul>
     </nav>
   )

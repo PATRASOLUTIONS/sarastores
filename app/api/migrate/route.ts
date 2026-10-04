@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const data = await request.json()
-    const result = await migrateFromLocalStorage(data)
+    const result = await migrateFromLocalStorage("legacy_local_storage", JSON.stringify(data))
     return NextResponse.json(result)
   } catch (error) {
     console.error("Error migrating data:", error)

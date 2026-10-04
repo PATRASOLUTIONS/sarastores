@@ -86,7 +86,7 @@ export async function GET(
       // Try matching by ObjectId first, fallback to string
       const objectIds = enabledProductIds.map(id => {
         try { return new ObjectId(id); } catch { return null; }
-      }).filter(Boolean);
+      }).filter((id): id is ObjectId => id !== null);
 
       // First try to fetch by ObjectId (for ids that are valid ObjectId hex strings)
       let productDocs: any[] = []

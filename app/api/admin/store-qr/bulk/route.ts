@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const { ObjectId } = await import("mongodb")
     const objectIds = storeIds.map((id) => {
       try { return new ObjectId(id) } catch { return null }
-    }).filter(Boolean)
+    }).filter((id): id is InstanceType<typeof ObjectId> => id !== null)
 
     const stores = await storesCol.find({ _id: { $in: objectIds }, isActive: true }).toArray()
 

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useQuery } from "@tanstack/react-query"
 import { LinearGradient } from "expo-linear-gradient"
-import { useLocalSearchParams, useRouter } from "expo-router"
+import { useLocalSearchParams } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
   ActivityIndicator,
@@ -62,7 +62,6 @@ function sortProducts(list: Product[], sort: Sort): Product[] {
 
 export default function ProductsScreen() {
   const { tokens, brand } = useTheme()
-  const router = useRouter()
   const params = useLocalSearchParams<{ q?: string }>()
   const incoming = typeof params.q === "string" ? params.q : ""
 

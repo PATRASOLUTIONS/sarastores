@@ -36,8 +36,40 @@ export async function loginWithGoogle(idToken: string): Promise<AuthUser> {
   return persist(pair)
 }
 
-export async function signup(name: string, email: string, password: string): Promise<void> {
-  await api.post("/api/auth/signup", { name, email, password })
+/**
+ * Account creation.
+ *
+ * Terms and privacy-notice consent are mandatory server-side. Marketing flags
+ * are severable and default to off — bundling them into signup would make the
+ * consent conditional, which the DPDP Act does not allow.
+ */
+export interface SignupInput {
+  name: string
+  email: string
+  password: string
+  acceptTerms: boolean
+  acceptPrivacyNotice: boolean
+  marketingEmail?: boolean
+  marketingWhatsapp?: boolean
+  marketingSms?: boolean
+  noticeVersion?: string
+}
+
+export async function signup(input: SignupInput): Promise<void> {
+  await api.post("/api/auth/signup", {
+    name: input.name,
+    email: input.email,
+    password: input.password,
+    // The web form has a confirm field; the app validates inline instead, but
+    // the shared schema still requires the value to be present and matching.
+    confirmPassword: input.password,
+    acceptTerms: input.acceptTerms,
+    acceptPrivacyNotice: input.acceptPrivacyNotice,
+    marketingEmail: input.marketingEmail ?? false,
+    marketingWhatsapp: input.marketingWhatsapp ?? false,
+    marketingSms: input.marketingSms ?? false,
+    noticeVersion: input.noticeVersion,
+  })
 }
 
 export async function logout(): Promise<void> {

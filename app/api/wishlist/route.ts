@@ -10,6 +10,13 @@ const addToWishlistSchema = z.object({
   productId: z.string().min(1, 'Product ID is required'),
 })
 
+type WishlistDocument = {
+  userId: string
+  items: string[]
+  createdAt?: Date
+  updatedAt?: Date
+}
+
 export async function GET(request: Request) {
   try {
     // Authoritative user id from the signed session — never trust client input.
@@ -18,7 +25,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Authentication required" }, { status: 401 })
     }
 
-    const wishlistCollection = await getCollection("wishlists")
+    const wishlistCollection = await getCollection<WishlistDocument>("wishlists")
     const wishlist = await wishlistCollection.findOne({ userId })
 
     if (!wishlist) {
@@ -27,7 +34,7 @@ export async function GET(request: Request) {
 
     // If we have product IDs, fetch the full product details
     if (wishlist.items && wishlist.items.length > 0) {
-      const productsCollection = await getCollection("products")
+      const productsCollection = await getCollection<{ _id: ObjectId | string }>("products")
       const productIds = wishlist.items.map((id: string) => {
         try {
           return new ObjectId(id)
@@ -75,7 +82,7 @@ export async function POST(request: Request) {
 
     const { productId } = parsed.data
 
-    const wishlistCollection = await getCollection("wishlists")
+    const wishlistCollection = await getCollection<WishlistDocument>("wishlists")
 
     // Check if wishlist exists
     const wishlist = await wishlistCollection.findOne({ userId })
@@ -124,7 +131,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ message: "Product ID is required" }, { status: 400 })
     }
 
-    const wishlistCollection = await getCollection("wishlists")
+    const wishlistCollection = await getCollection<WishlistDocument>("wishlists")
 
     // Remove product from wishlist
     await wishlistCollection.updateOne({ userId }, { $pull: { items: productId }, $set: { updatedAt: new Date() } })

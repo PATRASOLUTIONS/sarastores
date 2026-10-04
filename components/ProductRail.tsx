@@ -40,11 +40,20 @@ export default function ProductRail({ rail }: { rail: Rail }) {
         </button>
 
         <div ref={scrollerRef} className="scrollbar-hide flex gap-4 overflow-x-auto scroll-smooth px-1">
-          {rail.products.map((p) => (
-            <div key={p.id || p._id} className="w-44 flex-shrink-0 sm:w-52 md:w-60">
-              <CategoryProductCard product={p} />
-            </div>
-          ))}
+          {rail.products.map((p) => {
+            const product = {
+              ...p,
+              id: p.id || p._id,
+              name: p.name,
+              price: p.price,
+              image: p.image,
+            }
+            return (
+              <div key={product.id} className="w-44 flex-shrink-0 sm:w-52 md:w-60">
+                <CategoryProductCard product={product} />
+              </div>
+            )
+          })}
         </div>
 
         <button

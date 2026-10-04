@@ -112,7 +112,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<{ orderId: str
       },
       theme: { color: "#0F2557" },
     })
-  } catch (error) {
+  } catch {
     // The SDK rejects on user dismissal as well as on failure; both mean no
     // order should be created.
     throw new PaymentCancelledError()

@@ -18,6 +18,13 @@ interface RazorpayIntegration {
   paymentMode: 'wallet' | 'direct';
   commissionPercent: number;
   allowedDomains: string[];
+  credentials: Partial<Record<'test' | 'live', {
+    keyId?: string;
+    keySecretEnc?: string;
+    keySecretIv?: string;
+    keySecretTag?: string;
+  }>>;
+  defaultEnvironment: 'test' | 'live';
   webhookSecret?: string;
   razorpayAccountId?: string;
   razorpayAccountStatus?: 'pending' | 'active' | 'inactive';

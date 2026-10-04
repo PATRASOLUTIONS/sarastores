@@ -274,7 +274,7 @@ export default function ProductScreen() {
               ))
             ) : (
               <Text style={[styles.body, { color: tokens.textTertiary }]}>
-                Specifications for this product aren't published yet.
+                Specifications for this product aren&apos;t published yet.
               </Text>
             )
           ) : null}
@@ -315,7 +315,7 @@ export default function ProductScreen() {
               </View>
             ) : (
               <Text style={[styles.body, { color: tokens.textTertiary }]}>
-                EMI isn't available on this product.
+                EMI isn&apos;t available on this product.
               </Text>
             )
           ) : null}
@@ -344,7 +344,7 @@ export default function ProductScreen() {
 
           {tab === "FAQs" ? (
             <Text style={[styles.body, { color: tokens.textTertiary }]}>
-              Questions about delivery, installation or warranty? Contact our support team and we'll help.
+              Questions about delivery, installation or warranty? Contact our support team and we&apos;ll help.
             </Text>
           ) : null}
         </View>

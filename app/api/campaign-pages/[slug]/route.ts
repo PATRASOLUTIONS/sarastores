@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { ObjectId, type WithId, type Document } from "mongodb";
 
 export async function GET(req: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
@@ -15,7 +15,7 @@ export async function GET(req: Request, context: { params: Promise<{ slug: strin
     }
 
     // Populate products
-    let products = [];
+    let products: WithId<Document>[] = [];
     if (campaign.productIds && campaign.productIds.length > 0) {
       // Filter out invalid IDs to prevent cast errors
       const validIds = campaign.productIds

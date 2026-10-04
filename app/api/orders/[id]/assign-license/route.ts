@@ -5,6 +5,25 @@ import { getCollection, createObjectId } from '@/lib/db-service'
 import { sendEmail } from '@/lib/email'
 import { emailTemplates } from '@/lib/emailTemplates'
 
+interface OrderDocument {
+  _id: ObjectId | string | { $oid: string }
+  id?: string
+  orderId?: string
+  customer?: {
+    email?: string
+    name?: string
+    firstName?: string
+    lastName?: string
+  }
+  shippingAddress?: { email?: string }
+  licenseKey?: string
+  licenseKeys?: string[]
+  licenseAssignedAt?: Date
+  status?: string
+  updatedAt?: Date
+  timeline?: Array<{ date: string; status: string; description: string }>
+}
+
 /**
  * POST /api/orders/[id]/assign-license
  * 
@@ -45,7 +64,7 @@ export async function POST(
       )
     }
 
-    const ordersCollection = await getCollection('orders')
+    const ordersCollection = await getCollection<OrderDocument>('orders')
     // Use `license_keys` collection for license storage as requested
     const licenseKeysCollection = await getCollection('license_keys')
     const softwareProductsCollection = await getCollection('software_products')

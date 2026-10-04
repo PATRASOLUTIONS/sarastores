@@ -36,7 +36,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ sku:
     if (updateData.description !== undefined && updateData.description !== null) {
       updateFields.description = updateData.description
     }
-    if (updateData.price !== undefined && updateData.price !== null && updateData.price !== '') {
+    if (updateData.price !== undefined && updateData.price !== null) {
       updateFields.price = updateData.price
     }
     if (updateData.category !== undefined && updateData.category !== null) {

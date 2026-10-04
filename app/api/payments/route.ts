@@ -49,7 +49,10 @@ export async function GET(request: Request) {
             if (!p.status && fetched.status) p.status = fetched.status
             if (!p.createdAt && fetched.created_at) p.createdAt = new Date(fetched.created_at * 1000)
           } catch (err) {
-            console.error(`Failed to fetch Razorpay payment ${p.razorpayPaymentId}:`, err?.message || err)
+            console.error(
+              `Failed to fetch Razorpay payment ${p.razorpayPaymentId}:`,
+              err instanceof Error ? err.message : err
+            )
           }
           
         }

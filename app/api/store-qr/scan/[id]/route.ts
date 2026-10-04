@@ -4,6 +4,20 @@ import { ObjectId } from "mongodb"
 
 const COLLECTION = "store_qr_codes"
 
+interface StoreQrDocument {
+  isActive?: boolean
+  targetUrl: string
+  scanCount?: number
+  lastScannedAt?: Date
+  updatedAt?: Date
+  scanHistory?: Array<{
+    timestamp: Date
+    userAgent: string
+    referer: string
+    ip: string
+  }>
+}
+
 // GET - Track a scan and redirect to the target URL
 // This is a PUBLIC endpoint (no auth required) - called when someone scans the QR code
 export async function GET(
@@ -20,7 +34,7 @@ export async function GET(
       )
     }
 
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<StoreQrDocument>(COLLECTION)
     const qr = await collection.findOne({ _id: new ObjectId(id) })
 
     if (!qr) {

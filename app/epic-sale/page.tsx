@@ -349,8 +349,8 @@ export default function EpicSalePage() {
                 <div className="max-w-7xl mx-auto">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                         <div className="text-center md:text-left">
-                            <h4 className="text-2xl md:text-3xl font-black text-white">{SALE_CONFIG.storeName}</h4>
-                            <p className="text-blue-200 text-sm mt-1">{SALE_CONFIG.storeTagline}</p>
+                            <h4 className="text-2xl md:text-3xl font-black text-white">{SALE_CONFIG.saraStore.name}</h4>
+                            <p className="text-blue-200 text-sm mt-1">{SALE_CONFIG.saraStore.tagline}</p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-4 md:gap-6 text-sm">
                             {STORE_LOCATIONS.map((loc, i) => (

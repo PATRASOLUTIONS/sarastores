@@ -227,9 +227,12 @@ const TermsAndConditionsPage = () => (
         </h2>
         <p>
           Users are responsible for maintaining the confidentiality of their login
-          credentials. Sara Mobiles and Electronics sells to adults only. If under 18,
-          purchases must be made under parental supervision. We reserve the right to
-          refuse service, cancel orders, or suspend accounts at our discretion.
+          credentials. You must be at least 18 years old to create an account or place
+          an order directly. By accepting these Terms, creating an account, or placing
+          an order, you confirm that you are 18 or older. If you are under 18, a parent
+          or legal guardian must create the account and complete the purchase on your
+          behalf. We do not ask for your date of birth during sign-up. We reserve the
+          right to refuse service, cancel orders, or suspend accounts at our discretion.
         </p>
 
         <h2 className="heading-3 mt-8 mb-3 text-brand-primary">

@@ -59,12 +59,13 @@ export async function setFooterData(data: any) {
 }
 import { connectToDatabase } from "./mongodb"
 import { isMediaUrl } from "./media"
-import { type Collection, ObjectId } from "mongodb"
+import { type Collection, type Document, ObjectId } from "mongodb"
 
 // Collection names constant
 export const COLLECTIONS = {
   PRODUCTS: "products",
   USERS: "users",
+  CONSENT_RECORDS: "consent_records",
   ORDERS: "orders",
   CATEGORIES: "categories",
   SUB_CATEGORIES: "sub_categories",
@@ -81,10 +82,12 @@ export const COLLECTIONS = {
   SLIDES: "product_slides",
 } as const
 
-export async function getCollection(collectionName: string): Promise<Collection> {
+export async function getCollection<TSchema extends Document = Document>(
+  collectionName: string
+): Promise<Collection<TSchema>> {
   try {
     const { db } = await connectToDatabase()
-    return db.collection(collectionName)
+    return db.collection<TSchema>(collectionName)
   } catch (error) {
     console.error(`Error getting collection ${collectionName}:`, error)
     throw error

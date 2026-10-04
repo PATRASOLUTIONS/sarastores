@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router"
 import { useState } from "react"
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native"
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput } from "react-native"
 import { AuthShell, Notice } from "@/components/AuthShell"
 import { api } from "@/api/client"
 import { useTheme } from "@/theme/ThemeContext"

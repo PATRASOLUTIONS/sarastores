@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { User, Package, Heart, Settings, Bell, LogOut } from "lucide-react"
+import { User, Package, Heart, Settings, Bell, LogOut, ShieldCheck } from "lucide-react"
 
 interface AccountClientShellProps {
   user: {
@@ -37,6 +37,7 @@ export default function AccountClientShell({ user, children }: AccountClientShel
     { href: "/dashboard/orders", icon: <Package className="h-5 w-5" />, label: "Orders" },
     { href: "/dashboard/wishlist", icon: <Heart className="h-5 w-5" />, label: "Wishlist" },
     { href: "/account/preferences", icon: <Bell className="h-5 w-5" />, label: "Communication Preferences" },
+    { href: "/account/privacy", icon: <ShieldCheck className="h-5 w-5" />, label: "Privacy & My Data" },
     { href: "/dashboard/settings", icon: <Settings className="h-5 w-5" />, label: "Addresses & Settings" },
   ]
 

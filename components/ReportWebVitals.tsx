@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { hasConsent, onConsentChange } from "@/lib/consent-client"
 
 type WebVitalMetric = {
   name: string
@@ -52,24 +53,37 @@ export default function ReportWebVitals() {
   const subscribed = useRef(false)
 
   useEffect(() => {
-    if (subscribed.current) return
     if (typeof window === "undefined") return
-    subscribed.current = true
 
-    // Fire-and-forget; the component must always render null.
-    import("web-vitals")
-      .then((mod) => {
-        if (!mod) return
-        const { onINP, onLCP, onCLS, onFCP, onTTFB } = mod
-        if (typeof onINP === "function") onINP(postMetric)
-        if (typeof onLCP === "function") onLCP(postMetric)
-        if (typeof onCLS === "function") onCLS(postMetric)
-        if (typeof onFCP === "function") onFCP(postMetric)
-        if (typeof onTTFB === "function") onTTFB(postMetric)
-      })
-      .catch(() => {
-        // web-vitals is optional — silently ignore if unavailable
-      })
+    /**
+     * DPDP: page-performance metrics are tied to a page path and a visitor's
+     * session, so they are treated as consent-based analytics rather than
+     * strictly necessary. Subscribing is deferred until consent exists, and
+     * re-checked if the visitor accepts later in the same page view.
+     */
+    const subscribe = () => {
+      if (subscribed.current) return
+      if (!hasConsent("analytics")) return
+      subscribed.current = true
+
+      // Fire-and-forget; the component must always render null.
+      import("web-vitals")
+        .then((mod) => {
+          if (!mod) return
+          const { onINP, onLCP, onCLS, onFCP, onTTFB } = mod
+          if (typeof onINP === "function") onINP(postMetric)
+          if (typeof onLCP === "function") onLCP(postMetric)
+          if (typeof onCLS === "function") onCLS(postMetric)
+          if (typeof onFCP === "function") onFCP(postMetric)
+          if (typeof onTTFB === "function") onTTFB(postMetric)
+        })
+        .catch(() => {
+          // web-vitals is optional — silently ignore if unavailable
+        })
+    }
+
+    subscribe()
+    return onConsentChange(subscribe)
   }, [])
 
   return null

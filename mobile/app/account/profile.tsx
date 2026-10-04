@@ -115,7 +115,7 @@ export default function ProfileScreen() {
                 <Text style={[styles.readonlyText, { color: tokens.textSecondary }]}>{user?.email}</Text>
               </View>
               <Text style={[styles.hint, { color: tokens.textTertiary }]}>
-                Your email is used to sign in and can't be changed here.
+                Your email is used to sign in and can&apos;t be changed here.
               </Text>
             </View>
 

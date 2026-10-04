@@ -14,7 +14,6 @@ interface Prize {
   weightMultiplier?: number
   dateRanges?: { startDate: string; endDate: string }[]
   timeSlots?: { startTime: string; endTime: string }[]
-  [key: string]: unknown
 }
 
 function isPrizeAvailable(
@@ -66,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase()
     const participantsCol = await getCampaignCollection(campaignSlug, "participants")
-    const inventoryCol = await getCampaignCollection(campaignSlug, "inventory")
+    const inventoryCol = await getCampaignCollection<Prize>(campaignSlug, "inventory")
     const couponCodesCol = await getCampaignCollection(campaignSlug, "couponCodes")
 
     let participant
@@ -97,13 +96,13 @@ export async function POST(request: NextRequest) {
 
     const allPrizes = await inventoryCol.find().toArray()
 
-    const couponCounts = await couponCodesCol.aggregate([
+    const couponCounts = await couponCodesCol.aggregate<{ _id: string; count: number }>([
       { $match: { isUsed: false } },
       { $group: { _id: "$prizeName", count: { $sum: 1 } } }
     ]).toArray()
 
     const couponCountMap: Record<string, number> = {}
-    couponCounts.forEach((c: { _id: string; count: number }) => { couponCountMap[c._id] = c.count })
+    couponCounts.forEach((c) => { couponCountMap[c._id] = c.count })
 
     const availablePrizes = allPrizes.filter((prize: Prize) => {
       if (prize.prizeName === "BETTER LUCK NEXT TIME") return false

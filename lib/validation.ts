@@ -80,6 +80,21 @@ export const RegisterSchema = z.object({
   acceptTerms: z.literal(true, {
     errorMap: () => ({ message: 'You must accept the terms and conditions' }),
   }),
+  // Separate from acceptTerms: DPDP Section 6(1) consent must be "informed",
+  // which means acknowledging the privacy notice is its own affirmative act.
+  acceptPrivacyNotice: z.literal(true, {
+    errorMap: () => ({ message: 'You must confirm you have read the privacy notice' }),
+  }),
+  /**
+   * Marketing consent is optional and defaults to false. Making it a condition
+   * of registration would make the consent neither free nor unconditional,
+   * which Section 6(1) forbids.
+   */
+  marketingEmail: z.boolean().optional().default(false),
+  marketingWhatsapp: z.boolean().optional().default(false),
+  marketingSms: z.boolean().optional().default(false),
+  /** Echoed back so the consent record names the exact notice shown. */
+  noticeVersion: z.string().max(50).optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],

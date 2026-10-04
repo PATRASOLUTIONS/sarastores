@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import * as dbService from "@/lib/db-service"
 import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS } from "@/lib/db-service"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Document } from "mongodb"
 import { handleApiError } from "@/lib/api-error"
 import { isAdmin } from "@/lib/auth"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
@@ -34,7 +34,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Use a custom getByIdWithProjection if projection is needed
     let product: any
     if (projection) {
-      const collection = await dbService.getCollection(COLLECTIONS.PRODUCTS)
+      const collection = await dbService.getCollection<Document & {
+        _id: ObjectId | string
+      }>(COLLECTIONS.PRODUCTS)
       // Try slug first, then ObjectId, then string _id, then id field
       let doc = null
       doc = await collection.findOne({ slug: id }, { projection })
