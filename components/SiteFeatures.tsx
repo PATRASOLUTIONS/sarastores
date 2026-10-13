@@ -49,7 +49,7 @@ export default function SiteFeatures() {
     return (
         <div className={`grid grid-cols-2 md:grid-cols-${Math.min(features.length, 4)} gap-3 mb-6`}>
             {features.map((feature) => {
-                const Icon = (LucideIcons as any)[feature.icon] || LucideIcons.HelpCircle
+                const Icon = Object.entries(LucideIcons.icons).find(([name]) => name === feature.icon)?.[1] || LucideIcons.HelpCircle
                 const colorClass = COLOR_MAP[feature.color] || COLOR_MAP.blue
 
                 return (

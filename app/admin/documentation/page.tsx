@@ -10,6 +10,7 @@ import {
     Info, ExternalLink, ArrowRight, LayoutTemplate, Download, Clock, Palette, Store, UserPlus
 } from "lucide-react"
 import Link from "next/link"
+import type { SVGProps } from "react"
 
 export default function DocumentationPage() {
 
@@ -289,7 +290,7 @@ export default function DocumentationPage() {
                                     </div>
                                 </div>
                                 <p className="text-sm text-gray-600 mb-4 italic border-l-2 border-gray-200 pl-3">
-                                    "{page.desc}"
+                                    &quot;{page.desc}&quot;
                                 </p>
                                 <div className="space-y-3 mb-6 flex-grow">
                                     {page.features.map((feat, i) => (
@@ -573,7 +574,7 @@ export default function DocumentationPage() {
     )
 }
 
-function LayoutDashboardIcon(props: any) {
+function LayoutDashboardIcon(props: SVGProps<SVGSVGElement>) {
     return (
         <svg
             {...props}

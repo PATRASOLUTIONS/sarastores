@@ -91,34 +91,34 @@ export async function GET(_request: NextRequest) {
 
     const email = typeof account.email === "string" ? account.email : null
 
-    const data: Record<string, { description: string; records: unknown }> = {}
+    const recordLimit = 5000
+    const data: Record<string, { description: string; records: unknown; truncated: boolean }> = {}
 
     for (const { collection, label } of BY_USER_ID) {
-      try {
-        const records = await db.collection(collection).find({ userId }).limit(5000).toArray()
-        if (records.length) data[collection] = { description: label, records: scrub(records) }
-      } catch {
-        /* collection may not exist in this environment */
+      const records = await db.collection(collection).find({ userId }).limit(recordLimit + 1).toArray()
+      if (records.length) data[collection] = {
+        description: label, records: scrub(records.slice(0, recordLimit)), truncated: records.length > recordLimit,
       }
     }
 
     if (email) {
       for (const { collection, label } of BY_EMAIL) {
-        try {
-          const records = await db.collection(collection).find({ email }).limit(5000).toArray()
-          if (records.length) data[collection] = { description: label, records: scrub(records) }
-        } catch {
-          /* collection may not exist in this environment */
+        const records = await db.collection(collection).find({ email }).limit(recordLimit + 1).toArray()
+        if (records.length) data[collection] = {
+          description: label, records: scrub(records.slice(0, recordLimit)), truncated: records.length > recordLimit,
         }
       }
     }
 
-    const consentHistory = await getConsentHistory(userId).catch(() => [])
+    const consentHistory = await getConsentHistory(userId)
 
     const payload = {
       export: {
         generatedAt: new Date().toISOString(),
         generatedFor: email,
+        maximumRecordsPerCollection: recordLimit,
+        partial: Object.values(data).some((entry) => entry.truncated),
+        fullExportAssistance: "If any collection is truncated, contact the Grievance Officer for the remaining records.",
         legalBasis:
           "Digital Personal Data Protection Act 2023, section 11 (Right to access information about personal data)",
         privacyNoticeVersion: PRIVACY_NOTICE_VERSION,

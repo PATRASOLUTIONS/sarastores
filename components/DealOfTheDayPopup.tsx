@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { PartyPopper, X, ArrowRight, Tag } from "lucide-react"
 import { fetchWithCache } from "@/utils/cache"
+import { catalogProductListResponseSchema } from "@/utils/catalog"
 import { selectDeals, discountPct, getTimeLeft, DEALS_ANCHOR_ID } from "@/utils/deals"
 
 const SESSION_KEY = "sara:deal-popup-seen"
@@ -40,9 +41,10 @@ export default function DealOfTheDayPopup() {
         if (!r.ok) throw new Error("Failed to fetch products")
         return r.json()
       },
+      catalogProductListResponseSchema,
       DATA_TTL
     )
-      .then((data: any[]) => {
+      .then((data) => {
         if (cancelled) return
         const deals = selectDeals(data)
         if (deals.length === 0) return
@@ -50,9 +52,7 @@ export default function DealOfTheDayPopup() {
         setTopDiscount(discountPct(deals[0]))
         timer = setTimeout(() => !cancelled && setOpen(true), OPEN_DELAY_MS)
       })
-      .catch(() => {
-        /* no deals, no popup */
-      })
+      .catch(error => console.error("Failed to load promotional deals", error))
 
     return () => {
       cancelled = true

@@ -1,157 +1,72 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MongoServerError, ObjectId } from "mongodb"
 import { getCollection } from "@/lib/db-service"
-import QRCode from "qrcode"
+import { connectToDatabase } from "@/lib/mongodb"
 import { requireAdmin } from "@/lib/auth"
-
-const COLLECTION = "store_qr_codes"
-const STORES_COLLECTION = "store_locations"
-
-const QR_TYPES = [
-  { type: "google_maps" as const, getTargetUrl: (store: any) => store.googleMapLocation || "" },
-  { type: "whatsapp" as const, getTargetUrl: () => "https://whatsapp.com/channel/0029Va6Q9GO35fLwtGQiLr0u" },
-  { type: "instagram" as const, getTargetUrl: () => "https://www.instagram.com/saramobilesandelectronics/" },
-]
+import { getOriginFromHeaders } from "@/lib/seo-metadata"
+import { BulkStoreQrSchema, StoreHttpUrlSchema } from "@/lib/validation"
+import { createTrackedStoreQr, normalizeStoreQr, STORE_QR_DEFAULT_URLS, StoreQrError, storeQrScanUrl } from "@/lib/store-qr"
+import type { StoreQrDocument, StoreQrType } from "@/lib/store-qr"
+import type { StoredStoreLocation } from "@/lib/store-locations"
 
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
-
   try {
-    const body = await request.json()
-    const { storeIds } = body as { storeIds: string[] }
-
-    if (!storeIds || !Array.isArray(storeIds) || storeIds.length === 0) {
-      return NextResponse.json(
-        { success: false, message: "storeIds array is required" },
-        { status: 400 }
-      )
-    }
-
-    const storesCol = await getCollection(STORES_COLLECTION)
-    const qrCol = await getCollection(COLLECTION)
-
-    // Fetch requested stores
-    const { ObjectId } = await import("mongodb")
-    const objectIds = storeIds.map((id) => {
-      try { return new ObjectId(id) } catch { return null }
-    }).filter((id): id is InstanceType<typeof ObjectId> => id !== null)
-
-    const stores = await storesCol.find({ _id: { $in: objectIds }, isActive: true }).toArray()
-
-    if (stores.length === 0) {
-      return NextResponse.json(
-        { success: false, message: "No active stores found for the given IDs" },
-        { status: 404 }
-      )
-    }
-
-    // Find existing QR codes for these stores
-    const storeIdStrings = stores.map((s) => s._id.toString())
-    const existingQRs = await qrCol.find({ storeId: { $in: storeIdStrings } }).toArray()
-
-    // Map existing QR types per store
-    const existingMap = new Map<string, Set<string>>()
-    for (const qr of existingQRs) {
-      const sid = qr.storeId
-      if (!existingMap.has(sid)) existingMap.set(sid, new Set())
-      existingMap.get(sid)!.add(qr.type)
-    }
-
-    // Create missing QR codes for each store
-    const created: any[] = []
-    const skipped: { storeId: string; storeName: string; reason: string }[] = []
-
-    for (const store of stores) {
-      const sid = store._id.toString()
-      const existingTypes = existingMap.get(sid) || new Set()
-
-      for (const qrType of QR_TYPES) {
-        if (existingTypes.has(qrType.type)) {
-          skipped.push({
-            storeId: sid,
-            storeName: store.shopName || "",
-            reason: `${qrType.type} already exists`,
-          })
-          continue
+    const parsed = BulkStoreQrSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
+    const ids = parsed.data.storeIds
+    const origin = await getOriginFromHeaders()
+    const storesCol = await getCollection<StoredStoreLocation>("store_locations")
+    const qrCol = await getCollection<StoreQrDocument>("store_qr_codes")
+    const { client } = await connectToDatabase()
+    const session = client.startSession()
+    try {
+      const result = await session.withTransaction(async () => {
+        const stores = await storesCol.find({ _id: { $in: ids.map(id => new ObjectId(id)) }, isActive: true }, { session }).toArray()
+        if (stores.length !== ids.length) throw new StoreQrError("One or more requested stores are missing or inactive", 404)
+        const existing = await qrCol.find({ storeId: { $in: ids } }, { session }).toArray()
+        const existingPairs = new Set(existing.map(qr => `${qr.storeId}:${qr.type}`))
+        const docs: StoreQrDocument[] = []
+        const skipped: Array<{ storeId: string; storeName: string; reason: string }> = []
+        for (const store of stores) {
+          const storeId = store._id.toString()
+          const storeName = store.shopName || ""
+          for (const type of ["google_maps", "whatsapp", "instagram"] satisfies StoreQrType[]) {
+            if (existingPairs.has(`${storeId}:${type}`)) {
+              skipped.push({ storeId, storeName, reason: `${type} already exists` })
+              continue
+            }
+            const targetUrl = type === "google_maps" ? store.googleMapLocation : STORE_QR_DEFAULT_URLS[type]
+            if (!targetUrl) {
+              skipped.push({ storeId, storeName, reason: `No URL configured for ${type}` })
+              continue
+            }
+            if (!StoreHttpUrlSchema.safeParse(targetUrl).success) throw new StoreQrError(`Store has an invalid ${type} URL`, 400)
+            docs.push(await createTrackedStoreQr({ storeId, storeName, type, label: "", targetUrl }, origin))
+          }
         }
-
-        const targetUrl = qrType.getTargetUrl(store)
-        if (!targetUrl) {
-          skipped.push({
-            storeId: sid,
-            storeName: store.shopName || "",
-            reason: `No URL configured for ${qrType.type}`,
-          })
-          continue
+        if (docs.length) await qrCol.insertMany(docs, { session })
+        return {
+          success: true, message: `Created ${docs.length} QR codes, skipped ${skipped.length}`,
+          created: docs.map(qr => {
+            if (!qr._id) throw new Error("Generated QR ID is missing")
+            return { ...normalizeStoreQr({ ...qr, _id: qr._id }), scanUrl: storeQrScanUrl(qr._id.toHexString(), origin) }
+          }),
+          skipped,
+          summary: { storesProcessed: stores.length, totalCreated: docs.length, totalSkipped: skipped.length },
         }
-
-        const scanUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sarastores.com"}/api/store-qr/scan/pending`
-
-        // We'll generate the real scan URL after insert
-        const qrDataUrl = await QRCode.toDataURL(targetUrl, {
-          width: 400,
-          margin: 2,
-          color: { dark: "#000000", light: "#FFFFFF" },
-        })
-
-        const qrDoc = {
-          storeId: sid,
-          storeName: store.shopName || "",
-          type: qrType.type,
-          label: "",
-          targetUrl,
-          qrDataUrl,
-          scanCount: 0,
-          lastScannedAt: null,
-          scanHistory: [],
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-
-        const result = await qrCol.insertOne(qrDoc)
-
-        // Now update qrDataUrl to encode the real scan URL
-        const realScanUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sarastores.com"}/api/store-qr/scan/${result.insertedId.toString()}`
-        const realQrDataUrl = await QRCode.toDataURL(realScanUrl, {
-          width: 400,
-          margin: 2,
-          color: { dark: "#000000", light: "#FFFFFF" },
-        })
-
-        await qrCol.updateOne(
-          { _id: result.insertedId },
-          { $set: { qrDataUrl: realQrDataUrl, updatedAt: new Date() } }
-        )
-
-        created.push({
-          id: result.insertedId.toString(),
-          storeId: sid,
-          storeName: store.shopName || "",
-          type: qrType.type,
-          targetUrl,
-          scanUrl: realScanUrl,
-          qrDataUrl: realQrDataUrl,
-        })
-      }
+      })
+      if (!result) throw new Error("QR generation transaction did not commit")
+      return NextResponse.json(result)
+    } finally {
+      await session.endSession()
     }
-
-    return NextResponse.json({
-      success: true,
-      message: `Created ${created.length} QR codes, skipped ${skipped.length}`,
-      created,
-      skipped,
-      summary: {
-        storesProcessed: stores.length,
-        totalCreated: created.length,
-        totalSkipped: skipped.length,
-      },
-    })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
+    if (error instanceof StoreQrError) return NextResponse.json({ success: false, message: error.message }, { status: error.status })
+    if (error instanceof MongoServerError && error.code === 11000) return NextResponse.json({ success: false, message: "QR creation conflicted with another request; reload and retry" }, { status: 409 })
     console.error("Error in bulk QR generation:", error)
-    return NextResponse.json(
-      { success: false, message: "Failed to generate QR codes in bulk" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, message: "Failed to generate QR codes in bulk" }, { status: 500 })
   }
 }

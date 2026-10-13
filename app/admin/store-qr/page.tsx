@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api-client"
 import QRCode from "qrcode"
 import { generateA5Pamphlet, generateSinglePamphlet } from "@/lib/qr-pamphlet"
 import type { QRType } from "@/lib/qr-pamphlet"
+import type { LucideIcon } from "lucide-react"
 import { useState, useEffect, useCallback } from "react"
 import { toast } from "react-hot-toast"
 import Link from "next/link"
@@ -77,13 +78,13 @@ const DEFAULT_URLS: Record<string, string> = {
   instagram: "https://www.instagram.com/saramobilesandelectronics/",
 }
 
-const QR_TYPES = [
+const QR_TYPES: Array<{ value: string; label: string; icon: LucideIcon; color: string; placeholder: string; fixed?: boolean }> = [
   { value: "google_maps", label: "Google Maps Review", icon: MapPin, color: "#4285F4", placeholder: "https://maps.app.goo.gl/..." },
   { value: "whatsapp", label: "WhatsApp Channel", icon: MessageCircle, color: "#25D366", placeholder: "https://whatsapp.com/channel/...", fixed: true },
   { value: "instagram", label: "Instagram Profile", icon: Instagram, color: "#E4405F", placeholder: "https://instagram.com/...", fixed: true },
 ]
 
-const TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; label: string }> = {
+const TYPE_CONFIG: Record<string, { icon: LucideIcon; color: string; bg: string; label: string }> = {
   google_maps: { icon: MapPin, color: "#4285F4", bg: "bg-blue-50", label: "Google Maps" },
   whatsapp: { icon: MessageCircle, color: "#25D366", bg: "bg-green-50", label: "WhatsApp" },
   instagram: { icon: Instagram, color: "#E4405F", bg: "bg-pink-50", label: "Instagram" },
@@ -600,7 +601,7 @@ export default function StoreQRPage() {
 
                   {/* Label */}
                   {qr.label && (
-                    <p className="text-xs text-gray-500 text-center mb-2 truncate">"{qr.label}"</p>
+                    <p className="text-xs text-gray-500 text-center mb-2 truncate">&quot;{qr.label}&quot;</p>
                   )}
 
                   {/* Scan Stats */}
@@ -750,11 +751,11 @@ export default function StoreQRPage() {
                   value={createForm.targetUrl}
                   onChange={(e) => setCreateForm({ ...createForm, targetUrl: e.target.value })}
                   placeholder={selectedType?.placeholder}
-                  readOnly={!!QR_TYPES.find((t) => t.value === createForm.type && (t as any).fixed)}
+                  readOnly={!!QR_TYPES.find((t) => t.value === createForm.type && t.fixed)}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent read-only:bg-gray-50 read-only:text-gray-500"
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  {QR_TYPES.find((t) => t.value === createForm.type && (t as any).fixed)
+                  {QR_TYPES.find((t) => t.value === createForm.type && t.fixed)
                     ? "This link is common for all stores and cannot be changed"
                     : "When someone scans the QR, they'll be redirected to this URL"}
                 </p>

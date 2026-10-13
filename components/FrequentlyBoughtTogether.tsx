@@ -67,7 +67,7 @@ export default function FrequentlyBoughtTogether({
     setAdding(true)
     try {
       for (const item of [product, ...chosen]) {
-        await addToCart({
+        const added = await addToCart({
           id: item.id,
           name: item.name,
           price: item.price,
@@ -76,6 +76,7 @@ export default function FrequentlyBoughtTogether({
           color: null,
           size: null,
         })
+        if (!added) return
       }
       toast.success(`Added ${chosen.length + 1} items to your cart`)
     } catch {

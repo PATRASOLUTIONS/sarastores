@@ -8,7 +8,7 @@ export async function GET() {
     const { db } = await connectToDatabase()
 
     // Try to get offers from the database
-    let offers = await db.collection("offers").find({}).limit(50).toArray()
+    const offers = await db.collection("offers").find({}).limit(50).toArray()
 
     // Return whatever is present in the DB (may be empty)
 

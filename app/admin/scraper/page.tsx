@@ -20,6 +20,7 @@ import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
 import SelectWithAdd from "@/components/admin/SelectWithAdd"
 import { SAP_OWNED_FIELDS, SCRAPER_LABELS, type ScraperSource } from "@/lib/scrapers/types"
+import { z } from "zod"
 
 interface ScrapedProduct {
   source: ScraperSource
@@ -78,7 +79,18 @@ function detectSource(url: string): ScraperSource | null {
 }
 
 /** Amazon keeps its own tuned endpoint; everything else goes through /api/scrape. */
-function normaliseAmazon(raw: any, url: string): ScrapedProduct {
+function normaliseAmazon(value: unknown, url: string): ScrapedProduct {
+  const raw = z.object({
+    asin: z.string(), name: z.string(), category: z.string(), subCategory: z.string(), brand: z.string(),
+    price: z.number().finite(), mrp: z.number().finite(), description: z.string(),
+    images: z.array(z.string()), features: z.array(z.string()),
+    technicalDetails: z.record(z.string()), manufacturerInfo: z.string(),
+    manufacturerImages: z.array(z.string()), whatsIncluded: z.array(z.string()), warranty: z.string(),
+    rating: z.number().finite(), reviewCount: z.number().finite(), stock: z.number().finite(),
+    reviewsSummary: z.object({ customerReviews: z.array(z.object({
+      rating: z.number().finite(), title: z.string().optional().default(""), text: z.string(),
+    })) }),
+  }).parse(value)
   return {
     source: "amazon",
     sourceUrl: url,
@@ -96,7 +108,7 @@ function normaliseAmazon(raw: any, url: string): ScrapedProduct {
     description: raw?.description ?? "",
     images: raw?.images ?? [],
     features: raw?.features ?? [],
-    technicalDetails: raw?.technicalDetails ?? raw?.specifications ?? {},
+    technicalDetails: raw.technicalDetails,
     manufacturerInfo: raw?.manufacturerInfo ?? "",
     manufacturerImages: raw?.manufacturerImages ?? [],
     whatsIncluded: raw?.whatsIncluded ?? [],

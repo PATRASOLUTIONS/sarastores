@@ -8,7 +8,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 
-const OUT = path.join(process.cwd(), ".scrape-probe", "pdfs")
+const OUT = path.join(process.cwd(), "documents", "private-artifacts", "archive", "scrape-probe", "pdfs")
 
 const PHOTOS = [
   "https://media3.bsh-group.com/Product_Shots/23139045_CST22U14PI_STP_def.jpg",

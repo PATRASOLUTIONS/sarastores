@@ -15,8 +15,11 @@ Every claim below was verified against the code on 2026-09-05. Where an older do
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Dev server on `localhost:3000` |
-| `npx tsc --noEmit` | **The only real type check. Always run after TS changes.** |
-| `npm run build` | Production build. Silently ignores *all* TS and ESLint errors (see [next.config.mjs](next.config.mjs)) |
+| `npx tsc --noEmit` | **Explicit TypeScript check. Always run after TS changes.** |
+| `npm run build` | Production build with TypeScript and recommended ESLint checks enforced; verified against isolated fixtures |
+| `npm run lint` | Recommended Next.js ESLint checks; zero errors, with non-blocking warnings remaining |
+| `npm test` | 328 isolated Node.js regression tests; no live payment, email or fulfillment calls |
+| `npm run check:deployment` | Secret-safe production configuration preflight; no provider/DB calls. Passing syntax checks does not certify hosted credentials |
 | `npm start` | Serve the production build |
 | `npm run seed:admin` | Create the initial admin user (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) |
 | `npm run indexes:core` | Create core MongoDB indexes (reads `.env`) |
@@ -24,10 +27,13 @@ Every claim below was verified against the code on 2026-09-05. Where an older do
 | `npm run migrate:schema:dry` | Dry-run the canonical product-schema migration — **always run before the real one** |
 | `npm run migrate:schema` | Apply the product-schema migration |
 | `npm run migrate:schema:strict` | Same, but fails hard on any non-conforming document |
+| `npx tsx scripts/backfill-order-ids.ts` | Read-only missing-order-ID preview. `--apply` explicitly commits acknowledged transactional batches; requires backup and authorization on real data |
 
-`npm run lint` is **broken** — no ESLint config or dependency is installed. Don't rely on it.
+ESLint is configured and installed. Do not disable checks to bypass existing failures. See [the production-readiness audit](documents/production-readiness-audit.md) for measured blockers.
 
-**There is no test framework.** No jest/vitest/playwright config, no `test` script. Files named `scripts/test-*` are manual smoke scripts run by hand against a live server.
+`npm test` uses the Node.js test runner. There is no Jest, Vitest or Playwright configuration. Browser/database smoke scripts require explicitly isolated local fixtures; do not point them at live customer data.
+
+The development-only catalogue seed defaults to preview; `{ "apply": true }` explicitly replaces `source="excel"` products in a transaction. The legacy localStorage migration is disabled and returns 410 instead of falsely claiming an import.
 
 ---
 
@@ -40,7 +46,7 @@ Every claim below was verified against the code on 2026-09-05. Where an older do
 5. **Use [lib/db-service.ts](lib/db-service.ts) for data access.** [lib/db.ts](lib/db.ts) is `@deprecated` (10 files still import it); it now delegates to the same database, but new code must not use it.
 6. **Never hardcode a connection string, key, or password** — including in `scripts/`. Use `process.env` with no fallback.
 7. **Always `normalizeId()` before returning documents.** Clients see a string `id`; they must never see `_id`.
-8. **Run `npx tsc --noEmit`.** `next build` will not surface type errors.
+8. **Run `npx tsc --noEmit`.** Also run `npm run build`; its TypeScript and ESLint gates must remain enabled.
 
 ---
 
@@ -315,14 +321,14 @@ Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Polic
 
 | Issue | Detail |
 | --- | --- |
-| **Post-order cart is never cleared** | [app/api/orders/route.ts](app/api/orders/route.ts) line ~583 calls `getCollection("cart")` — singular. The real collection is `carts`, so the `updateOne` (with `upsert: false`) silently matches nothing. |
+| Post-order cart cleanup | The audit corrected order cleanup to use `carts`, matching the shopping data layer. |
 | Guard coverage | Only 77 of 219 route files call a `lib/auth.ts` guard. The middleware policy table covers most gaps today, but any new path outside those prefixes is unprotected by default. |
 | Unguarded debug/test routes | `/api/debug/session`, `/api/debug/cookie`, `/api/test-db`, `/api/test-connection`, `/api/test-product-update`, `/api/debug-categories` have no auth. |
 | `/vendor` gating | Client-only; anonymous users receive the HTML shell before the redirect fires. Convert to the `/account` server-gate pattern. |
 | Validation | ~5 routes use [lib/validation.ts](lib/validation.ts); most write routes accept unvalidated JSON. |
 | `@/lib/db` importers | 10 files (payment verify, payments, product SKU, scrape-amazon, scraped-products, software-licenses, advertisements `[id]`, both partner Razorpay routes). Migrate them to `db-service`. |
 | Rate limiting | In-memory only; resets on every cold start. Needs Redis. |
-| Build safety | `ignoreBuildErrors` + `ignoreDuringBuilds` mean a broken build ships. `npx tsc --noEmit` is the only gate, and there are no tests. |
+| Build safety | TypeScript and recommended ESLint gates are enforced; all 328 isolated regression tests, the strict local production build and current local configuration preflight pass. Non-blocking lint warnings and external deployment gates remain. See [the audit](documents/production-readiness-audit.md). |
 | Image allowlist | [next.config.mjs](next.config.mjs) `remotePatterns` ends with a catch-all `hostname: "**"`, which defeats the point of the allowlist. |
 | Firebase | Referenced in CSP, preconnects and the image allowlist, but no Firebase SDK is installed and no upload route exists. |
 
@@ -330,7 +336,7 @@ Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Polic
 
 ## 12. Corrections to older docs
 
-`CLAUDE.legacy.md`, `AGENTS.md` and several files under `docs/` predate the current code. Verified differences:
+`documents/legacy/CLAUDE.legacy.md`, `AGENTS.md` and several files under `documents/` predate the current code. Verified differences:
 
 | Older claim | Reality today |
 | --- | --- |
@@ -346,12 +352,16 @@ Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Polic
 | "`app/page.tsx` is `"use client"`" | It is a server component rendering a client `HomeExperience`. |
 | Collections `cart`, `wishlist`, `software`, `inquiries`, `vendors`, `notifications`, `licenses`, `store_purchases`, `scrape_jobs`, `categories_test`, `orders_test` | Do not exist. Real names: `carts`, `wishlists`, `software_products`, `contact_inquiries`. The rest are fictional. |
 | "`app/api/checkout/` route" | Does not exist. Checkout posts to `/api/orders` and `/api/payment/*`. |
-| "Abandoned-cart cron is live" | Disabled. Superseded by `/api/cron/cart-recovery` + [lib/retention/cart-recovery.ts](lib/retention/cart-recovery.ts), which nothing currently triggers. The 10 docs in `docs/abandoned-cart/` all describe it as working. |
+| "Abandoned-cart cron is live" | Disabled. Superseded by `/api/cron/cart-recovery` + [lib/retention/cart-recovery.ts](lib/retention/cart-recovery.ts), which nothing currently triggers. The 10 docs in `documents/abandoned-cart/` all describe it as working. |
 
 ---
 
 ## 13. Repo hygiene
 
-Root-level `audit-ids.js`, `inspect-api.js`, `inspect-sample.js`, `inspect_order.js`, `exhaustive-audit.js`, `check-assignments.js`, `extract-docx.js`, `tmp-phase2-check.ts`, `order_dump.json`, `order_debug_dump.json` are one-off debug leftovers, not part of the app. **The two JSON dumps contain real order data — treat as PII.** `README.md` is placeholder scratch notes. `pdf-gen/` and `proposal/` generate sales collateral, not product code. `CLAUDE.legacy.md` is the superseded version of this file, kept only because the repo is not under version control — delete it once you've confirmed nothing else references it.
+Documentation is consolidated under [documents/](documents/), including reports, proposals and design references. Open [documents/index.html](documents/index.html) for the offline catalogue, or [README.md](README.md) for the project directory map.
 
-**Other docs:** [AGENTS.md](AGENTS.md) (partly stale — see §12), [FEATURES.md](FEATURES.md) (business-facing catalogue), [GAPS.md](GAPS.md), [PLATFORM_COMPARISON.md](PLATFORM_COMPARISON.md), and `docs/` (`abandoned-cart/`, `analysis/`, `architecture/`, `brand/`, `features/`, `operations/`, `partner-api/`, `security/`, `spin-wheel/`, `whatsapp/`). Treat all of them as historical unless verified.
+One-off tools (`audit-ids.mjs`, `inspect-*.mjs`, `exhaustive-audit.mjs`, `check-assignments.mjs`, `tmp-phase2-check.ts`) live in `documents/archive/tools/diagnostics/`; the DOCX extractor is in `documents/archive/tools/`. Run them from the repository root so existing environment-file and working-directory assumptions remain valid. Do not run data-access tools merely to validate a move.
+
+**Order dumps in `documents/private-artifacts/audit/` contain real customer data — treat as PII.** The private-artifact tree is excluded from the catalogue, version control and deployment. The PDF generators are retained in `documents/archive/tools/pdf-gen/`, with their output in `documents/design/wireframes/`. Sales collateral lives in `documents/proposals/`; the superseded guide is preserved at `documents/legacy/CLAUDE.legacy.md`. Active operational/runtime scripts, tests and the separate mobile app remain in their conventional locations.
+
+**Other docs:** [AGENTS.md](AGENTS.md) (partly stale — see §12), [FEATURES.md](documents/FEATURES.md) (business-facing catalogue), [GAPS.md](documents/GAPS.md), [PLATFORM_COMPARISON.md](documents/PLATFORM_COMPARISON.md), and `documents/` (`abandoned-cart/`, `analysis/`, `architecture/`, `brand/`, `features/`, `operations/`, `partner-api/`, `security/`, `spin-wheel/`, `whatsapp/`). Treat all of them as historical unless verified.

@@ -429,8 +429,8 @@ function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
                         </div>
                         {product.mrp && (
                             <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] text-gray-400">MRP:</span>
-                                <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
+                                <span className="text-[10px] text-gray-600">MRP:</span>
+                                <span className="text-xs text-gray-600 line-through">₹{product.mrp}</span>
                             </div>
                         )}
                     </div>

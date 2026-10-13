@@ -54,12 +54,12 @@ export default function AdminClientShell({
     if (!pathname.startsWith("/admin")) return
     if (!user) return
 
-    const role = (user as any)?.role as string | undefined
+    const role = user.role
     if (role === "admin" || role === "superadmin") {
       return
     }
 
-    const dashboardAccess = (user as any)?.dashboardAccess === true
+    const dashboardAccess = user.dashboardAccess === true
     if (!dashboardAccess) {
       toast.error("You don't have dashboard access. Redirecting to home.")
       router.replace("/")
@@ -69,7 +69,7 @@ export default function AdminClientShell({
     // Non-admin staff with dashboardAccess are restricted to their
     // allowedPages list. If the list is empty/missing, they only get the
     // /admin/dashboard landing page.
-    const allowedPages: string[] | undefined = (user as any)?.allowedPages
+    const allowedPages = user.allowedPages
     const effectiveAllowed: string[] = Array.isArray(allowedPages) && allowedPages.length > 0
       ? allowedPages
       : ["/admin/dashboard"]

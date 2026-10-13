@@ -93,7 +93,7 @@ export default function ExcelUpload({
     }
   }
 
-  const addMissingFields = (rows: Record<string, any>[]) => {
+  const addMissingFields = (rows: Record<string, unknown>[]) => {
     return rows.map(row => {
       const newRow = { ...row }
       REQUIRED_COLUMNS.forEach(col => {

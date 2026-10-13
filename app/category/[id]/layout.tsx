@@ -1,107 +1,31 @@
-import { Metadata } from 'next'
-import { connectToDatabase } from '@/lib/mongodb'
-import { getOriginFromHeaders } from '@/lib/seo-metadata'
-import { CategoryJsonLdServer } from './CategoryJsonLdServer'
-
-async function getSettings() {
-  try {
-    const { db } = await connectToDatabase()
-    return await db.collection('settings').findOne({})
-  } catch {
-    return null
-  }
-}
-
-async function getCategory(id: string) {
-  try {
-    const { db } = await connectToDatabase()
-    const { ObjectId } = await import('mongodb')
-
-    if (ObjectId.isValid(id)) {
-      const byObjectId = await db.collection('categories').findOne({ _id: new ObjectId(id) })
-      if (byObjectId) return byObjectId
-    }
-
-    const byId = await db.collection('categories').findOne({ id })
-    if (byId) return byId
-
-    // The route also accepts a display name, optionally hyphenated.
-    const name = decodeURIComponent(id).replace(/-/g, ' ')
-    return await db
-      .collection('categories')
-      .findOne({ name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } })
-  } catch {
-    return null
-  }
-}
+import type { Metadata } from "next"
+import type { ReactNode } from "react"
+import { notFound } from "next/navigation"
+import { getSeoCategory } from "@/lib/seo-category"
+import { titleCaseLabel } from "@/lib/product-display"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
+import { CategoryJsonLdServer } from "./CategoryJsonLdServer"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
-  const origin = await getOriginFromHeaders()
-
-  try {
-    const [category, settings] = await Promise.all([getCategory(id), getSettings()])
-
-    if (!category) {
-      return { title: 'Category Not Found', description: 'The requested category could not be found.' }
-    }
-
-    const companyName = settings?.companyName || settings?.siteName || 'Sara Electronics'
-    const catName = category.name
-      ? category.name.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-      : 'Category'
-    const title = `${catName} | ${companyName}`
-    const description = category.description || `Shop ${catName} online at best prices. Wide range of ${catName.toLowerCase()} with fast delivery at ${companyName}.`
-    const pageUrl = `${origin}/category/${id}`
-    const imageUrl = category.image
-      ? (category.image.startsWith('http') ? category.image : `${origin}${category.image.startsWith('/') ? '' : '/'}${category.image}`)
-      : `${origin}/og-image.jpg`
-
-    return {
-      title,
-      description,
-      metadataBase: new URL(origin),
-      alternates: {
-        canonical: pageUrl,
-        languages: {
-          "en-IN": pageUrl,
-          "x-default": pageUrl,
-        },
-      },
-      openGraph: {
-        title: `${catName} - Shop Online`,
-        description,
-        url: pageUrl,
-        siteName: companyName,
-        images: [{ url: imageUrl, width: 1200, height: 630, alt: catName }],
-        locale: 'en_IN',
-        type: 'website',
-      },
-      twitter: { card: 'summary_large_image', title, description, images: [imageUrl] },
-      robots: { index: true, follow: true, 'max-image-preview': 'large' },
-    }
-  } catch {
-    return { title: 'Category', description: 'Browse category products.' }
-  }
+  const [origin, settings, category] = await Promise.all([
+    getOriginFromHeaders(), getSiteSettings(), getSeoCategory(id),
+  ])
+  if (!category) notFound()
+  const companyName = getCompanyName(settings)
+  const name = titleCaseLabel(String(category.name))
+  return buildPageMetadata({
+    title: `${name} | ${companyName}`,
+    description: category.description || `Explore ${name.toLowerCase()} at ${companyName}. Compare products, prices, availability and delivery options.`,
+    pageUrl: `${origin}/category/${encodeURIComponent(category.slug || category.id)}`,
+    origin, companyName, imageUrl: category.image, noIndex: category.isEnabled === false,
+  })
 }
 
-export default async function CategoryLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode
-  params: Promise<{ id: string }>
+export default async function CategoryLayout({ children, params }: {
+  children: ReactNode; params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const origin = await getOriginFromHeaders()
-
-  // Decode the category name from the URL param
-  const decodedName = decodeURIComponent(id).replace(/-/g, ' ')
-
-  return (
-    <>
-      <CategoryJsonLdServer categoryName={decodedName} origin={origin} />
-      {children}
-    </>
-  )
+  if (!await getSeoCategory(id)) notFound()
+  return <><CategoryJsonLdServer categoryName={id} origin={await getOriginFromHeaders()} />{children}</>
 }

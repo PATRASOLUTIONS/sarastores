@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useState, useEffect, useRef } from "react"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
 
@@ -23,6 +23,7 @@ export interface User {
     country?: string
   }
   createdAt?: string
+  dateOfBirth?: string
   emailVerified?: boolean
 }
 
@@ -69,14 +70,15 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const authEpoch = useRef(0)
   const router = useRouter()
   const SESSION_TIMEOUT = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   const ACTIVITY_TIMEOUT = 12 * 60 * 60 * 1000 // 12 hours of inactivity
   const COOKIE_GRACE_PERIOD = 250 // allow Set-Cookie propagation before redirecting
 
-  const clearStoredAuth = () => {
+  const clearStoredAuth = (preserveRedirect = false) => {
     localStorage.removeItem("user")
-    localStorage.removeItem("redirectAfterLogin")
+    if (!preserveRedirect) localStorage.removeItem("redirectAfterLogin")
     localStorage.removeItem("lastActivityTime")
     localStorage.removeItem("loginTime")
   }
@@ -92,9 +94,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return Number.isFinite(timestamp) ? timestamp : null
   }
 
-  const clearClientAuthState = () => {
+  const clearClientAuthState = (preserveRedirect = false) => {
+    authEpoch.current++
     setUser(null)
-    clearStoredAuth()
+    clearStoredAuth(preserveRedirect)
   }
 
   const persistClientUser = (nextUser: User | null) => {
@@ -122,6 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const refreshUserProfile = async (baseUser: User) => {
+    const epoch = authEpoch.current
     try {
       if (!baseUser.id) {
         return
@@ -133,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const fullUser = await res.json().catch(() => null)
-      if (fullUser && !getSessionInvalidReason()) {
+      if (fullUser && epoch === authEpoch.current && !getSessionInvalidReason()) {
         persistClientUser(fullUser)
       }
     } catch (error) {
@@ -142,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const fetchSessionUser = async (): Promise<User | null> => {
+    const epoch = authEpoch.current
     try {
       const response = await fetch("/api/auth/session", {
         cache: "no-store",
@@ -152,10 +157,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await response.json().catch(() => null)
+      if (epoch !== authEpoch.current) return null
       if (!data?.user) {
+        clearClientAuthState(true)
         return null
       }
 
+      const invalidReason = getSessionInvalidReason()
+      if (invalidReason) {
+        invalidateSession(invalidReason, true)
+        return null
+      }
       persistClientUser(data.user)
       return data.user
     } catch (error) {
@@ -220,30 +232,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null
   }
 
-  const getStoredUserIfValid = (notifyOnInvalid = false): User | null => {
-    const invalidReason = getSessionInvalidReason()
-
-    if (invalidReason) {
-      invalidateSession(invalidReason, notifyOnInvalid)
-      return null
-    }
-
-    const storedUser = localStorage.getItem("user")
-
-    if (!storedUser) {
-      setUser(null)
-      return null
-    }
-
-    try {
-      return JSON.parse(storedUser)
-    } catch (error) {
-      console.error("Failed to parse user from storage", error)
-      invalidateSession()
-      return null
-    }
-  }
-
   // Function to handle user activity
   const handleUserActivity = () => {
     // Store the current timestamp when user is active
@@ -295,39 +283,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user])
 
   useEffect(() => {
-    // Check if user is logged in from localStorage
     const checkAuth = async () => {
       try {
-        // Server-side session is the source of truth (httpOnly, signed cookie).
-        // We poll for it briefly so we don't race against Set-Cookie propagation
-        // on production deploys (CDN/proxy delays).
-        let sessionUser: User | null = null
-        const isProd = process.env.NODE_ENV === "production"
-        const maxWait = isProd ? 8000 : 5000
-        const start = Date.now()
-        while (!sessionUser && Date.now() - start < maxWait) {
-          sessionUser = await fetchSessionUser()
-          if (!sessionUser) {
-            await new Promise((r) => setTimeout(r, 200))
-          }
-        }
-
-        // Only fall back to localStorage if the server confirms no session.
-        // This prevents logging a user out just because the cosmetic
-        // localStorage entry has not yet been written.
-        const parsedUser = sessionUser ? null : getStoredUserIfValid(true)
-        const activeUser = sessionUser || parsedUser
-
-        if (!activeUser) {
-          return
-        }
-
-        // Set a minimal user immediately then try to refresh full user from API
-        setUser(activeUser)
-        await refreshUserProfile(activeUser)
-
-        // Check session timeout on initial load
-        checkSessionTimeout()
+        // Only an explicit login needs to wait for Set-Cookie propagation.
+        // A stored UI hint must never resurrect a missing server session.
+        const sessionUser = await fetchSessionUser()
+        if (sessionUser) await refreshUserProfile(sessionUser)
       } finally {
         setIsLoading(false)
       }
@@ -338,20 +299,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const syncAuthState = () => {
-      const nextUser = getStoredUserIfValid()
-
-      if (!nextUser) {
-        fetchSessionUser().catch((error) => {
-          console.warn("Failed to sync auth session", error)
-        })
-        return
-      }
-
-      setUser((currentUser) => {
-        const currentSerialized = currentUser ? JSON.stringify(currentUser) : null
-        const nextSerialized = JSON.stringify(nextUser)
-
-        return currentSerialized === nextSerialized ? currentUser : nextUser
+      fetchSessionUser().catch((error) => {
+        console.warn("Failed to sync auth session", error)
       })
     }
 
@@ -361,27 +310,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Only update user state if the data is meaningfully different.
-    // Shallow-compare the serialized forms before writing to avoid
-    // triggering downstream effects (cart reload, etc.) on every
-    // focus/visibility-change that doesn't actually change the user.
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key !== "user") return
-      try {
-        const nextUser = e.newValue ? JSON.parse(e.newValue) : null
-        setUser((current) => {
-          const nextSerialized = e.newValue
-          const currentSerialized = current ? JSON.stringify(current) : null
-          if (currentSerialized === nextSerialized) return current
-          return nextUser
-        })
-      } catch {
-        // ignore parse errors
-      }
+      syncAuthState()
     }
 
     const handleFocusSync = () => {
-      // Avoid re-fetching if a session poll is already in-flight
       if (document.hidden) return
       syncAuthState()
     }
@@ -462,6 +396,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.fetch = patchedFetch as typeof window.fetch
 
     const onAuthExpired = () => {
+      authEpoch.current++
       // Use functional setState to read the *current* user without making
       // this effect re-subscribe on every user change. We also clear local
       // state and call the server-side logout to drop the (invalid) cookie
@@ -519,6 +454,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false
       }
 
+      authEpoch.current++
       // Store minimal user data in localStorage (id + role only).
       // Full user profile is fetched from the server on page load.
       localStorage.setItem("user", JSON.stringify({
@@ -720,8 +656,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const logout = () => {
-    setUser(null)
-    clearStoredAuth()
+    clearClientAuthState()
 
     // Clear cookies by making a request to a logout endpoint
     fetch("/api/auth/logout", { method: "POST" })

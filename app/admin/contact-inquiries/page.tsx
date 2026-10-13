@@ -18,13 +18,19 @@ import {
 } from "lucide-react"
 
 interface ContactInquiry {
-    _id: string
+    id: string
     name: string
     email: string
     phone: string
     status: "new" | "contacted" | "resolved" | "archived"
     createdAt: string
     updatedAt: string
+    company?: string
+    enquiryType?: string
+    city?: string
+    subject?: string
+    message?: string
+    consent?: boolean
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -120,7 +126,9 @@ export default function ContactInquiriesPage() {
         const matchesSearch =
             inquiry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             inquiry.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            inquiry.phone.includes(searchQuery)
+            (inquiry.phone || "").includes(searchQuery) ||
+            [inquiry.company, inquiry.city, inquiry.enquiryType, inquiry.subject, inquiry.message]
+                .some((value) => value?.toLowerCase().includes(searchQuery.toLowerCase()))
         return matchesStatus && matchesSearch
     })
 
@@ -186,7 +194,7 @@ export default function ContactInquiriesPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Search by name, email, or phone..."
+                        placeholder="Search by name, contact, company, or enquiry..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
@@ -214,6 +222,9 @@ export default function ContactInquiriesPage() {
                                     Contact Info
                                 </th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    Enquiry
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Status
                                 </th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -227,7 +238,7 @@ export default function ContactInquiriesPage() {
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredInquiries.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-16 text-center">
+                                    <td colSpan={6} className="px-6 py-16 text-center">
                                         <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500 text-lg">No inquiries found</p>
                                         <p className="text-gray-400 text-sm mt-1">
@@ -239,7 +250,7 @@ export default function ContactInquiriesPage() {
                                 </tr>
                             ) : (
                                 filteredInquiries.map((inquiry) => (
-                                    <tr key={inquiry._id} className="hover:bg-gray-50 transition-colors">
+                                    <tr key={inquiry.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
@@ -247,9 +258,20 @@ export default function ContactInquiriesPage() {
                                                 </div>
                                                 <div>
                                                     <div className="font-semibold text-gray-900">{inquiry.name}</div>
-                                                    <div className="text-sm text-gray-500">Customer</div>
+                                                    <div className="text-sm text-gray-500">{inquiry.company || "Customer"}</div>
+                                                    {inquiry.city && <div className="text-xs text-gray-500">{inquiry.city}</div>}
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 min-w-[240px] max-w-md">
+                                            <p className="text-sm font-semibold text-gray-900">{inquiry.enquiryType || inquiry.subject || "General enquiry"}</p>
+                                            {inquiry.message && (
+                                                <details className="mt-2 text-sm text-gray-600">
+                                                    <summary className="cursor-pointer text-blue-600">View full message</summary>
+                                                    <p className="mt-2 whitespace-pre-wrap break-words">{inquiry.message}</p>
+                                                </details>
+                                            )}
+                                            {inquiry.consent === true && <p className="mt-2 text-xs text-gray-500">Terms and privacy accepted</p>}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="space-y-1">
@@ -270,9 +292,9 @@ export default function ContactInquiriesPage() {
                                         <td className="px-6 py-4">
                                             <select
                                                 value={inquiry.status}
-                                                onChange={(e) => handleStatusUpdate(inquiry._id, e.target.value)}
-                                                disabled={updating === inquiry._id}
-                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${STATUS_COLORS[inquiry.status]} ${updating === inquiry._id ? "opacity-50" : ""
+                                                onChange={(e) => handleStatusUpdate(inquiry.id, e.target.value)}
+                                                disabled={updating === inquiry.id}
+                                                className={`px-3 py-1.5 rounded-lg text-sm font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${STATUS_COLORS[inquiry.status]} ${updating === inquiry.id ? "opacity-50" : ""
                                                     }`}
                                             >
                                                 {Object.entries(STATUS_LABELS).map(([value, label]) => (
@@ -314,7 +336,7 @@ export default function ContactInquiriesPage() {
                                                     <Mail className="h-5 w-5" />
                                                 </a>
                                                 <button
-                                                    onClick={() => handleDelete(inquiry._id)}
+                                                    onClick={() => handleDelete(inquiry.id)}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                     title="Delete"
                                                 >

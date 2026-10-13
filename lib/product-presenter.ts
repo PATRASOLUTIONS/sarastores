@@ -20,6 +20,7 @@ import {
   getRatingInfo,
   productBadge,
   productBenefits,
+  type ProductDisplayInput,
 } from "@/lib/product-display"
 import { getLowestEmiPlan, isEmiAvailable } from "@/lib/emi"
 
@@ -41,7 +42,7 @@ export interface ProductDisplay {
   }
 }
 
-export function buildProductDisplay(product: any): ProductDisplay {
+export function buildProductDisplay(product: ProductDisplayInput): ProductDisplay {
   const price = Number(product?.price) || 0
   const mrp = getEffectiveMRP(product)
   const rating = getRatingInfo(product)
@@ -68,6 +69,6 @@ export function buildProductDisplay(product: any): ProductDisplay {
 }
 
 /** Attach `display` to a product without mutating the source document. */
-export function withProductDisplay<T extends Record<string, any>>(product: T): T & { display: ProductDisplay } {
+export function withProductDisplay<T extends ProductDisplayInput>(product: T): T & { display: ProductDisplay } {
   return { ...product, display: buildProductDisplay(product) }
 }

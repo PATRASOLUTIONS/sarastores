@@ -19,6 +19,7 @@ import { getSession } from "@/lib/auth"
 import { connectToDatabase } from "@/lib/mongodb"
 import { revokeAllForUser } from "@/lib/refresh-tokens"
 import { withdrawAllOptional } from "@/lib/consent"
+import { COLLECTION_UNSUBSCRIBE_TOKENS } from "@/lib/customer-profile"
 
 export const dynamic = "force-dynamic"
 
@@ -28,6 +29,7 @@ const PURGE_BY_USER_ID = [
   "wishlists",
   "compare",
   "customer_profiles",
+  COLLECTION_UNSUBSCRIBE_TOKENS,
   "customer_events",
   "device_tokens",
   "recently_viewed",

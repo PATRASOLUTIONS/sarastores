@@ -5,10 +5,17 @@ import { Mail, User, Lock } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 interface InStorePurchaseProps {
-  onVerified: (data: { employeeId: string; email: string }) => void
+  onVerified: (data: { employeeId: string; email: string; approvalId: string; approvalToken: string }) => void | Promise<void>
+  beforeVerify?: () => Promise<boolean>
+  checkout: {
+    items: Array<{ id?: string; productId?: string; sku?: string | null; quantity: number; color?: string | null; size?: string | null }>
+    couponCode?: string | null
+    redeemPoints?: number
+    fulfilment?: { method: "delivery" | "pickup"; storeId?: string }
+  }
 }
 
-export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
+export default function InStorePurchase({ onVerified, beforeVerify, checkout }: InStorePurchaseProps) {
   const [email, setEmail] = useState("")
   const [employeeId, setEmployeeId] = useState("")
   const [otp, setOtp] = useState("")
@@ -17,6 +24,7 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
   const [isValidating, setIsValidating] = useState(false)
   const [isValidEmployee, setIsValidEmployee] = useState(false)
   const [validationMessage, setValidationMessage] = useState("")
+  const [challengeId, setChallengeId] = useState("")
 
   // Validate employee when ID or email changes
   useEffect(() => {
@@ -72,10 +80,11 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
 
     setIsLoading(true)
     try {
+      if (beforeVerify && !await beforeVerify()) return
       const res = await fetch("/api/auth/store-purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, employeeId, action: "verify" })
+        body: JSON.stringify({ email, employeeId, action: "verify", checkout })
       })
 
       const data = await res.json()
@@ -84,6 +93,7 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
       }
 
       toast.success("OTP sent to your email")
+      setChallengeId(data.challengeId)
       setShowOtpInput(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send OTP")
@@ -100,10 +110,11 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
 
     setIsLoading(true)
     try {
+      if (beforeVerify && !await beforeVerify()) return
       const res = await fetch("/api/auth/store-purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, employeeId, otp, action: "validate" })
+        body: JSON.stringify({ email, employeeId, otp, action: "validate", checkout, challengeId })
       })
 
       const data = await res.json()
@@ -112,7 +123,7 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
       }
 
       toast.success("Verified successfully")
-      onVerified({ employeeId, email })
+      await onVerified({ employeeId, email, approvalId: data.approvalId, approvalToken: data.approvalToken })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Verification failed")
     } finally {
@@ -125,11 +136,12 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
       <div className="space-y-4">
         {/* Email input */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="store-purchase-email" className="block text-sm font-medium text-gray-700 mb-1">
             <Mail className="inline h-4 w-4 mr-1" />
             Email Address
           </label>
           <input
+            id="store-purchase-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -142,12 +154,13 @@ export default function InStorePurchase({ onVerified }: InStorePurchaseProps) {
 
         {/* Employee ID input */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="store-purchase-employee" className="block text-sm font-medium text-gray-700 mb-1">
             <User className="inline h-4 w-4 mr-1" />
             Employee ID
           </label>
           <div className="relative">
             <input
+              id="store-purchase-employee"
               type="text"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}

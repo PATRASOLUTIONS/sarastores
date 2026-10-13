@@ -6,6 +6,7 @@ import { useState, useEffect, use } from "react"
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, ShoppingBag, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
+import { AdminCustomerSchema, CustomerOrderSummaryListSchema } from "@/lib/validation"
 
 interface Order {
   id: string
@@ -43,17 +44,17 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         if (!customerResponse.ok) {
           throw new Error("Failed to fetch customer")
         }
-        const customerData = await customerResponse.json()
+        const customerData = AdminCustomerSchema.parse(await customerResponse.json())
 
         // Fetch orders for this customer
         const ordersResponse = await apiFetch(`/api/orders?userId=${id}`)
         if (!ordersResponse.ok) {
           throw new Error("Failed to fetch customer orders")
         }
-        const ordersData = await ordersResponse.json()
+        const ordersData = CustomerOrderSummaryListSchema.parse(await ordersResponse.json())
 
         // Calculate total spent
-        const totalSpent = ordersData.reduce((total: number, order: any) => total + order.total, 0)
+        const totalSpent = ordersData.reduce((total, order) => total + order.total, 0)
 
         setCustomer({
           ...customerData,

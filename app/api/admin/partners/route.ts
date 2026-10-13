@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuthorization } from '@/lib/auth';
 import { listPartners, createPartner } from '@/lib/partner/service';
-import { PartnerFilterParams } from '@/lib/partner/types';
+import { PartnerListQuerySchema, CreateAdminPartnerSchema } from '@/lib/validation';
 
 /**
  * GET /api/admin/partners
@@ -26,21 +26,17 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
-    const params: PartnerFilterParams = {
-      page: parseInt(searchParams.get('page') || '1', 10),
-      limit: parseInt(searchParams.get('limit') || '20', 10),
-      status: searchParams.get('status') as any || undefined,
-      tier: searchParams.get('tier') as any || undefined,
-      search: searchParams.get('search') || undefined,
-      sortBy: searchParams.get('sortBy') as any || 'createdAt',
-      sortOrder: searchParams.get('sortOrder') as any || 'desc',
-    };
+    const parsed = PartnerListQuerySchema.safeParse(Object.fromEntries(searchParams));
+    if (!parsed.success) return NextResponse.json(
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid partner filters' } }, { status: 400 }
+    );
+    const params = parsed.data;
     
     const result = await listPartners(params);
     
     // Transform partners for response
-    const partners = result.partners.map((partner: any) => ({
-      id: partner.id || partner._id?.toString(),
+    const partners = result.partners.map((partner) => ({
+      id: partner.id,
       companyName: partner.name,
       email: partner.email,
       phone: partner.phone,
@@ -90,43 +86,16 @@ export async function POST(request: NextRequest) {
   }
   
   try {
-    const body = await request.json();
-    
-    // Validate required fields
-    const validationErrors: string[] = [];
-    
-    if (!body.name && !body.companyName) validationErrors.push('name is required');
-    if (!body.email) validationErrors.push('email is required');
-    if (!body.phone) validationErrors.push('phone is required');
-    
-    if (!body.businessDetails) {
-      validationErrors.push('businessDetails is required');
-    } else {
-      if (!body.businessDetails.gstin) validationErrors.push('businessDetails.gstin is required');
-      if (!body.businessDetails.pan) validationErrors.push('businessDetails.pan is required');
-      if (!body.businessDetails.registeredAddress) {
-        validationErrors.push('businessDetails.registeredAddress is required');
-      }
-    }
-    
-    if (validationErrors.length > 0) {
+    const parsed = CreateAdminPartnerSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: { code: 'VALIDATION_ERROR', message: validationErrors.join('; ') } },
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid partner details', details: parsed.error.flatten() } },
         { status: 400 }
       );
     }
     
     // Create partner
-    const result = await createPartner({
-      name: body.name || body.companyName,
-      email: body.email,
-      phone: body.phone,
-      website: body.website,
-      businessDetails: body.businessDetails,
-      contactPerson: body.contactPerson,
-      tier: body.tier || 'starter',
-      commissionRate: body.commissionRate,
-    });
+    const result = await createPartner(parsed.data);
     
     const partner = result.partner;
     
@@ -148,11 +117,12 @@ export async function POST(request: NextRequest) {
         },
       },
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Admin Partners] Create error:', error);
+    const duplicate = error instanceof Error && error.message.includes('already exists');
     return NextResponse.json(
-      { success: false, error: { code: 'CREATION_FAILED', message: error.message || 'Failed to create partner' } },
-      { status: 400 }
+      { success: false, error: { code: duplicate ? 'DUPLICATE_EMAIL' : 'CREATION_FAILED', message: duplicate ? 'A partner with this email already exists' : 'Failed to create partner' } },
+      { status: duplicate ? 409 : 500 }
     );
   }
 }

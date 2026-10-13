@@ -146,7 +146,7 @@ export default function LoginPage() {
       <Header />
       <main className="flex flex-grow" id="main-content">
         {/* Left: Brand Panel */}
-        <div className="relative hidden overflow-hidden bg-gradient-to-br from-[#0F2557] via-[#12336E] to-[#1560BD] lg:flex lg:w-[46%]">
+        <div className="relative hidden overflow-hidden bg-[#0F2557] bg-gradient-to-br from-[#0F2557] via-[#12336E] to-[#1560BD] lg:flex lg:w-[46%]">
           <div className="absolute inset-0 opacity-[0.07]">
             <div className="absolute -left-10 top-16 h-72 w-72 rounded-full bg-white blur-3xl" />
             <div className="absolute -right-10 bottom-16 h-96 w-96 rounded-full bg-white blur-3xl" />
@@ -235,7 +235,7 @@ export default function LoginPage() {
 
             {errors.general && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-                <p className="text-sm text-red-600">{errors.general}</p>
+                <p className="text-sm text-red-700">{errors.general}</p>
               </div>
             )}
 
@@ -347,11 +347,11 @@ export default function LoginPage() {
 
             <p className="mt-5 text-center text-[11.5px] leading-relaxed text-slate-500">
               By signing in, you agree to our{" "}
-              <Link href="/terms-and-conditions" className="text-[#1560BD] hover:underline">
+              <Link href="/terms-and-conditions" className="text-[#1560BD] underline">
                 Terms
               </Link>{" "}
               and{" "}
-              <Link href="/privacy-policy" className="text-[#1560BD] hover:underline">
+              <Link href="/privacy-policy" className="text-[#1560BD] underline">
                 Privacy Policy
               </Link>
             </p>

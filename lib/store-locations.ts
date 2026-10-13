@@ -1,4 +1,26 @@
 import { getCollection } from "@/lib/db-service"
+import { absoluteSeoImage } from "@/lib/seo-metadata"
+import type { ObjectId, WithId } from "mongodb"
+
+export interface StoredStoreLocation {
+  _id?: ObjectId | string
+  id?: string
+  shopName?: string
+  locationDescription?: string
+  city?: string
+  state?: string
+  pincode?: string | number
+  mobileNo?: string | number
+  emailId?: string
+  shopTiming?: string
+  shopImage?: string
+  googleMapLocation?: string
+  latitude?: number
+  longitude?: number
+  isActive?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+}
 
 /**
  * Server-side access to `store_locations` for the local-SEO store pages.
@@ -49,7 +71,7 @@ function derivePincode(address: string): string {
   return match ? match[1] : ""
 }
 
-function toStoreLocation(doc: any): StoreLocation | null {
+function toStoreLocation(doc: WithId<StoredStoreLocation>): StoreLocation | null {
   const name = String(doc?.shopName || "").trim()
   if (!name) return null
 
@@ -77,12 +99,13 @@ function toStoreLocation(doc: any): StoreLocation | null {
 
 export async function getAllStoreLocations(): Promise<StoreLocation[]> {
   try {
-    const collection = await getCollection("store_locations")
+    const collection = await getCollection<StoredStoreLocation>("store_locations")
     const docs = await collection.find({ isActive: true }).sort({ shopName: 1 }).toArray()
     return docs
       .map(toStoreLocation)
       .filter((store): store is StoreLocation => store !== null && store.citySlug.length > 0)
-  } catch {
+  } catch (error) {
+    console.error("[Store locations] Failed to load active stores", error)
     // Store pages must not 500 the whole route when Mongo is unreachable.
     return []
   }
@@ -125,7 +148,7 @@ export function buildStoreJsonLd(store: StoreLocation, origin: string) {
     "@id": `${origin}/stores/${store.citySlug}/${store.slug}`,
     name: `Sara Electronics — ${store.name}`,
     url: `${origin}/stores/${store.citySlug}/${store.slug}`,
-    ...(store.image ? { image: store.image } : {}),
+    ...(store.image ? { image: absoluteSeoImage(store.image, origin) } : {}),
     ...(store.phone ? { telephone: store.phone } : {}),
     ...(store.email ? { email: store.email } : {}),
     address: {

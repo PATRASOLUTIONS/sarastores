@@ -9,7 +9,7 @@ export async function GET() {
         // Normalize and map to the format expected by the frontend
         const normalizedStores = stores.map(store => {
             const address = store.locationDescription || "";
-            // Coordinates are backfilled by scripts/backfill-store-coordinates.js;
+            // Coordinates are backfilled by scripts/backfill-store-coordinates.mjs;
             // fall back to parsing the map link for stores added since.
             const fallbackCoords = extractLatLng(store.googleMapLocation)
             const latitude = typeof store.latitude === "number" ? store.latitude : fallbackCoords.latitude
@@ -54,11 +54,22 @@ function derivePincode(address: string) {
 
 /** Last-resort city guess for stores that have not been geocoded yet. */
 function deriveCity(address: string) {
-    if (!address.includes(",")) return ""
-    const parts = address.split(",").map((p) => p.trim()).filter(Boolean)
-    const candidate = parts[parts.length - 2] || parts[parts.length - 1] || ""
-    const match = candidate.replace(/\d|-/g, "").trim()
-    return match.length > 2 ? match : ""
+    const canonical = (city: string) => {
+        const aliases: Record<string, string> = {
+            bangalore: "Bengaluru", banglaore: "Bengaluru", bengaluru: "Bengaluru",
+            mysore: "Mysuru", mysuru: "Mysuru", ballary: "Ballari", shimoga: "Shivamogga",
+        }
+        return aliases[city.toLowerCase()] || city
+    }
+    const postalCity = address.match(/(?:^|,)\s*([a-z][a-z\s]+?)\s*-\s*\d{6}\b/i)?.[1].trim()
+    if (postalCity && !/^(karnataka|india)$/i.test(postalCity)) return canonical(postalCity)
+    const parts = address.split(",").map((part) => part.replace(/\b\d{6}\b/g, "").trim())
+        .filter((part) => part && !/^(karnataka|india)[\s.-]*$/i.test(part))
+    const district = parts.at(-1) || ""
+    if (/\b(?:urban|rural)\b/i.test(district)) return canonical(district.replace(/\b(?:urban|rural)\b/gi, "").trim())
+    const candidate = parts.at(-2) || ""
+    const city = /^[a-z\s]+$/i.test(candidate) && !/\b(road|floor|ground|building|circle|taluk|colony|layout)\b/i.test(candidate) ? candidate : district
+    return /^[a-z\s]+$/i.test(city) ? canonical(city) : ""
 }
 
 function extractLatLng(url: string) {

@@ -2,29 +2,34 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import * as XLSX from "xlsx";
 import { normalizeProductForSchema } from "@/lib/product-schema";
+import { requireAdmin } from "@/lib/auth";
+import { handleApiError } from "@/lib/api-error";
 
 export async function GET() {
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard.response;
+  try {
   const { db } = await connectToDatabase();
   const [products, categories, subCategories] = await Promise.all([
     db.collection("products").find({}).toArray(),
     db.collection("categories").find({}).toArray(),
-    db.collection("sub-categories").find({}).toArray()
+    db.collection("sub_categories").find({}).toArray()
   ]);
 
   // Build lookup maps
   const categoryMap = new Map();
-  categories.forEach((cat: any) => {
+  categories.forEach((cat) => {
     categoryMap.set(String(cat._id), cat.name);
     categoryMap.set(String(cat.id), cat.name);
   });
 
   const subCategoryMap = new Map();
-  subCategories.forEach((sub: any) => {
+  subCategories.forEach((sub) => {
     subCategoryMap.set(String(sub._id), sub.name);
     subCategoryMap.set(String(sub.id), sub.name);
   });
 
-  const data: any[] = [];
+  const data: Record<string, unknown>[] = [];
   const seenSkus = new Set<string>();
 
   for (const product of products) {
@@ -51,7 +56,7 @@ export async function GET() {
     }
 
     // 3. Prepare the row with the requested columns including Active/Inactive status
-    const row: Record<string, any> = {
+    const row: Record<string, unknown> = {
       "itemno": itemno,
       "Name": canonical.name || product.name || "",
       "Active/Inactive": product.active === false ? "Inactive" : "Active",
@@ -81,8 +86,11 @@ export async function GET() {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="products-export-${new Date().toISOString().slice(0, 19)}.xlsx"`
+      "Content-Disposition": `attachment; filename="products-export-${new Date().toISOString().slice(0, 19)}.xlsx"`,
+      "Cache-Control": "no-store",
     }
   });
+  } catch (error) {
+    return handleApiError(error, "Failed to export products");
+  }
 }
-

@@ -5,6 +5,7 @@ import { Clock, MapPin, Phone } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { getStoreCities, getStoresByCity } from "@/lib/store-locations"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
 
 export const revalidate = 3600
 
@@ -20,14 +21,17 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { city: citySlug } = await params
   const stores = await getStoresByCity(citySlug)
-  if (stores.length === 0) return { title: "Store not found" }
+  if (stores.length === 0) notFound()
 
   const cityName = stores[0].city
-  return {
-    title: `Electronics Store in ${cityName} — ${stores.length} Sara Electronics Showrooms`,
-    description: `Find Sara Electronics stores in ${cityName}. Addresses, phone numbers, opening hours and directions for all ${stores.length} showrooms. Mobiles, TVs, refrigerators, washing machines and more.`,
-    alternates: { canonical: `/stores/${citySlug}` },
-  }
+  const [origin, settings] = await Promise.all([getOriginFromHeaders(), getSiteSettings()])
+  const companyName = getCompanyName(settings)
+  return buildPageMetadata({
+    title: `Electronics Stores in ${cityName} | ${companyName}`,
+    description: `Find ${stores.length} ${companyName} showrooms in ${cityName}. Get addresses, phone numbers, opening hours and directions.`,
+    pageUrl: `${origin}/stores/${encodeURIComponent(citySlug)}`,
+    origin, companyName, imageUrl: stores[0].image,
+  })
 }
 
 export default async function CityStoresPage({

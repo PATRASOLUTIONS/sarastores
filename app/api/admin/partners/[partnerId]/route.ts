@@ -17,6 +17,8 @@ import {
 import { getWalletByPartnerId } from '@/lib/partner/wallet';
 import { listPartnerAPIKeys } from '@/lib/partner/api-keys';
 import { getCollection } from '@/lib/db-service';
+import { publicRazorpayIntegration } from '@/lib/partner/razorpay-integration';
+import { UpdateAdminPartnerSchema, RegisterPartnerSchema } from '@/lib/validation';
 
 /**
  * GET /api/admin/partners/[partnerId]
@@ -72,7 +74,7 @@ export async function GET(
         commissionRate: partner.commissionRate,
         permissions: partner.permissions,
         documents: partner.documents,
-        razorpayIntegration: partner.razorpayIntegration || null,
+        razorpayIntegration: partner.razorpayIntegration ? publicRazorpayIntegration(partner.razorpayIntegration) : null,
         createdAt: partner.createdAt,
         updatedAt: partner.updatedAt,
         lastActiveAt: partner.lastActiveAt,
@@ -126,7 +128,11 @@ export async function PUT(
   
   try {
     const { partnerId } = await params;
-    const body = await request.json();
+    const parsed = UpdateAdminPartnerSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json(
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid partner update' } }, { status: 400 }
+    );
+    const body = parsed.data;
     
     // Find partner
     const partner = await getPartnerById(partnerId);
@@ -161,17 +167,22 @@ export async function PUT(
     }
     
     // Update other fields
-    const updates: any = {};
+    const updates: Parameters<typeof updatePartner>[1] = {};
     if (body.name !== undefined) updates.name = body.name;
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.website !== undefined) updates.website = body.website;
     
     if (Object.keys(updates).length > 0) {
-      await updatePartner(partner.id, updates);
+      if (!await updatePartner(partner.id, updates)) return NextResponse.json(
+        { success: false, error: { code: 'UPDATE_FAILED', message: 'Partner update did not match a record' } }, { status: 404 }
+      );
     }
     
     // Fetch updated partner
     const updatedPartner = await getPartnerById(partnerId);
+    if (!updatedPartner) return NextResponse.json(
+      { success: false, error: { code: 'NOT_FOUND', message: 'Partner no longer exists' } }, { status: 404 }
+    );
     
     return NextResponse.json({
       success: true,
@@ -214,7 +225,11 @@ export async function PATCH(
   
   try {
     const { partnerId } = await params;
-    const body = await request.json();
+    const parsed = UpdateAdminPartnerSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json(
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid partner update' } }, { status: 400 }
+    );
+    const body = parsed.data;
     
     // Find partner
     const partner = await getPartnerById(partnerId);
@@ -225,6 +240,12 @@ export async function PATCH(
         { status: 404 }
       );
     }
+    const contact = body.contactPerson ? RegisterPartnerSchema.shape.contactPerson.unwrap().safeParse({
+      ...partner.contactPerson, ...body.contactPerson,
+    }) : null;
+    if (contact && !contact.success) return NextResponse.json(
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'Contact person requires a valid name' } }, { status: 400 }
+    );
     
     // Handle status update
     if (body.status && body.status !== partner.status) {
@@ -263,7 +284,7 @@ export async function PATCH(
     }
     
     // Build updates object for other fields
-    const updates: any = {};
+    const updates: Parameters<typeof updatePartner>[1] = {};
     
     // Basic fields
     if (body.name !== undefined) updates.name = body.name;
@@ -283,20 +304,20 @@ export async function PATCH(
     }
     
     // Contact person
-    if (body.contactPerson) {
-      updates.contactPerson = {
-        ...partner.contactPerson,
-        ...body.contactPerson,
-      };
-    }
+    if (contact?.success) updates.contactPerson = contact.data;
     
     // Apply updates if any
     if (Object.keys(updates).length > 0) {
-      await updatePartner(partner.id, updates);
+      if (!await updatePartner(partner.id, updates)) return NextResponse.json(
+        { success: false, error: { code: 'UPDATE_FAILED', message: 'Partner update did not match a record' } }, { status: 404 }
+      );
     }
     
     // Fetch updated partner
     const updatedPartner = await getPartnerById(partnerId);
+    if (!updatedPartner) return NextResponse.json(
+      { success: false, error: { code: 'NOT_FOUND', message: 'Partner no longer exists' } }, { status: 404 }
+    );
     
     return NextResponse.json({
       success: true,
@@ -314,10 +335,10 @@ export async function PATCH(
         message: 'Partner updated successfully',
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Admin Partner PATCH] Error:', error);
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: error.message || 'Failed to update partner' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to update partner' } },
       { status: 500 }
     );
   }

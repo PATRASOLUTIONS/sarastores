@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, type SpinParticipant } from "@/lib/spin-wheel-campaigns"
+import type { Filter } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -15,9 +16,9 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20")
     const campaignSlug = searchParams.get("campaignId") || "default"
 
-    const participantsCol = await getCampaignCollection(campaignSlug, "participants")
+    const participantsCol = await getCampaignCollection<SpinParticipant>(campaignSlug, "participants")
 
-    const query: any = {}
+    const query: Filter<SpinParticipant> = {}
 
     if (search) {
       query.$or = [
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
       .toArray()
 
     return NextResponse.json({
-      participants: participants.map((p: any) => ({
+      participants: participants.map((p) => ({
         id: p._id.toString(),
         name: p.name,
         phone: p.phone,

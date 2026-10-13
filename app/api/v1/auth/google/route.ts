@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (resolved.status === "inactive") {
+      return NextResponse.json({ error: "This account is inactive" }, { status: 403 })
+    }
     const user = resolved.user
     const device: DeviceInfo = body?.device ?? {}
 

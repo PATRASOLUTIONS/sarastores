@@ -1,7 +1,15 @@
 /** Shared "Deal of the Day" selection logic, used by the homepage section and the promo popup. */
 
+interface DealProduct {
+  price?: number
+  mrp?: number
+  originalPrice?: number
+  raw?: Record<string, unknown>
+  stock?: number
+}
+
 /** Resolve an effective MRP from the several shapes present in the product data. */
-export function getEffectiveMRP(product: any): number {
+export function getEffectiveMRP(product: DealProduct): number {
   if (typeof product?.mrp === "number" && product.mrp > 0) return Math.round(product.mrp)
   try {
     const rawAny = product?.raw
@@ -17,7 +25,7 @@ export function getEffectiveMRP(product: any): number {
   return Math.floor((product?.price || 0) * 1.2)
 }
 
-export function discountPct(product: any): number {
+export function discountPct(product: DealProduct): number {
   const mrp = getEffectiveMRP(product)
   const price = Number(product?.price) || 0
   if (!mrp || mrp <= price) return 0
@@ -30,7 +38,7 @@ export const MIN_DEAL_DISCOUNT = 10
 export const MAX_DEAL_DISCOUNT = 85
 
 /** In-stock products with a meaningful, plausible discount, best offer first. */
-export function selectDeals(products: any[], limit = 12) {
+export function selectDeals<T extends DealProduct>(products: T[], limit = 12): T[] {
   if (!Array.isArray(products)) return []
   return [...products]
     .filter((p) => {

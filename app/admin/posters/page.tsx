@@ -6,6 +6,7 @@ import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
 import { renderPosterSvg, type Poster, type PosterMotif } from "@/lib/posters"
 import HeroSlidesManager from "@/components/admin/HeroSlidesManager"
+import { z } from "zod"
 
 type FeatureType = "product" | "category" | "subcategory"
 
@@ -46,6 +47,23 @@ const FEATURE_LABELS: { value: FeatureType | "none"; label: string }[] = [
 ]
 
 const MOTIFS: PosterMotif[] = ["rays", "dots", "grid", "waves", "arcs"]
+const featureTypeSchema = z.enum(["product", "category", "subcategory"])
+const posterSettingsResponseSchema = z.object({
+  success: z.literal(true),
+  enabled: z.array(z.string()),
+  links: z.record(z.object({
+    href: z.string(),
+    feature: z.object({ type: featureTypeSchema, id: z.string() }).optional(),
+  })),
+})
+const posterCatalogueResponseSchema = posterSettingsResponseSchema.extend({
+  posters: z.array(z.object({
+    slug: z.string(), group: z.string(), eyebrow: z.string(), headline: z.string(),
+    subline: z.string(), cta: z.string(), url: z.string(), enabled: z.boolean(), custom: z.boolean(),
+    href: z.string(), feature: z.object({ type: featureTypeSchema, name: z.string() }).nullable(),
+  })),
+})
+const pickerOptionSchema = z.object({ id: z.string().min(1), name: z.string().min(1) })
 const GROUPS: Poster["group"][] = ["Festival", "Category", "Offer", "Trust", "Seasonal"]
 
 type Palette = Pick<Poster, "from" | "via" | "to" | "accent" | "ink">
@@ -82,43 +100,60 @@ export default function AdminPostersPage() {
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<Poster | null>(null)
   const [creating, setCreating] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   const reload = () =>
     apiFetch("/api/posters")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Poster catalogue request failed")
+        return res.json()
+      })
       .then((data) => {
-        if (!data?.success) return
-        setPosters(data.posters ?? [])
-        setEnabled(data.enabled ?? [])
-        setLinks(data.links ?? {})
+        const parsed = posterCatalogueResponseSchema.parse(data)
+        setPosters(parsed.posters)
+        setEnabled(parsed.enabled)
+        setLinks(parsed.links)
+        setLoadFailed(false)
       })
 
   useEffect(() => {
     reload()
-      .catch(() => toast.error("Could not load posters"))
+      .catch(() => { setLoadFailed(true); toast.error("Could not load posters") })
       .finally(() => setLoading(false))
   }, [])
 
   // Card projection keeps the product list light; the pickers only need id and name.
   useEffect(() => {
-    const toOptions = (payload: any, key: string): Option[] => {
-      const list = Array.isArray(payload) ? payload : payload?.[key] ?? []
-      return list
-        .map((item: any) => ({ id: item.id, name: item.name }))
-        .filter((o: Option) => o.id && o.name)
-        .sort((a: Option, b: Option) => a.name.localeCompare(b.name))
+    const toOptions = (payload: unknown, key: string): Option[] => {
+      const list = Array.isArray(payload) ? payload : z.record(z.unknown()).parse(payload)[key]
+      return pickerOptionSchema.array().parse(list).sort((a, b) => a.name.localeCompare(b.name))
     }
 
     const load = (url: string, key: string, set: (o: Option[]) => void) =>
       apiFetch(url)
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error("Poster picker request failed")
+          return res.json()
+        })
         .then((data) => set(toOptions(data, key)))
         .catch(() => {
-          /* The picker degrades to the plain link field. */
+          toast.error(`Could not load ${key}; use a plain link or retry`)
         })
 
-    load("/api/products?fields=card", "products", setProducts)
+    const loadProducts = async () => {
+      const options: Option[] = []
+      for (let skip = 0; ; skip += 1000) {
+        const response = await apiFetch(`/api/products?fields=card&limit=1000&skip=${skip}`)
+        if (!response.ok) throw new Error("Poster product picker request failed")
+        const page = toOptions(await response.json(), "products")
+        options.push(...page)
+        if (options.length > 20_000) throw new Error("Poster product picker supports at most 20,000 products")
+        if (page.length < 1000) break
+      }
+      setProducts(options.sort((a, b) => a.name.localeCompare(b.name)))
+    }
+    loadProducts().catch(() => toast.error("Could not load products; use a plain link or retry"))
     load("/api/categories", "categories", setCategories)
     load("/api/sub-categories", "subCategories", setSubCategories)
   }, [])
@@ -160,9 +195,10 @@ export default function AdminPostersPage() {
         toast.error(data?.error || "Could not save poster")
         return
       }
-      await reload()
+      z.object({ success: z.literal(true) }).parse(data)
       setDraft(null)
       toast.success("Poster created — tick it, then publish to put it on the homepage")
+      await reload().catch(() => { setLoadFailed(true); toast.error("Poster was saved, but configuration could not be refreshed") })
     } catch {
       toast.error("Could not save poster")
     } finally {
@@ -201,15 +237,18 @@ export default function AdminPostersPage() {
         toast.error("Could not delete poster")
         return
       }
-      await reload()
+      z.object({ success: z.literal(true) }).parse(await res.json())
       setEnabled((prev) => prev.filter((s) => s !== slug))
+      setPosters(prev => prev.filter(poster => poster.slug !== slug))
       toast.success("Poster deleted")
+      await reload().catch(() => { setLoadFailed(true); toast.error("Poster was deleted, but configuration could not be refreshed") })
     } catch {
       toast.error("Could not delete poster")
     }
   }
 
   const handleSave = async () => {
+    if (loadFailed) return
     setSaving(true)
     try {
       const res = await apiFetch("/api/posters", { method: "PUT", json: { enabled, links } })
@@ -218,10 +257,13 @@ export default function AdminPostersPage() {
         toast.error(data?.error || "Could not save")
         return
       }
+      const saved = posterSettingsResponseSchema.parse(data)
+      setEnabled(saved.enabled)
+      setLinks(saved.links)
       toast.success(
-        enabled.length === 0
+        saved.enabled.length === 0
           ? "All posters hidden — the hero will use your uploaded slides"
-          : `${enabled.length} poster${enabled.length === 1 ? "" : "s"} live on the homepage`,
+          : `${saved.enabled.length} poster${saved.enabled.length === 1 ? "" : "s"} live on the homepage`,
       )
     } catch {
       toast.error("Could not save")
@@ -243,6 +285,7 @@ export default function AdminPostersPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {loadFailed && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800">Poster configuration could not be loaded. Reload before publishing changes.</p>}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
@@ -271,7 +314,7 @@ export default function AdminPostersPage() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loadFailed}
             className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

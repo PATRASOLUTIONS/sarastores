@@ -9,8 +9,7 @@ export default function CompareFloating() {
   const { compareIds } = useCompare()
   const pathname = usePathname()
 
-  // Hide the floating compare button on admin pages and the full-screen draw display
-  if (pathname && (pathname.startsWith("/admin") || pathname.startsWith("/lucky-draw/draw"))) return null
+  if (pathname && (pathname === "/dashboard" || pathname.startsWith("/dashboard/") || pathname === "/checkout" || pathname === "/thank-you" || pathname.startsWith("/admin") || pathname.startsWith("/lucky-draw/draw"))) return null
 
   if (!compareIds) return null
 

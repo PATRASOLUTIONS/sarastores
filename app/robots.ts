@@ -1,24 +1,18 @@
 import { MetadataRoute } from 'next'
-
-function getOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-  )
-}
+import { getOriginFromHeaders } from '@/lib/seo-metadata'
 
 /**
  * Private or transactional areas. Nothing here has search value and several
  * contain personal data, so they stay out of the crawl entirely.
  */
 const PRIVATE_PATHS = [
-  '/admin/',
-  '/api/',
-  '/dashboard/',
-  '/account/',
-  '/checkout/',
-  '/cart/',
-  '/order/',
+  '/admin',
+  '/api',
+  '/dashboard',
+  '/account',
+  '/checkout',
+  '/cart',
+  '/order',
   '/thank-you',
   '/track',
   '/auth/',
@@ -27,13 +21,18 @@ const PRIVATE_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/verify-email',
-  '/vendor/',
-  '/partner-api-test/',
-  '/partner-api-docs/',
-  '/loaders-demo/',
-  '/subham/',
-  '/error/',
+  '/vendor',
+  '/partner-api-test',
+  '/partner-api-docs',
+  '/loaders-demo',
+  '/subham',
+  '/error',
   '/compare',
+  '/search',
+  '/wishlist',
+  '/credits',
+  '/spin',
+  '/lucky-draw/draw/',
 ]
 
 /**
@@ -47,6 +46,14 @@ const PRIVATE_PATHS = [
  */
 const FACET_PARAMS = [
   '/*?*q=',
+  '/*?*search=',
+  '/*?*category=',
+  '/*?*categories=',
+  '/*?*brand=',
+  '/*?*brands=',
+  '/*?*subCategory=',
+  '/*?*subCategories=',
+  '/*?*tag=',
   '/*?*sort=',
   '/*?*minPrice=',
   '/*?*maxPrice=',
@@ -57,20 +64,20 @@ const FACET_PARAMS = [
   '/*?*page=',
 ]
 
-export default function robots(): MetadataRoute.Robots {
-  const origin = getOrigin()
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const origin = await getOriginFromHeaders()
 
   return {
     rules: [
       {
         userAgent: '*',
-        allow: '/',
+        allow: ['/', '/api/media/brand-logo/', '/api/media/hero-slide/'],
         disallow: [...PRIVATE_PATHS, ...FACET_PARAMS],
       },
       {
         // The image crawler should still reach product imagery on listing pages.
         userAgent: 'Googlebot-Image',
-        allow: '/',
+        allow: ['/', '/api/media/brand-logo/', '/api/media/hero-slide/'],
         disallow: PRIVATE_PATHS,
       },
     ],

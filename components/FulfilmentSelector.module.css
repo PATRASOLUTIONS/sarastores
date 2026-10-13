@@ -1,0 +1,47 @@
+.options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.options > button { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; min-height: 76px; border: 1px solid #e3eaf5; border-radius: 5px; text-align: left; background: #fff; }
+.options > button > svg { flex-shrink: 0; margin-top: 2px; color: #101828; }
+.options span { min-width: 0; }
+.options strong { display: block; font-size: 12px; line-height: 1.4; color: #101828; }
+.options small { display: block; font-size: 10px; line-height: 1.6; margin-top: 2px; color: #344054; }
+.options b { display: block; font-size: 12px; line-height: 16px; font-weight: 400; margin-top: 3px; color: #007a38; }
+.options > .selectedOption { border-color: #0054f0; background: #fff; }
+.options > .selectedOption > svg, .selectedOption strong { color: #0054f0; }
+.options > .unavailableOption { color: #98a2b3; background: #fcfdff; }
+.unavailableOption strong, .unavailableOption small, .unavailableOption b, .options > .unavailableOption > svg { color: #98a2b3; }
+.stores { margin-top: 16px; }
+.storeHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.storeHeading > h3 { font-size: 14px; line-height: 20px; font-weight: 700; }
+.storeHeading > button { color: #0054f0; font-size: 10px; white-space: nowrap; }
+.cityFilter { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #526079; margin-bottom: 10px; }
+.cityFilter select { padding: 6px 10px; border: 1px solid #d3dce9; border-radius: 4px; background: #fff; color: #101828; }
+.storeGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-height: 390px; overflow-y: auto; }
+.storeGrid > li { min-width: 0; }
+.storeGrid button { position: relative; display: block; width: 100%; height: 100%; text-align: left; border: 1px solid #e1e8f1; border-radius: 5px; padding: 12px 10px 6px 38px; background: #fff; }
+.storeGrid .selectedStore { border-color: #0054f0; }
+.storeRadio { position: absolute; left: 12px; top: 13px; width: 16px; height: 16px; border: 1.5px solid #a8b5c9; border-radius: 50%; }
+.selectedStore > .storeRadio { background: #fff; border: 5px solid #0054f0; }
+.storeImage { position: relative; display: flex; align-items: center; justify-content: center; gap: 7px; height: 54px; margin-bottom: 6px; overflow: hidden; border-radius: 4px; background: linear-gradient(120deg, #e9f2ff, #f7faff); color: #0f4385; }
+.storeImage > span { font-size: 18px; font-weight: 700; letter-spacing: -.5px; }
+.storeImage > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.storeGrid strong { display: block; color: #101828; font-size: 11px; line-height: 13px; }
+.storeCity { display: block; color: #667085; font-size: 10px; line-height: 13px; margin-top: 3px; }
+.storeAddress { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 10px; line-height: 13px; color: #667085; margin-top: 3px; }
+.storeReady { display: flex; align-items: flex-start; gap: 3px; font-size: 9px; line-height: 13px; color: #007a38; margin-top: 3px; }
+.storeReady svg { flex-shrink: 0; margin-top: 1px; }
+.pickupConfirmation { margin-top: 10px; font-size: 11px; line-height: 1.6; background: #f0faf4; color: #00833e; border-radius: 4px; padding: 10px; }
+.pickupConfirmation > svg { display: inline; margin-right: 5px; vertical-align: text-bottom; }
+.storeContact { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; color: #344054; }
+.storeContact > span:first-child { width: 100%; }
+.storeContact > a { color: #0054f0; text-decoration: underline; }
+@media (max-width: 767px) {
+  .options { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .options > button { min-height: 72px; }
+  .options strong { font-size: 13px; }
+  .options small { font-size: 12px; }
+  .storeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .storeGrid button { padding: 10px; }
+  .storeImage { margin-left: 20px; }
+  .storeRadio { left: 9px; top: 12px; }
+  .storeGrid strong { font-size: 12px; }
+}

@@ -1,6 +1,8 @@
 import DOMPurify from "isomorphic-dompurify"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { estimateReadingMinutes, type Article } from "@/lib/article-types"
+import { absoluteSeoImage } from "@/lib/seo-metadata"
+import type { Document } from "mongodb"
 
 /**
  * Buying guides and articles ("CONTENT / BLOG" in the BRD).
@@ -33,7 +35,7 @@ export function sanitizeArticleHtml(html: unknown): string {
   })
 }
 
-function toArticle(doc: any): Article {
+function toArticle(doc: Document): Article {
   const normalized = normalizeId(doc)
   return {
     id: normalized.id,
@@ -119,11 +121,11 @@ export function buildArticleJsonLd(article: Article, origin: string) {
     "@type": "Article",
     headline: article.title,
     description: article.seoDescription || article.excerpt,
-    ...(article.coverImage ? { image: article.coverImage } : {}),
+    ...(article.coverImage ? { image: absoluteSeoImage(article.coverImage, origin) } : {}),
     author: { "@type": "Organization", name: article.author },
     publisher: {
       "@type": "Organization",
-      name: "Sara Electronics",
+      "@id": `${origin}#organization`,
       url: origin,
     },
     ...(article.publishedAt ? { datePublished: article.publishedAt } : {}),

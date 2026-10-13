@@ -61,7 +61,13 @@ export function readConsent(): TrackingConsent | null {
     const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as TrackingConsent
-    if (typeof parsed?.analytics !== "boolean") return null
+    if (
+      typeof parsed?.analytics !== "boolean" ||
+      typeof parsed.advertising !== "boolean" ||
+      typeof parsed.personalisation !== "boolean" ||
+      typeof parsed.anonymousId !== "string" ||
+      typeof parsed.decidedAt !== "string"
+    ) return null
     // A changed notice invalidates the old answer: the person agreed to
     // something that no longer describes what we do.
     if (parsed.version !== PRIVACY_NOTICE_VERSION) return null
@@ -85,6 +91,7 @@ export function getAnonymousId(): string {
 
 /** Persist a decision, notify listening tag gates, and mirror it to the ledger. */
 export function writeConsent(choice: Partial<Record<TrackingCategory, boolean>>): TrackingConsent {
+  const previous = readConsent()
   const record: TrackingConsent = {
     analytics: Boolean(choice.analytics),
     advertising: Boolean(choice.advertising),
@@ -115,33 +122,59 @@ export function writeConsent(choice: Partial<Record<TrackingCategory, boolean>>)
       credentials: "include",
       body: JSON.stringify(record),
       keepalive: true,
+    }).then((response) => {
+      if (!response.ok) console.error("[Consent] Consent audit record could not be saved.")
+    }).catch(() => {
+      console.error("[Consent] Consent audit record could not be saved.")
     })
   } catch {
-    // ignore
+    console.error("[Consent] Consent audit record could not be saved.")
   }
 
+  // Unmounting a Script does not stop an already-loaded third-party tracker.
+  if (hasWithdrawnConsent(previous, readConsent())) window.location.reload()
   return record
 }
 
+function hasWithdrawnConsent(previous: TrackingConsent | null, current: TrackingConsent | null): boolean {
+  return (["analytics", "advertising", "personalisation"] as const)
+    .some((category) => previous?.[category] === true && current?.[category] !== true)
+}
+
 /** Subscribe to consent changes so a tag can mount the moment it is allowed. */
-export function onConsentChange(handler: (consent: TrackingConsent) => void): () => void {
+export function onConsentChange(handler: (consent: TrackingConsent | null) => void): () => void {
   if (typeof window === "undefined") return () => {}
-  const listener = (event: Event) => {
-    const detail = (event as CustomEvent<TrackingConsent>).detail
-    if (detail) handler(detail)
+  let previous = readConsent()
+  const listener = () => {
+    previous = readConsent()
+    handler(previous)
+  }
+  const storageListener = (event: StorageEvent) => {
+    if (event.key !== CONSENT_STORAGE_KEY && event.key !== null) return
+    const current = readConsent()
+    const withdrawn = hasWithdrawnConsent(previous, current)
+    previous = current
+    handler(current)
+    if (withdrawn) window.location.reload()
   }
   window.addEventListener(CONSENT_CHANGE_EVENT, listener)
-  return () => window.removeEventListener(CONSENT_CHANGE_EVENT, listener)
+  window.addEventListener("storage", storageListener)
+  return () => {
+    window.removeEventListener(CONSENT_CHANGE_EVENT, listener)
+    window.removeEventListener("storage", storageListener)
+  }
 }
 
 /** Clears the stored decision so the banner reappears. */
 export function resetConsent(): void {
+  const previous = readConsent()
   try {
     window.localStorage.removeItem(CONSENT_STORAGE_KEY)
     window.dispatchEvent(new CustomEvent(CONSENT_CHANGE_EVENT, { detail: null }))
   } catch {
-    // ignore
+    console.error("[Consent] Consent preferences could not be reset.")
   }
+  if (hasWithdrawnConsent(previous, readConsent())) window.location.reload()
 }
 
 /**

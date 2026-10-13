@@ -1,6 +1,6 @@
 import { getDocumentProxy } from "unpdf"
 import { ingestImage, type StoredImage } from "../media-ingest"
-import { clean, toPrice } from "./http"
+import { clean, toPrice, dataRecord } from "./http"
 import { emptyProduct, ScraperError, type ScrapedProduct } from "./types"
 
 /**
@@ -71,7 +71,7 @@ const NOISE = /^(page\s*\d|www\.|https?:|©|copyright|all rights reserved|terms|
 const BULLET = /^[\u2022\u25aa\u25e6\u2023*\-\u2013\u2014]\s*/
 
 async function readLines(bytes: Uint8Array): Promise<{ lines: Line[]; pages: number; chars: number; meta: string }> {
-  let pdf: any
+  let pdf: Awaited<ReturnType<typeof getDocumentProxy>>
   try {
     // pdf.js takes ownership of the array it is handed and detaches it, which
     // would leave the caller holding an empty buffer for the image pass.
@@ -91,8 +91,9 @@ async function readLines(bytes: Uint8Array): Promise<{ lines: Line[]; pages: num
     // Bucket runs by baseline. Rounding to whole points is too strict — a run
     // that sits a fraction lower still belongs to the same visual row.
     const rows = new Map<number, { y: number; size: number; items: Cell[] }>()
-    for (const item of content.items as any[]) {
-      const text = String(item?.str ?? "")
+    for (const item of content.items) {
+      if (!("str" in item)) continue
+      const text = String(item.str ?? "")
       if (!text.trim()) continue
       chars += text.length
       const x = Number(item?.transform?.[4] ?? 0)
@@ -135,7 +136,7 @@ async function readLines(bytes: Uint8Array): Promise<{ lines: Line[]; pages: num
   // Vendor logos are usually artwork, so the brand often survives only here.
   let meta = ""
   try {
-    const info = (await pdf.getMetadata())?.info ?? {}
+    const info = dataRecord((await pdf.getMetadata()).info)
     meta = [info.Title, info.Author, info.Subject, info.Keywords, info.Creator].filter(Boolean).join(" ")
   } catch {
     /* metadata is optional */

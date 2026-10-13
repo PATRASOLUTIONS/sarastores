@@ -9,7 +9,7 @@ import * as LucideIcons from "lucide-react"
 
 // Dynamic icon renderer
 const IconRenderer = ({ name, className }: { name: string, className?: string }) => {
-    const Icon = (LucideIcons as any)[name] || LucideIcons.HelpCircle
+    const Icon = Object.entries(LucideIcons.icons).find(([iconName]) => iconName === name)?.[1] || LucideIcons.HelpCircle
     return <Icon className={className} />
 }
 

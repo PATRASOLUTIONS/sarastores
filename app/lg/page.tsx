@@ -9,6 +9,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, St
 import { lgLifestyleGalleryImages } from "./data"
 import { motion, AnimatePresence } from "framer-motion"
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import { brandProductListResponseSchema, type BrandProduct } from "@/lib/brand-landing-response"
 
 // LG promotional images from Amazon
 const lgBannerImages = [
@@ -78,25 +79,8 @@ const lgLifestyleImages = [
     },
 ]
 
-interface Product {
-    id: string
-    name: string
-    description?: string
-    price: number
-    image: string
-    stock?: number
-    category?: string
-    rating?: number
-    reviews?: number
-    discount?: number
-    originalPrice?: number
-    specification_images?: string
-    sku?: string
-    technical_details?: Record<string, any>
-}
-
 export default function LGBrandPage() {
-    const [products, setProducts] = useState<Product[]>([])
+    const [products, setProducts] = useState<BrandProduct[]>([])
     const [loading, setLoading] = useState(true)
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isVisible, setIsVisible] = useState(false)
@@ -138,9 +122,9 @@ export default function LGBrandPage() {
             try {
                 const response = await fetch("/api/products")
                 if (response.ok) {
-                    const data = await response.json()
+                    const data = brandProductListResponseSchema.parse(await response.json())
                     // Filter products by LG manufacturer
-                    const lgProducts = data.filter((p: any) => {
+                    const lgProducts = data.filter((p) => {
                         const manufacturer = normalizeProductForSchema(p).manufacturerName || p.manufacturer || ""
                         return manufacturer.toLowerCase().includes("lg")
                     })
@@ -148,7 +132,7 @@ export default function LGBrandPage() {
 
                     // Extract unique subcategories from LG products
                     // Note: In this app, 'description' field often holds the subcategory/type like "Refrigerator"
-                    const lgSubCategories = new Set(lgProducts.map((p: any) =>
+                    const lgSubCategories = new Set(lgProducts.map((p) =>
                         (p.subCategory || p.description || "").trim()
                     ))
 
@@ -159,6 +143,8 @@ export default function LGBrandPage() {
                         )
                     )
                     setAvailableCategories(validCategories)
+                } else {
+                    throw new Error("Failed to load LG products")
                 }
             } catch (error) {
                 console.error("Error fetching LG products:", error)
@@ -215,10 +201,10 @@ export default function LGBrandPage() {
 
 
                             <h1 className="text-4xl md:text-6xl font-bold text-white mb-4 leading-tight">
-                                Life's Good
+                                Life&apos;s Good
                             </h1>
                             <p className="text-lg md:text-xl text-white/90 mb-6 max-w-xl">
-                                Experience innovation that makes life better. Discover LG's
+                                Experience innovation that makes life better. Discover LG&apos;s
                                 cutting-edge technology in home appliances and entertainment.
                             </p>
 
@@ -304,7 +290,7 @@ export default function LGBrandPage() {
             {/* <section className="py-16 md:py-20 bg-white">
                 <div className="container mx-auto px-4">
                     <div className="text-center mb-12">
-                        <span className="inline-block px-4 py-2 bg-red-50 text-red-600 rounded-full text-sm font-semibold mb-4">
+                        <span className="inline-block px-4 py-2 bg-red-50 text-red-700 rounded-full text-sm font-semibold mb-4">
                             Explore Categories
                         </span>
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -462,7 +448,7 @@ export default function LGBrandPage() {
             <section ref={productsRef} className="py-16 md:py-20 bg-white">
                 <div className="container mx-auto px-4">
                     <div className="text-center mb-12">
-                        <span className="inline-block px-4 py-2 bg-red-50 text-red-600 rounded-full text-sm font-semibold mb-4">
+                        <span className="inline-block px-4 py-2 bg-red-50 text-red-700 rounded-full text-sm font-semibold mb-4">
                             Featured Products
                         </span>
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -514,7 +500,7 @@ export default function LGBrandPage() {
                                 LG Products Coming Soon
                             </h3>
                             <p className="text-gray-500 mb-6">
-                                We're adding LG products to our collection. Check back soon!
+                                We&apos;re adding LG products to our collection. Check back soon!
                             </p>
                             <Link
                                 href="/products"

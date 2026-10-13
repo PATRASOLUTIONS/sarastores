@@ -17,7 +17,7 @@ interface Payment {
   method: string
   createdAt: string
   amount?: number
-  orderDetails?: any[]
+  orderDetails?: Array<{ _id?: string; id?: string; totalAmount?: number }>
 }
 
 export default function PaymentsPage() {

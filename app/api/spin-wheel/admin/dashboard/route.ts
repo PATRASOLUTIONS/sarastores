@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
     ]).toArray()
 
     const visitMap: Record<string, number> = {}
-    storeVisits.forEach((s: any) => { visitMap[s._id] = s.visits })
+    storeVisits.forEach((s) => { visitMap[s._id] = s.visits })
 
-    const storePerformanceWithVisits = storePerformance.map((s: any) => ({
+    const storePerformanceWithVisits = storePerformance.map((s) => ({
       store: s._id,
       visits: visitMap[s._id] || 0,
       participants: s.participants,
@@ -89,12 +89,12 @@ export async function GET(request: NextRequest) {
       totalSpins,
       otpVerifiedCount,
       conversionRate,
-      prizeDistribution: prizeDistribution.map((p: any) => ({
+      prizeDistribution: prizeDistribution.map((p) => ({
         prize: p._id,
         count: p.count
       })),
       storePerformance: storePerformanceWithVisits,
-      recentParticipants: recentParticipants.map((p: any) => ({
+      recentParticipants: recentParticipants.map((p) => ({
         id: p._id.toString(),
         name: p.name,
         phone: p.phone,

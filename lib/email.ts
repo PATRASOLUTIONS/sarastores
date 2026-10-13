@@ -1,9 +1,35 @@
 import nodemailer from "nodemailer"
+import type Mail from "nodemailer/lib/mailer"
 import jsPDF from "jspdf"
+import { escapeHtml } from "@/lib/html"
+export { escapeHtml } from "@/lib/html"
 
-function escapeHtml(str: string): string {
-  if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+interface OrderEmailInput {
+  id: string
+  items: Array<{ name: string; quantity: number; price: number; image?: string | null }>
+  customer: {
+    firstName: string
+    lastName: string
+    email: string
+    phone?: string | null
+    address?: string
+    city?: string
+    state?: string
+    zipCode?: string
+    country?: string
+  }
+  subtotal: number
+  tax: number
+  shipping: number
+  total: number
+  paymentMethod: string
+  paymentDetails?: { status?: string }
+}
+
+interface InvoiceEmailInput extends OrderEmailInput {
+  createdAt: string | Date
+  status: string
+  taxAmount: number
 }
 
 const transporter = nodemailer.createTransport({
@@ -39,7 +65,7 @@ export async function sendEmail({
       console.log(`  Attachments: ${attachments ? attachments.length : 0}`)
     }
     
-    const mailOptions: any = {
+    const mailOptions: Mail.Options = {
       from: process.env.EMAIL_FROM,
       to,
       subject,
@@ -163,10 +189,10 @@ export function getRegistrationEmailTemplate(name: string) {
   `
 }
 
-export function getOrderConfirmationEmailTemplate(order: any) {
+export function getOrderConfirmationEmailTemplate(order: OrderEmailInput) {
   const itemsHtml = order.items
     .map(
-      (item: any) => `
+      (item) => `
     <tr>
       <td style="padding: 10px; border-bottom: 1px solid #eee;">
         <img src="${escapeHtml(String(item.image || ''))}" alt="${escapeHtml(item.name)}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;">
@@ -261,10 +287,10 @@ export function getOrderConfirmationEmailTemplate(order: any) {
   `
 }
 
-export function getVendorOrderNotificationTemplate(order: any) {
+export function getVendorOrderNotificationTemplate(order: OrderEmailInput) {
   const itemsHtml = order.items
     .map(
-      (item: any) => `
+      (item) => `
     <tr>
       <td style="padding: 10px; border-bottom: 1px solid #eee;">${escapeHtml(item.name)}</td>
       <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
@@ -347,7 +373,7 @@ export function getVendorOrderNotificationTemplate(order: any) {
   `
 }
 
-export function generateInvoicePDF(order: any): Buffer {
+export function generateInvoicePDF(order: InvoiceEmailInput): Buffer {
   const html = `<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -442,7 +468,7 @@ export function generateInvoicePDF(order: any): Buffer {
             </tr>
           </thead>
           <tbody>
-            ${order.items.map((item: any) => `
+            ${order.items.map((item) => `
               <tr>
                 <td>${escapeHtml(item.name)}</td>
                 <td>${item.quantity}</td>
@@ -541,7 +567,7 @@ export function generateInvoicePDF(order: any): Buffer {
 
   doc.setFontSize(9)
   doc.setFont("helvetica", "normal")
-  order.items.forEach((item: any, index: number) => {
+  order.items.forEach((item, index) => {
     doc.text(`${index + 1}. ${escapeHtml(item.name)}`, 20, y)
     doc.text(`Qty: ${item.quantity} × ₹${item.price.toLocaleString("en-IN")}`, 20, y + 5)
     doc.text(`₹${(item.price * item.quantity).toLocaleString("en-IN")}`, pageWidth - 20, y, { align: "right" })

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react"
 import CategoryProductCard from "@/components/CategoryProductCard"
+import { catalogProductListResponseSchema, type CatalogProduct } from "@/utils/catalog"
 
 /** Products merchandised alongside an article, so a guide can convert. */
 export default function ArticleProductRail({ productIds }: { productIds: string[] }) {
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<CatalogProduct[]>([])
 
   useEffect(() => {
+    setProducts([])
     if (productIds.length === 0) return
 
     let cancelled = false
@@ -18,11 +20,11 @@ export default function ArticleProductRail({ productIds }: { productIds: string[
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: productIds }),
         })
-        if (!res.ok) return
-        const data = await res.json()
-        if (!cancelled && Array.isArray(data)) setProducts(data)
-      } catch {
-        // The article still reads fine without the rail.
+        if (!res.ok) throw new Error("Article products could not be loaded")
+        const data = catalogProductListResponseSchema.parse(await res.json())
+        if (!cancelled) setProducts(data)
+      } catch (error) {
+        if (!cancelled) console.error("[Article products] Load failed:", error)
       }
     })()
 

@@ -106,7 +106,9 @@ export default function ComplaintForm() {
       if (response.ok) {
         setMessage({
           type: "success",
-          text: `Complaint submitted successfully! Reference ID: ${data.complaint.id}`,
+          text: `Complaint submitted successfully! Reference ID: ${data.complaint.id}${
+            data.notification?.status === "sent" ? "" : " Your complaint is saved, but email notification could not be sent."
+          }`,
         })
         setFormData({
           customerName: "",
@@ -145,7 +147,7 @@ export default function ComplaintForm() {
           >
             <h1 className="text-3xl font-bold" style={{ fontFamily: 'Poppins, sans-serif' }}>Submit a Complaint</h1>
             <p className="mt-2" style={{ color: '#E0F2FE' }}>
-              We're here to help! Please provide details about your issue and we'll get back to you soon.
+              We&apos;re here to help! Please provide details about your issue and we&apos;ll get back to you soon.
             </p>
           </div>
 
@@ -169,10 +171,11 @@ export default function ComplaintForm() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="complaint-name" className="block text-sm font-medium text-gray-700 mb-2">
                     Full Name <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="complaint-name"
                     type="text"
                     required
                     value={formData.customerName}
@@ -183,10 +186,11 @@ export default function ComplaintForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="complaint-email" className="block text-sm font-medium text-gray-700 mb-2">
                     Email Address <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="complaint-email"
                     type="email"
                     required
                     value={formData.email}
@@ -199,10 +203,11 @@ export default function ComplaintForm() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="complaint-phone" className="block text-sm font-medium text-gray-700 mb-2">
                     Phone Number {!isPrivacyGrievance && <span className="text-red-500">*</span>}
                   </label>
                   <input
+                    id="complaint-phone"
                     type="tel"
                     required={!isPrivacyGrievance}
                     value={formData.phone}
@@ -214,10 +219,11 @@ export default function ComplaintForm() {
 
                 {!isPrivacyGrievance && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="complaint-order" className="block text-sm font-medium text-gray-700 mb-2">
                       Order Number <span className="text-red-500">*</span>
                     </label>
                     <input
+                      id="complaint-order"
                       type="text"
                       required
                       value={formData.orderNumber}
@@ -235,10 +241,11 @@ export default function ComplaintForm() {
               <h2 className="text-xl font-semibold text-gray-900">Complaint Details</h2>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="complaint-type" className="block text-sm font-medium text-gray-700 mb-2">
                   Complaint Type <span className="text-red-500">*</span>
                 </label>
                 <select
+                  id="complaint-type"
                   required
                   value={formData.complaintType}
                   onChange={(e) => setFormData({ ...formData, complaintType: e.target.value })}
@@ -283,10 +290,11 @@ export default function ComplaintForm() {
 
               {!isPrivacyGrievance && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="complaint-product" className="block text-sm font-medium text-gray-700 mb-2">
                     Product Name <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="complaint-product"
                     type="text"
                     required
                     value={formData.productName}
@@ -298,10 +306,11 @@ export default function ComplaintForm() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="complaint-subject" className="block text-sm font-medium text-gray-700 mb-2">
                   Subject <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="complaint-subject"
                   type="text"
                   required
                   value={formData.subject}
@@ -312,10 +321,11 @@ export default function ComplaintForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="complaint-description" className="block text-sm font-medium text-gray-700 mb-2">
                   Description <span className="text-red-500">*</span>
                 </label>
                 <textarea
+                  id="complaint-description"
                   required
                   rows={6}
                   value={formData.description}
@@ -328,7 +338,7 @@ export default function ComplaintForm() {
               {/* Image Upload - Only for specific complaint types */}
               {requiresImages && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="complaint-images" className="block text-sm font-medium text-gray-700 mb-2">
                     Upload Images <span className="text-red-500">*</span>
                   </label>
                   <p className="text-sm text-gray-600 mb-3">
@@ -336,6 +346,7 @@ export default function ComplaintForm() {
                   </p>
                   
                   <input
+                    id="complaint-images"
                     type="file"
                     accept="image/*"
                     multiple
@@ -355,6 +366,7 @@ export default function ComplaintForm() {
                           />
                           <button
                             type="button"
+                            aria-label={`Remove uploaded image ${index + 1}`}
                             onClick={() => removeImage(index)}
                             className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
@@ -381,11 +393,11 @@ export default function ComplaintForm() {
                 disabled={loading}
                 className="w-full text-white py-3 px-6 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
                 style={{ 
-                  backgroundColor: loading ? '#94A3B8' : '#2A7FFF',
+                  backgroundColor: loading ? '#94A3B8' : '#1560BD',
                   fontFamily: 'Roboto, sans-serif'
                 }}
-                onMouseEnter={(e) => !loading && (e.currentTarget.style.backgroundColor = '#1E5FCC')}
-                onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = '#2A7FFF')}
+                onMouseEnter={(e) => !loading && (e.currentTarget.style.backgroundColor = '#124F9D')}
+                onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = '#1560BD')}
               >
                 {loading ? "Submitting..." : "Submit Complaint"}
               </button>
@@ -397,9 +409,9 @@ export default function ComplaintForm() {
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-blue-900 mb-2">📧 What happens next?</h3>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>• You'll receive a confirmation email with your complaint reference ID</li>
+            <li>• You&apos;ll receive a confirmation email with your complaint reference ID</li>
             <li>• Our team will review your complaint within 24-48 hours</li>
-            <li>• You'll receive email updates as your complaint status changes</li>
+            <li>• You&apos;ll receive email updates as your complaint status changes</li>
             <li>• You can contact us at info@saramobiles.com for urgent matters</li>
           </ul>
         </div>

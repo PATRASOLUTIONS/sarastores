@@ -3,6 +3,10 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { COLLECTIONS } from "@/lib/db-service"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { checkAdminAuthorization } from "@/lib/auth"
+import { readFile } from "node:fs/promises"
+import path from "node:path"
+import { SeedCatalogueSchema, SeedDatabaseRequestSchema } from "@/lib/validation"
+import { handleApiError } from "@/lib/api-error"
 
 // Helper to compute a realistic price by manufacturer fallback
 const MANUFACTURER_BASE_PRICE: Record<string, number> = {
@@ -22,7 +26,7 @@ function computePrice(manufacturerName?: string) {
   return base
 }
 
-function buildDescription(row: any) {
+function buildDescription(row: Record<string, string | number | boolean | null>) {
   const normalized = extractCanonicalProductMetadata(row)
   const parts = [
     normalized.subCategoryProdDesc,
@@ -35,7 +39,7 @@ function buildDescription(row: any) {
 }
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV !== "development") {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
   try {
@@ -44,40 +48,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const { db } = await connectToDatabase()
-
-    // Fetch the imported JSON (Excel data) from public folder
-    const dataUrl = new URL("/data/realistic-laptop-master-data.json", request.url)
-    const dataRes = await fetch(dataUrl)
-    if (!dataRes.ok) {
-      return NextResponse.json(
-        { success: false, message: "Failed to load JSON data from public/data." },
-        { status: 500 },
-      )
+    const text = await request.text()
+    const input = SeedDatabaseRequestSchema.safeParse(text ? JSON.parse(text) : {})
+    if (!input.success) return NextResponse.json({ error: input.error.issues[0].message }, { status: 400 })
+    const rows = SeedCatalogueSchema.parse(JSON.parse(
+      await readFile(path.join(process.cwd(), "lib", "seed-data", "realistic-laptop-master-data.json"), "utf8"),
+    ))
+    if (!input.data.apply) {
+      return NextResponse.json({ success: true, dryRun: true, products: { planned: rows.length }, message: "Preview only. Explicit apply replaces source='excel' products." })
     }
-    const rows: any[] = await dataRes.json()
+    const { client, db } = await connectToDatabase()
+    const session = client.startSession()
+    try {
+      const summary = await session.withTransaction(async () => {
 
     // Ensure collections exist
-    const collections = await db.listCollections().toArray()
-    const names = collections.map((c) => c.name)
-    if (!names.includes(COLLECTIONS.CATEGORIES)) await db.createCollection(COLLECTIONS.CATEGORIES)
-    if (!names.includes(COLLECTIONS.PRODUCTS)) await db.createCollection(COLLECTIONS.PRODUCTS)
-
-    const categoriesCol = db.collection(COLLECTIONS.CATEGORIES)
+    const categoriesCol = db.collection<{ name: string; description: string; image: string; createdAt: Date; updatedAt: Date }>(COLLECTIONS.CATEGORIES)
     const productsCol = db.collection(COLLECTIONS.PRODUCTS)
 
     // Derive unique category names from canonical category field
     const categoryNames = new Set<string>()
     for (const r of rows) {
       const normalized = extractCanonicalProductMetadata(r)
-      const group = (normalized.categoryGroupName || "Uncategorized") as string
+      const group = normalized.categoryGroupName || "Uncategorized"
       categoryNames.add(group.trim())
     }
 
     // Fetch existing categories
-    const existingCats = await categoriesCol.find({ name: { $in: Array.from(categoryNames) } }).toArray()
+    const existingCats = await categoriesCol.find({ name: { $in: Array.from(categoryNames) } }, { session }).toArray()
     const catMap = new Map<string, string>()
-    existingCats.forEach((c: any) => catMap.set(c.name, c._id.toString()))
+    existingCats.forEach((c) => catMap.set(c.name, c._id.toString()))
 
     // Insert missing categories
     const missing = Array.from(categoryNames).filter((name) => !catMap.has(name))
@@ -89,23 +89,26 @@ export async function POST(request: Request) {
         createdAt: new Date(),
         updatedAt: new Date(),
       }))
-      const ins = await categoriesCol.insertMany(insertPayload)
+      const ins = await categoriesCol.insertMany(insertPayload, { session })
+      if (ins.insertedCount !== insertPayload.length) throw new Error("Seed category insertion was incomplete")
       // refetch inserted docs
-      const insertedDocs = await categoriesCol.find({ _id: { $in: Object.values(ins.insertedIds) } }).toArray()
-      insertedDocs.forEach((c: any) => catMap.set(c.name, c._id.toString()))
+      const insertedDocs = await categoriesCol.find({ _id: { $in: Object.values(ins.insertedIds) } }, { session }).toArray()
+      if (insertedDocs.length !== insertPayload.length) throw new Error("Seed categories could not be reloaded")
+      insertedDocs.forEach((c) => catMap.set(c.name, c._id.toString()))
     }
 
     // Optional: remove previously imported products to avoid duplicates
-    await productsCol.deleteMany({ source: "excel" })
+    const deleted = await productsCol.deleteMany({ source: "excel" }, { session })
+    if (!deleted.acknowledged) throw new Error("Seed product replacement was not acknowledged")
 
     // Map rows to products
     const productDocs = rows.map((r) => {
       const normalized = extractCanonicalProductMetadata(r)
-      const name = (normalized.name || "Unnamed Product") as string
-      const categoryName = (normalized.categoryGroupName || "Uncategorized") as string
+      const name = normalized.name || "Unnamed Product"
+      const categoryName = normalized.categoryGroupName || "Uncategorized"
       const categoryId = catMap.get(categoryName) || null
       const manufacturerName = normalized.manufacturerName
-      const stock = typeof r["In Stock"] === "number" ? r["In Stock"] : Number.parseInt(r["In Stock"] || "0", 10)
+      const stock = Number(r["In Stock"] ?? 0)
       const raw = buildSchemaSynchronizedRaw(r, normalized)
 
       return {
@@ -149,23 +152,22 @@ export async function POST(request: Request) {
     })
 
     // Insert products
-    const insertResult = await productsCol.insertMany(productDocs)
+    const insertResult = await productsCol.insertMany(productDocs, { session })
+    if (insertResult.insertedCount !== productDocs.length) throw new Error("Seed product insertion was incomplete")
 
-    return NextResponse.json({
+    return {
       success: true,
       message: "Database seeded from Excel JSON successfully",
       categories: { insertedOrUpserted: categoryNames.size },
       products: { inserted: insertResult.insertedCount },
-    })
+    }
+      })
+      return NextResponse.json(summary)
+    } finally {
+      await session.endSession()
+    }
   } catch (error) {
-    console.error("Error seeding from Excel JSON:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to seed from Excel JSON",
-        error: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON data" }, { status: 400 })
+    return handleApiError(error, "Failed to seed catalogue")
   }
 }

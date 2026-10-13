@@ -100,7 +100,7 @@ export async function handleOptionsRequest(request: NextRequest): Promise<NextRe
   
   if (apiKey) {
     try {
-      const collection = await getCollection(API_KEYS_COLLECTION);
+      const collection = await getCollection<PartnerAPIKey>(API_KEYS_COLLECTION);
       const keyData = await collection.findOne({ 
         $or: [
           { id: apiKey },
@@ -439,7 +439,7 @@ export function createPaginatedResponse<T>(
   limit: number,
   total: number,
   requestId: string,
-  additionalData?: Record<string, any>,
+  additionalData?: Record<string, unknown>,
   origin?: string | null
 ): NextResponse {
   const totalPages = Math.ceil(total / limit);
@@ -486,14 +486,14 @@ export interface PartnerAuthRequest extends NextRequest {
 /**
  * Wrapper for partner API handlers with optional permission checking and CORS support
  */
-export function withPartnerAuth(
+export function withPartnerAuth<Args extends unknown[]>(
   handler: (
     request: PartnerAuthRequest,
-    ...args: any[]
+    ...args: Args
   ) => Promise<NextResponse>,
   requiredPermissions?: string[]
 ) {
-  return async (request: NextRequest, ...args: any[]): Promise<NextResponse> => {
+  return async (request: NextRequest, ...args: Args): Promise<NextResponse> => {
     const origin = request.headers.get('origin');
     const corsHeaders = getCorsHeaders(origin);
     
@@ -505,7 +505,7 @@ export function withPartnerAuth(
     const authResult = await authenticatePartnerRequest(request);
     
     // Get updated CORS headers with methods from API key if available
-    const apiKeyMethods = 'apiKey' in authResult ? (authResult as any).context?.apiKey?.allowedMethods : undefined;
+    const apiKeyMethods = 'context' in authResult ? authResult.context.apiKey.allowedMethods : undefined;
     const finalCorsHeaders = getCorsHeaders(origin, apiKeyMethods);
     
     if ('error' in authResult) {
@@ -537,7 +537,7 @@ export function withPartnerAuth(
         partner: authResult.context.partner,
         apiKey: authResult.context.apiKey,
         requestId: authResult.context.requestId,
-      }) as PartnerAuthRequest;
+      });
       
       const response = await handler(extendedRequest, ...args);
       
@@ -570,7 +570,7 @@ export function withPartnerAuth(
  */
 async function getPartnerById(partnerId: string): Promise<Partner | null> {
   try {
-    const collection = await getCollection(PARTNERS_COLLECTION);
+    const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
     const { ObjectId } = await import('mongodb');
     
     let partner = null;
@@ -618,7 +618,7 @@ async function getPartnerById(partnerId: string): Promise<Partner | null> {
  */
 async function updatePartnerLastActive(partnerId: string): Promise<void> {
   try {
-    const collection = await getCollection(PARTNERS_COLLECTION);
+    const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
     const { ObjectId } = await import('mongodb');
     
     await collection.updateOne(

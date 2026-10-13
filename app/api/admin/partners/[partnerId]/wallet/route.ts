@@ -1,3 +1,5 @@
+
+import { getErrorMessage } from "@/lib/utils"
 /**
  * Admin Partner Wallet API
  * 
@@ -200,10 +202,10 @@ export async function POST(
       },
       message: `Successfully added ₹${amount.toLocaleString()} to wallet`,
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Admin Partner Wallet] Add funds error:', error);
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: error.message || 'Failed to add funds' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'Failed to add funds') } },
       { status: 500 }
     );
   }

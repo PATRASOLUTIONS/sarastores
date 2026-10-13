@@ -4,7 +4,7 @@
 import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { apiFetch } from "@/lib/api-client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -35,7 +35,8 @@ interface Category {
   name: string
 }
 
-export default function EditAdvertisementPage({ params }: { params: { id: string } }) {
+export default function EditAdvertisementPage({ params: pendingParams }: { params: Promise<{ id: string }> }) {
+  const params = use(pendingParams)
   const { user, isAdmin } = useAuth()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)

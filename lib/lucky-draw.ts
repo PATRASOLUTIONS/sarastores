@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb"
 import { randomBytes, randomInt } from "crypto"
+import { escapeHtml } from "@/lib/html"
 
 export const LUCKY_DRAW_COLLECTIONS = {
   CAMPAIGNS: "lucky_draw_campaigns",
@@ -23,6 +24,7 @@ export type LuckyDrawCampaign = {
   drawToken: string
   createdAt: Date | string
   updatedAt: Date | string
+  participantsRevision?: number
 }
 
 export type LuckyDrawParticipant = {
@@ -33,6 +35,25 @@ export type LuckyDrawParticipant = {
   email: string
   wonAt?: Date | null
   createdAt: Date | string
+}
+
+export type LuckyDrawWinner = {
+  _id: string
+  campaignId: string
+  participantId: string
+  participantName: string
+  participantPhone: string
+  participantEmail: string
+  prize: string
+  prizeIcon: string
+  drawnAt: Date | string
+  drawnBy: string
+  drawRequestId?: string
+  emailSent?: boolean
+  emailError?: string | null
+  emailDeliveryStatus?: "sending" | "sent" | "failed" | "uncertain"
+  emailSendId?: string
+  emailClaimedAt?: Date
 }
 
 /** Existing documents use hex string _ids rather than ObjectId. */
@@ -53,11 +74,14 @@ export function pickRandom<T>(items: T[]): T | null {
 export function normalisePrizes(input: unknown): LuckyDrawPrize[] {
   if (!Array.isArray(input)) return []
   return input
-    .map((p: any) => ({
-      name: String(p?.name ?? "").trim(),
-      icon: String(p?.icon ?? "🎁").trim() || "🎁",
-      quantity: Math.max(0, Math.floor(Number(p?.quantity ?? 0)) || 0),
-    }))
+    .map((value: unknown) => {
+      const p = value !== null && typeof value === "object" ? value : {}
+      return {
+        name: String("name" in p ? p.name ?? "" : "").trim(),
+        icon: String("icon" in p ? p.icon ?? "🎁" : "🎁").trim() || "🎁",
+        quantity: Math.max(0, Math.floor(Number("quantity" in p ? p.quantity ?? 0 : 0)) || 0),
+      }
+    })
     .filter((p) => p.name.length > 0)
 }
 
@@ -129,7 +153,11 @@ export function winnerEmailHtml(opts: {
   campaignName: string
   storeName: string
 }): string {
-  const { winnerName, prizeName, prizeIcon, campaignName, storeName } = opts
+  const winnerName = escapeHtml(opts.winnerName)
+  const prizeName = escapeHtml(opts.prizeName)
+  const prizeIcon = escapeHtml(opts.prizeIcon)
+  const campaignName = escapeHtml(opts.campaignName)
+  const storeName = escapeHtml(opts.storeName)
   return `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f4f6f9;font-family:'Segoe UI',Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:28px 12px;">

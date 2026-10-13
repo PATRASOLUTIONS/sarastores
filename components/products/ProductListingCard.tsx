@@ -7,13 +7,18 @@ import { toast } from "react-hot-toast"
 import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
 import { cleanProductName } from "@/utils/cleanProductName"
+import CompareProductButton from "@/components/CompareProductButton"
+import type { CatalogProduct } from "@/utils/catalog"
 import {
   calculateDiscount,
   emiPerMonth,
   getEffectiveMRP,
   getRatingInfo,
+  getCatalogMRP,
+  getCatalogRatingInfo,
   productBadge,
   productBenefits,
+  type ProductDisplayInput,
 } from "@/lib/product-display"
 
 const BADGE_TONE = {
@@ -48,7 +53,9 @@ function Stars({ rating, count }: { rating: number; count: number }) {
   )
 }
 
-export default function ProductListingCard({ product }: { product: any }) {
+export default function ProductListingCard({ product, offersMode = false, offerLabels = [] }: {
+  product: CatalogProduct & ProductDisplayInput; offersMode?: boolean; offerLabels?: string[]
+}) {
   const { addToCart } = useCart()
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const [adding, setAdding] = useState(false)
@@ -60,27 +67,30 @@ export default function ProductListingCard({ product }: { product: any }) {
     (Array.isArray(product.images) && product.images[0]) ||
     "/placeholder.svg"
 
-  const mrp = getEffectiveMRP(product)
+  const mrp = offersMode ? getCatalogMRP(product) : getEffectiveMRP(product)
   const discount = calculateDiscount(mrp, product.price)
-  const badge = productBadge(product)
-  const rating = getRatingInfo(product)
-  const benefits = productBenefits(product)
+  const badge = offersMode ? (discount > 0 ? { label: `${discount}% OFF`, tone: "sale" as const } : null) : productBadge(product)
+  const rating = offersMode ? getCatalogRatingInfo(product) : getRatingInfo(product)
+  const benefits = offersMode ? offerLabels.slice(0, 2) : productBenefits(product)
+  const unavailable = offersMode && (!Number.isFinite(Number(product.price)) || Number(product.price) <= 0 ||
+    (typeof product.stock === "number" && product.stock <= 0))
   const wishlisted = isInWishlist(id)
 
   const handleAddToCart = async () => {
-    if (adding) return
+    if (adding || unavailable) return
     setAdding(true)
     try {
-      addToCart({
+      const added = await addToCart({
         id,
         name: product.name,
         price: product.price,
         image,
         quantity: 1,
+        ...(offersMode ? { stock: product.stock } : {}),
         color: null,
         size: null,
       })
-      toast.success(`${cleanProductName(product.name)} added to cart`)
+      if (added) toast.success(`${cleanProductName(product.name)} added to cart`)
     } finally {
       setTimeout(() => setAdding(false), 400)
     }
@@ -107,7 +117,7 @@ export default function ProductListingCard({ product }: { product: any }) {
         </button>
 
         <Link href={href} className="block">
-          <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-lg bg-gray-50 p-3">
+          <div className={`flex items-center justify-center overflow-hidden rounded-t-lg p-3 ${offersMode ? "aspect-[4/3] bg-white" : "aspect-[4/3] bg-gray-50"}`}>
             {/* Catalogue images are hotlinked from many CDNs, so a plain img avoids loader failures. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -130,24 +140,28 @@ export default function ProductListingCard({ product }: { product: any }) {
           </h3>
         </Link>
 
-        <div className="mt-1.5">
+        {(!offersMode || rating.count > 0) && <div className="mt-1.5">
           <Stars rating={rating.rating} count={rating.count} />
-        </div>
+        </div>}
 
         <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
           <span className="text-base font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</span>
           {discount > 0 && (
-            <span className="text-xs text-gray-400 line-through">₹{mrp.toLocaleString("en-IN")}</span>
+            <span className="text-xs text-gray-600 line-through">₹{mrp.toLocaleString("en-IN")}</span>
           )}
         </div>
 
-        {product.price >= 5000 && (
+        {offersMode && discount > 0 && (
+          <p className="mt-1"><span className="inline-block rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">Save ₹{(mrp - Number(product.price)).toLocaleString("en-IN")}</span></p>
+        )}
+
+        {!offersMode && product.price >= 5000 && (
           <p className="mt-1 text-[11px] text-gray-500">
             EMI from ₹{emiPerMonth(product.price).toLocaleString("en-IN")}/month
           </p>
         )}
 
-        <ul className="mt-2 space-y-1">
+        <ul className={`mt-2 space-y-1 ${offersMode ? "flex-1" : ""}`}>
           {benefits.map((benefit) => (
             <li key={benefit} className="flex items-start gap-1.5 text-[11px] leading-tight text-gray-600">
               <Check className="mt-[1px] h-3 w-3 flex-shrink-0 rounded-full bg-[#0F8A3C] p-[1px] text-white" />
@@ -159,11 +173,12 @@ export default function ProductListingCard({ product }: { product: any }) {
         <button
           type="button"
           onClick={handleAddToCart}
-          disabled={adding}
+          disabled={adding || unavailable}
           className="mt-3 h-9 w-full rounded-md border border-[#1560BD] text-[13px] font-semibold text-[#1560BD] transition-colors hover:bg-[#1560BD] hover:text-white disabled:opacity-60"
         >
-          {adding ? "Adding…" : "Add to Cart"}
+          {unavailable ? "Unavailable" : adding ? "Adding…" : "Add to Cart"}
         </button>
+        <CompareProductButton productId={id} name={cleanProductName(product.name)} />
       </div>
     </article>
   )

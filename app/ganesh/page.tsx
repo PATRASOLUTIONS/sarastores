@@ -16,6 +16,9 @@ import Footer from "@/components/Footer"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import { COLLECTIONS, findMany } from "@/lib/db-service"
 import { pageMetadata } from "@/lib/seo-page"
+import { productCardResponseSchema } from "@/lib/product-card-response"
+import { catalogCategoryListResponseSchema } from "@/lib/catalog-list-response"
+import { z } from "zod"
 
 /** Catalogue prices and stock move during a sale; five minutes is a fair trade. */
 export const revalidate = 300
@@ -91,27 +94,27 @@ const FAQ = [
 async function getFestivalPicks() {
   const base = { active: true, image: { $exists: true, $nin: [null, ""] } }
 
-  const discounted = (await findMany(
+  const discounted = z.array(productCardResponseSchema).parse(await findMany(
     COLLECTIONS.PRODUCTS,
     { ...base, discount: { $gte: 10 } },
     { projection: CARD_PROJECTION, sort: { discount: -1 }, limit: 12 },
-  )) as any[]
+  ))
 
   if (discounted.length >= 8) return discounted
 
   // A thin or freshly-seeded catalogue must still render a full shelf.
-  return (await findMany(COLLECTIONS.PRODUCTS, base, {
+  return z.array(productCardResponseSchema).parse(await findMany(COLLECTIONS.PRODUCTS, base, {
     projection: CARD_PROJECTION,
     limit: 12,
-  })) as any[]
+  }))
 }
 
 async function getCategories() {
-  return (await findMany(
+  return catalogCategoryListResponseSchema.parse(await findMany(
     COLLECTIONS.CATEGORIES,
     { isEnabled: { $ne: false } },
     { projection: { name: 1, slug: 1, image: 1 }, limit: 10 },
-  )) as any[]
+  ))
 }
 
 export default async function GaneshPage() {
@@ -205,7 +208,7 @@ export default async function GaneshPage() {
                   <p className="text-sm font-bold text-brand-text-primary group-hover:text-brand-primary">
                     {band.label}
                   </p>
-                  <p className="mt-1 text-xs text-brand-text-tertiary">{band.note}</p>
+                  <p className="mt-1 text-xs text-brand-text-secondary">{band.note}</p>
                 </Link>
               ))}
             </div>
@@ -264,7 +267,7 @@ export default async function GaneshPage() {
             {picks.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {picks.map((product) => (
-                  <CategoryProductCard key={product.id} product={product as any} />
+                  <CategoryProductCard key={product.id} product={product} />
                 ))}
               </div>
             ) : (

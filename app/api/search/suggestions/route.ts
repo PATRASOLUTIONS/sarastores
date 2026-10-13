@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { withCache, cacheKeys, CACHE_TTL } from '@/lib/cache';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { handleApiError, RateLimitUnavailableError } from '@/lib/api-error';
 import {
   describeSearchQuery,
   hasStructuredIntent,
@@ -27,6 +28,7 @@ interface SearchSuggestion {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   // Rate limiting
   const rateLimitResult = await checkRateLimit(request, RATE_LIMITS.SEARCH);
   if (!rateLimitResult.success) {
@@ -47,7 +49,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  try {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q')?.trim().toLowerCase() || '';
     const limit = Math.min(parseInt(searchParams.get('limit') || '8'), 20);
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
+    if (error instanceof RateLimitUnavailableError) return handleApiError(error);
     console.error('[Search API] Error:', error);
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch suggestions' } },

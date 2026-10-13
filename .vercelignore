@@ -1,0 +1,41 @@
+# Configure secrets in Vercel Environment Variables, never upload local files.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local data and customer/debug exports.
+order_dump.json
+order_debug_dump.json
+*_dump.json
+*_debug_dump.json
+dumps/
+exports/
+*.tmp.txt
+sweep-*.txt
+
+# Local/generated output and non-storefront projects.
+.next/
+.next-audit*/
+out/
+build/
+node_modules/
+mobile/
+archive/
+documents/
+.scrape-probe/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+.copilot/
+
+# Read-only audit tooling is not part of the deployed application.
+tests/
+scripts/audit-*.mjs
+scripts/audit/
+scripts/archive/
+scripts/diagnostics/
+scripts/utilities/
+scripts/legacy/

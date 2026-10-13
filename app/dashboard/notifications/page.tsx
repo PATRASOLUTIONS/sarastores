@@ -1,11 +1,5 @@
-import type { Metadata } from "next"
-import PreferencesClient from "@/app/account/preferences/preferences-client"
+import { redirect } from "next/navigation"
 
-export const metadata: Metadata = {
-  title: "Notifications",
-  robots: { index: false, follow: false },
-}
-
-export default function DashboardNotificationsPage() {
-  return <PreferencesClient />
+export default function NotificationsPage() {
+  redirect("/dashboard/settings")
 }

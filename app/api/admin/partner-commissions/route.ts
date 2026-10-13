@@ -9,6 +9,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAdminAuthorization } from '@/lib/auth'
 import { getCollection } from '@/lib/db-service'
+import { ObjectId, type Filter, type WithId } from 'mongodb'
+import type { Partner, PartnerOrder } from '@/lib/partner/types'
+import { z } from 'zod'
+import { isCommissionPaymentEligible } from '@/lib/partner/commissions'
+
+const querySchema = z.object({
+  partnerId: z.string().min(1).max(100).optional(),
+  status: z.enum(['pending', 'credited', 'adjusted', 'all']).default('all'),
+})
+
+function commissionOrder(order: WithId<PartnerOrder>) {
+  return {
+    orderId: order._id.toString(),
+    internalOrderId: order.orderId,
+    partnerOrderId: order.partnerOrderId || null,
+    createdAt: order.createdAt,
+    orderTotal: order.summary?.total || 0,
+    subtotal: order.summary?.subtotal || 0,
+    commissionRate: order.commission?.rate || 0,
+    commissionAmount: order.commission?.amount || 0,
+    commissionStatus: order.commission?.status || 'pending',
+    paymentVerified: order.paymentVerification?.verified === true,
+    paymentEligible: isCommissionPaymentEligible(order),
+    orderStatus: order.status || 'pending',
+    customer: { name: order.customer?.name || '', email: order.customer?.email || '' },
+    items: (order.items || []).map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+  }
+}
 
 export async function GET(request: NextRequest) {
   const authCheck = await checkAdminAuthorization()
@@ -21,14 +49,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const partnerIdFilter = searchParams.get('partnerId')
-    const statusFilter = searchParams.get('status') // 'pending' | 'credited' | 'all'
+    const parsed = querySchema.safeParse(Object.fromEntries(searchParams))
+    if (!parsed.success) return NextResponse.json(
+      { success: false, error: { code: 'INVALID_INPUT', message: 'Invalid commission filters' } }, { status: 400 }
+    )
+    const { partnerId: partnerIdFilter, status: statusFilter } = parsed.data
 
-    const ordersCol = await getCollection('partner_orders')
-    const partnersCol = await getCollection('partners')
+    const ordersCol = await getCollection<PartnerOrder>('partner_orders')
+    const partnersCol = await getCollection<Partner>('partners')
 
     // Build match stage
-    const match: any = {}
+    const match: Filter<PartnerOrder> = {}
     if (partnerIdFilter) match.partnerId = partnerIdFilter
     if (statusFilter && statusFilter !== 'all') match['commission.status'] = statusFilter
 
@@ -38,17 +69,17 @@ export async function GET(request: NextRequest) {
       .toArray()
 
     // Collect unique partnerIds
-    const partnerIds = [...new Set(orders.map((o: any) => o.partnerId).filter(Boolean))]
+    const partnerIds = [...new Set(orders.map((o) => o.partnerId).filter(Boolean))]
 
-    // Fetch partners in one query — partnerId on orders is always the partner's string `id` field
+    const nativeIds = partnerIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id))
     const partners = partnerIds.length > 0
-      ? await partnersCol.find({ id: { $in: partnerIds } }).toArray()
+      ? await partnersCol.find({ $or: [{ id: { $in: partnerIds } }, { _id: { $in: nativeIds } }] }).toArray()
       : []
 
-    const partnerMap: Record<string, any> = {}
+    const partnerMap = new Map<string, WithId<Partner>>()
     for (const p of partners) {
-      const pid = p.id || p._id?.toString()
-      partnerMap[pid] = p
+      partnerMap.set(p._id.toString(), p)
+      if (p.id) partnerMap.set(p.id, p)
     }
 
     // Group orders by partnerId
@@ -60,7 +91,7 @@ export async function GET(request: NextRequest) {
       commissionRate: number
       totalPending: number
       totalCredited: number
-      orders: any[]
+      orders: ReturnType<typeof commissionOrder>[]
     }> = {}
 
     for (const order of orders) {
@@ -68,13 +99,13 @@ export async function GET(request: NextRequest) {
       if (!pid) continue
 
       if (!grouped[pid]) {
-        const partner = partnerMap[pid] || {}
+        const partner = partnerMap.get(pid)
         grouped[pid] = {
           partnerId: pid,
-          partnerName: partner.name || partner.email || pid,
-          partnerEmail: partner.email || '',
-          tier: partner.tier || 'starter',
-          commissionRate: order.commission?.rate ?? partner.commissionRate ?? 0,
+          partnerName: partner?.name || partner?.email || pid,
+          partnerEmail: partner?.email || '',
+          tier: partner?.tier || 'starter',
+          commissionRate: order.commission?.rate ?? partner?.commissionRate ?? 0,
           totalPending: 0,
           totalCredited: 0,
           orders: [],
@@ -87,23 +118,7 @@ export async function GET(request: NextRequest) {
       if (commStatus === 'pending') grouped[pid].totalPending += commAmt
       else if (commStatus === 'credited') grouped[pid].totalCredited += commAmt
 
-      grouped[pid].orders.push({
-        orderId: order._id?.toString() || order.orderId,
-        internalOrderId: order.orderId, // the PO-xxx string
-        partnerOrderId: order.partnerOrderId || null,
-        createdAt: order.createdAt,
-        orderTotal: order.summary?.total || 0,
-        subtotal: order.summary?.subtotal || 0,
-        commissionRate: order.commission?.rate || 0,
-        commissionAmount: commAmt,
-        commissionStatus: commStatus,
-        orderStatus: order.status || 'pending',
-        customer: {
-          name: order.customer?.name || '',
-          email: order.customer?.email || '',
-        },
-        items: (order.items || []).map((it: any) => ({ name: it.name, quantity: it.quantity, price: it.price })),
-      })
+      grouped[pid].orders.push(commissionOrder(order))
     }
 
     const result = Object.values(grouped).sort((a, b) => b.totalPending - a.totalPending)

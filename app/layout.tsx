@@ -5,7 +5,7 @@ import { Inter, Poppins, Caveat } from "next/font/google"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import "./globals.css"
 import { Providers } from "./providers"
-import { getSettingsData } from "../lib/db-service"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
 import { Analytics } from "@vercel/analytics/next"
 import { SiteJsonLd } from "@/components/SiteJsonLd"
 import ReportWebVitals from "@/components/ReportWebVitals"
@@ -57,49 +57,37 @@ const caveat = Caveat({
 export async function generateMetadata() {
   // Never let a slow or unreachable database block the page: race the settings
   // lookup against a short timeout and fall back to defaults if it loses.
-  const settings: any = await Promise.race([
-    getSettingsData().catch(() => null),
-    new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
+  const settings = await Promise.race([
+    getSiteSettings(),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
   ])
 
   // Determine absolute origin for images/icons
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:3000`)
+  const origin = await getOriginFromHeaders()
 
-  const siteName = settings?.storeName || "SARA Mobiles & Electronics"
+  const siteName = getCompanyName(settings)
+  const title = settings?.metaTitle?.trim() || siteName
   const description =
-    settings?.storeDescription ||
+    settings?.metaDescription?.trim() || settings?.storeDescription ||
     "Shop genuine mobiles, electronics and home appliances at SARA — best prices, easy EMI and fast delivery across Karnataka."
 
   // Brand logo doubles as the favicon unless one is uploaded in admin settings.
   const defaultLogo = "/sara-logo.png"
   const rawLogo = settings?.brandLogo || defaultLogo
-  const logo = rawLogo && (rawLogo.startsWith("http") ? rawLogo : `${origin}${rawLogo.startsWith("/") ? "" : "/"}${rawLogo}`)
-
   // Favicons must stay same-origin: an absolute http://localhost URL is cross-origin
   // to the running port and is blocked by the img-src CSP. Only remote logos keep their URL.
   const iconUrl = rawLogo.startsWith("http") ? rawLogo : rawLogo.startsWith("/") ? rawLogo : `/${rawLogo}`
   const iconDescriptor = [{ url: iconUrl, type: "image/png" }]
 
   return {
-    title: siteName,
-    description,
+    ...buildPageMetadata({ title, description, pageUrl: origin, origin, companyName: siteName }),
+    // Next supplies noindex on 404s; do not inherit a conflicting root index tag.
+    robots: undefined,
     generator: "Bytewise Consulting LLP",
     icons: {
       icon: iconDescriptor,
       apple: iconDescriptor,
       shortcut: defaultLogo,
-    },
-    openGraph: {
-      title: siteName,
-      description,
-      siteName,
-      images: logo ? [logo] : [],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: siteName,
-      description,
-      images: logo ? [logo] : [],
     },
     // PWA / mobile
     manifest: "/manifest.webmanifest",
@@ -187,9 +175,7 @@ export default async function RootLayout({
           <Analytics />
         </ConsentGate>
         <ReportWebVitals />
-        <ConsentGate category="advertising">
-          <MarketingTags />
-        </ConsentGate>
+        <MarketingTags />
         <ConsentBanner />
         {/* Service Worker: disabled by default because stale workers in
             production can keep serving broken cached images or stale route

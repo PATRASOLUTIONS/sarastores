@@ -2,11 +2,39 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 import axios from "axios"
 import * as cheerio from "cheerio"
-import { connectDB } from "@/lib/db"
-import { ObjectId } from "mongodb"
+import { connectToDatabase } from "@/lib/mongodb"
+import { z } from "zod"
+import { fetchBoundedText } from "@/lib/scrapers/http"
+import { ScraperError } from "@/lib/scrapers/types"
+import { handleApiError } from "@/lib/api-error"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { buildSpecificationDocument, SPECIFICATIONS_COLLECTION } from "@/lib/product-specification-schema"
 import { generateProductSlug } from "@/utils/slug"
+
+const textField = z.string().trim().max(20000)
+const stringList = z.array(textField).max(200)
+const editedDataSchema = z.object({
+  name: textField.optional(), brand: textField.optional(), description: textField.optional(),
+  price: z.number().finite().nonnegative().optional(), mrp: z.number().finite().nonnegative().optional(),
+  technicalDetails: z.record(z.string().max(200), textField).refine(value => Object.keys(value).length <= 200).optional(),
+  manufacturerInfo: textField.optional(), manufacturerImages: stringList.optional(),
+  whatsIncluded: stringList.optional(), features: stringList.optional(),
+}).strict()
+const requestSchema = z.object({
+  url: z.string().trim().max(4096), saveToDatabase: z.boolean().default(false),
+  itemno: z.string().trim().max(200).optional(), sku: z.string().trim().max(200).optional(),
+  category: textField.optional(), subCategory: textField.optional(), prod_desc: textField.optional(),
+  group_name: textField.optional(), char_desc: textField.optional(), manufacturer_name: textField.optional(),
+  editedData: editedDataSchema.optional(), active: z.boolean().optional(),
+}).strict().refine(value => !value.itemno || !value.sku || value.itemno === value.sku, "Item No and SKU must match")
+
+interface ReviewsSummary {
+  rating: number
+  totalRatings: number
+  starDistribution: Record<string, string>
+  customerReviews: Array<{ rating: number; text: string; title?: string }>
+  topReviews: string[]
+}
 
 // User agents to rotate for avoiding detection (updated Feb 2026)
 const USER_AGENTS = [
@@ -40,6 +68,7 @@ function amazonHost(url: string): string | null {
     return null
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
+  if (parsed.username || parsed.password || parsed.port) return null
   const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
   // Match the host itself or a subdomain of it — a substring test would let
   // https://internal-host/amzn.in/ through and make us fetch an internal URL.
@@ -81,26 +110,15 @@ function parsePrice(priceStr: string): number {
 async function resolveShortUrl(shortUrl: string): Promise<string> {
   // Reading the Location header is several times faster than following the
   // redirect, which downloads the whole product page just to learn the URL.
-  const response = await axios.get(shortUrl, {
+  const response = await fetchBoundedText(shortUrl, isValidAmazonUrl, {
     headers: {
       "User-Agent": getRandomUserAgent(),
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
-    maxRedirects: 0,
     timeout: 25000,
-    validateStatus: (status) => status < 400,
   })
-
-  const location = response.headers?.location
-  if (typeof location === "string" && location) {
-    const absolute = new URL(location, shortUrl).toString()
-    if (!isValidAmazonUrl(absolute)) {
-      throw new Error("Short link redirected off Amazon")
-    }
-    return absolute
-  }
-
-  return response.request?.res?.responseUrl || response.config?.url || shortUrl
+  if (response.status !== 200) throw new ScraperError("Could not resolve Amazon link", 422)
+  return response.finalUrl
 }
 
 export async function POST(request: Request) {
@@ -108,10 +126,16 @@ export async function POST(request: Request) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
+    let rawBody: unknown
+    try { rawBody = await request.json() } catch {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+    }
+    const parsed = requestSchema.safeParse(rawBody)
+    if (!parsed.success) return NextResponse.json({ success: false, error: "Invalid scraper request" }, { status: 400 })
+    const body = parsed.data
     const { url: inputUrl, saveToDatabase = false, itemno, category: inputCategory, subCategory: inputSubCategory, prod_desc: inputProdDesc, group_name: inputGroupName, char_desc: inputCharDesc, manufacturer_name: inputManufacturerName, editedData, active } = body
     const normalizedRequestMeta = extractCanonicalProductMetadata({
-      itemno,
+      itemno: itemno || body.sku,
       Name: editedData?.name,
       Description: editedData?.description,
       "Category/Group Name": inputCategory || inputGroupName,
@@ -153,7 +177,8 @@ export async function POST(request: Request) {
     }
 
     // Use clean ASIN-based URL to avoid tracking params that trigger bot detection
-    const domain = url.includes("amazon.in") ? "amazon.in" : "amazon.com"
+    const host = amazonHost(url)
+    const domain = host && !["amzn.in", "amzn.to"].includes(host) ? host : "amazon.in"
     const cleanUrl = `https://www.${domain}/dp/${asin}`
 
     // Fetch with retry logic - try different User-Agents on failure
@@ -164,7 +189,7 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < Math.min(3, shuffledUAs.length); attempt++) {
       try {
         const ua = shuffledUAs[attempt]
-        const response = await axios.get(cleanUrl, {
+        const response = await fetchBoundedText(cleanUrl, isValidAmazonUrl, {
           headers: {
             "User-Agent": ua,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -182,10 +207,10 @@ export async function POST(request: Request) {
             "Sec-CH-UA-Platform": '"Windows"',
             "Referer": `https://www.${domain}/`,
           },
-          maxRedirects: 5,
           timeout: 20000,
         })
-        responseData = response.data
+        if (response.status !== 200) throw new ScraperError(`Amazon returned HTTP ${response.status}`, 422)
+        responseData = response.html
 
         // Check if we got a CAPTCHA page instead of a product page
         if (responseData.includes("captcha") || responseData.includes("robot") || responseData.includes("automated access")) {
@@ -204,8 +229,10 @@ export async function POST(request: Request) {
         lastError = "Page content did not contain expected product elements"
         console.log(`Attempt ${attempt + 1}: No product elements found, retrying...`)
         await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
-      } catch (fetchError: any) {
-        lastError = fetchError.message || "Network request failed"
+      } catch (fetchError) {
+        if (fetchError instanceof ScraperError && fetchError.status === 400) throw fetchError
+        lastError = "Source request failed"
+        responseData = ""
         console.log(`Attempt ${attempt + 1} failed:`, lastError)
         if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500))
       }
@@ -219,7 +246,7 @@ export async function POST(request: Request) {
     }
 
     const $ = cheerio.load(responseData)
-    const html = responseData as string
+    const html = responseData
 
     // ===== EXTRACT PRODUCT DATA =====
 
@@ -472,7 +499,7 @@ export async function POST(request: Request) {
       const isAplusMedia = rawSrc.includes("aplus-media") || rawSrc.includes("aplus-seller-content")
 
       // Normalize URL for dedup
-      let normalizedUrl = rawSrc
+      const normalizedUrl = rawSrc
         .replace(/\._[A-Z]{2}\d+[_,]?\./, ".")
         .replace(/\._S[XY]\d+[_,]?\./, ".")
         .replace(/\._U[SL]\d+[_,]?\./, ".")
@@ -627,7 +654,7 @@ How to Report an Issue:
 • Our support team will review your request and guide you through the resolution process`
 
     // ===== CUSTOMER REVIEWS SUMMARY =====
-    const reviewsSummary: Record<string, any> = {}
+    const reviewsSummary: ReviewsSummary = { rating: 0, totalRatings: 0, starDistribution: {}, customerReviews: [], topReviews: [] }
 
     // Overall rating
     const ratingText = $(".a-icon-alt").first().text()
@@ -692,8 +719,7 @@ How to Report an Issue:
     const REPLACEMENT_WORD = process.env.AMAZON_SCRAPER_WORD || "Saramoblies"
     const cleanText = (text: string) => {
       if (!text) return ""
-      // Regex to replace Amazon with Replacement Word (case insensitive)
-      return text.replace(/Amazon/gi, REPLACEMENT_WORD)
+      return text.replace(/(https?:\/\/[^\s"'<>]+)|Amazon/gi, (match, url: string | undefined) => url || REPLACEMENT_WORD)
     }
 
     // Clean basic fields
@@ -751,12 +777,12 @@ How to Report an Issue:
     // Clean Reviews
     const cleanedReviewsSummary = {
       ...reviewsSummary,
-      customerReviews: (reviewsSummary.customerReviews as any[])?.map((r: any) => ({
+      customerReviews: reviewsSummary.customerReviews.map(r => ({
         ...r,
         title: cleanText(r.title || ""),
         text: cleanText(r.text)
-      })) || [],
-      topReviews: (reviewsSummary.topReviews as string[])?.map((r: string) => cleanText(r)) || []
+      })),
+      topReviews: reviewsSummary.topReviews.map(r => cleanText(r))
     }
 
     // Combine all specifications (after removing box content keys)
@@ -831,7 +857,10 @@ How to Report an Issue:
     // Option to save directly to database using itemno as unique key
     // Option to save directly to database using itemno as unique key
     if (saveToDatabase && canonicalSku) {
-      const db = await connectDB()
+      const { client, db } = await connectToDatabase()
+      const session = client.startSession()
+      try {
+      return await session.withTransaction(async () => {
       const productsCollection = db.collection("products")
 
       // Find existing product by itemno
@@ -841,7 +870,7 @@ How to Report an Issue:
           { itemno: canonicalSku },
           { "raw.itemno": canonicalSku }
         ]
-      })
+      }, { session })
 
       // Merge edited data if provided
       const finalData = editedData ? {
@@ -849,8 +878,8 @@ How to Report an Issue:
         amazonName: editedData.name || amazonData.amazonName,
         amazonBrand: editedData.brand || amazonData.amazonBrand,
         amazonDescription: editedData.description || amazonData.amazonDescription,
-        amazonPrice: editedData.price || amazonData.amazonPrice,
-        amazonMrp: editedData.mrp || amazonData.amazonMrp,
+        amazonPrice: editedData.price ?? amazonData.amazonPrice,
+        amazonMrp: editedData.mrp ?? amazonData.amazonMrp,
         amazonTechnicalDetails: editedData.technicalDetails || amazonData.amazonTechnicalDetails,
         amazonManufacturerInfo: editedData.manufacturerInfo || amazonData.amazonManufacturerInfo,
         amazonManufacturerImages: editedData.manufacturerImages || amazonData.amazonManufacturerImages,
@@ -871,14 +900,8 @@ How to Report an Issue:
         const updateRaw = buildSchemaSynchronizedRaw(existing.raw || {}, updateCanonical)
 
         // Update existing product with Amazon data (prioritizing editedData)
-        await productsCollection.updateOne(
-          {
-            $or: [
-              { sku: canonicalSku },
-              { itemno: canonicalSku },
-              { "raw.itemno": canonicalSku }
-            ]
-          },
+        const updateResult = await productsCollection.updateOne(
+          { _id: existing._id },
           {
             $set: {
               // Merge Amazon data into product
@@ -891,7 +914,7 @@ How to Report an Issue:
               category: inputCategory || existing.category || category,
               subCategory: inputSubCategory || existing.subCategory || scrapedSubCategory || "",
               description: editedData?.description || existing.description || cleanedDescription || aboutItems.join("\n"),
-              mrp: editedData?.mrp || existing.mrp || (mrp || price),
+              mrp: editedData?.mrp ?? existing.mrp ?? (mrp || price),
               originalPrice: existing.originalPrice || (mrp || price),
               image: existing.image || mainImage,
               images: existing.images?.length > 0 ? existing.images : amazonData.amazonImages,
@@ -906,12 +929,14 @@ How to Report an Issue:
               slug: existing.slug || generateProductSlug(editedData?.name || existing.name || cleanedTitle),
               raw: updateRaw,
               updatedAt: new Date().toISOString()
-            }
-          }
+            },
+          },
+          { session },
         )
+        if (updateResult.matchedCount !== 1) throw new Error("Product changed during scrape save")
 
         // Sync to product_specifications
-        try {
+        {
           const finalCat = inputCategory || category || existing.category;
           const finalSub = inputSubCategory || scrapedSubCategory || existing.subCategory || "";
 
@@ -925,7 +950,7 @@ How to Report an Issue:
             category: finalCat,
             subCategory: finalSub,
             name: editedData?.name || cleanedTitle,
-            mrp: editedData?.mrp || mrp || price,
+            mrp: editedData?.mrp ?? (mrp || price),
             technical_details: editedData?.technicalDetails || allSpecifications,
             from_manufacturer: editedData?.manufacturerInfo || cleanedManufacturerInfo,
             gallery_images: amazonData.amazonImages,
@@ -939,16 +964,13 @@ How to Report an Issue:
             char_desc: inputCharDesc,
             manufacturer_name: inputManufacturerName,
           })
-          if (specDoc) {
-            await specsCollection.updateOne({ sku: canonicalSku }, { $set: specDoc }, { upsert: true })
-          }
-        } catch (err) {
-          console.error("Failed to sync specs:", err)
+          if (!specDoc) throw new Error("Could not build product specifications")
+          await specsCollection.updateOne({ sku: canonicalSku }, { $set: specDoc }, { upsert: true, session })
         }
 
         return NextResponse.json({
           success: true,
-          product: { ...scrapedProduct, itemno: canonicalSku, sku: canonicalSku },
+          product: { ...scrapedProduct, itemno: canonicalSku, sku: canonicalSku, id: existing._id.toString() },
           action: "updated",
           message: `Amazon data linked to Item No: ${canonicalSku}`
         })
@@ -976,8 +998,8 @@ How to Report an Issue:
           category: finalCategory,
           subCategory: inputSubCategory || scrapedSubCategory || "",
           description: editedData?.description || cleanedDescription || aboutItems.join("\n"),
-          price: editedData?.price || price || mrp,
-          mrp: editedData?.mrp || mrp || price,
+          price: editedData?.price ?? (price || mrp),
+          mrp: editedData?.mrp ?? (mrp || price),
           originalPrice: mrp || price,
           image: mainImage,
           images: amazonData.amazonImages,
@@ -997,10 +1019,10 @@ How to Report an Issue:
           raw: createRaw,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        })
+        }, { session })
 
         // Sync to product_specifications
-        try {
+        {
           const finalSub = inputSubCategory || scrapedSubCategory || "";
 
           console.log(`[Amazon Scraper] Syncing NEW spec for SKU: ${canonicalSku}`);
@@ -1012,7 +1034,7 @@ How to Report an Issue:
             category: finalCategory,
             subCategory: finalSub,
             name: editedData?.name || cleanedTitle,
-            mrp: editedData?.mrp || mrp || price,
+            mrp: editedData?.mrp ?? (mrp || price),
             technical_details: editedData?.technicalDetails || allSpecifications,
             from_manufacturer: editedData?.manufacturerInfo || cleanedManufacturerInfo,
             gallery_images: amazonData.amazonImages,
@@ -1026,41 +1048,40 @@ How to Report an Issue:
             char_desc: inputCharDesc,
             manufacturer_name: inputManufacturerName,
           })
-          if (newSpecDoc) {
+          if (!newSpecDoc) throw new Error("Could not build product specifications")
             await specsCollection.updateOne(
               { sku: canonicalSku },
               { $set: newSpecDoc, $setOnInsert: { createdAt: new Date() } },
-              { upsert: true },
+              { upsert: true, session },
             )
-          }
-        } catch (err) {
-          console.error("Failed to sync specs (new):", err)
         }
 
         return NextResponse.json({
           success: true,
-          product: { ...scrapedProduct, itemno: canonicalSku, sku: canonicalSku, _id: result.insertedId },
+          product: { ...scrapedProduct, itemno: canonicalSku, sku: canonicalSku, id: result.insertedId.toString() },
           action: "created",
           message: `New product created with Item No: ${canonicalSku}`
         })
+      }
+      })
+      } finally {
+        await session.endSession()
       }
     }
 
     return NextResponse.json({ success: true, product: scrapedProduct })
 
-  } catch (error: any) {
-    console.error("Scrape error:", error)
-
-    if (error.response?.status === 503) {
+  } catch (error) {
+    if (error instanceof ScraperError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+    }
+    if (axios.isAxiosError(error) && error.response?.status === 503) {
       return NextResponse.json({
         success: false,
         error: "Amazon is blocking requests. Try again later or use a different product URL."
       }, { status: 503 })
     }
 
-    return NextResponse.json({
-      success: false,
-      error: error.message || "Failed to scrape product"
-    }, { status: 500 })
+    return handleApiError(error, "Failed to scrape product")
   }
 }

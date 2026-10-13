@@ -1,15 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getCollection, normalizeId } from "@/lib/db-service"
-import { checkAdminAuthorization } from "@/lib/auth"
+import { requireFullAdmin } from "@/lib/auth"
 import bcrypt from "bcryptjs"
+import { z } from "zod"
+import { emailSchema, nameSchema, passwordSchema } from "@/lib/validation"
+import type { Filter, Document } from "mongodb"
+
+const CreateUserSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  name: nameSchema,
+  role: z.enum(["user", "vendor", "admin", "superadmin"]).default("user"),
+})
 
 export async function GET(request: NextRequest) {
   try {
     // Listing all users exposes PII — admins only.
-    const auth = await checkAdminAuthorization()
-    if (!auth.authorized) {
-      return NextResponse.json({ message: auth.error || "Admin access required" }, { status: 401 })
-    }
+    const guard = await requireFullAdmin()
+    if (!guard.ok) return guard.response
 
     const url = request.nextUrl
     const role = url.searchParams.get("role") || undefined
@@ -21,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     const usersCollection = await getCollection("users")
 
-    const query: any = {}
+    const query: Filter<Document> = {}
     if (role) query.role = role
 
     // Segment membership is derived from the customer_profiles rollup; the user
@@ -37,7 +45,7 @@ export async function GET(request: NextRequest) {
             ? { lastOrderAt: { $gte: thirtyDaysAgo } }
             : { $or: [{ lastOrderAt: { $lt: thirtyDaysAgo } }, { lastOrderAt: null }] }
       const docs = await profiles.find(profileQuery, { projection: { userId: 1 } }).toArray()
-      segmentUserIds = docs.map((d: any) => String(d.userId))
+      segmentUserIds = docs.map((d) => String(d.userId))
     }
 
     if (segmentUserIds) {
@@ -80,16 +88,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Creating users (and assigning roles) is an admin-only operation.
-    const auth = await checkAdminAuthorization()
-    if (!auth.authorized) {
-      return NextResponse.json({ message: auth.error || "Admin access required" }, { status: 401 })
-    }
-
-    const data = await request.json()
-    const { email, password, name, role = "user" } = data
-
-    if (typeof email !== "string" || typeof password !== "string" || typeof name !== "string") {
-      return NextResponse.json({ message: "Email, password, and name are required" }, { status: 400 })
+    const guard = await requireFullAdmin()
+    if (!guard.ok) return guard.response
+    const parsed = CreateUserSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ message: parsed.error.issues[0].message }, { status: 400 })
+    const { email, password, name, role } = parsed.data
+    if (role === "superadmin" && guard.user.role !== "superadmin") {
+      return NextResponse.json({ error: "Only a superadmin may create another superadmin" }, { status: 403 })
     }
 
     const usersCollection = await getCollection("users")

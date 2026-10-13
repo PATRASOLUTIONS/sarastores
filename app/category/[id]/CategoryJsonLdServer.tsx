@@ -5,18 +5,15 @@
 
 import { connectToDatabase } from "@/lib/mongodb"
 import { safeJsonLd } from "@/lib/jsonld-safe"
+import { getSeoCategory } from "@/lib/seo-category"
+import { titleCaseLabel } from "@/lib/product-display"
+import { cleanProductName } from "@/utils/cleanProductName"
 
 async function getCategoryProducts(categoryName: string) {
   try {
     const { db } = await connectToDatabase()
 
-    const categories = await db.collection('categories').find({}).toArray()
-    const category = categories.find(
-      (c: any) =>
-        c.name?.toLowerCase() === categoryName.toLowerCase() ||
-        c.id === categoryName ||
-        String(c._id) === categoryName,
-    )
+    const category = await getSeoCategory(categoryName)
 
     if (!category) return { category: null, products: [] }
 
@@ -24,15 +21,16 @@ async function getCategoryProducts(categoryName: string) {
     const products = await db
       .collection('products')
       .find({
-        active: true,
+        active: { $ne: false },
         $or: [{ category: category.name }, { groupName: category.name }, { category: category.id }],
       })
-      .project({ _id: 1, id: 1, name: 1 })
+      .project({ _id: 1, id: 1, slug: 1, name: 1 })
       .limit(50)
       .toArray()
 
     return { category, products }
-  } catch {
+  } catch (error) {
+    console.error('[SEO] Category structured data could not be loaded:', error)
     return { category: null, products: [] }
   }
 }
@@ -46,10 +44,9 @@ export async function CategoryJsonLdServer({
 }) {
   const { category, products } = await getCategoryProducts(categoryName)
 
-  const displayName = categoryName
-    .split(/\s+/)
-    .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ')
+  if (!category) return null
+  const displayName = titleCaseLabel(String(category.name))
+  const pageUrl = `${origin}/category/${encodeURIComponent(category.slug || category.id)}`
 
   const breadcrumbData = {
     "@context": "https://schema.org",
@@ -57,7 +54,7 @@ export async function CategoryJsonLdServer({
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: origin },
       { "@type": "ListItem", position: 2, name: "Products", item: `${origin}/products` },
-      { "@type": "ListItem", position: 3, name: displayName },
+      { "@type": "ListItem", position: 3, name: displayName, item: pageUrl },
     ],
   }
 
@@ -66,11 +63,11 @@ export async function CategoryJsonLdServer({
     "@type": "ItemList",
     name: displayName,
     numberOfItems: products.length,
-    itemListElement: products.map((p: any, idx: number) => ({
+    itemListElement: products.map((p, idx: number) => ({
       "@type": "ListItem",
       position: idx + 1,
-      url: `${origin}/product/${p.id || p._id}`,
-      name: p.name,
+      url: `${origin}/product/${encodeURIComponent(p.slug || p._id.toString())}`,
+      name: cleanProductName(p.name),
     })),
   } : null
 

@@ -6,6 +6,7 @@ import { Zap, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react"
 import { fetchWithCache } from "@/utils/cache"
 import { selectDeals, getTimeLeft } from "@/utils/deals"
 import CategoryProductCard from "@/components/CategoryProductCard"
+import { catalogProductListResponseSchema, type CatalogProduct } from "@/utils/catalog"
 
 const DATA_TTL = 5 * 60 * 1000
 
@@ -22,7 +23,7 @@ function TimeCell({ value, label }: { value: number; label: string }) {
 }
 
 export default function DealsOfTheDay() {
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<CatalogProduct[]>([])
   const [timeLeft, setTimeLeft] = useState(getTimeLeft())
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
@@ -37,13 +38,14 @@ export default function DealsOfTheDay() {
         if (!r.ok) throw new Error("Failed to fetch products")
         return r.json()
       },
+      catalogProductListResponseSchema,
       DATA_TTL,
     )
-      .then((data: any[]) => {
+      .then((data) => {
         if (cancelled || !Array.isArray(data)) return
         setProducts(data)
       })
-      .catch(() => { })
+      .catch(error => console.error("Failed to load daily deals", error))
     return () => {
       cancelled = true
     }
@@ -106,7 +108,7 @@ export default function DealsOfTheDay() {
 
         <div ref={scrollerRef} className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth px-1">
           {deals.map((p) => (
-            <div key={p.id || p._id} className="w-44 sm:w-52 md:w-60 flex-shrink-0">
+            <div key={p.id} className="w-44 sm:w-52 md:w-60 flex-shrink-0">
               <CategoryProductCard product={p} />
             </div>
           ))}

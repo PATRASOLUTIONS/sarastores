@@ -67,7 +67,25 @@ export interface CanonicalProductMetadata {
   manufacturerName: string
 }
 
-function firstNonEmpty(...values: any[]): string {
+export interface ProductSchemaInput {
+  raw?: Record<string, unknown> | null
+  sku?: unknown
+  itemNo?: unknown
+  itemno?: unknown
+  name?: unknown
+  description?: unknown
+  char_desc?: unknown
+  characteristics?: unknown
+  groupName?: unknown
+  category?: unknown
+  subCategory?: unknown
+  prod_desc?: unknown
+  manufacturerName?: unknown
+  manufacturer_name?: unknown
+  manufacturer?: unknown
+}
+
+function firstNonEmpty(...values: unknown[]): string {
   for (const value of values) {
     if (value === null || value === undefined) {
       continue
@@ -82,7 +100,7 @@ function firstNonEmpty(...values: any[]): string {
   return ""
 }
 
-export function readAliasValue(source: Record<string, any>, aliases: string[]): string {
+export function readAliasValue(source: Record<string, unknown>, aliases: string[]): string {
   for (const key of aliases) {
     const value = source[key]
     if (value === null || value === undefined) {
@@ -98,7 +116,7 @@ export function readAliasValue(source: Record<string, any>, aliases: string[]): 
   return ""
 }
 
-export function extractCanonicalProductMetadata(row: Record<string, any>): CanonicalProductMetadata {
+export function extractCanonicalProductMetadata(row: Record<string, unknown>): CanonicalProductMetadata {
   return {
     itemno: readAliasValue(row, COLUMN_ALIASES.sku),
     name: readAliasValue(row, COLUMN_ALIASES.name),
@@ -110,8 +128,12 @@ export function extractCanonicalProductMetadata(row: Record<string, any>): Canon
   }
 }
 
-export function normalizeProductForSchema(product: any): CanonicalProductMetadata {
-  const raw = (product?.raw || {}) as Record<string, any>
+function isProductRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+export function normalizeProductForSchema(product: ProductSchemaInput | Record<string, unknown> | null | undefined): CanonicalProductMetadata {
+  const raw = isProductRecord(product?.raw) ? product.raw : {}
 
   return {
     itemno: firstNonEmpty(product?.sku, product?.itemNo, product?.itemno, raw["itemno"], raw["Item No."], raw["Item No"], raw["ITEM NO"]),
@@ -124,7 +146,7 @@ export function normalizeProductForSchema(product: any): CanonicalProductMetadat
   }
 }
 
-export function buildSchemaSynchronizedRaw(rawInput: Record<string, any> | null | undefined, canonical: CanonicalProductMetadata) {
+export function buildSchemaSynchronizedRaw(rawInput: Record<string, unknown> | null | undefined, canonical: CanonicalProductMetadata) {
   const raw = { ...(rawInput || {}) }
 
   if (canonical.itemno) raw[PRODUCT_CANONICAL_COLUMNS.sku] = canonical.itemno

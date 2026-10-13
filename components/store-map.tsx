@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo } from "react"
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 
@@ -43,9 +43,11 @@ const userIcon = L.divIcon({
 function ViewportSync({
   points,
   active,
+  resetKey,
 }: {
   points: Array<[number, number]>
   active: [number, number] | null
+  resetKey: number
 }) {
   const map = useMap()
 
@@ -61,7 +63,7 @@ function ViewportSync({
     if (points.length > 1) {
       map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 13 })
     }
-  }, [map, active, points])
+  }, [map, active, points, resetKey])
 
   return null
 }
@@ -71,19 +73,26 @@ export default function StoreMap({
   selectedStore,
   onSelectStore,
   userLocation,
+  userLocationLabel = "Your location",
+  resetKey = 0,
   className = "",
 }: {
   stores: MapStore[]
   selectedStore: string | null
   onSelectStore: (id: string) => void
   userLocation: { lat: number; lng: number } | null
+  userLocationLabel?: string
+  resetKey?: number
   className?: string
 }) {
   const located = useMemo(() => stores.filter((s) => s.coords), [stores])
 
   const points = useMemo(
-    () => located.map((s) => [s.coords!.lat, s.coords!.lng] as [number, number]),
-    [located]
+    () => [
+      ...located.map((s) => [s.coords!.lat, s.coords!.lng] as [number, number]),
+      ...(userLocation ? [[userLocation.lat, userLocation.lng] as [number, number]] : []),
+    ],
+    [located, userLocation]
   )
 
   const active = useMemo(() => {
@@ -95,7 +104,7 @@ export default function StoreMap({
     return (
       <div className={`flex flex-col items-center justify-center bg-gray-50 text-center p-6 ${className}`}>
         <p className="text-gray-600 font-medium">No mapped stores in this view</p>
-        <p className="text-gray-400 text-sm mt-1">Try widening the radius or clearing filters.</p>
+        <p className="text-gray-600 text-sm mt-1">Try widening the radius or clearing filters.</p>
       </div>
     )
   }
@@ -104,6 +113,7 @@ export default function StoreMap({
     <MapContainer
       center={points[0]}
       zoom={11}
+      zoomControl={false}
       scrollWheelZoom
       className={className}
       style={{ height: "100%", width: "100%" }}
@@ -113,15 +123,18 @@ export default function StoreMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <ViewportSync points={points} active={active} />
+      <ZoomControl position="bottomright" />
+      <ViewportSync points={points} active={active} resetKey={resetKey} />
 
-      {userLocation && <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} />}
+      {userLocation && <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} title={userLocationLabel}><Popup>{userLocationLabel}</Popup></Marker>}
 
       {located.map((store) => (
         <Marker
           key={store.id}
           position={[store.coords!.lat, store.coords!.lng]}
           icon={pinIcon(store.id === selectedStore)}
+          title={store.name}
+          alt={`View ${store.name}`}
           eventHandlers={{ click: () => onSelectStore(store.id) }}
         >
           <Popup>
@@ -142,8 +155,8 @@ export default function StoreMap({
                 )}
                 <a
                   href={
-                    store.mapUrl ||
-                    `https://www.google.com/maps/dir/?api=1&destination=${store.coords!.lat},${store.coords!.lng}`
+                    (userLocation ? undefined : store.mapUrl) ||
+                    `https://www.google.com/maps/dir/?api=1&destination=${store.coords!.lat},${store.coords!.lng}${userLocation ? `&origin=${userLocation.lat},${userLocation.lng}` : ""}`
                   }
                   target="_blank"
                   rel="noopener noreferrer"

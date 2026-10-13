@@ -9,6 +9,68 @@
  * standard.
  */
 
+function normalizeImageUrl(value: string): string | null {
+  const source = value.trim().replace(/&amp;/gi, "&").replace(/[,;\]})]+$/, "")
+  if (source.startsWith("/") && !source.startsWith("//")) return source
+  try {
+    const url = new URL(source)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null
+    // Older scraper text replacements also changed the Amazon image hostname.
+    if (url.hostname === "m.media-saramobiles.com" || url.hostname === "m.media-saramoblies.com") {
+      url.hostname = "m.media-amazon.com"
+    }
+    return url.href
+  } catch {
+    console.warn("[Product images] Invalid image URL")
+    return null
+  }
+}
+
+export function productImageUrls(value: unknown): string[] {
+  if (Array.isArray(value)) return [...new Set(value.flatMap(productImageUrls))]
+  if (value && typeof value === "object") {
+    if ("images" in value) return productImageUrls(value.images)
+    if ("specification_images" in value) return productImageUrls(value.specification_images)
+    return []
+  }
+  if (typeof value !== "string") return []
+  let text = value.trim().replace(/\\\//g, "/")
+  if (text.startsWith("//")) text = `https:${text}`
+  const candidates: string[] = text.match(/https?:\/\/[^\s"'<>]+|\/(?:api\/media|images|uploads|homepage)\/[^\s"'<>]+/gi) || []
+  if (text.startsWith("/") && !text.startsWith("//") && !/[\s"'<>]/.test(text)) candidates.push(text)
+  return [...new Set(candidates.flatMap(candidate => candidate.split(/[,;](?=https?:\/\/)/i)).flatMap(candidate => {
+    const url = normalizeImageUrl(candidate)
+    return url ? [url] : []
+  }))]
+}
+
+export function manufacturerImageSource(
+  technicalDetails?: Record<string, unknown> | null,
+  specificationImages?: unknown,
+  fromManufacturer?: unknown,
+): { images: string[]; dataUrl: string | null } {
+  const markup = typeof fromManufacturer === "string" ? fromManufacturer : ""
+  const attributes = [...markup.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => {
+    const attribute = tag.match(/\bdata-src\s*=\s*["']([^"']+)["']/i) || tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)
+    return attribute ? [attribute[1]] : []
+  })
+  const backgrounds = [...markup.matchAll(/background-image\s*:\s*url\(\s*["']?(https?:\/\/[^"')\s]+)/gi)].map(match => match[1])
+  const embedded = productImageUrls([...attributes, ...backgrounds])
+  if (embedded.length) return { images: embedded, dataUrl: null }
+  const provided = productImageUrls(specificationImages)
+  if (provided.length) return { images: provided, dataUrl: null }
+  const details = technicalDetails || {}
+  for (const key of ["manufacturer_image_urls", "from_manufacturer_image_urls", "image_urls", "images", "manufacturer_images", "URL", "Url", "url", "From Manufacturer URL", "Manufacturer URL"]) {
+    const images = productImageUrls(details[key])
+    if (images.length) return { images, dataUrl: null }
+  }
+  for (const key of ["manufacturer_images_url", "from_manufacturer_images_url", "spec_images_url", "images_url", "manufacturer_images_json"]) {
+    const urls = productImageUrls(details[key])
+    if (urls.length) return { images: [], dataUrl: urls[0] }
+  }
+  return { images: [], dataUrl: null }
+}
+
 export const IMAGE_ROLES = [
   "primary",
   "front",
@@ -74,7 +136,16 @@ export function isUsableImageUrl(value: unknown): value is string {
 }
 
 /** Every distinct, usable asset URL on a product document. */
-export function collectProductImages(product: any): string[] {
+export interface ProductImageInput {
+  image?: unknown
+  images?: unknown
+  specification_images?: unknown
+  video?: unknown
+  videos?: unknown
+  imageRoles?: Partial<Record<ImageRole, unknown>> | null
+}
+
+export function collectProductImages(product: ProductImageInput | null | undefined): string[] {
   const candidates = [
     product?.image,
     ...(Array.isArray(product?.images) ? product.images : []),
@@ -113,7 +184,7 @@ export interface ImageAudit {
  * Explicit `imageRoles` on the document wins; otherwise roles are inferred from
  * filenames, and the first usable asset is assumed to be the primary.
  */
-export function auditProductImages(product: any): ImageAudit {
+export function auditProductImages(product: ProductImageInput | null | undefined): ImageAudit {
   const images = collectProductImages(product)
   const byRole: Partial<Record<ImageRole, string>> = {}
 
@@ -164,7 +235,7 @@ export interface ImageCoverageSummary {
   withNoImages: number
 }
 
-export function summariseImageCoverage(products: any[]): ImageCoverageSummary {
+export function summariseImageCoverage(products: ProductImageInput[]): ImageCoverageSummary {
   const missingByRole: Record<string, number> = {}
   for (const role of [...REQUIRED_ROLES, ...OPTIONAL_ROLES]) missingByRole[role] = 0
 

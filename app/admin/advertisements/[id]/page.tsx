@@ -1,7 +1,7 @@
 "use client"
 
 import { apiFetch } from "@/lib/api-client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,8 @@ interface Advertisement {
   order: number
 }
 
-export default function ViewAdvertisementPage({ params }: { params: { id: string } }) {
+export default function ViewAdvertisementPage({ params: pendingParams }: { params: Promise<{ id: string }> }) {
+  const params = use(pendingParams)
   const { user, isAdmin } = useAuth()
   const router = useRouter()
   const [advertisement, setAdvertisement] = useState<Advertisement | null>(null)

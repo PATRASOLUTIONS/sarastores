@@ -35,6 +35,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "react-hot-toast"
+import type { Address } from "@/lib/partner/types"
+import { publicRazorpayIntegrationSchema, type PublicRazorpayIntegration as RazorpayIntegration } from "@/lib/partner/razorpay-integration"
 
 interface Partner {
   id: string;
@@ -123,18 +125,6 @@ interface OrderStats {
   totalCommission: number;
 }
 
-interface RazorpayIntegration {
-  enabled: boolean;
-  paymentMode: 'wallet' | 'direct';
-  commissionPercent: number;
-  allowedDomains: string[];
-  webhookSecret?: string;
-  razorpayAccountId?: string;
-  razorpayAccountStatus?: 'pending' | 'active' | 'inactive';
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 interface EnabledProduct {
   _id: string;
   name: string;
@@ -153,7 +143,7 @@ interface PartnerOrder {
     name: string
     email: string
     phone: string
-    address?: any
+    address?: Partial<Address>
   }
   items: Array<{
     productId: string
@@ -240,6 +230,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
   const [newDomain, setNewDomain] = useState('')
   const [razorpayAccountId, setRazorpayAccountId] = useState('')
   const [isSavingRazorpay, setIsSavingRazorpay] = useState(false)
+  const [razorpayLoadFailed, setRazorpayLoadFailed] = useState(false)
   const [paymentSubTab, setPaymentSubTab] = useState<'wallet' | 'razorpay'>('wallet')
   const [defaultRazorpayEnv, setDefaultRazorpayEnv] = useState<'test' | 'live'>('test')
   const [testKeyId, setTestKeyId] = useState('')
@@ -314,7 +305,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
     }
   }
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = async (newStatus: Partner['status']) => {
     try {
       const response = await apiFetch(`/api/admin/partners/${partnerId}`, {
         method: 'PATCH',
@@ -325,7 +316,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       const data = await response.json()
       if (data.success) {
         toast.success(`Partner ${newStatus} successfully`)
-        setPartner(prev => prev ? { ...prev, status: newStatus as any } : null)
+        setPartner(prev => prev ? { ...prev, status: newStatus } : null)
       } else {
         toast.error(data.error?.message || 'Failed to update partner')
       }
@@ -455,13 +446,22 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
   // Initialize Razorpay state when partner data is loaded
   useEffect(() => {
     if (partner?.razorpayIntegration) {
-      setRazorpayEnabled(partner.razorpayIntegration.enabled || false)
-      setRazorpayPaymentMode(partner.razorpayIntegration.paymentMode || 'wallet')
-      setRazorpayCommission(partner.razorpayIntegration.commissionPercent?.toString() || '')
-      setRazorpayDomains(partner.razorpayIntegration.allowedDomains || [])
-      setRazorpayAccountId(partner.razorpayIntegration.razorpayAccountId || '')
-      setDefaultRazorpayEnv((partner.razorpayIntegration as any).defaultEnvironment || 'test')
-      const creds = (partner.razorpayIntegration as any)?.credentials || {}
+      const parsed = publicRazorpayIntegrationSchema.safeParse(partner.razorpayIntegration)
+      if (!parsed.success) {
+        setRazorpayLoadFailed(true)
+        console.error("Invalid partner Razorpay integration response", parsed.error)
+        toast.error("Could not load valid Razorpay integration settings")
+        return
+      }
+      const integration = parsed.data
+      setRazorpayLoadFailed(false)
+      setRazorpayEnabled(integration.enabled)
+      setRazorpayPaymentMode(integration.paymentMode)
+      setRazorpayCommission(integration.commissionPercent.toString())
+      setRazorpayDomains(integration.allowedDomains)
+      setRazorpayAccountId(integration.razorpayAccountId || '')
+      setDefaultRazorpayEnv(integration.defaultEnvironment)
+      const creds = integration.credentials || {}
       setTestKeyId(creds.test?.keyId || '')
       setLiveKeyId(creds.live?.keyId || '')
     }
@@ -500,6 +500,10 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
   }
 
   const handleSaveRazorpayIntegration = async () => {
+    if (razorpayLoadFailed) {
+      toast.error("Reload valid integration settings before saving")
+      return
+    }
     const commission = parseFloat(razorpayCommission)
     if (razorpayEnabled && (isNaN(commission) || commission < 0 || commission > 100)) {
       toast.error('Please enter a valid commission percentage (0-100)')
@@ -812,7 +816,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
           {newKeyData && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <p className="text-sm text-yellow-800 font-medium mb-2">
-                ⚠️ Copy this key now! It won't be shown again.
+                ⚠️ Copy this key now! It won&apos;t be shown again.
               </p>
               <div className="flex items-center gap-2 bg-white p-3 rounded border font-mono text-sm">
                 <code className="flex-1 break-all">{newKeyData.key}</code>
@@ -827,7 +831,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
                 onClick={() => setNewKeyData(null)}
                 className="mt-3 text-sm text-yellow-700 hover:underline"
               >
-                I've copied the key, dismiss this message
+                I&apos;ve copied the key, dismiss this message
               </button>
             </div>
           )}
@@ -955,7 +959,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
               <div className="text-center py-8">
                 <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                 <p className="text-gray-600">No products enabled for this partner yet.</p>
-                <p className="text-sm text-gray-500 mt-2">Click "Manage Products" to enable products for this partner.</p>
+                <p className="text-sm text-gray-500 mt-2">Click &quot;Manage Products&quot; to enable products for this partner.</p>
               </div>
             </div>
           ) : (
@@ -1873,7 +1877,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Partner's Razorpay Account ID for direct transfers
+                    Partner&apos;s Razorpay Account ID for direct transfers
                   </p>
                 </div>
               )}
@@ -1961,7 +1965,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
               Integration Guide
             </h4>
             <p className="text-sm text-gray-500 mb-4">
-              Use this code snippet to integrate Razorpay payments on your website
+              First call /orders/razorpay/create with product IDs and quantities. Use its returned data below; never calculate the checkout amount in your browser. The API key selects test or live credentials.
             </p>
 
             <div className="bg-gray-900 rounded-lg overflow-hidden">
@@ -1970,12 +1974,12 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
                 <button
                   onClick={() => copyToClipboard(`// Initialize Razorpay Payment
 const options = {
-  key: 'YOUR_RAZORPAY_KEY',
-  amount: orderAmount * 100, // Amount in paise
+  key: razorpayData.keyId,
+  amount: razorpayData.amount, // Server-priced amount in paise
   currency: 'INR',
   name: 'Your Store Name',
   description: 'Order Payment',
-  order_id: razorpayOrderId,
+  order_id: razorpayData.razorpayOrderId,
   handler: function(response) {
     // Verify payment with partner API
     fetch('https://YOUR_SARA_DOMAIN/api/v1/partner/orders/razorpay/verify', {
@@ -2010,12 +2014,12 @@ rzp.open();`)}
               <pre className="p-4 overflow-x-auto text-sm text-gray-100">
                 <code>{`// Initialize Razorpay Payment
 const options = {
-  key: 'YOUR_RAZORPAY_KEY',
-  amount: orderAmount * 100, // Amount in paise
+  key: razorpayData.keyId,
+  amount: razorpayData.amount, // Server-priced amount in paise
   currency: 'INR',
   name: 'Your Store Name',
   description: 'Order Payment',
-  order_id: razorpayOrderId,
+  order_id: razorpayData.razorpayOrderId,
   handler: function(response) {
     // Verify payment with partner API
     fetch('https://YOUR_SARA_DOMAIN/api/v1/partner/orders/razorpay/verify', {
@@ -2142,7 +2146,7 @@ rzp.open();`}</code>
             </button>
             <button
               onClick={handleSaveRazorpayIntegration}
-              disabled={isSavingRazorpay}
+              disabled={isSavingRazorpay || razorpayLoadFailed}
               className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {isSavingRazorpay ? (

@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 export interface EmailData {
   orderNumber: string;
   customerName: string;
@@ -646,7 +648,9 @@ export const emailTemplates = {
   },
   SOFTWARE_LICENSE_KEYS: {
     subject: "Your Software License Keys - Order #{orderNumber}",
-    html: (data: any) => `
+    html: (data: EmailData) => {
+      if (!data.activationCodes?.length) throw new Error("Software license email requires activation codes")
+      return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -691,7 +695,7 @@ export const emailTemplates = {
             
             <p>Thank you for your purchase! Below are your software license keys:</p>
             
-            ${data.activationCodes.map((item: any) => `
+            ${data.activationCodes.map((item) => `
               <div style="margin: 20px 0;">
                 <h3>${item.softwareName}</h3>
                 <div class="activation-code">
@@ -724,6 +728,7 @@ export const emailTemplates = {
       </body>
       </html>
     `
+    },
   },
   SOFTWARE_ACTIVATION_KEY: {
     subject: "Your Activation Key for #{softwareName} - Order #{orderNumber}",
@@ -941,13 +946,68 @@ export const emailTemplates = {
 
 export type EmailTemplateId = keyof typeof emailTemplates
 
-export const getEmailTemplate = (templateId: EmailTemplateId, data: EmailData) => {
-  const template = emailTemplates[templateId];
-  if (!template) {
-    throw new Error(`Email template ${templateId} not found`);
+const orderEmailDataSchema = z.object({
+  orderNumber: z.string().trim().min(1).max(100),
+  customerName: z.string().trim().min(1).max(160),
+  status: z.string().optional(),
+  trackingNumber: z.string().optional(),
+  reason: z.string().optional(),
+  note: z.string().optional(),
+  orderDetails: z.object({
+    total: z.number(),
+    items: z.array(z.object({ name: z.string(), quantity: z.number(), price: z.number(), type: z.string().optional() })),
+    shippingAddress: z.string().optional(),
+    softwareLicenses: z.array(z.object({
+      softwareName: z.string(),
+      keys: z.array(z.object({ key: z.string(), validityYears: z.number(), expiresAt: z.coerce.date() })),
+    })).optional(),
+  }).optional(),
+})
+const licenseEmailDataSchema = orderEmailDataSchema.extend({
+  activationCodes: z.array(z.object({
+    softwareName: z.string(), activationCode: z.string(), validity: z.string(), expiresAt: z.string(),
+  })).min(1),
+  orderDate: z.string().optional(),
+  supportEmail: z.string().optional(),
+  supportPhone: z.string().optional(),
+})
+const activationEmailDataSchema = z.object({
+  customerName: z.string(), orderNumber: z.string(), softwareName: z.string(),
+  licenseKey: z.string(), validity: z.string(), maxDevice: z.number(), companyName: z.string().optional(),
+})
+const cartEmailDataSchema = z.object({
+  customerName: z.string(), cartUrl: z.string(),
+  items: z.array(z.object({ name: z.string(), image: z.string(), price: z.number(), quantity: z.number() })),
+})
+export const emailTemplateDataSchemas = {
+  ORDER_PENDING: orderEmailDataSchema,
+  ORDER_PROCESSING: orderEmailDataSchema,
+  ORDER_SHIPPED: orderEmailDataSchema,
+  ORDER_DELIVERED: orderEmailDataSchema,
+  ORDER_CANCELLED: orderEmailDataSchema,
+  SOFTWARE_LICENSE_KEYS: licenseEmailDataSchema,
+  SOFTWARE_ACTIVATION_KEY: activationEmailDataSchema,
+  CART_ABANDONMENT: cartEmailDataSchema,
+}
+
+export const getEmailTemplate = (templateId: EmailTemplateId, data: unknown): string => {
+  switch (templateId) {
+    case "SOFTWARE_LICENSE_KEYS":
+      return emailTemplates.SOFTWARE_LICENSE_KEYS.html(licenseEmailDataSchema.parse(data))
+    case "SOFTWARE_ACTIVATION_KEY":
+      return emailTemplates.SOFTWARE_ACTIVATION_KEY.html(activationEmailDataSchema.parse(data))
+    case "CART_ABANDONMENT":
+      return emailTemplates.CART_ABANDONMENT.html(cartEmailDataSchema.parse(data))
+    case "ORDER_PENDING":
+    case "ORDER_PROCESSING":
+    case "ORDER_SHIPPED":
+    case "ORDER_DELIVERED":
+    case "ORDER_CANCELLED":
+      return emailTemplates[templateId].html(orderEmailDataSchema.parse(data))
+    default:
+      throw new Error(`Email template ${templateId} not found`)
   }
-  return template.html(data);
-};
+}
 
 export const getEmailSubject = (templateId: EmailTemplateId, orderNumber: string) => {
   const template = emailTemplates[templateId];

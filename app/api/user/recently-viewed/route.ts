@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCollection } from "@/lib/db-service";
+import { getCollection, normalizeId } from "@/lib/db-service";
 import { ObjectId } from "mongodb";
 import { getCurrentUserId } from "@/lib/auth";
 
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
                         $position: 0,
                         $slice: 20
                     }
-                } as any
+                }
             }
         );
 
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
-        const collection = await getCollection(COLLECTION);
+        const collection = await getCollection<UserRecentlyViewedDocument>(COLLECTION);
         const user = await collection.findOne({ _id: new ObjectId(userId) });
 
         if (!user || !user.recentlyViewed) {
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
         }
 
         // Fetch product details for the recent IDs
-        const productsCollection = await getCollection("products");
+        const productsCollection = await getCollection<{ _id: ObjectId | string; id?: string; slug?: string; name?: string }>("products");
 
         // Convert string IDs to ObjectIds if your product IDs are ObjectIds
         // Assuming product IDs are strings based on project context, but handling both
@@ -90,13 +90,13 @@ export async function GET(req: Request) {
 
         // Sort products by the order in recentlyViewed
         const sortedProducts = productIds
-            .map((id: string) => products.find((p: any) => String(p.id) === String(id) || String(p._id) === String(id)))
-            .filter(Boolean); // Remove nulls if product not found
+            .map((id: string) => products.find((p) => String(p.id) === String(id) || String(p._id) === String(id)))
+            .filter((product) => product !== undefined);
 
         // Ensure slug exists on each product
         const { generateProductSlug } = await import("@/utils/slug")
-        const productsWithSlug = sortedProducts.map((p: any) => {
-            const normalized = p._id ? { ...p, id: String(p._id), _id: undefined } : p
+        const productsWithSlug = sortedProducts.map((p) => {
+            const normalized = normalizeId(p)
             if (!normalized.slug && normalized.name) normalized.slug = generateProductSlug(normalized.name)
             return normalized
         })

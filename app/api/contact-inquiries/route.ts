@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
+import { getCollection, normalizeId } from "@/lib/db-service"
+import { ContactInquirySchema } from "@/lib/validation"
+import { handleApiError } from "@/lib/api-error"
+import { withRateLimit } from "@/lib/rate-limit"
 
 // GET - Fetch all contact inquiries (for admin)
 export async function GET() {
@@ -15,7 +19,7 @@ export async function GET() {
             .sort({ createdAt: -1 })
             .toArray()
 
-        return NextResponse.json({ success: true, inquiries })
+        return NextResponse.json({ success: true, inquiries: inquiries.map(normalizeId) })
     } catch (error) {
         console.error("Error fetching contact inquiries:", error)
         return NextResponse.json(
@@ -26,62 +30,41 @@ export async function GET() {
 }
 
 // POST - Submit a new contact inquiry
-export async function POST(req: Request) {
+export const POST = withRateLimit(async (req: Request) => {
     try {
-        const { name, email, phone } = await req.json()
-
-        // Validate required fields
-        if (!name || !email || !phone) {
-            return NextResponse.json(
-                { success: false, error: "Name, email, and phone are required" },
-                { status: 400 }
-            )
+        let body: unknown
+        try {
+            body = await req.json()
+        } catch {
+            return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
         }
-
-        // Validate email format
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-        if (!emailRegex.test(email)) {
-            return NextResponse.json(
-                { success: false, error: "Invalid email format" },
-                { status: 400 }
-            )
+        const parsed = ContactInquirySchema.safeParse(body)
+        if (!parsed.success) {
+            return NextResponse.json({
+                success: false,
+                error: parsed.error.issues[0].message,
+            }, { status: 400 })
         }
-
-        // Validate phone number (basic validation)
-        const phoneRegex = /^\d{10}$/
-        if (!phoneRegex.test(phone.replace(/\D/g, ""))) {
-            return NextResponse.json(
-                { success: false, error: "Invalid phone number. Please enter a 10-digit phone number" },
-                { status: 400 }
-            )
-        }
-
-        const { db } = await connectToDatabase()
-
+        const now = new Date()
         const inquiry = {
-            name: name.trim(),
-            email: email.toLowerCase().trim(),
-            phone: phone.trim(),
+            ...parsed.data,
+            ...(parsed.data.consent === true ? { consentAt: now } : {}),
             status: "new",
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: now,
+            updatedAt: now,
         }
-
-        const result = await db.collection("contact_inquiries").insertOne(inquiry)
+        const inquiries = await getCollection("contact_inquiries")
+        const result = await inquiries.insertOne(inquiry)
 
         return NextResponse.json({
             success: true,
             message: "Thank you for reaching out! We will contact you soon.",
-            id: result.insertedId,
+            id: result.insertedId.toString(),
         })
     } catch (error) {
-        console.error("Error submitting contact inquiry:", error)
-        return NextResponse.json(
-            { success: false, error: "Failed to submit inquiry" },
-            { status: 500 }
-        )
+        return handleApiError(error, "Failed to submit inquiry")
     }
-}
+}, { maxRequests: 5, windowMs: 60000 })
 
 // DELETE - Delete a contact inquiry (admin only)
 export async function DELETE(req: Request) {

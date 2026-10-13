@@ -4,10 +4,17 @@ import {
   bulkAddLicenses, 
   getAvailableLicenseCount,
   getLicensesByEmail,
-  revokeLicense 
+  revokeLicense,
+  type SoftwareLicense,
 } from '@/lib/license-service'
-import { connectDB } from '@/lib/db'
-import { ObjectId } from 'mongodb'
+import { getCollection, normalizeId } from '@/lib/db-service'
+import { ObjectId, type Filter } from 'mongodb'
+import { z } from 'zod'
+
+const LicenseUploadSchema = z.object({
+  softwareId: z.string().refine(value => ObjectId.isValid(value), "Invalid software ID"),
+  keys: z.array(z.string().trim().min(1).max(1000)).min(1).max(5000),
+}).strict()
 
 /**
  * GET /api/software-licenses
@@ -17,6 +24,8 @@ import { ObjectId } from 'mongodb'
  * - assigned: Filter by assignment status (true/false)
  */
 export async function GET(request: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
   try {
     const searchParams = request.nextUrl.searchParams
     const softwareId = searchParams.get('softwareId')
@@ -24,14 +33,17 @@ export async function GET(request: NextRequest) {
     const assigned = searchParams.get('assigned')
     const countOnly = searchParams.get('countOnly') === 'true'
 
-    const db = await connectDB()
-    const collection = db.collection('software_licenses')
+    if (softwareId && !ObjectId.isValid(softwareId)) return NextResponse.json({ error: 'Invalid software ID' }, { status: 400 })
+    if (assigned !== null && assigned !== 'true' && assigned !== 'false') {
+      return NextResponse.json({ error: 'Invalid assigned filter' }, { status: 400 })
+    }
+    const collection = await getCollection<SoftwareLicense>('software_licenses')
 
     // Build query
-    const query: any = {}
+    const query: Filter<SoftwareLicense> = {}
     
     if (softwareId) {
-      query.softwareId = new ObjectId(softwareId)
+      query.softwareId = { $in: [new ObjectId(softwareId), softwareId] }
     }
     
     if (email) {
@@ -56,8 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Convert ObjectId to string for JSON serialization
     const serializedLicenses = licenses.map(license => ({
-      ...license,
-      _id: license._id.toString(),
+      ...normalizeId(license),
       softwareId: license.softwareId.toString(),
       orderId: license.orderId ? license.orderId.toString() : null
     }))
@@ -85,27 +96,12 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { softwareId, keys } = body
-
-    if (!softwareId || !keys || !Array.isArray(keys) || keys.length === 0) {
-      return NextResponse.json(
-        { error: 'softwareId and keys array are required' },
-        { status: 400 }
-      )
-    }
-
-    // Validate that all keys are non-empty strings
-    const validKeys = keys.filter(key => typeof key === 'string' && key.trim().length > 0)
-    
-    if (validKeys.length === 0) {
-      return NextResponse.json(
-        { error: 'No valid license keys provided' },
-        { status: 400 }
-      )
-    }
-
-    const insertedCount = await bulkAddLicenses(softwareId, validKeys)
+    const parsed = LicenseUploadSchema.safeParse(await request.json().catch(error => {
+      console.warn('Invalid license upload JSON:', error)
+      return null
+    }))
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Invalid license upload' }, { status: 400 })
+    const insertedCount = await bulkAddLicenses(parsed.data.softwareId, [...new Set(parsed.data.keys)])
 
     return NextResponse.json({
       success: true,
@@ -133,7 +129,7 @@ export async function DELETE(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const licenseId = searchParams.get('licenseId')
 
-    if (!licenseId) {
+    if (!licenseId || !ObjectId.isValid(licenseId)) {
       return NextResponse.json(
         { error: 'licenseId is required' },
         { status: 400 }

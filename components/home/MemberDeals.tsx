@@ -4,13 +4,14 @@ import { useRef } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Lock, ArrowRight } from "lucide-react"
 import CategoryProductCard from "@/components/CategoryProductCard"
+import type { CatalogProduct } from "@/utils/catalog"
 
 /**
  * "Members-only prices" rail. Same catalogue, framed as a member benefit so the
  * value of signing in / joining Rewards is felt at the point of browsing, not
  * buried on a separate page.
  */
-export default function MemberDeals({ products }: { products: any[] }) {
+export default function MemberDeals({ products }: { products: CatalogProduct[] }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const scrollBy = (dir: number) => scrollerRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" })
 
@@ -49,7 +50,7 @@ export default function MemberDeals({ products }: { products: any[] }) {
 
         <div ref={scrollerRef} className="scrollbar-hide flex gap-4 overflow-x-auto scroll-smooth px-1">
           {products.map((p) => (
-            <div key={p.id || p._id} className="w-44 flex-shrink-0 sm:w-52 md:w-60">
+            <div key={p.id} className="w-44 flex-shrink-0 sm:w-52 md:w-60">
               <CategoryProductCard product={p} />
             </div>
           ))}

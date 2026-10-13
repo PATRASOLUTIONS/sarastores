@@ -353,7 +353,7 @@ export const getHeadingClasses = (level: 1 | 2 | 3 | 4) => {
 export const getBadgeClasses = (type: "sale" | "success" | "info" | "warning") => {
   const classes = {
     sale: "bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-sm font-medium",
-    success: "bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium",
+    success: "bg-green-700 text-white px-3 py-1 rounded-full text-sm font-medium",
     info: "bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium",
     warning: "bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-sm font-medium",
   }

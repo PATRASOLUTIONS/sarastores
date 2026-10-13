@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sara Electronics - Admin Journey and Platform Features</title>
+<style>
+  :root {
+    --navy: #0f2557;
+    --navy-dark: #081633;
+    --navy-soft: #edf2fb;
+    --orange: #ff6a2c;
+    --orange-dark: #dd4e12;
+    --orange-soft: #fff0e8;
+    --blue: #2a7fff;
+    --green: #0b7a4b;
+    --green-soft: #e7f5ee;
+    --gold: #ad7000;
+    --gold-soft: #fff4d8;
+    --red: #bd2945;
+    --red-soft: #fdecef;
+    --purple: #6a3dc2;
+    --purple-soft: #f2edff;
+    --ink: #172033;
+    --muted: #5d6b7e;
+    --line: #dce4ef;
+    --surface: #f7f9fc;
+    --white: #fff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #8d98a8;
+    color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    line-height: 1.48;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { size: A4; margin: 0; }
+  .page {
+    position: relative;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 8mm;
+    padding: 15mm 16mm 18mm;
+    overflow: hidden;
+    background: var(--white);
+    box-shadow: 0 5px 24px rgba(7,20,46,.24);
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+  .page:last-child { page-break-after: auto; }
+  @media print {
+    html, body { background: #fff; }
+    .page { margin: 0; box-shadow: none; }
+  }
+
+  h1, h2, h3, h4 { color: var(--navy); line-height: 1.16; }
+  h2 { margin-bottom: 4px; font-size: 24px; }
+  h3 { margin: 8px 0 5px; font-size: 15px; }
+  h4 { margin-bottom: 3px; font-size: 12px; }
+  p { margin-bottom: 5px; }
+  strong { color: var(--navy); }
+  ul, ol { margin: 3px 0 5px 17px; }
+  li { margin-bottom: 2px; }
+
+  .page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 5px;
+    margin-bottom: 9px;
+    border-bottom: 2px solid var(--line);
+  }
+  .brand-lockup {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .045em;
+  }
+  .brand-lockup img { width: 24px; height: 24px; object-fit: contain; }
+  .brand-lockup span { color: var(--orange); }
+  .page-tag { color: var(--muted); font-size: 9px; }
+  .footer {
+    position: absolute;
+    right: 16mm;
+    bottom: 9mm;
+    left: 16mm;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 8.5px;
+  }
+  .eyebrow {
+    display: inline-block;
+    margin-bottom: 3px;
+    color: var(--orange-dark);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  .section-sub {
+    max-width: 172mm;
+    margin-bottom: 9px;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .card {
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--white);
+    page-break-inside: avoid;
+  }
+  .card.soft { background: var(--surface); }
+  .card.navy { border-color: #c7d5ed; background: var(--navy-soft); }
+  .card.orange { border-color: #ffd2bd; background: var(--orange-soft); }
+  .card.green { border-color: #bde3cf; background: var(--green-soft); }
+  .card.gold { border-color: #efd58d; background: var(--gold-soft); }
+  .card.purple { border-color: #d9cbfa; background: var(--purple-soft); }
+  .card p { margin: 0; color: var(--muted); font-size: 10px; }
+  .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 29px;
+    height: 29px;
+    margin-bottom: 6px;
+    border-radius: 9px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 900;
+  }
+  .icon.orange { background: var(--orange); }
+  .icon.green { background: var(--green); }
+  .icon.blue { background: var(--blue); }
+  .icon.purple { background: var(--purple); }
+  .pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 30px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .pill.live { background: var(--green-soft); color: var(--green); }
+  .pill.control { background: var(--navy-soft); color: var(--navy); }
+  .pill.action { background: var(--orange-soft); color: var(--orange-dark); }
+  .pill.setup { background: var(--gold-soft); color: var(--gold); }
+  .pill.risk { background: var(--red-soft); color: var(--red); }
+  .callout {
+    padding: 8px 11px;
+    margin: 7px 0;
+    border-left: 4px solid var(--orange);
+    border-radius: 0 8px 8px 0;
+    background: var(--orange-soft);
+    font-size: 10.5px;
+  }
+  .callout.navy { border-color: var(--navy); background: var(--navy-soft); }
+  .callout.green { border-color: var(--green); background: var(--green-soft); }
+  .callout.gold { border-color: var(--gold); background: var(--gold-soft); }
+  .callout.red { border-color: var(--red); background: var(--red-soft); }
+  table {
+    width: 100%;
+    margin: 5px 0 8px;
+    border-collapse: collapse;
+    font-size: 9.6px;
+  }
+  th {
+    padding: 5px 7px;
+    background: var(--navy);
+    color: #fff;
+    text-align: left;
+    font-weight: 700;
+  }
+  td {
+    padding: 5px 7px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: var(--surface); }
+  .flow {
+    display: flex;
+    align-items: stretch;
+    margin: 7px 0 9px;
+  }
+  .flow-step {
+    position: relative;
+    flex: 1;
+    padding: 8px 5px;
+    border: 1px solid var(--line);
+    border-right: none;
+    background: var(--surface);
+    text-align: center;
+  }
+  .flow-step:first-child { border-radius: 9px 0 0 9px; }
+  .flow-step:last-child { border-right: 1px solid var(--line); border-radius: 0 9px 9px 0; }
+  .flow-step:not(:last-child)::after {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    right: -7px;
+    width: 12px;
+    height: 12px;
+    border-top: 2px solid var(--orange);
+    border-right: 2px solid var(--orange);
+    background: var(--surface);
+    content: "";
+    transform: translateY(-50%) rotate(45deg);
+  }
+  .flow-step .number {
+    color: var(--orange-dark);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+  .flow-step .title { color: var(--navy); font-size: 10px; font-weight: 800; }
+  .flow-step .desc { margin-top: 2px; color: var(--muted); font-size: 8.2px; }
+  .timeline { margin: 6px 0 7px 5px; border-left: 3px solid var(--orange); }
+  .timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 31mm 1fr;
+    gap: 7px;
+    padding: 3px 0 8px 12px;
+  }
+  .timeline-item::before {
+    position: absolute;
+    top: 5px;
+    left: -8px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--orange);
+    border-radius: 50%;
+    background: #fff;
+    content: "";
+  }
+  .timeline-when { color: var(--navy); font-size: 10.5px; font-weight: 800; }
+  .timeline-when span { display: block; color: var(--orange-dark); font-size: 8px; text-transform: uppercase; }
+  .timeline-item p { margin: 0; color: var(--muted); font-size: 9.5px; }
+  .metric-strip { display: flex; gap: 6px; margin: 7px 0; }
+  .metric {
+    flex: 1;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--orange);
+    border-radius: 8px;
+  }
+  .metric .value { color: var(--navy); font-size: 14px; font-weight: 900; }
+  .metric .label { color: var(--muted); font-size: 8px; text-transform: uppercase; }
+  .checklist {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px 12px;
+    margin-top: 5px;
+  }
+  .check {
+    position: relative;
+    padding: 5px 7px 5px 25px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface);
+    font-size: 9.5px;
+  }
+  .check::before {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--green);
+    color: #fff;
+    content: "✓";
+    font-size: 8px;
+    font-weight: 900;
+  }
+  .route {
+    color: var(--purple);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+  }
+  .cover {
+    padding: 0;
+    color: #fff;
+    background:
+      radial-gradient(650px 430px at 87% -6%, rgba(255,106,44,.47), transparent 61%),
+      radial-gradient(600px 460px at -8% 108%, rgba(42,127,255,.35), transparent 57%),
+      linear-gradient(148deg, var(--navy) 0%, #0b1d46 56%, var(--navy-dark) 100%);
+  }
+  .cover-inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 297mm;
+    padding: 20mm 18mm;
+  }
+  .cover-brand { display: flex; align-items: center; justify-content: space-between; }
+  .cover-logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .04em;
+  }
+  .cover-logo img {
+    width: 38px;
+    height: 38px;
+    padding: 4px;
+    border-radius: 10px;
+    background: #fff;
+    object-fit: contain;
+  }
+  .cover-chip {
+    padding: 5px 11px;
+    border: 1px solid rgba(255,255,255,.28);
+    border-radius: 30px;
+    background: rgba(255,255,255,.1);
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .cover-copy { margin-top: auto; }
+  .cover h1 {
+    max-width: 172mm;
+    color: #fff;
+    font-size: 39px;
+    line-height: 1.06;
+  }
+  .cover h1 span { color: #ffc8ad; }
+  .cover-lead {
+    max-width: 157mm;
+    margin-top: 14px;
+    color: #cbd8ee;
+    font-size: 13px;
+  }
+  .cover-topics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .cover-topic {
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 11px;
+    background: rgba(255,255,255,.08);
+  }
+  .cover-topic .num { color: #ffb895; font-size: 19px; font-weight: 900; }
+  .cover-topic .label { color: #e6edf8; font-size: 9px; }
+  .cover-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,.2);
+    color: #aebed7;
+    font-size: 9.5px;
+  }
+  .quote {
+    margin: 7px 0 9px;
+    padding-left: 12px;
+    border-left: 4px solid var(--orange);
+    color: var(--navy);
+    font-size: 15px;
+    font-weight: 750;
+    line-height: 1.35;
+  }
+</style>
+</head>
+<body>
+
+<!-- 1. Cover -->
+<section class="page cover">
+  <div class="cover-inner">
+    <div class="cover-brand">
+      <div class="cover-logo">
+        <img src="../../public/sara-logo.png" alt="Sara Electronics logo" />
+        <div>SARA <span style="color:#ff8d57">ELECTRONICS</span></div>
+      </div>
+      <div class="cover-chip">Admin Operations Guide</div>
+    </div>
+
+    <div class="cover-copy">
+      <h1>Admin journey and <span>platform feature guide</span></h1>
+      <p class="cover-lead">
+        A presentation-ready guide to how administrators operate the Sara Electronics platform:
+        access, daily control, catalogue, sales, customers, campaigns, stores, partners and system governance.
+      </p>
+      <div class="cover-topics">
+        <div class="cover-topic"><div class="num">01</div><div class="label">Admin journey</div></div>
+        <div class="cover-topic"><div class="num">02</div><div class="label">Operational workflows</div></div>
+        <div class="cover-topic"><div class="num">03</div><div class="label">Platform features</div></div>
+        <div class="cover-topic"><div class="num">04</div><div class="label">Controls and governance</div></div>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <span>Prepared for Sara Electronics</span>
+      <span>October 2026</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Admin mission -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Admin Overview</div>
+  </div>
+
+  <span class="eyebrow">Purpose</span>
+  <h2>The admin panel is the operating system of the business</h2>
+  <p class="section-sub">
+    Administrators use one controlled workspace to manage what customers see, what they can buy,
+    how orders progress, how campaigns run and how the platform is configured.
+  </p>
+
+  <div class="quote">
+    The admin journey converts business decisions into customer experience:
+    catalogue accuracy, fulfilment speed, marketing relevance and operational trust.
+  </div>
+
+  <div class="grid4">
+    <div class="card navy"><div class="icon">1</div><h4>Observe</h4><p>Review revenue, fulfilment, inventory, customers and recent activity.</p></div>
+    <div class="card orange"><div class="icon orange">2</div><h4>Prioritise</h4><p>Identify low stock, pending orders, customer issues and campaign opportunities.</p></div>
+    <div class="card green"><div class="icon green">3</div><h4>Act</h4><p>Update products, orders, content, campaigns, stores, partners and settings.</p></div>
+    <div class="card purple"><div class="icon purple">4</div><h4>Verify</h4><p>Confirm storefront output, payment state, delivery progress and reporting.</p></div>
+  </div>
+
+  <h3>Current administration structure</h3>
+  <table>
+    <tr><th>Navigation group</th><th>Business responsibility</th><th>Typical users</th></tr>
+    <tr><td><strong>Overview</strong></td><td>Performance and operational health</td><td>Leadership, admin managers</td></tr>
+    <tr><td><strong>Catalogue</strong></td><td>Products, taxonomy, specifications, images and software</td><td>Merchandising, catalogue team</td></tr>
+    <tr><td><strong>Sales</strong></td><td>Orders, payments, offers and fulfilment</td><td>Order desk, finance, store staff</td></tr>
+    <tr><td><strong>Customers</strong></td><td>Profiles, leads, support and communication</td><td>CRM, support, marketing</td></tr>
+    <tr><td><strong>Storefront</strong></td><td>Homepage, promotions, content and visual merchandising</td><td>Marketing, content team</td></tr>
+    <tr><td><strong>Campaigns</strong></td><td>Gamification and customer acquisition programmes</td><td>Campaign managers</td></tr>
+    <tr><td><strong>Stores</strong></td><td>Locations, QR journeys and serviceability</td><td>Retail operations</td></tr>
+    <tr><td><strong>Partners</strong></td><td>B2B accounts, API access and payouts</td><td>Partner operations, finance</td></tr>
+    <tr><td><strong>System</strong></td><td>Store configuration, permissions and documentation</td><td>Superadmin, technical owner</td></tr>
+  </table>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 2</span></div>
+</section>
+
+<!-- 3. Access and permissions -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Access and Governance</div>
+  </div>
+
+  <span class="eyebrow">Secure Entry</span>
+  <h2>Admin access and permission journey</h2>
+  <p class="section-sub">
+    Access is checked before admin content is rendered. Staff can then receive only the pages required for their role.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><div class="number">Step 1</div><div class="title">Sign in</div><div class="desc">Authenticated session</div></div>
+    <div class="flow-step"><div class="number">Step 2</div><div class="title">Authorise</div><div class="desc">Role or dashboard access</div></div>
+    <div class="flow-step"><div class="number">Step 3</div><div class="title">Filter</div><div class="desc">Allowed admin pages</div></div>
+    <div class="flow-step"><div class="number">Step 4</div><div class="title">Operate</div><div class="desc">Use approved tools</div></div>
+    <div class="flow-step"><div class="number">Step 5</div><div class="title">Audit</div><div class="desc">Review outcome</div></div>
+  </div>
+
+  <div class="grid3">
+    <div class="card navy">
+      <span class="pill control">Admin</span>
+      <h3>Full operational role</h3>
+      <p>Suitable for trusted managers responsible for catalogue, sales, content, customers and campaigns.</p>
+    </div>
+    <div class="card purple">
+      <span class="pill control">Superadmin</span>
+      <h3>Highest control level</h3>
+      <p>Suitable for system ownership, sensitive settings, staff access and critical platform decisions.</p>
+    </div>
+    <div class="card orange">
+      <span class="pill action">Staff access</span>
+      <h3>Granular page access</h3>
+      <p>Dashboard access and allowed-page claims support narrower responsibilities without sharing full admin control.</p>
+    </div>
+  </div>
+
+  <h3>Permission design examples</h3>
+  <table>
+    <tr><th>Staff profile</th><th>Recommended pages</th><th>Pages normally restricted</th></tr>
+    <tr><td>Catalogue executive</td><td>Products, catalogue, specifications, image coverage, scraper</td><td>Payments, partners, settings</td></tr>
+    <tr><td>Order executive</td><td>Orders, bulk update, external orders, customers</td><td>System settings and partner keys</td></tr>
+    <tr><td>Marketing executive</td><td>Campaigns, email, homepage, posters, promotions, custom pages</td><td>Payments and technical configuration</td></tr>
+    <tr><td>Store manager</td><td>Employees, store QR, QR analytics, leads and selected orders</td><td>Global catalogue and partner controls</td></tr>
+    <tr><td>Finance manager</td><td>Payments, orders, partner payouts and dashboard</td><td>Content and catalogue editing</td></tr>
+  </table>
+
+  <div class="callout red">
+    <strong>Security rule:</strong> navigation visibility is not the security boundary.
+    Every sensitive API action must also verify the authenticated role or permission on the server.
+  </div>
+  <div class="callout navy">
+    <strong>Access principle:</strong> grant the minimum pages needed for the job, review access when responsibilities change,
+    and reserve superadmin rights for a small number of accountable owners.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 3</span></div>
+</section>
+
+<!-- 4. Journey map -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Admin Journey</div>
+  </div>
+
+  <span class="eyebrow">End-to-End Workflow</span>
+  <h2>The administrator's operating cycle</h2>
+  <p class="section-sub">
+    The most effective admin journey follows a repeatable loop rather than isolated page updates.
+  </p>
+
+  <div class="timeline">
+    <div class="timeline-item"><div class="timeline-when"><span>1. Start</span>Review dashboard</div><div><p>Select the date range and check realised revenue, fulfilment pipeline, orders, AOV, customers, products and low-stock signals.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>2. Triage</span>Resolve exceptions</div><div><p>Prioritise pending or delayed orders, payment issues, stock risks, complaints, contact inquiries and lead follow-up.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>3. Maintain</span>Update core data</div><div><p>Keep products, categories, brands, specifications, images, prices, offers, serviceability and store details accurate.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>4. Merchandise</span>Shape the storefront</div><div><p>Schedule hero content, homepage sections, promotional banners, advertisements, buying guides and campaign pages.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>5. Engage</span>Run campaigns</div><div><p>Select audiences, prepare email or WhatsApp plans, configure coupons, spin campaigns, lucky draws and local QR activations.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>6. Verify</span>Check customer output</div><div><p>Preview the storefront, test links and offers, confirm order/payment updates and review campaign delivery or analytics.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>7. Improve</span>Export and learn</div><div><p>Use dashboard, order, campaign, QR and spin reports to identify the next operational or commercial action.</p></div></div>
+  </div>
+
+  <h3>Admin outcome map</h3>
+  <div class="grid4">
+    <div class="card"><h4>Accurate</h4><p>Products, price, stock, content and settings match reality.</p></div>
+    <div class="card"><h4>Responsive</h4><p>Orders, leads and customer issues move without avoidable delay.</p></div>
+    <div class="card"><h4>Relevant</h4><p>Campaigns and storefront content fit audience and season.</p></div>
+    <div class="card"><h4>Measurable</h4><p>Important actions produce visible business outcomes.</p></div>
+  </div>
+
+  <div class="callout green">
+    <strong>Recommended habit:</strong> begin with exceptions, not content creation. Protect existing customers and active orders
+    before launching the next promotion.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 4</span></div>
+</section>
+
+<!-- 5. Dashboard -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Overview Features</div>
+  </div>
+
+  <span class="eyebrow">Command Centre</span>
+  <h2>Dashboard and business visibility</h2>
+  <p class="section-sub">
+    The dashboard is designed for rapid performance review and direct navigation to the underlying operational work.
+  </p>
+
+  <div class="metric-strip">
+    <div class="metric"><div class="value">Revenue</div><div class="label">Delivered/completed orders</div></div>
+    <div class="metric"><div class="value">Pipeline</div><div class="label">Awaiting fulfilment</div></div>
+    <div class="metric"><div class="value">Orders</div><div class="label">Volume and AOV</div></div>
+    <div class="metric"><div class="value">Customers</div><div class="label">Total and new</div></div>
+    <div class="metric"><div class="value">Stock</div><div class="label">Active and low stock</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card navy">
+      <h3>Date-based analysis</h3>
+      <ul>
+        <li>Preset ranges: 7, 30, 90 and 365 days or all time</li>
+        <li>Custom from/to date selection</li>
+        <li>Comparison deltas for revenue, orders and AOV</li>
+        <li>Daily revenue, booked value and order trend</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <h3>Operational breakdown</h3>
+      <ul>
+        <li>Orders grouped by current status</li>
+        <li>Payment methods with order count and value</li>
+        <li>Realised, pipeline and cancelled/returned value</li>
+        <li>Recent order visibility for fast follow-up</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <h3>Commercial intelligence</h3>
+      <ul>
+        <li>Top products by units and revenue</li>
+        <li>Average order value</li>
+        <li>New customer count in selected range</li>
+        <li>Product activity and low-stock warning</li>
+      </ul>
+    </div>
+    <div class="card purple">
+      <h3>Reporting</h3>
+      <ul>
+        <li>Excel workbook export</li>
+        <li>Summary, daily, status and payment sheets</li>
+        <li>Top-product and recent-order sheets</li>
+        <li>Direct links from key cards into admin modules</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Suggested daily dashboard questions</h3>
+  <table>
+    <tr><th>Question</th><th>Signal</th><th>Admin action</th></tr>
+    <tr><td>What requires attention now?</td><td>Pipeline, pending status, recent orders</td><td>Open orders and assign next steps</td></tr>
+    <tr><td>Are sales converting into fulfilment?</td><td>Booked value versus realised revenue</td><td>Investigate delayed or cancelled orders</td></tr>
+    <tr><td>What may become unavailable?</td><td>Low-stock count and product activity</td><td>Restock, deactivate or adjust merchandising</td></tr>
+    <tr><td>What should be promoted?</td><td>Top products, category demand, inventory</td><td>Update homepage or campaign focus</td></tr>
+  </table>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 5</span></div>
+</section>
+
+<!-- 6. Catalogue -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Catalogue Features</div>
+  </div>
+
+  <span class="eyebrow">Product Operations</span>
+  <h2>Catalogue, taxonomy and product quality</h2>
+  <p class="section-sub">
+    Catalogue administration controls product discovery, pricing clarity, stock confidence, search visibility and checkout accuracy.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy"><div class="icon">P</div><h4>Products</h4><p>Create, edit, activate, deactivate, search and manage product data, pricing, images, stock and metadata.</p><div class="route">/admin/products</div></div>
+    <div class="card orange"><div class="icon orange">T</div><h4>Categories & brands</h4><p>Manage categories, sub-categories and brands through a consolidated catalogue workspace.</p><div class="route">/admin/catalogue</div></div>
+    <div class="card green"><div class="icon green">S</div><h4>Specifications</h4><p>Import, fetch, lock, edit and synchronise detailed product specifications.</p><div class="route">/admin/product-specifications</div></div>
+    <div class="card"><div class="icon blue">I</div><h4>Image coverage</h4><p>Identify products with incomplete visual assets and improve catalogue presentation.</p><div class="route">/admin/image-coverage</div></div>
+    <div class="card gold"><div class="icon orange">A</div><h4>Product scraper</h4><p>Extract product information for review and controlled import rather than direct unverified publishing.</p><div class="route">/admin/scraper</div></div>
+    <div class="card purple"><div class="icon purple">D</div><h4>Software catalogue</h4><p>Manage software products, validity/device options and licence-key inventory.</p><div class="route">/admin/software</div></div>
+  </div>
+
+  <h3>Key catalogue capabilities</h3>
+  <table>
+    <tr><th>Capability</th><th>Admin value</th><th>Customer impact</th></tr>
+    <tr><td>Product CRUD and status</td><td>Control exactly what is available</td><td>Prevents inactive or incomplete products appearing</td></tr>
+    <tr><td>Bulk upload and updates</td><td>Maintain large catalogues efficiently</td><td>Faster price and metadata accuracy</td></tr>
+    <tr><td>Canonical schema migration</td><td>Standardise inconsistent records</td><td>More reliable filtering and display</td></tr>
+    <tr><td>Taxonomy management</td><td>Keep navigation structured</td><td>Easier search and browsing</td></tr>
+    <tr><td>Specifications and images</td><td>Increase product completeness</td><td>Greater decision confidence</td></tr>
+    <tr><td>Software licence keys</td><td>Protect digital fulfilment inventory</td><td>Reliable post-purchase delivery</td></tr>
+  </table>
+
+  <div class="callout gold">
+    <strong>Publishing control:</strong> imported or scraped content should be reviewed for title, brand, category,
+    price, stock, images, specifications, warranty and customer-facing accuracy before activation.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 6</span></div>
+</section>
+
+<!-- 7. Sales -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Sales Features</div>
+  </div>
+
+  <span class="eyebrow">Revenue Operations</span>
+  <h2>Orders, payments, offers and fulfilment</h2>
+  <p class="section-sub">
+    Sales administration takes an order from initial review through payment confirmation, fulfilment, tracking and completion.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><div class="number">1</div><div class="title">Receive</div><div class="desc">Order and payment data</div></div>
+    <div class="flow-step"><div class="number">2</div><div class="title">Validate</div><div class="desc">Customer, items, payment</div></div>
+    <div class="flow-step"><div class="number">3</div><div class="title">Process</div><div class="desc">Status and assignment</div></div>
+    <div class="flow-step"><div class="number">4</div><div class="title">Dispatch</div><div class="desc">Tracking number</div></div>
+    <div class="flow-step"><div class="number">5</div><div class="title">Complete</div><div class="desc">Delivery or licence</div></div>
+  </div>
+
+  <div class="grid3">
+    <div class="card navy"><h3>Orders</h3><p>Search, filter, review customer and item details, update status, manage tracking, access invoices and handle software fulfilment.</p><div class="route">/admin/orders</div></div>
+    <div class="card orange"><h3>Bulk order update</h3><p>Upload and preview multiple order-status and tracking changes before applying them.</p><div class="route">/admin/orders/bulk-update</div></div>
+    <div class="card green"><h3>External orders</h3><p>Monitor third-party fulfilment orders, retry failures and cancel queued work where supported.</p><div class="route">/admin/external-orders</div></div>
+    <div class="card"><h3>Payments</h3><p>Review payment transactions, status and online versus in-store payment activity.</p><div class="route">/admin/payments</div></div>
+    <div class="card gold"><h3>Coupons & offers</h3><p>Create and manage discount programmes, eligibility, validity and promotional presentation.</p><div class="route">/admin/promotions</div></div>
+    <div class="card purple"><h3>Employees</h3><p>Manage employee references used by in-store purchase and operational flows.</p><div class="route">/admin/employees</div></div>
+  </div>
+
+  <h3>Order desk checklist</h3>
+  <div class="checklist">
+    <div class="check">Confirm payment method and payment status</div>
+    <div class="check">Check customer contact and delivery address</div>
+    <div class="check">Review product, quantity and fulfilment type</div>
+    <div class="check">Update order status only after real progress</div>
+    <div class="check">Enter a correct tracking reference</div>
+    <div class="check">Assign software licence keys safely</div>
+    <div class="check">Notify the customer of meaningful changes</div>
+    <div class="check">Record cancellation, return or refund accurately</div>
+  </div>
+
+  <div class="callout red">
+    <strong>Financial control:</strong> customer-facing totals must be based on server-verified product, coupon,
+    shipping and payment data. Admins should investigate discrepancies rather than manually masking them.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 7</span></div>
+</section>
+
+<!-- 8. Customers -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Customer Features</div>
+  </div>
+
+  <span class="eyebrow">Customer Operations</span>
+  <h2>Customers, leads, support and communication</h2>
+  <p class="section-sub">
+    Customer administration combines identity, commercial history, service cases and permission-aware communication.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy"><div class="icon">C</div><h4>Customers</h4><p>Search customer records, review detail and understand the relationship around accounts and orders.</p><div class="route">/admin/customers</div></div>
+    <div class="card orange"><div class="icon orange">L</div><h4>Leads</h4><p>Capture, categorise, follow up and move leads through new, contacted, interested, converted or closed states.</p><div class="route">/admin/leads</div></div>
+    <div class="card green"><div class="icon green">Q</div><h4>Complaints</h4><p>Review structured complaints, evidence, order references, status and internal notes.</p><div class="route">/admin/complaints</div></div>
+    <div class="card"><div class="icon blue">I</div><h4>Contact inquiries</h4><p>Manage general customer messages from new through contacted, resolved or archived.</p><div class="route">/admin/contact-inquiries</div></div>
+    <div class="card gold"><div class="icon orange">M</div><h4>Campaigns & email</h4><p>Select templates, edit content, choose recipients, preview and send with progress visibility.</p><div class="route">/admin/customer-centric</div></div>
+    <div class="card purple"><div class="icon purple">E</div><h4>Email templates</h4><p>Create and maintain reusable promotional and lifecycle email content.</p><div class="route">/admin/customer-centric/templates</div></div>
+  </div>
+
+  <h3>Four-step campaign journey</h3>
+  <div class="flow">
+    <div class="flow-step"><div class="number">Step 1</div><div class="title">Pick template</div><div class="desc">Saved or prepared content</div></div>
+    <div class="flow-step"><div class="number">Step 2</div><div class="title">Edit content</div><div class="desc">Subject, body, image, CTA</div></div>
+    <div class="flow-step"><div class="number">Step 3</div><div class="title">Choose recipients</div><div class="desc">Segment, search or import</div></div>
+    <div class="flow-step"><div class="number">Step 4</div><div class="title">Preview & send</div><div class="desc">Review, batch and monitor</div></div>
+  </div>
+
+  <div class="callout navy">
+    <strong>Customer-care principle:</strong> order history, complaint context and communication consent should guide
+    the response. The objective is resolution and trust, not only closing the admin record.
+  </div>
+  <div class="callout gold">
+    <strong>Marketing dependency:</strong> WhatsApp plans require provider configuration and customer opt-in.
+    Scheduled cart, wishlist and lifecycle campaigns require secure scheduler activation.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 8</span></div>
+</section>
+
+<!-- 9. Storefront -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Storefront Features</div>
+  </div>
+
+  <span class="eyebrow">Digital Merchandising</span>
+  <h2>Homepage, content and promotional presentation</h2>
+  <p class="section-sub">
+    Storefront administration controls the visual hierarchy customers see before they open a product page.
+  </p>
+
+  <table>
+    <tr><th>Admin module</th><th>Feature purpose</th><th>Customer-facing effect</th></tr>
+    <tr><td><strong>Homepage Sections</strong><br><span class="route">/admin/home-components</span></td><td>Create, publish, hide, duplicate and reorder curated sections</td><td>Controls category rails, featured collections and homepage storytelling</td></tr>
+    <tr><td><strong>Hero Posters & Slides</strong><br><span class="route">/admin/posters</span></td><td>Manage primary campaign visuals, CTA and order</td><td>Defines the first promotional message</td></tr>
+    <tr><td><strong>Banners & Promos</strong><br><span class="route">/admin/listing-banners</span></td><td>Place promotional assets within listing experiences</td><td>Connects category browsing with current campaigns</td></tr>
+    <tr><td><strong>Theme & Festivals</strong><br><span class="route">/admin/theme</span></td><td>Coordinate visual themes and seasonal moments</td><td>Creates timely, consistent festival experiences</td></tr>
+    <tr><td><strong>Site Features</strong><br><span class="route">/admin/features</span></td><td>Manage service and trust messages</td><td>Communicates benefits such as delivery, support or assurance</td></tr>
+    <tr><td><strong>Product Ads</strong><br><span class="route">/admin/product-advertisements</span></td><td>Promote specific products through managed placements</td><td>Increases visibility for selected inventory</td></tr>
+    <tr><td><strong>Advertisements</strong><br><span class="route">/admin/advertisements</span></td><td>Create and maintain general advertising assets</td><td>Supports wider promotional campaigns</td></tr>
+    <tr><td><strong>Custom Pages</strong><br><span class="route">/admin/campaign-pages</span></td><td>Build slug-based campaign landing pages</td><td>Provides a focused destination for paid, email, social or QR traffic</td></tr>
+    <tr><td><strong>Buying Guides</strong><br><span class="route">/admin/articles</span></td><td>Publish educational editorial content</td><td>Helps customers understand categories and choose products</td></tr>
+  </table>
+
+  <h3>Content publishing workflow</h3>
+  <div class="flow">
+    <div class="flow-step"><div class="number">Brief</div><div class="title">Objective</div><div class="desc">Audience and outcome</div></div>
+    <div class="flow-step"><div class="number">Build</div><div class="title">Creative</div><div class="desc">Copy, image, CTA, products</div></div>
+    <div class="flow-step"><div class="number">Check</div><div class="title">Preview</div><div class="desc">Desktop and mobile</div></div>
+    <div class="flow-step"><div class="number">Publish</div><div class="title">Schedule</div><div class="desc">Visibility and timing</div></div>
+    <div class="flow-step"><div class="number">Learn</div><div class="title">Measure</div><div class="desc">Engagement and sales</div></div>
+  </div>
+
+  <div class="callout orange">
+    <strong>Merchandising rule:</strong> every banner and homepage section should have one clear purpose,
+    a valid destination, current products and a defined removal or review date.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 9</span></div>
+</section>
+
+<!-- 10. Campaigns -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Campaign Features</div>
+  </div>
+
+  <span class="eyebrow">Engagement Programmes</span>
+  <h2>Spin wheel, campaign control and lucky draw</h2>
+  <p class="section-sub">
+    Gamification tools support acquisition, store activation, coupon distribution and campaign measurement.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <div class="icon">W</div>
+      <h3>Spin Wheel</h3>
+      <p>Operate dashboard, coupons, prize inventory, wheel preview, store tracking, traffic analytics and data export.</p>
+      <div class="route">/admin/spin-wheel</div>
+    </div>
+    <div class="card orange">
+      <div class="icon orange">C</div>
+      <h3>Spin Campaigns</h3>
+      <p>Create isolated campaigns, define slugs and status, and manage campaign-specific participation and rewards.</p>
+      <div class="route">/admin/spin-wheel/campaigns</div>
+    </div>
+    <div class="card green">
+      <div class="icon green">L</div>
+      <h3>Lucky Draw</h3>
+      <p>Manage campaigns, participants, draw operations, winners and notification workflow.</p>
+      <div class="route">/admin/lucky-draw</div>
+    </div>
+  </div>
+
+  <h3>Spin-wheel administrative features</h3>
+  <table>
+    <tr><th>Area</th><th>Admin capability</th><th>Control objective</th></tr>
+    <tr><td>Dashboard</td><td>Visitors, participants, OTP verification and completed spins</td><td>Understand funnel and campaign activity</td></tr>
+    <tr><td>Prize inventory</td><td>Configure prizes, availability and probability</td><td>Protect stock and campaign economics</td></tr>
+    <tr><td>Coupons</td><td>Generate and manage reward codes</td><td>Connect engagement to purchase</td></tr>
+    <tr><td>Wheel preview</td><td>Review customer-facing segments and behaviour</td><td>Validate experience before launch</td></tr>
+    <tr><td>Store tracking</td><td>Associate traffic with stores and QR journeys</td><td>Measure local activation</td></tr>
+    <tr><td>Analytics</td><td>Daily traffic, drop-off, registrations and spin success</td><td>Improve campaign effectiveness</td></tr>
+    <tr><td>Export</td><td>Download campaign data for analysis</td><td>Support reporting and reconciliation</td></tr>
+  </table>
+
+  <div class="callout red">
+    <strong>Campaign control:</strong> prize probability, inventory and coupon issuance must be tested before activation.
+    Never change reward economics mid-campaign without an approved reason and documented customer treatment.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 10</span></div>
+</section>
+
+<!-- 11. Stores -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Store Features</div>
+  </div>
+
+  <span class="eyebrow">Local Operations</span>
+  <h2>Store locations, QR engagement and serviceability</h2>
+  <p class="section-sub">
+    Store administration connects the online platform with local retail presence and delivery constraints.
+  </p>
+
+  <div class="grid4">
+    <div class="card navy"><div class="icon">S</div><h4>Store locations</h4><p>Manage store information used by the locator and local customer journeys.</p><div class="route">/admin/store-locations</div></div>
+    <div class="card orange"><div class="icon orange">Q</div><h4>Store QR codes</h4><p>Create and manage QR entry points for store-specific campaigns.</p><div class="route">/admin/store-qr</div></div>
+    <div class="card green"><div class="icon green">A</div><h4>QR analytics</h4><p>Review scans and store-attributed engagement.</p><div class="route">/admin/store-qr/analytics</div></div>
+    <div class="card gold"><div class="icon orange">P</div><h4>Blocked pincodes</h4><p>Maintain delivery restrictions and serviceability controls.</p><div class="route">/admin/blocked-pincodes</div></div>
+  </div>
+
+  <h3>Local customer journey</h3>
+  <div class="flow">
+    <div class="flow-step"><div class="number">Discover</div><div class="title">Find store</div><div class="desc">Store locator</div></div>
+    <div class="flow-step"><div class="number">Visit</div><div class="title">Scan QR</div><div class="desc">Store-specific entry</div></div>
+    <div class="flow-step"><div class="number">Engage</div><div class="title">Campaign</div><div class="desc">Spin, lead or offer</div></div>
+    <div class="flow-step"><div class="number">Convert</div><div class="title">Purchase</div><div class="desc">Online or in-store</div></div>
+    <div class="flow-step"><div class="number">Measure</div><div class="title">Attribute</div><div class="desc">QR/store analytics</div></div>
+  </div>
+
+  <h3>Store data quality checklist</h3>
+  <div class="checklist">
+    <div class="check">Store name and address are current</div>
+    <div class="check">Map coordinates point to the correct location</div>
+    <div class="check">Phone and operating hours are accurate</div>
+    <div class="check">QR code opens the intended campaign</div>
+    <div class="check">Campaign identifies the correct store</div>
+    <div class="check">Expired QR campaigns are disabled</div>
+    <div class="check">Blocked pincodes reflect delivery operations</div>
+    <div class="check">Bulk imports are reviewed after upload</div>
+  </div>
+
+  <div class="callout green">
+    <strong>Business benefit:</strong> store and QR features make local retail activity measurable while giving
+    customers a connected journey between physical and digital channels.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 11</span></div>
+</section>
+
+<!-- 12. Partners -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Partner Features</div>
+  </div>
+
+  <span class="eyebrow">B2B Operations</span>
+  <h2>Partners, API access, wallets and payouts</h2>
+  <p class="section-sub">
+    Partner administration supports controlled external commerce while separating partner identity,
+    credentials, products, orders, balances and settlement.
+  </p>
+
+  <div class="timeline">
+    <div class="timeline-item"><div class="timeline-when"><span>Step 1</span>Create partner</div><div><p>Record the organisation and operating details required for the relationship.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>Step 2</span>Issue access</div><div><p>Create API credentials and configure allowed domains or security settings.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>Step 3</span>Assign products</div><div><p>Control which catalogue items and commercial terms are available to the partner.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>Step 4</span>Process orders</div><div><p>Monitor partner orders, external references, payment and fulfilment progression.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>Step 5</span>Manage wallet</div><div><p>Review balances, transactions, commissions and financial movement.</p></div></div>
+    <div class="timeline-item"><div class="timeline-when"><span>Step 6</span>Settle payout</div><div><p>Review payout requests and complete approved settlement operations.</p></div></div>
+  </div>
+
+  <div class="grid3">
+    <div class="card navy"><h3>Partner directory</h3><p>Create, edit and review partners, partner detail, products and API keys.</p><div class="route">/admin/partners</div></div>
+    <div class="card orange"><h3>Partner payouts</h3><p>Review and manage payout operations and their status.</p><div class="route">/admin/partner-payouts</div></div>
+    <div class="card green"><h3>Integrations</h3><p>Monitor connected-provider products, orders, transactions and integration activity.</p><div class="route">/admin/integrations</div></div>
+  </div>
+
+  <h3>Partner governance controls</h3>
+  <table>
+    <tr><th>Control</th><th>Purpose</th></tr>
+    <tr><td>API-key issuance and revocation</td><td>Limit access to approved partner systems and respond to credential risk</td></tr>
+    <tr><td>Allowed-domain configuration</td><td>Reduce unauthorised browser-origin use</td></tr>
+    <tr><td>Encrypted partner secrets</td><td>Protect sensitive payment and API configuration</td></tr>
+    <tr><td>Wallet transaction ledger</td><td>Maintain a traceable financial record</td></tr>
+    <tr><td>Payout review</td><td>Separate request from financial approval and completion</td></tr>
+    <tr><td>Rate limiting and CORS</td><td>Control partner API traffic and origin access</td></tr>
+  </table>
+
+  <div class="callout red">
+    <strong>Sensitive access:</strong> partner API keys, payment credentials and payout controls should be limited
+    to named administrators. Never transmit or store raw secrets in documents or campaign tools.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 12</span></div>
+</section>
+
+<!-- 13. System -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">System Features</div>
+  </div>
+
+  <span class="eyebrow">Configuration</span>
+  <h2>Store settings, documentation and platform controls</h2>
+  <p class="section-sub">
+    System administration defines the shared rules used across the storefront, checkout and customer communication.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <h3>Store information</h3>
+      <p>Manage store identity, contact details and the information used across customer-facing surfaces.</p>
+    </div>
+    <div class="card orange">
+      <h3>Branding</h3>
+      <p>Maintain logo, signature and visual identity assets used by the platform.</p>
+    </div>
+    <div class="card green">
+      <h3>Business</h3>
+      <p>Configure currency, tax and pricing-related business settings.</p>
+    </div>
+    <div class="card">
+      <h3>Shipping</h3>
+      <p>Control shipping fees, thresholds and related checkout behaviour.</p>
+    </div>
+    <div class="card gold">
+      <h3>Online presence</h3>
+      <p>Maintain website, social links and selected search/visibility information.</p>
+    </div>
+    <div class="card purple">
+      <h3>Documentation</h3>
+      <p>Provide administrators with product and operational guidance inside the admin area.</p>
+    </div>
+  </div>
+
+  <h3>System routes and specialist tools</h3>
+  <table>
+    <tr><th>Tool</th><th>Purpose</th><th>Control level</th></tr>
+    <tr><td><strong>Settings</strong><br><span class="route">/admin/settings</span></td><td>Shared store, brand, business, shipping and online-presence configuration</td><td>Restricted</td></tr>
+    <tr><td><strong>Documentation</strong><br><span class="route">/admin/documentation</span></td><td>Admin guidance and reference</td><td>General admin</td></tr>
+    <tr><td><strong>Migration</strong><br><span class="route">/admin/migrate</span></td><td>Specialist data migration operations</td><td>Superadmin / technical</td></tr>
+    <tr><td><strong>OTT dashboard</strong></td><td>External operational system linked from the admin navigation</td><td>Separate credentials</td></tr>
+  </table>
+
+  <h3>Configuration safeguards</h3>
+  <div class="checklist">
+    <div class="check">Record the reason for material setting changes</div>
+    <div class="check">Preview customer-facing results after saving</div>
+    <div class="check">Restrict destructive tools to named owners</div>
+    <div class="check">Dry-run migrations before applying them</div>
+    <div class="check">Keep environment secrets outside admin content</div>
+    <div class="check">Coordinate tax and shipping changes with finance</div>
+    <div class="check">Keep site URLs consistent across environments</div>
+    <div class="check">Verify email and payment integrations after changes</div>
+  </div>
+
+  <div class="callout red">
+    <strong>High-risk actions:</strong> database clearing, schema migration, key management and global settings
+    can affect the entire platform. Use explicit approval, backup and verification procedures.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 13</span></div>
+</section>
+
+<!-- 14. Core workflows -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Admin Workflows</div>
+  </div>
+
+  <span class="eyebrow">Standard Operating Journeys</span>
+  <h2>Three workflows that connect multiple admin modules</h2>
+  <p class="section-sub">
+    Platform value comes from connected execution. These workflows show how individual admin features work together.
+  </p>
+
+  <div class="card navy">
+    <span class="pill control">Workflow 1</span>
+    <h3>Launch a new product</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="number">1</div><div class="title">Taxonomy</div><div class="desc">Category and brand</div></div>
+      <div class="flow-step"><div class="number">2</div><div class="title">Product</div><div class="desc">Core data and pricing</div></div>
+      <div class="flow-step"><div class="number">3</div><div class="title">Content</div><div class="desc">Images and specifications</div></div>
+      <div class="flow-step"><div class="number">4</div><div class="title">Quality</div><div class="desc">Preview and stock check</div></div>
+      <div class="flow-step"><div class="number">5</div><div class="title">Promote</div><div class="desc">Homepage or campaign</div></div>
+    </div>
+  </div>
+
+  <div class="card orange" style="margin-top:7px">
+    <span class="pill action">Workflow 2</span>
+    <h3>Fulfil an order</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="number">1</div><div class="title">Review</div><div class="desc">Order and customer</div></div>
+      <div class="flow-step"><div class="number">2</div><div class="title">Verify</div><div class="desc">Payment and stock</div></div>
+      <div class="flow-step"><div class="number">3</div><div class="title">Process</div><div class="desc">Status and assignment</div></div>
+      <div class="flow-step"><div class="number">4</div><div class="title">Dispatch</div><div class="desc">Tracking or licence</div></div>
+      <div class="flow-step"><div class="number">5</div><div class="title">Complete</div><div class="desc">Delivery and support</div></div>
+    </div>
+  </div>
+
+  <div class="card green" style="margin-top:7px">
+    <span class="pill live">Workflow 3</span>
+    <h3>Launch a marketing campaign</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="number">1</div><div class="title">Objective</div><div class="desc">Audience and KPI</div></div>
+      <div class="flow-step"><div class="number">2</div><div class="title">Offer</div><div class="desc">Coupon or reward</div></div>
+      <div class="flow-step"><div class="number">3</div><div class="title">Destination</div><div class="desc">Page and products</div></div>
+      <div class="flow-step"><div class="number">4</div><div class="title">Delivery</div><div class="desc">On-site, email or QR</div></div>
+      <div class="flow-step"><div class="number">5</div><div class="title">Measure</div><div class="desc">Conversion and health</div></div>
+    </div>
+  </div>
+
+  <div class="callout navy">
+    <strong>Workflow ownership:</strong> assign one accountable owner, even when several teams contribute.
+    The owner confirms readiness, launch, monitoring and closure.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 14</span></div>
+</section>
+
+<!-- 15. Operating cadence -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Operating Model</div>
+  </div>
+
+  <span class="eyebrow">Admin Routine</span>
+  <h2>Recommended daily, weekly and monthly cadence</h2>
+  <p class="section-sub">
+    A clear cadence reduces forgotten exceptions, stale content and reactive administration.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <span class="pill control">Daily</span>
+      <h3>Protect active business</h3>
+      <ul>
+        <li>Review dashboard and fulfilment pipeline</li>
+        <li>Process new and pending orders</li>
+        <li>Check payment or integration failures</li>
+        <li>Respond to complaints, inquiries and leads</li>
+        <li>Review low stock and incorrect product states</li>
+        <li>Confirm active campaign links and offers</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <span class="pill action">Weekly</span>
+      <h3>Improve performance</h3>
+      <ul>
+        <li>Export and review sales performance</li>
+        <li>Update homepage merchandising</li>
+        <li>Review product/image completeness</li>
+        <li>Analyse campaign, spin and QR results</li>
+        <li>Check store and serviceability changes</li>
+        <li>Review partner orders and payouts</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <span class="pill live">Monthly</span>
+      <h3>Govern the platform</h3>
+      <ul>
+        <li>Review staff access and allowed pages</li>
+        <li>Audit settings and sensitive credentials</li>
+        <li>Clean up expired content and campaigns</li>
+        <li>Review catalogue schema/data quality</li>
+        <li>Assess retention and customer-health metrics</li>
+        <li>Plan seasonal content and inventory focus</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Admin quality scorecard</h3>
+  <table>
+    <tr><th>Area</th><th>Healthy signal</th><th>Warning signal</th></tr>
+    <tr><td>Orders</td><td>Clear status ownership and timely progression</td><td>Growing pipeline with stale status</td></tr>
+    <tr><td>Catalogue</td><td>Current price, stock, images and specifications</td><td>Inactive, incomplete or inconsistent products</td></tr>
+    <tr><td>Customers</td><td>Leads and issues have recent accountable action</td><td>Unassigned or repeatedly reopened cases</td></tr>
+    <tr><td>Campaigns</td><td>Defined audience, objective, expiry and report</td><td>Always-on promotions with no owner or outcome</td></tr>
+    <tr><td>Access</td><td>Permissions match current job responsibilities</td><td>Shared accounts or unnecessary superadmin access</td></tr>
+    <tr><td>System</td><td>Changes are tested and documented</td><td>Unverified global changes or silent failures</td></tr>
+  </table>
+
+  <div class="callout green">
+    <strong>Success standard:</strong> customers should experience accurate products, reliable fulfilment,
+    relevant communication and consistent support because the admin operation is disciplined.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 15</span></div>
+</section>
+
+<!-- 16. Feature directory -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Feature Directory</div>
+  </div>
+
+  <span class="eyebrow">Quick Reference</span>
+  <h2>Admin platform feature directory</h2>
+  <p class="section-sub">
+    A concise map of the main administrative workspaces currently exposed through the admin navigation.
+  </p>
+
+  <table>
+    <tr><th>Group</th><th>Pages and capabilities</th></tr>
+    <tr><td><strong>Overview</strong></td><td>Dashboard: revenue, pipeline, orders, AOV, customers, products, stock, charts and Excel export</td></tr>
+    <tr><td><strong>Catalogue</strong></td><td>Products; Categories & Brands; Specifications; Image Coverage; Product Scraper; Software and licence keys</td></tr>
+    <tr><td><strong>Sales</strong></td><td>Orders; Bulk Order Update; External Orders; Payments; Coupons & Offers; Employees</td></tr>
+    <tr><td><strong>Customers</strong></td><td>Customers; Leads and settings; Complaints; Contact Inquiries; Campaigns & Email; Email Templates</td></tr>
+    <tr><td><strong>Storefront</strong></td><td>Homepage Sections; Hero Posters & Slides; Banners & Promos; Theme & Festivals; Site Features; Product Ads; Advertisements; Custom Pages; Buying Guides</td></tr>
+    <tr><td><strong>Campaigns</strong></td><td>Spin Wheel operations; Spin Campaign management; Lucky Draw</td></tr>
+    <tr><td><strong>Stores</strong></td><td>Store Locations; Store QR Codes; QR Analytics; Blocked Pincodes</td></tr>
+    <tr><td><strong>Partners</strong></td><td>Partner accounts, details, products and API keys; Partner Payouts; integration operations</td></tr>
+    <tr><td><strong>System</strong></td><td>Settings; Documentation; specialist migration tools; external OTT dashboard link</td></tr>
+  </table>
+
+  <h3>Platform value delivered through admin</h3>
+  <div class="grid4">
+    <div class="card navy"><h4>Commerce</h4><p>Catalogue, checkout inputs, orders, payments and fulfilment.</p></div>
+    <div class="card orange"><h4>Growth</h4><p>Offers, campaigns, email, gamification, content and landing pages.</p></div>
+    <div class="card green"><h4>Service</h4><p>Customers, leads, complaints, inquiries, stores and tracking.</p></div>
+    <div class="card purple"><h4>Platform</h4><p>Roles, settings, partners, integrations, reporting and governance.</p></div>
+  </div>
+
+  <div class="callout navy">
+    <strong>Recommended next step:</strong> assign named owners to each navigation group, define permission profiles,
+    and convert the daily/weekly/monthly cadence in this guide into the team's admin operating procedure.
+  </div>
+  <div class="callout green">
+    This document is designed for screen presentation and A4 PDF export. In a browser, use
+    <strong>Print &gt; Save as PDF</strong>, enable background graphics, choose A4, and set margins to none.
+  </div>
+
+  <div class="footer"><span>Admin Journey and Platform Features</span><span>Page 16</span></div>
+</section>
+
+</body>
+</html>

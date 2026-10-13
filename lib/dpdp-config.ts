@@ -193,6 +193,13 @@ export const RETENTION_SCHEDULE: RetentionRule[] = [
     timestampField: "createdAt",
   },
   {
+    collection: "customer_unsubscribe_tokens",
+    label: "Email opt-out link verifiers",
+    retention: "Until you delete your account",
+    days: null,
+    basis: "Hash-only verifiers keep previously emailed opt-out links usable. Removed on account deletion.",
+  },
+  {
     collection: "carts",
     label: "Abandoned shopping carts",
     retention: "180 days after last update",

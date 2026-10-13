@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCollection, normalizeId } from '@/lib/db-service'
 import { requireAdmin } from '@/lib/auth'
+import type { PartnerOrder } from '@/lib/partner/types'
+import type { Filter } from 'mongodb'
 
 /**
  * GET /api/admin/partners/[partnerId]/orders
@@ -25,13 +27,16 @@ export async function GET(
 
         const { searchParams } = new URL(request.url)
         const status = searchParams.get('status')
-        const page = parseInt(searchParams.get('page') || '1', 10)
-        const limit = parseInt(searchParams.get('limit') || '50', 10)
+        const page = Number(searchParams.get('page') || '1')
+        const limit = Math.min(Number(searchParams.get('limit') || '50'), 100)
+        if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1) {
+            return NextResponse.json({ error: 'Invalid pagination' }, { status: 400 })
+        }
 
-        const collection = await getCollection('partner_orders')
+        const collection = await getCollection<Omit<PartnerOrder, 'status'> & { status?: string }>('partner_orders')
 
         // Build query
-        const query: any = { partnerId }
+        const query: Filter<Omit<PartnerOrder, 'status'> & { status?: string }> = { partnerId }
         if (status) {
             query.status = status
         }
@@ -43,18 +48,18 @@ export async function GET(
         const orders = await collection
             .find(query)
             .sort({ createdAt: -1 })
-            .skip((Math.max(1, page) - 1) * Math.min(limit, 100))
-            .limit(Math.min(limit, 100))
+            .skip((page - 1) * limit)
+            .limit(limit)
             .toArray()
 
         // Normalize orders
-        const normalizedOrders = orders.map((order: any) => ({
+        const normalizedOrders = orders.map((order) => ({
             id: order._id?.toString(),
             orderId: order.orderId,
             partnerId: order.partnerId,
             partnerOrderId: order.partnerOrderId || null,
             customer: order.customer || {},
-            items: (order.items || []).map((item: any) => ({
+            items: (order.items || []).map(item => ({
                 productId: item.productId,
                 name: item.name,
                 price: item.price,

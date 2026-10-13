@@ -1,201 +1,167 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { fetchWithCache } from "@/utils/cache"
-import { useSettingsData } from "@/hooks/useSettingsData"
+import { fetchWithCache, setCached } from "@/utils/cache"
 import { useBanners } from "@/hooks/useBanners"
-import { titleCaseLabel } from "@/lib/product-display"
 import LandingHero from "@/components/home/landing/LandingHero"
-import { CategoryRail, PromoDuo, PromoStrip, StatementBand } from "@/components/home/landing/LandingSections"
 import {
-  BrandLogos,
-  FeaturedCategories,
-  MemberRow,
-  ProductShelf,
-  StoresBand,
-  WhyShop,
-} from "@/components/home/landing/LandingBlocks"
+  HOME_BRANDS, HOME_CATEGORIES, HomepageBenefits, HomepageBrands, HomepageCategories,
+  HomepageDeals, HomepagePromotions, HomepageStores, type HomeBrand, type HomeProduct,
+} from "@/components/home/landing/HomepageSections"
+import styles from "@/components/home/landing/homepage.module.css"
+import { MarketingSection, MarketingSections } from "@/components/marketing/MarketingSections"
+import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { catalogProductListResponseSchema } from "@/utils/catalog"
+import { homeSubCategoryListResponseSchema, homeBrandListResponseSchema, homeStoreListResponseSchema } from "@/lib/catalog-list-response"
 
 const TTL = 5 * 60 * 1000
-// Generous because a cold catalogue query is slow; the page renders without it anyway.
 const TIMEOUT = 25000
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+const text = (value: unknown) => typeof value === "string" ? value : undefined
+const imageUrl = (value: unknown) => typeof value === "string" && /^(https?:\/\/|\/)/.test(value) ? value : undefined
+const number = (value: unknown) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : undefined
 
-async function fetchJson(url: string) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) })
-  if (!res.ok) throw new Error(`Request failed: ${url}`)
-  return res.json()
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) })
+  if (!response.ok) throw new Error(`Request failed: ${url} (${response.status})`)
+  return response.json()
 }
 
-const isTestCategory = (name: string) => /^test\d*$/i.test(name.trim())
+function parseProducts(data: unknown): HomeProduct[] {
+  if (!Array.isArray(data)) throw new Error("Invalid catalogue response")
+  return data.flatMap((item: unknown) => {
+    if (!isRecord(item)) return []
+    const id = text(item.id)
+    const name = text(item.name)
+    const image = text(item.image)
+    const price = number(item.price)
+    if (!id || !name || !image || price === undefined || price <= 0) return []
+    const reviews = isRecord(item.reviews) ? item.reviews : undefined
+    return [{
+      id, name, image, price,
+      mrp: number(item.mrp),
+      stock: number(item.stock) ?? 0,
+      slug: text(item.slug),
+      category: text(item.category),
+      subCategory: text(item.subCategory),
+      brand: text(item.manufacturerName) || text(item.brand),
+      rating: number(item.rating) || number(reviews?.average),
+      reviewsCount: number(item.reviewsCount) || number(reviews?.count) || number(item.reviews),
+    }]
+  })
+}
 
 export default function SaraLanding() {
-  const { data: settings } = useSettingsData()
-  const [products, setProducts] = useState<any[]>([])
-  const [subCategories, setSubCategories] = useState<any[]>([])
-  const [brandDocs, setBrandDocs] = useState<any[]>([])
-  const [storeCount, setStoreCount] = useState(85)
-
+  const marketing = useMarketingContent("home")
+  const [products, setProducts] = useState<HomeProduct[]>([])
+  const [subCategories, setSubCategories] = useState<Record<string, unknown>[]>([])
+  const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
+  const [storeCount, setStoreCount] = useState<number>()
+  const [loading, setLoading] = useState(true)
+  const [catalogueError, setCatalogueError] = useState<string>()
   const stripBanners = useBanners("home-strip")
   const duoBanners = useBanners("home-duo")
   const cardBanners = useBanners("home-card")
   const statementBanners = useBanners("home-statement")
 
-  useEffect(() => {
-    // Each source is independent: a slow one must not hold up the rest of the page.
-    fetchWithCache("products-card", () => fetchJson("/api/products?fields=card"), TTL)
-      .then((data) => Array.isArray(data) && setProducts(data))
-      .catch(() => {})
-
-    fetchWithCache("sub-categories", () => fetchJson("/api/sub-categories"), TTL)
-      .then((data) => Array.isArray(data) && setSubCategories(data))
-      .catch(() => {})
-
-    fetchWithCache("brands", () => fetchJson("/api/brands"), TTL)
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data?.brands
-        if (Array.isArray(list)) setBrandDocs(list)
-      })
-      .catch(() => {})
-
-    fetchWithCache("stores", () => fetchJson("/api/stores"), TTL)
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data?.stores
-        if (Array.isArray(list) && list.length > 0) setStoreCount(list.length)
-      })
-      .catch(() => {})
+  const loadProducts = useCallback(async (refresh = false) => {
+    setLoading(true)
+    setCatalogueError(undefined)
+    try {
+      const fetcher = () => fetchJson("/api/products?fields=card")
+      const data = refresh
+        ? setCached("products-card", await fetcher(), catalogProductListResponseSchema)
+        : await fetchWithCache("products-card", fetcher, catalogProductListResponseSchema, TTL)
+      setProducts(parseProducts(data))
+    } catch (error) {
+      console.error("[Homepage] Could not load deals:", error)
+      setCatalogueError("We couldn't load today's deals. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const subCategoryImages = useMemo(
-    () =>
-      Object.fromEntries(
-        subCategories.filter((s: any) => s?.name).map((s: any) => [String(s.name).toLowerCase(), s.image || ""]),
-      ),
-    [subCategories],
-  )
-
-  /** Browsable sub-category labels ordered by how much stock sits behind them. */
-  const rankedSubCategories = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of products) {
-      const raw = String(p?.subCategory || "").trim()
-      if (!raw || isTestCategory(raw)) continue
-      const label = /^tv\b/i.test(raw) ? "TV" : raw
-      counts.set(label, (counts.get(label) || 0) + 1)
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([label]) => ({
-        label: titleCaseLabel(label),
-        raw: label,
-        image: subCategoryImages[label.toLowerCase()] || undefined,
-      }))
-  }, [products, subCategoryImages])
-
-  const categoryTiles = useMemo(
-    () =>
-      rankedSubCategories.slice(0, 11).map(({ label, raw, image }) => ({
-        label,
-        image,
-        href: `/products?subCategory=${encodeURIComponent(raw)}`,
-      })),
-    [rankedSubCategories],
-  )
-
-  const featuredCategories = useMemo(
-    () =>
-      rankedSubCategories.slice(0, 6).map(({ label, raw, image }) => ({
-        label,
-        image,
-        href: `/products?subCategory=${encodeURIComponent(raw)}`,
-      })),
-    [rankedSubCategories],
-  )
-
-  /** Curated brands (they have landing pages) first, then whatever else the catalogue carries. */
-  const brands = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of products) {
-      const brand = String(p?.manufacturerName || p?.brand || "").trim()
-      if (brand) counts.set(brand.toLowerCase(), (counts.get(brand.toLowerCase()) || 0) + 1)
-    }
-
-    const curated = brandDocs
-      .filter((b: any) => b?.name && b?.slug)
-      .map((b: any) => ({
-        name: b.name,
-        logo: b.logo || undefined,
-        href: `/brands/${b.slug}`,
-        count: counts.get(String(b.name).toLowerCase()) || 0,
-      }))
-
-    const curatedNames = new Set(curated.map((b) => b.name.toLowerCase()))
-
-    const fromCatalogue = [...counts.entries()]
-      .filter(([key]) => !curatedNames.has(key))
-      .sort((a, b) => b[1] - a[1])
-      .map(([key, count]) => {
-        const label = products.find(
-          (p) => String(p?.manufacturerName || p?.brand || "").trim().toLowerCase() === key,
-        )
-        return {
-          name: titleCaseLabel(String(label?.manufacturerName || label?.brand || key)),
-          logo: undefined,
-          href: `/products?brand=${encodeURIComponent(String(label?.manufacturerName || label?.brand || key))}`,
-          count,
-        }
+  useEffect(() => {
+    void loadProducts()
+    fetchWithCache("sub-categories", () => fetchJson("/api/sub-categories"), homeSubCategoryListResponseSchema, TTL)
+      .then((data) => {
+        setSubCategories(data)
       })
+      .catch((error: unknown) => console.error("[Homepage] Could not load categories:", error))
+    fetchWithCache("brands", () => fetchJson("/api/brands"), homeBrandListResponseSchema, TTL)
+      .then((data) => {
+        setBrandDocs(data)
+      })
+      .catch((error: unknown) => console.error("[Homepage] Could not load brands:", error))
+    fetchWithCache("stores", () => fetchJson("/api/stores"), homeStoreListResponseSchema, TTL)
+      .then((data) => {
+        if (data.length) setStoreCount(data.length)
+      })
+      .catch((error: unknown) => console.error("[Homepage] Could not load stores:", error))
+  }, [loadProducts])
 
-    return [...curated.sort((a, b) => b.count - a.count), ...fromCatalogue].slice(0, 12)
-  }, [products, brandDocs])
+  const categories = useMemo(() => HOME_CATEGORIES.map((fallback) => {
+    const category = subCategories.find((item) => fallback.match.test(String(item.name || "")))
+    return category ? {
+      ...fallback,
+      image: imageUrl(category.image) || fallback.image,
+      href: `/products?subCategory=${encodeURIComponent(String(category.name))}`,
+    } : fallback
+  }), [subCategories])
 
-  const newArrivals = useMemo(
-    () =>
-      [...products]
-        .filter((p) => p?.image && Number(p?.price) > 0)
-        .sort(
-          (a, b) =>
-            (new Date(b.createdAt ?? b.updatedAt ?? 0).getTime() || 0) -
-            (new Date(a.createdAt ?? a.updatedAt ?? 0).getTime() || 0),
-        )
-        .slice(0, 12),
-    [products],
-  )
+  const brands = useMemo<HomeBrand[]>(() => {
+    return HOME_BRANDS.map((fallback) => {
+      const brand = brandDocs.find((item) => String(item.name).toLowerCase() === fallback.name.toLowerCase())
+      if (brand?.enabled === false || brand?.active === false) return null
+      if (!brand) return fallback
+      return {
+        ...fallback,
+        logo: imageUrl(brand.logo) || fallback.logo,
+        href: text(brand.slug) ? `/brands/${brand.slug}` : fallback.href,
+      }
+    }).filter((brand): brand is HomeBrand => brand !== null)
+  }, [brandDocs])
 
-  const bestSellers = useMemo(
-    () =>
-      [...products]
-        .filter((p) => p?.image && Number(p?.price) > 0 && Number(p?.mrp) > Number(p?.price))
-        .sort((a, b) => Number(b.mrp) - Number(b.price) - (Number(a.mrp) - Number(a.price)))
-        .slice(0, 12),
-    [products],
-  )
-
-  const phone = settings?.storePhone || "1800 123 7272"
+  const deals = useMemo(() => {
+    const available = products.filter((product) => product.stock > 0)
+    const discounted = available.filter((product) => product.mrp && product.mrp > product.price)
+      .sort((a, b) => ((b.mrp || b.price) - b.price) / (b.mrp || b.price) - ((a.mrp || a.price) - a.price) / (a.mrp || a.price))
+    const candidates = discounted.length ? discounted : available
+    const selected: HomeProduct[] = []
+    for (const category of HOME_CATEGORIES) {
+      const product = candidates.find((item) => !selected.includes(item) && category.match.test(`${item.subCategory || ""} ${item.category || ""} ${item.name}`))
+      if (product) selected.push(product)
+      if (selected.length === 6) break
+    }
+    return [...selected, ...candidates.filter((item) => !selected.includes(item))].slice(0, 6)
+  }, [products])
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F4F7FB]">
+    <div className="flex min-h-screen flex-col bg-brand-surface-raised">
       <Header />
-
-      <main className="flex-grow">
-        <LandingHero />
-
-        <div className="space-y-6 pb-10 pt-2">
-          <CategoryRail tiles={categoryTiles} />
-          {stripBanners[0] && <PromoStrip banner={stripBanners[0]} />}
-          <PromoDuo banners={duoBanners} />
-          <BrandLogos brands={brands} />
-          <ProductShelf title="New Arrivals" href="/products" products={newArrivals} />
-          <FeaturedCategories items={featuredCategories} />
-          <StoresBand storeCount={storeCount} />
-          <MemberRow cards={cardBanners} />
-          <ProductShelf title="Best Value Today" href="/offers" products={bestSellers} />
-          <WhyShop phone={phone} />
-          {statementBanners[0] && <StatementBand banner={statementBanners[0]} />}
-        </div>
+      <main id="main-content" className={styles.homepage}>
+        {!marketing.enabled("hero") && <h1 className="sr-only">SARA Electronics</h1>}
+        <MarketingSections page="home">
+          <MarketingSection page="home" section="hero"><LandingHero products={products} sideBanners={duoBanners} /></MarketingSection>
+          <MarketingSection page="home" section="benefits"><HomepageBenefits storeCount={storeCount} /></MarketingSection>
+          <MarketingSection page="home" section="categories"><HomepageCategories categories={categories.map((category, index) => ({
+            ...category, label: marketing.text("categories", `item${index + 1}Title`, category.label),
+            image: marketing.image("categories", `item${index + 1}Image`, category.image),
+            href: marketing.text("categories", `item${index + 1}Href`) || category.href,
+          }))} /></MarketingSection>
+          <MarketingSection page="home" section="deals"><HomepageDeals products={deals} loading={loading} error={catalogueError} retry={() => void loadProducts(true)} /></MarketingSection>
+          <MarketingSection page="home" section="promotions"><HomepagePromotions banners={[...cardBanners, ...stripBanners, ...statementBanners].sort((a, b) => (a.order || 0) - (b.order || 0))} /></MarketingSection>
+          <MarketingSection page="home" section="brands"><HomepageBrands brands={brands.map(brand => {
+            const index = HOME_BRANDS.findIndex(item => item.name === brand.name)
+            return { ...brand, name: marketing.text("brands", `item${index + 1}Title`, brand.name),
+              logo: marketing.image("brands", `item${index + 1}Image`, brand.logo || ""),
+              href: marketing.text("brands", `item${index + 1}Href`) || brand.href }
+          })} /></MarketingSection>
+          <MarketingSection page="home" section="stores"><HomepageStores storeCount={storeCount} /></MarketingSection>
+        </MarketingSections>
       </main>
-
       <Footer />
     </div>
   )

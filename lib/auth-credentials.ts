@@ -7,9 +7,11 @@
  */
 
 import bcrypt from "bcryptjs"
-import { ObjectId } from "mongodb"
 import { connectToDatabase } from "@/lib/mongodb"
 import type { SessionPayload } from "@/lib/session"
+import { getById } from "@/lib/db-service"
+import type { Collection, WithId } from "mongodb"
+import { z } from "zod"
 
 export interface AuthenticatedUser {
   id: string
@@ -23,7 +25,27 @@ export interface AuthenticatedUser {
   address: string | null
   dashboardAccess: boolean
   allowedPages: string[]
+  sessionVersion: number
 }
+
+export const authUserRecordSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+  password: z.string().nullish(),
+  role: z.string().optional(),
+  status: z.string().optional(),
+  emailVerified: z.boolean().optional(),
+  createdAt: z.union([z.date(), z.string()]).nullish(),
+  updatedAt: z.date().optional(),
+  avatar: z.string().nullish(),
+  phone: z.string().nullish(),
+  address: z.string().nullish(),
+  dashboardAccess: z.boolean().optional(),
+  allowedPages: z.array(z.string()).optional(),
+  sessionVersion: z.number().int().nonnegative().optional(),
+  authProvider: z.string().optional(),
+})
+export type AuthUserRecord = z.infer<typeof authUserRecordSchema>
 
 export type CredentialResult =
   | { ok: true; user: AuthenticatedUser }
@@ -31,11 +53,11 @@ export type CredentialResult =
 
 /** Verifies email + password and returns the user without its password hash. */
 export async function verifyCredentials(email: string, password: string): Promise<CredentialResult> {
-  let user: any = null
-  let usersCollection: any = null
+  let user: WithId<AuthUserRecord> | null
+  let usersCollection: Collection<AuthUserRecord>
   try {
     const conn = await connectToDatabase()
-    usersCollection = conn.db.collection("users")
+    usersCollection = conn.db.collection<AuthUserRecord>("users")
     user = await usersCollection.findOne({ email: email.toLowerCase() })
   } catch (dbError) {
     // A database outage is a 503, never "invalid credentials" — reporting it as
@@ -48,7 +70,7 @@ export async function verifyCredentials(email: string, password: string): Promis
   if (!user || !isPasswordValid) {
     return { ok: false, status: 401, message: "Invalid email or password" }
   }
-  if (user.status === "inactive") {
+  if (user.status === "inactive" || user.status === "deleted") {
     return { ok: false, status: 403, message: "This staff account is inactive" }
   }
 
@@ -75,6 +97,7 @@ export async function verifyCredentials(email: string, password: string): Promis
       address: user.address || null,
       dashboardAccess: !!user.dashboardAccess,
       allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
+      sessionVersion: user.sessionVersion ?? 0,
     },
   }
 }
@@ -85,13 +108,13 @@ export async function verifyCredentials(email: string, password: string): Promis
  * refresh token.
  */
 export async function getAuthenticatedUserById(userId: string): Promise<AuthenticatedUser | null> {
-  if (!ObjectId.isValid(userId)) return null
   try {
-    const { db } = await connectToDatabase()
-    const user = await db.collection("users").findOne({ _id: new ObjectId(userId) })
-    if (!user || user.status === "inactive") return null
+    const record = await getById("users", userId)
+    if (!record) return null
+    const user = authUserRecordSchema.parse(record)
+    if (user.status === "inactive" || user.status === "deleted") return null
     return {
-      id: user._id.toString(),
+      id: record.id,
       name: user.name,
       email: user.email,
       role: user.role || "user",
@@ -102,6 +125,7 @@ export async function getAuthenticatedUserById(userId: string): Promise<Authenti
       address: user.address || null,
       dashboardAccess: !!user.dashboardAccess,
       allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
+      sessionVersion: user.sessionVersion ?? 0,
     }
   } catch (error) {
     console.error("[Auth] Failed to load user for refresh", error)
@@ -128,6 +152,7 @@ export function buildSessionPayload(user: AuthenticatedUser): Omit<SessionPayloa
     role: user.role as SessionPayload["role"],
     dashboardAccess: user.dashboardAccess,
     allowedPages: safeAllowed,
+    sessionVersion: user.sessionVersion,
   }
 
   try {

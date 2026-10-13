@@ -1,7 +1,10 @@
 "use client"
 
 import { apiFetch } from "@/lib/api-client"
-import { useState, useEffect, use } from "react"
+import { useState, useEffect, use, useRef } from "react"
+import { z } from "zod"
+import { partnerAssignmentProductResponseSchema, partnerAssignmentsResponseSchema } from "@/lib/product-card-response"
+import type { PartnerAssignmentProductResponse } from "@/lib/product-card-response"
 import {
   ArrowLeft,
   Search,
@@ -17,22 +20,7 @@ import {
 import Link from "next/link"
 import { toast } from "react-hot-toast"
 
-interface Product {
-  _id: string;
-
-  id: string;
-  name: string;
-  sku?: string;
-  price: number;
-  mrp?: number;
-  category?: string;
-  subCategory?: string;
-  brand?: string;
-  manufacturerName?: string;
-  stock?: number;
-  images?: string[];
-  active?: boolean;
-}
+type Product = PartnerAssignmentProductResponse
 
 interface Partner {
   id: string;
@@ -40,12 +28,9 @@ interface Partner {
   tier: string;
 }
 
-interface PartnerProduct {
-  productId: string;
-  customPrice?: number;
-  customCommission?: number;
-  enabled: boolean;
-}
+const partnerResponseSchema = z.object({
+  success: z.literal(true), data: z.object({ partner: z.object({ id: z.string(), name: z.string(), tier: z.string() }) }),
+})
 
 export default function PartnerProductsPage({ params }: { params: Promise<{ partnerId: string }> }) {
   const { partnerId } = use(params)
@@ -58,110 +43,59 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
   const [categories, setCategories] = useState<string[]>([])
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const latestRequest = useRef(0)
 
   useEffect(() => {
     fetchData()
   }, [partnerId])
 
   const fetchData = async () => {
+    const requestId = ++latestRequest.current
     setIsLoading(true)
+    setLoadFailed(false)
     try {
-      // Fetch partner details
-      const partnerRes = await apiFetch(`/api/admin/partners/${partnerId}`)
-      const partnerData = await partnerRes.json()
-      if (partnerData.success) {
-        setPartner(partnerData.data.partner)
+      const [partnerRes, assignRes] = await Promise.all([
+        apiFetch(`/api/admin/partners/${partnerId}`),
+        apiFetch(`/api/admin/partners/${partnerId}/products?t=${Date.now()}`),
+      ])
+      if (!partnerRes.ok || !assignRes.ok) throw new Error("Partner assignments could not be loaded")
+      const partnerData = partnerResponseSchema.parse(await partnerRes.json())
+      const assignData = partnerAssignmentsResponseSchema.parse(await assignRes.json())
+      const allProducts: Product[] = []
+      for (let skip = 0; ; skip += 1000) {
+        const productsRes = await apiFetch(`/api/products?limit=1000&skip=${skip}`)
+        if (!productsRes.ok) throw new Error("Catalogue could not be loaded")
+        const page = partnerAssignmentProductResponseSchema.array().parse(await productsRes.json())
+        allProducts.push(...page)
+        if (allProducts.length > 5000) throw new Error("This assignment editor supports at most 5,000 products")
+        if (page.length < 1000) break
       }
-
-      // Fetch active products only for partner assignment view
-      const productsRes = await apiFetch(`/api/products`)
-      const productsData = await productsRes.json()
-
-      // API returns array directly, not wrapped in success/data
-      const allProducts = Array.isArray(productsData)
-        ? productsData
-        : (productsData.data?.products || productsData.products || [])
-
-      // Normalize product IDs to strings and ensure unique IDs
-      const normalizedProducts = allProducts
-        .map((p: any, index: number) => {
-          // The API uses normalizeId() which renames _id -> id
-          const stringId = p.id || (p._id ? (typeof p._id === 'object' ? p._id.toString() : String(p._id)) : null)
-
-          if (!stringId) {
-            console.warn(`[Manage Products] Product at index ${index} has no ID!`, p.name)
-            return null
-          }
-
-          return {
-            ...p,
-            id: stringId,
-            _id: stringId,
-          }
-        })
-        .filter(Boolean) as Product[]
-
-      setProducts(normalizedProducts)
-
-      // Extract unique categories
-      const cats = [...new Set(normalizedProducts.map((p: Product) => p.category).filter(Boolean))] as string[]
-      setCategories(cats)
-
-      // Fetch partner product assignments with cache breaker
-      const assignRes = await apiFetch(`/api/admin/partners/${partnerId}/products?t=${Date.now()}`)
-      const assignData = await assignRes.json()
-      if (assignData.success) {
-        const assignments = assignData.data.products || []
-        console.log('[Manage Products] Fetched assignments:', assignments.length)
-        const enabledMap: Record<string, boolean> = {}
-        assignments.forEach((p: PartnerProduct) => {
-          // Normalize productId keys we may receive (trim, and unwrap ObjectId(...) wrappers)
-          const raw = String(p.productId || '').trim()
-          if (!raw) return
-          const unwrapped = raw.replace(/^ObjectId\(\"(.*)\"\)$/, '$1')
-          // Prefer the unwrapped canonical id when available, otherwise use the raw string
-          const pid = unwrapped || raw
-          enabledMap[pid] = !!p.enabled
-        })
-        setEnabledProducts(enabledMap)
-
-        // If the assignments API returned full product details for enabled products,
-        // merge those into our products list so enabled items always display.
-        const enabledDetails = assignData.data.enabledProductDetails || []
-        if (Array.isArray(enabledDetails) && enabledDetails.length > 0) {
-          const existingIds = new Set(normalizedProducts.map((p: Product) => p.id))
-          const merged = [...normalizedProducts]
-          enabledDetails.forEach((ed: any) => {
-            const id = ed._id || ed.id
-            if (!id) return
-            const sid = String(id)
-            if (!existingIds.has(sid)) {
-              merged.push({
-                ...ed,
-                id: sid,
-                _id: sid,
-                price: ed.price || 0,
-                mrp: ed.mrp || ed.price || 0,
-                images: ed.images || (ed.image ? [ed.image] : []),
-                active: ed.active !== false,
-              })
-              existingIds.add(sid)
-            }
-          })
-          setProducts(merged)
-          const mergedCats = [...new Set(merged.map((p: Product) => p.category).filter(Boolean))] as string[]
-          setCategories(mergedCats)
-        }
-      }
+      if (requestId !== latestRequest.current) return
+      const byId = new Map(allProducts.map(product => [product.id, product]))
+      for (const product of assignData.data.enabledProductDetails) byId.set(product.id, product)
+      const merged = [...byId.values()]
+      setPartner(partnerData.data.partner)
+      setProducts(merged)
+      setCategories([...new Set(merged.map(product => product.category).filter((category): category is string => !!category))])
+      setEnabledProducts(Object.fromEntries(assignData.data.products.map(product => [product.productId, product.enabled])))
     } catch (error) {
+      if (requestId !== latestRequest.current) return
+      setLoadFailed(true)
+      setProducts([])
+      setEnabledProducts({})
       console.error('Error fetching data:', error)
       toast.error('Failed to fetch data')
     } finally {
-      setIsLoading(false)
+      if (requestId === latestRequest.current) setIsLoading(false)
     }
   }
 
   const toggleProduct = (productId: string) => {
+    if (!enabledProducts[productId] && products.find(product => product.id === productId)?.active === false) {
+      toast.error("Inactive products cannot be enabled")
+      return
+    }
     setEnabledProducts(prev => ({
       ...prev,
       [productId]: !prev[productId]
@@ -171,7 +105,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
   const enableAll = () => {
     const updates: Record<string, boolean> = {}
     filteredProducts.forEach(p => {
-      updates[p._id] = true
+      if (p.active !== false) updates[p.id] = true
     })
     setEnabledProducts(prev => ({ ...prev, ...updates }))
   }
@@ -179,12 +113,13 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
   const disableAll = () => {
     const updates: Record<string, boolean> = {}
     filteredProducts.forEach(p => {
-      updates[p._id] = false
+      updates[p.id] = false
     })
     setEnabledProducts(prev => ({ ...prev, ...updates }))
   }
 
   const saveChanges = async () => {
+    if (loadFailed) return
     setIsSaving(true)
     try {
       const assignments = Object.entries(enabledProducts).map(([productId, enabled]) => ({
@@ -221,7 +156,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
 
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter
 
-    const matchesEnabled = !showOnlyEnabled || enabledProducts[product._id]
+    const matchesEnabled = !showOnlyEnabled || enabledProducts[product.id]
 
     return matchesSearch && matchesCategory && matchesEnabled
   })
@@ -238,6 +173,10 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
 
   return (
     <div className="space-y-6">
+      {loadFailed && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800">Assignments could not be loaded. Saving is disabled; refresh to retry.</p>}
+      <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        These assignments are stored configuration. The current partner catalogue and checkout do not enforce product-specific access or custom pricing.
+      </p>
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link
@@ -249,12 +188,12 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Manage Products</h1>
           <p className="text-gray-600 mt-1">
-            Configure product access for {partner?.name || 'Partner'}
+            Configure product assignments for {partner?.name || 'Partner'}
           </p>
         </div>
         <button
           onClick={saveChanges}
-          disabled={isSaving}
+          disabled={isSaving || loadFailed}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
           {isSaving ? (
@@ -350,15 +289,15 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
             <div className="text-sm text-gray-600">Showing results for current filters</div>
           </div>
 
-          {filteredProducts.filter(p => !!enabledProducts[p._id || p.id]).length === 0 ? (
+          {filteredProducts.filter(p => !!enabledProducts[p.id]).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-gray-500">
               <Package className="h-12 w-12 mb-4" />
               <p>No enabled products match the filters</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-              {filteredProducts.filter(p => !!enabledProducts[p._id || p.id]).map((product, index) => {
-                const productId = product._id || product.id
+              {filteredProducts.filter(p => !!enabledProducts[p.id]).map((product, index) => {
+                const productId = product.id
                 return (
                   <div
                     key={`enabled-${productId}-${index}`}
@@ -404,20 +343,20 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Pending / Available Products</h3>
-              <p className="text-sm text-gray-500">{filteredProducts.filter(p => !enabledProducts[p._id || p.id]).length} products available to enable</p>
+              <p className="text-sm text-gray-500">{filteredProducts.filter(p => !enabledProducts[p.id]).length} products available to enable</p>
             </div>
             <div className="text-sm text-gray-600">Click a product to enable for this partner</div>
           </div>
 
-          {filteredProducts.filter(p => !enabledProducts[p._id || p.id]).length === 0 ? (
+          {filteredProducts.filter(p => !enabledProducts[p.id]).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-gray-500">
               <Package className="h-12 w-12 mb-4" />
               <p>No available products match the filters</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-              {filteredProducts.filter(p => !enabledProducts[p._id || p.id]).map((product, index) => {
-                const productId = product._id || product.id
+              {filteredProducts.filter(p => !enabledProducts[p.id]).map((product, index) => {
+                const productId = product.id
                 return (
                   <div
                     key={`pending-${productId}-${index}`}

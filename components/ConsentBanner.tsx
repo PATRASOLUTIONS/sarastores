@@ -17,6 +17,7 @@ import Link from "next/link"
 import { Cookie, X } from "lucide-react"
 import {
   readConsent,
+  onConsentChange,
   writeConsent,
   CONSENT_REOPEN_EVENT,
   type TrackingCategory,
@@ -62,6 +63,9 @@ export default function ConsentBanner() {
     // Rendered only after mount so the server HTML stays identical for every
     // visitor and remains cacheable.
     if (readConsent() === null) setVisible(true)
+    return onConsentChange((consent) => {
+      if (consent === null) setVisible(true)
+    })
   }, [])
 
   // The footer's "Cookie preferences" link reopens the banner with the current
@@ -150,7 +154,7 @@ export default function ConsentBanner() {
         ) : (
           <div>
             <div className="flex items-start justify-between gap-4">
-              <p className="text-[14px] font-semibold text-[#0F2557]">Choose what you allow</p>
+              <p id="consent-banner-title" className="text-[14px] font-semibold text-[#0F2557]">Choose what you allow</p>
               <button
                 type="button"
                 aria-label="Close"

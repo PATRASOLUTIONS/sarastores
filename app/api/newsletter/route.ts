@@ -6,7 +6,7 @@ import { withRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { handleApiError } from "@/lib/api-error"
 
 const SubscribeSchema = z.object({
-  email: emailSchema,
+  email: z.string().trim().pipe(emailSchema),
   source: z.string().max(120).optional(),
 })
 

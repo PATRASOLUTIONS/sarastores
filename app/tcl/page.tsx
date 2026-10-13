@@ -7,6 +7,7 @@ import CategoryProductCard from "@/components/CategoryProductCard"
 import Link from "next/link"
 import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, Star, Tv, Volume2, Eye, Smartphone } from "lucide-react"
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import { brandProductListResponseSchema, type BrandProduct } from "@/lib/brand-landing-response"
 
 // TCL promotional banner images
 const tclBannerImages = [
@@ -70,25 +71,8 @@ const tclLifestyleImages = [
     },
 ]
 
-interface Product {
-    id: string
-    name: string
-    description?: string
-    price: number
-    image: string
-    stock?: number
-    category?: string
-    rating?: number
-    reviews?: number
-    discount?: number
-    originalPrice?: number
-    specification_images?: string
-    sku?: string
-    technical_details?: Record<string, any>
-}
-
 export default function TCLBrandPage() {
-    const [products, setProducts] = useState<Product[]>([])
+    const [products, setProducts] = useState<BrandProduct[]>([])
     const [loading, setLoading] = useState(true)
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isVisible, setIsVisible] = useState(false)
@@ -128,16 +112,16 @@ export default function TCLBrandPage() {
             try {
                 const response = await fetch("/api/products")
                 if (response.ok) {
-                    const data = await response.json()
+                    const data = brandProductListResponseSchema.parse(await response.json())
                     // Filter products by TCL manufacturer
-                    const tclProducts = data.filter((p: any) => {
+                    const tclProducts = data.filter((p) => {
                         const manufacturer = normalizeProductForSchema(p).manufacturerName || p.manufacturer || ""
                         return manufacturer.toLowerCase().includes("tcl")
                     })
                     setProducts(tclProducts.slice(0, 12)) // Show up to 12 products
 
                     // Extract unique subcategories from TCL products
-                    const tclSubCategories = new Set(tclProducts.map((p: any) =>
+                    const tclSubCategories = new Set(tclProducts.map((p) =>
                         (p.subCategory || p.description || "").trim()
                     ))
 
@@ -148,6 +132,8 @@ export default function TCLBrandPage() {
                         )
                     )
                     setAvailableCategories(validCategories)
+                } else {
+                    throw new Error("Failed to load TCL products")
                 }
             } catch (error) {
                 console.error("Error fetching TCL products:", error)
@@ -212,7 +198,7 @@ export default function TCLBrandPage() {
                             </div>
 
                             <p className="text-lg md:text-xl text-white/90 mb-6 max-w-xl">
-                                Experience innovation in display technology. Discover TCL's award-winning QLED TVs,
+                                Experience innovation in display technology. Discover TCL&apos;s award-winning QLED TVs,
                                 smart home appliances, and cutting-edge entertainment solutions.
                             </p>
 
@@ -442,7 +428,7 @@ export default function TCLBrandPage() {
                                 TCL Products Coming Soon
                             </h3>
                             <p className="text-gray-500 mb-6">
-                                We're adding TCL products to our collection. Check back soon!
+                                We&apos;re adding TCL products to our collection. Check back soon!
                             </p>
                             <Link
                                 href="/products"
@@ -465,7 +451,7 @@ export default function TCLBrandPage() {
                                 <Star className="h-6 w-6 text-blue-300" />
                             </div>
                             <div>
-                                <div className="font-bold text-lg">World's #2</div>
+                                <div className="font-bold text-lg">World&apos;s #2</div>
                                 <div className="text-sm text-blue-200">TV Brand Globally</div>
                             </div>
                         </div>

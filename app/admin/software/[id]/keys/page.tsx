@@ -1,47 +1,33 @@
 'use client'
 
-import { apiFetch } from "@/lib/api-client"
+import { ApiError, apiFetchJson } from "@/lib/api-client"
+import { licenseKeyListResponseSchema, licenseKeyMutationResponseSchema, type LicenseKeyResponse } from "@/lib/license-key-response"
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { ArrowLeft, Plus, Download, Ban, Copy, Check, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 
-interface LicenseKey {
-  _id: string
-  key: string
-  status: string
-  validityYears: number
-  maxDevices: number
-  assignedTo?: {
-    customerName: string
-    customerEmail: string
-    orderNumber: string
-  }
-  assignedAt?: string
-  expiresAt?: string
-}
-
 export default function LicenseKeysPage() {
   const params = useParams()
   const router = useRouter()
-  const [keys, setKeys] = useState<LicenseKey[]>([])
+  const [keys, setKeys] = useState<LicenseKeyResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingKey, setDeletingKey] = useState<{id: string, isAssigned: boolean} | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [editingKey, setEditingKey] = useState<LicenseKey | null>(null)
+  const [editingKey, setEditingKey] = useState<LicenseKeyResponse | null>(null)
   const [newValidity, setNewValidity] = useState(1)
   const [newMaxDevices, setNewMaxDevices] = useState(1)
   const [bulkKeys, setBulkKeys] = useState('')
-  const [selectedValidity, setSelectedValidity] = useState<1 | 2 | 3 | 4 | 5>(1)
+  const [selectedValidity, setSelectedValidity] = useState(1)
   const [maxDevices, setMaxDevices] = useState<number>(1)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [visibleKeyId, setVisibleKeyId] = useState<string | null>(null)
   const [showRevokeModal, setShowRevokeModal] = useState(false)
-  const [revokeTargetKey, setRevokeTargetKey] = useState<LicenseKey | null>(null)
+  const [revokeTargetKey, setRevokeTargetKey] = useState<LicenseKeyResponse | null>(null)
   const [revokePassword, setRevokePassword] = useState<string>('')
   const [isRevoking, setIsRevoking] = useState(false)
 
@@ -51,11 +37,8 @@ export default function LicenseKeysPage() {
 
   const fetchKeys = async () => {
     try {
-      const response = await apiFetch(`/api/software/license-keys?softwareId=${params.id}`)
-      const data = await response.json()
-      if (data.success) {
-        setKeys(data.keys)
-      }
+      const data = await apiFetchJson(`/api/software/license-keys?softwareId=${params.id}`, {}, value => licenseKeyListResponseSchema.parse(value))
+      setKeys(data.keys)
     } catch (error) {
       console.error('Error fetching keys:', error)
       toast.error('Failed to load license keys')
@@ -79,35 +62,22 @@ export default function LicenseKeysPage() {
         maxDevices: maxDevices || 1
       }))
 
-      const response = await apiFetch('/api/software/license-keys', {
+      await apiFetchJson('/api/software/license-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           softwareId: params.id,
           keys: keysToAdd
         })
-      })
+      }, value => licenseKeyMutationResponseSchema.parse(value))
 
-      const data = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add keys')
-      }
-
-      if (data.success) {
-        toast.success(`${keysToAdd.length} license key(s) added successfully`)
-        setBulkKeys('')
-        setShowAddModal(false)
-        // Force refresh the keys list with a small delay to ensure the database has updated
-        setTimeout(() => {
-          fetchKeys()
-        }, 500)
-      } else {
-        throw new Error(data.error || 'Failed to add keys')
-      }
-    } catch (error: any) {
+      toast.success(`${keysToAdd.length} license key(s) added successfully`)
+      setBulkKeys('')
+      setShowAddModal(false)
+      await fetchKeys()
+    } catch (error) {
       console.error('Error adding keys:', error)
-      toast.error(error.message || 'Failed to add keys')
+      toast.error(error instanceof Error ? error.message : 'Failed to add keys')
     }
   }
 
@@ -119,7 +89,7 @@ export default function LicenseKeysPage() {
 
     try {
       setIsRevoking(true)
-      const response = await apiFetch('/api/software/license-keys', {
+      await apiFetchJson('/api/software/license-keys', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,35 +98,21 @@ export default function LicenseKeysPage() {
           reason: 'Revoked by admin',
           password
         })
-      })
+      }, value => licenseKeyMutationResponseSchema.parse(value))
 
-      const data = await response.json()
-
-      if (response.status === 401) {
-        toast.error('Invalid admin password')
-        setIsRevoking(false)
-        return false
-      }
-
-      if (data.success) {
-        toast.success('License key revoked')
-        await fetchKeys()
-        setIsRevoking(false)
-        return true
-      } else {
-        toast.error(data.error || 'Failed to revoke key')
-        setIsRevoking(false)
-        return false
-      }
+      toast.success('License key revoked')
+      await fetchKeys()
+      setIsRevoking(false)
+      return true
     } catch (error) {
       console.error('Error revoking key:', error)
-      toast.error('Failed to revoke key')
+      toast.error(error instanceof ApiError && error.status === 401 ? 'Invalid admin password' : error instanceof Error ? error.message : 'Failed to revoke key')
       setIsRevoking(false)
       return false
     }
   }
 
-  const openRevokeModal = (key: LicenseKey) => {
+  const openRevokeModal = (key: LicenseKeyResponse) => {
     setRevokeTargetKey(key)
     setRevokePassword('')
     setShowRevokeModal(true)
@@ -165,7 +121,7 @@ export default function LicenseKeysPage() {
   const openDeleteModal = (keyId: string, isAssigned: boolean) => {
     console.log('Opening delete modal for key:', { keyId, isAssigned });
 
-    console.log('Current keys:', keys.find(k => k._id === keyId));
+    console.log('Current keys:', keys.find(k => k.id === keyId));
     setDeletingKey({ id: keyId, isAssigned });
     setShowDeleteModal(true);
   }
@@ -197,58 +153,28 @@ export default function LicenseKeysPage() {
     console.log('Sending delete request for key ID:', id);
 
     try {
-      const response = await apiFetch(`/api/software/license-keys/${id}`, {
+      await apiFetchJson(`/api/software/license-keys/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        credentials: 'same-origin'
-      });
-
-      console.log('Delete response status:', response.status);
-      
-      let data;
-      try {
-        data = await response.json();
-        console.log('Delete response data:', data);
-      } catch (jsonError) {
-        const errorMsg = 'Error parsing server response';
-        console.error(errorMsg, { status: response.status, statusText: response.statusText, jsonError });
-        throw new Error(`${errorMsg}: ${response.status} ${response.statusText}`);
-      }
-      
-      if (!response.ok) {
-        const errorMsg = data?.error || `Server returned ${response.status}: ${response.statusText}`;
-        console.error('Delete failed:', errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      if (data.success) {
-        console.log('Key deleted successfully, refreshing list...');
-        toast.success('License key deleted successfully');
-        await fetchKeys(); // Wait for the keys to refresh
-        closeDeleteModal();
-      } else {
-        const errorMsg = data?.error || 'Failed to delete key';
-        console.error('Delete operation failed:', errorMsg);
-        throw new Error(errorMsg);
-      }
-    } catch (error: any) {
-      console.error('Error in deleteKey:', {
-        error: error.message,
-        stack: error.stack,
-        keyId: id
-      });
-      toast.error(error.message || 'Failed to delete key. Check console for details.');
+      }, value => licenseKeyMutationResponseSchema.parse(value));
+      console.log('Key deleted successfully, refreshing list...');
+      toast.success('License key deleted successfully');
+      await fetchKeys();
+      closeDeleteModal();
+    } catch (error) {
+      console.error('Error in deleteKey:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete key. Check console for details.');
     } finally {
       setIsDeleting(false);
     }
   }
 
-  const openUpdateModal = (key: LicenseKey) => {
+  const openUpdateModal = (key: LicenseKeyResponse) => {
     setEditingKey(key)
-    setNewValidity(key.validityYears)
+    setNewValidity(key.validityYears || 1)
     setNewMaxDevices(key.maxDevices || 1)
     setShowUpdateModal(true)
   }
@@ -262,31 +188,20 @@ export default function LicenseKeysPage() {
     if (!editingKey) return
 
     try {
-      const response = await apiFetch(`/api/software/license-keys/${editingKey._id}`, {
+      await apiFetchJson(`/api/software/license-keys/${editingKey.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           validityYears: newValidity,
           maxDevices: newMaxDevices
         })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update key')
-      }
-
-      if (data.success) {
-        toast.success('License key updated successfully')
-        fetchKeys()
-        closeUpdateModal()
-      } else {
-        throw new Error(data.error || 'Failed to update key')
-      }
-    } catch (error: any) {
+      }, value => licenseKeyMutationResponseSchema.parse(value))
+      toast.success('License key updated successfully')
+      await fetchKeys()
+      closeUpdateModal()
+    } catch (error) {
       console.error('Error updating key:', error)
-      toast.error(error.message || 'Failed to update key')
+      toast.error(error instanceof Error ? error.message : 'Failed to update key')
     }
   }
 
@@ -423,11 +338,11 @@ export default function LicenseKeysPage() {
               </tr>
             ) : (
               keys.map((key) => (
-                <tr key={key._id} className="hover:bg-gray-50">
+                <tr key={key.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                        {visibleKeyId === key._id ? (
+                        {visibleKeyId === key.id ? (
                           key.key
                         ) : (
                           // masked representation: keep last 4 chars visible if possible
@@ -442,14 +357,14 @@ export default function LicenseKeysPage() {
 
                       <button
                         onClick={() => {
-                          if (visibleKeyId === key._id) setVisibleKeyId(null)
-                          else setVisibleKeyId(key._id)
+                          if (visibleKeyId === key.id) setVisibleKeyId(null)
+                          else setVisibleKeyId(key.id)
                         }}
                         className="text-gray-500 hover:text-gray-700"
-                        title={visibleKeyId === key._id ? 'Hide key' : 'Show key'}
+                        title={visibleKeyId === key.id ? 'Hide key' : 'Show key'}
                         type="button"
                       >
-                        {visibleKeyId === key._id ? (
+                        {visibleKeyId === key.id ? (
                           <EyeOff className="w-4 h-4" />
                         ) : (
                           <Eye className="w-4 h-4" />
@@ -629,10 +544,10 @@ export default function LicenseKeysPage() {
             </h2>
 
             <div className="mb-4 text-sm text-gray-700">
-              <p className="mb-2">You're about to revoke the following license key. This action cannot be undone.</p>
+              <p className="mb-2">You&apos;re about to revoke the following license key. This action cannot be undone.</p>
               <div className="flex items-center gap-3">
                 <code className="font-mono bg-gray-100 px-3 py-2 rounded text-sm">
-                  {visibleKeyId === revokeTargetKey._id ? revokeTargetKey.key : (revokeTargetKey.key ? `••••-••••-••••-${String(revokeTargetKey.key).slice(-4)}` : '—')}
+                  {visibleKeyId === revokeTargetKey.id ? revokeTargetKey.key : (revokeTargetKey.key ? `••••-••••-••••-${String(revokeTargetKey.key).slice(-4)}` : '—')}
                 </code>
                 <div className="text-xs text-gray-500">
                   <div>{revokeTargetKey.assignedTo?.customerName || '-'}</div>
@@ -663,7 +578,7 @@ export default function LicenseKeysPage() {
               <button
                 onClick={async () => {
                   if (!revokeTargetKey) return
-                  const ok = await revokeKey(revokeTargetKey._id, revokePassword)
+                  const ok = await revokeKey(revokeTargetKey.id, revokePassword)
                   if (ok) {
                     setShowRevokeModal(false)
                     setRevokeTargetKey(null)
@@ -693,7 +608,7 @@ export default function LicenseKeysPage() {
               <label className="block text-sm font-medium mb-2">Validity Period</label>
               <select
                 value={selectedValidity}
-                onChange={(e) => setSelectedValidity(Number(e.target.value) as any)}
+                onChange={(e) => setSelectedValidity(Number(e.target.value))}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value={1}>1 Year</option>

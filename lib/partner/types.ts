@@ -11,6 +11,15 @@
 export type PartnerTier = 'starter' | 'growth' | 'professional' | 'enterprise';
 export type PartnerStatus = 'pending' | 'active' | 'suspended' | 'terminated';
 export type BusinessType = 'sole_proprietorship' | 'partnership' | 'llp' | 'pvt_ltd' | 'public_ltd';
+export interface PartnerProductAssignmentDocument {
+  partnerId: string | import('mongodb').ObjectId;
+  productId: string | import('mongodb').ObjectId;
+  enabled: boolean;
+  customPrice?: number;
+  customCommission?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 export interface Address {
   line1: string;
@@ -169,7 +178,12 @@ export type TransactionCategory =
   | 'hold_release';
 
 export type TransactionStatus = 'pending' | 'completed' | 'failed' | 'active' | 'released';
-export type PayoutStatus = 'pending_approval' | 'approved' | 'processing' | 'completed' | 'failed' | 'rejected';
+export const PAYOUT_STATUSES = ['pending_approval', 'approved', 'processing', 'completed', 'failed', 'rejected'] as const;
+export type PayoutStatus = typeof PAYOUT_STATUSES[number];
+
+export function isPayoutStatus(value: string): value is PayoutStatus {
+  return PAYOUT_STATUSES.some(status => status === value);
+}
 
 export interface BankAccount {
   id: string;
@@ -319,7 +333,7 @@ export interface PartnerOrder {
   statusHistory: {
     status: PartnerOrderStatus;
     timestamp: Date;
-    details?: Record<string, any>;
+    details?: Record<string, unknown>;
   }[];
 
   commission: {
@@ -360,13 +374,13 @@ export interface PartnerOrder {
 // API Response Types
 // ============================================
 
-export interface APIResponse<T = any> {
+export interface APIResponse<T> {
   success: boolean;
   data?: T;
   error?: {
     code: string;
     message: string;
-    details?: any[];
+    details?: unknown[];
   };
   meta?: {
     requestId: string;

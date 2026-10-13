@@ -150,7 +150,7 @@ export default function BlockedPincodesPage() {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data)
       const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[]
+      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet)
 
       let successCount = 0
       let failCount = 0
@@ -489,7 +489,7 @@ export default function BlockedPincodesPage() {
 
               {/* Info Note */}
               <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                <strong>Note:</strong> The Excel file should have columns named "Pincode", "Name", and "State".
+                <strong>Note:</strong> The Excel file should have columns named &quot;Pincode&quot;, &quot;Name&quot;, and &quot;State&quot;.
                 Only the Pincode column is required.
               </div>
             </div>

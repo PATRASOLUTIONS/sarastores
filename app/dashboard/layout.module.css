@@ -1,0 +1,9 @@
+.container { max-width: 1200px; padding: 10px 30px 14px; font-family: Arial, Helvetica, sans-serif; }
+.container > nav { font-size: 10px; }
+.container > div { grid-template-columns: 190px minmax(0, 1fr); gap: 14px; margin-top: 8px; }
+.content { min-height: calc(100vh - 190px); }
+.container > section { margin-top: 10px; padding: 15px 12px; border-radius: 4px; }
+.container > section svg { height: 34px; width: 34px; }
+.container > section p { font-size: 10px; font-family: inherit; }
+@media (max-width: 1023px) { .container > div { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .container { padding: 14px 16px 20px; } }

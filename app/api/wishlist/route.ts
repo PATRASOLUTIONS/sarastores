@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
     // If we have product IDs, fetch the full product details
     if (wishlist.items && wishlist.items.length > 0) {
-      const productsCollection = await getCollection<{ _id: ObjectId | string }>("products")
+      const productsCollection = await getCollection<{ _id: ObjectId | string; name?: string; slug?: string }>("products")
       const productIds = wishlist.items.map((id: string) => {
         try {
           return new ObjectId(id)
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 
       // Ensure slug exists on each product
       const { generateProductSlug } = await import("@/utils/slug")
-      const productsWithSlug = normalizeId(products).map((p: any) => {
+      const productsWithSlug = normalizeId(products).map((p) => {
         if (!p.slug && p.name) p.slug = generateProductSlug(p.name)
         return p
       })

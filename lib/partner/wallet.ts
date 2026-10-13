@@ -4,12 +4,14 @@
  * Handles wallet operations, transactions, and payouts
  */
 
-import { ObjectId } from 'mongodb';
+import { ObjectId, type ClientSession, type Filter, type WithId } from 'mongodb';
 import { getCollection } from '@/lib/db-service';
+import { connectToDatabase } from '@/lib/mongodb';
 import { 
   PartnerWallet, 
   WalletTransaction, 
   Payout,
+  PayoutStatus,
   TransactionType,
   TransactionCategory,
   BankAccount 
@@ -19,6 +21,24 @@ const WALLETS_COLLECTION = 'partner_wallets';
 const TRANSACTIONS_COLLECTION = 'wallet_transactions';
 const PAYOUTS_COLLECTION = 'partner_payouts';
 
+async function withWalletTransaction<T>(operation: (session: ClientSession) => Promise<T>): Promise<T> {
+  const { client } = await connectToDatabase();
+  const session = client.startSession();
+  try {
+    const result = await session.withTransaction(() => operation(session));
+    if (result === undefined) throw new Error('Wallet transaction did not commit');
+    return result;
+  } finally {
+    await session.endSession();
+  }
+}
+
+function validateAmount(amount: number, allowZero = false): void {
+  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount === 0)) {
+    throw new Error('Amount must be a finite positive number');
+  }
+}
+
 // ============================================
 // Wallet Operations
 // ============================================
@@ -27,7 +47,7 @@ const PAYOUTS_COLLECTION = 'partner_payouts';
  * Create a new wallet for a partner
  */
 export async function createWallet(partnerId: string): Promise<PartnerWallet> {
-  const collection = await getCollection(WALLETS_COLLECTION);
+  const collection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
   
   const wallet: PartnerWallet = {
     id: new ObjectId().toString(),
@@ -61,7 +81,7 @@ export async function createWallet(partnerId: string): Promise<PartnerWallet> {
  * Get wallet by partner ID
  */
 export async function getWalletByPartnerId(partnerId: string): Promise<PartnerWallet | null> {
-  const collection = await getCollection(WALLETS_COLLECTION);
+  const collection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
   const wallet = await collection.findOne({ partnerId });
   
   if (!wallet) {
@@ -75,7 +95,7 @@ export async function getWalletByPartnerId(partnerId: string): Promise<PartnerWa
  * Get wallet by ID
  */
 export async function getWalletById(walletId: string): Promise<PartnerWallet | null> {
-  const collection = await getCollection(WALLETS_COLLECTION);
+  const collection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
   const wallet = await collection.findOne({ _id: new ObjectId(walletId) });
   
   if (!wallet) {
@@ -88,7 +108,7 @@ export async function getWalletById(walletId: string): Promise<PartnerWallet | n
 /**
  * Normalize wallet document from database
  */
-function normalizeWallet(doc: any): PartnerWallet {
+function normalizeWallet(doc: WithId<PartnerWallet>): PartnerWallet {
   return {
     id: doc._id.toString(),
     partnerId: doc.partnerId,
@@ -126,54 +146,70 @@ export async function createTransaction(
     paymentMethod?: string;
   }
 ): Promise<WalletTransaction> {
-  const walletsCollection = await getCollection(WALLETS_COLLECTION);
-  const transactionsCollection = await getCollection(TRANSACTIONS_COLLECTION);
-  
-  // Get current wallet balance
-  const wallet = await walletsCollection.findOne({ _id: new ObjectId(walletId) });
-  if (!wallet) {
-    throw new Error('Wallet not found');
-  }
-  
-  // Calculate new balance based on transaction type
-  let balanceUpdate: any = {};
-  let balanceAfter = 0;
+  return withWalletTransaction(session => applyWalletTransaction(
+    session, walletId, partnerId, type, category, amount, description, options
+  ));
+}
+
+async function applyWalletTransaction(
+  session: ClientSession,
+  walletId: string,
+  partnerId: string,
+  type: TransactionType,
+  category: TransactionCategory,
+  amount: number,
+  description: string,
+  options?: Parameters<typeof createTransaction>[6]
+): Promise<WalletTransaction> {
+  validateAmount(amount, type === 'credit' && category === 'order_commission');
+  const walletsCollection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
+  const transactionsCollection = await getCollection<WalletTransaction>(TRANSACTIONS_COLLECTION);
+  const filter: Filter<PartnerWallet> = { _id: new ObjectId(walletId), partnerId };
+  let balanceUpdate: Partial<Record<`balance.${keyof PartnerWallet['balance']}`, number>> = {};
   
   switch (type) {
     case 'credit':
       if (category === 'order_commission') {
         // Commission goes to pending first
-        balanceUpdate = { 'balance.pending': wallet.balance.pending + amount };
-        balanceAfter = wallet.balance.available + wallet.balance.pending + amount;
+        balanceUpdate = { 'balance.pending': amount };
       } else {
         // Bonuses etc go directly to available
-        balanceUpdate = { 'balance.available': wallet.balance.available + amount };
-        balanceAfter = wallet.balance.available + amount + wallet.balance.pending;
+        balanceUpdate = { 'balance.available': amount };
       }
       break;
       
     case 'debit':
-      balanceUpdate = { 'balance.available': wallet.balance.available - amount };
-      balanceAfter = wallet.balance.available - amount;
+      filter['balance.available'] = { $gte: amount };
+      balanceUpdate = { 'balance.available': -amount };
       break;
       
     case 'hold':
       balanceUpdate = { 
-        'balance.available': wallet.balance.available - amount,
-        'balance.held': wallet.balance.held + amount 
+        'balance.available': -amount,
+        'balance.held': amount
       };
-      balanceAfter = wallet.balance.available - amount;
+      filter['balance.available'] = { $gte: amount };
       break;
       
     case 'release':
       balanceUpdate = { 
-        'balance.held': wallet.balance.held - amount,
-        'balance.available': wallet.balance.available + amount 
+        'balance.held': -amount,
+        'balance.available': amount
       };
-      balanceAfter = wallet.balance.available + amount;
+      filter['balance.held'] = { $gte: amount };
       break;
+    default:
+      throw new Error('Invalid wallet transaction type');
   }
-  
+  const wallet = await walletsCollection.findOneAndUpdate(
+    filter,
+    { $inc: balanceUpdate, $set: { updatedAt: new Date() } },
+    { session, returnDocument: 'after' }
+  );
+  if (!wallet) throw new Error('Wallet not found or insufficient balance');
+  const balanceAfter = type === 'credit'
+    ? wallet.balance.available + wallet.balance.pending
+    : wallet.balance.available;
   // Create transaction
   const transaction: WalletTransaction = {
     id: new ObjectId().toString(),
@@ -195,22 +231,11 @@ export async function createTransaction(
     processedAt: new Date(),
   };
   
-  // Update wallet balance
-  await walletsCollection.updateOne(
-    { _id: new ObjectId(walletId) },
-    { 
-      $set: { 
-        ...balanceUpdate, 
-        updatedAt: new Date() 
-      } 
-    }
-  );
-  
   // Insert transaction
   await transactionsCollection.insertOne({
     ...transaction,
     _id: new ObjectId(transaction.id),
-  });
+  }, { session });
   
   return transaction;
 }
@@ -224,30 +249,33 @@ export async function releasePendingBalance(
   amount: number,
   orderId: string
 ): Promise<WalletTransaction> {
-  const walletsCollection = await getCollection(WALLETS_COLLECTION);
-  
-  // Update wallet
-  await walletsCollection.updateOne(
-    { _id: new ObjectId(walletId) },
-    { 
-      $inc: { 
-        'balance.pending': -amount,
-        'balance.available': amount 
+  validateAmount(amount);
+  return withWalletTransaction(async session => {
+    const walletsCollection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
+    const result = await walletsCollection.updateOne(
+      { _id: new ObjectId(walletId), partnerId, 'balance.pending': { $gte: amount } },
+      {
+        $inc: {
+          'balance.pending': -amount,
+          'balance.available': amount
+        },
+        $set: { updatedAt: new Date() }
       },
-      $set: { updatedAt: new Date() }
-    }
-  );
-  
-  // Create transaction
-  return createTransaction(
-    walletId,
-    partnerId,
-    'credit',
-    'order_commission',
-    0, // No new amount, just recording the release
-    `Commission released for order ${orderId}`,
-    { orderId }
-  );
+      { session }
+    );
+    if (result.matchedCount !== 1) throw new Error('Wallet not found or insufficient pending balance');
+
+    return applyWalletTransaction(
+      session,
+      walletId,
+      partnerId,
+      'credit',
+      'order_commission',
+      0, // No new amount, just recording the release
+      `Commission released for order ${orderId}`,
+      { orderId }
+    );
+  });
 }
 
 /**
@@ -264,9 +292,9 @@ export async function getWalletTransactions(
     limit?: number;
   }
 ): Promise<{ transactions: WalletTransaction[]; total: number }> {
-  const collection = await getCollection(TRANSACTIONS_COLLECTION);
+  const collection = await getCollection<WalletTransaction>(TRANSACTIONS_COLLECTION);
   
-  const filter: any = { walletId };
+  const filter: Filter<WalletTransaction> = { walletId };
   
   if (options?.type) {
     filter.type = options.type;
@@ -306,7 +334,7 @@ export async function getWalletTransactions(
   };
 }
 
-function normalizeTransaction(doc: any): WalletTransaction {
+function normalizeTransaction(doc: WithId<WalletTransaction>): WalletTransaction {
   return {
     id: doc._id.toString(),
     walletId: doc.walletId,
@@ -340,85 +368,64 @@ export async function createPayoutRequest(
   bankAccountId: string,
   notes?: string
 ): Promise<Payout> {
-  const walletsCollection = await getCollection(WALLETS_COLLECTION);
-  const payoutsCollection = await getCollection(PAYOUTS_COLLECTION);
-  
-  // Get wallet
-  const wallet = await walletsCollection.findOne({ _id: new ObjectId(walletId) });
-  if (!wallet) {
-    throw new Error('Wallet not found');
-  }
-  
-  // Validate balance
-  if (wallet.balance.available < amount) {
-    throw new Error('Insufficient balance');
-  }
-  
-  // Validate minimum payout
-  if (amount < wallet.minimumPayout) {
-    throw new Error(`Minimum payout amount is ₹${wallet.minimumPayout}`);
-  }
-  
-  // Get bank account
-  const bankAccount = wallet.bankAccounts.find((ba: BankAccount) => ba.id === bankAccountId);
-  if (!bankAccount) {
-    throw new Error('Bank account not found');
-  }
-  
-  // Create payout
-  const payout: Payout = {
-    id: new ObjectId().toString(),
-    partnerId,
-    walletId,
-    amount,
-    bankAccountId,
-    bankAccount: {
-      bankName: bankAccount.bankName,
-      accountNumber: bankAccount.accountNumber.slice(-4).padStart(bankAccount.accountNumber.length, '*'),
-      ifsc: bankAccount.ifsc,
-    },
-    status: 'pending_approval',
-    notes,
-    requestedAt: new Date(),
-  };
-  
-  // Debit amount from available balance
-  await walletsCollection.updateOne(
-    { _id: new ObjectId(walletId) },
-    { 
-      $inc: { 'balance.available': -amount },
-      $set: { updatedAt: new Date() }
+  validateAmount(amount);
+  return withWalletTransaction(async session => {
+    const walletsCollection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
+    const payoutsCollection = await getCollection<Payout>(PAYOUTS_COLLECTION);
+    const wallet = await walletsCollection.findOne({ _id: new ObjectId(walletId), partnerId }, { session });
+    if (!wallet) throw new Error('Wallet not found');
+    if (wallet.balance.available < amount) throw new Error('Insufficient balance');
+    if (amount < wallet.minimumPayout) {
+      throw new Error(`Minimum payout amount is ₹${wallet.minimumPayout}`);
     }
-  );
-  
-  // Insert payout
-  await payoutsCollection.insertOne({
-    ...payout,
-    _id: new ObjectId(payout.id),
+
+    const bankAccount = wallet.bankAccounts.find((ba: BankAccount) => ba.id === bankAccountId);
+    if (!bankAccount) throw new Error('Bank account not found');
+
+    const payout: Payout = {
+      id: new ObjectId().toString(),
+      partnerId,
+      walletId,
+      amount,
+      bankAccountId,
+      bankAccount: {
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber.slice(-4).padStart(bankAccount.accountNumber.length, '*'),
+        ifsc: bankAccount.ifsc,
+      },
+      status: 'pending_approval',
+      notes,
+      requestedAt: new Date(),
+    };
+    await payoutsCollection.insertOne({
+      ...payout,
+      _id: new ObjectId(payout.id),
+    }, { session });
+    await applyWalletTransaction(
+      session,
+      walletId,
+      partnerId,
+      'debit',
+      'payout',
+      amount,
+      `Payout request - ${payout.id}`,
+      { payoutId: payout.id, notes }
+    );
+    return payout;
   });
-  
-  // Create transaction
-  await createTransaction(
-    walletId,
-    partnerId,
-    'debit',
-    'payout',
-    amount,
-    `Payout request - ${payout.id}`,
-    { payoutId: payout.id, notes }
-  );
-  
-  return payout;
 }
 
 /**
  * Approve a payout request
  */
+export class PayoutStateConflictError extends Error {}
+
 export async function approvePayout(
   payoutId: string,
-  approvedBy: string
+  approvedBy: string,
+  metadata: { notes?: string; transactionId?: string } = {}
 ): Promise<Payout> {
-  const collection = await getCollection(PAYOUTS_COLLECTION);
+  const collection = await getCollection<Payout>(PAYOUTS_COLLECTION);
   
   const result = await collection.findOneAndUpdate(
     { _id: new ObjectId(payoutId), status: 'pending_approval' },
@@ -427,13 +434,15 @@ export async function approvePayout(
         status: 'approved',
         approvedAt: new Date(),
         approvedBy,
+        ...(metadata.notes !== undefined ? { adminNotes: metadata.notes } : {}),
+        ...(metadata.transactionId !== undefined ? { transactionId: metadata.transactionId } : {}),
       } 
     },
     { returnDocument: 'after' }
   );
   
   if (!result) {
-    throw new Error('Payout not found or already processed');
+    throw new PayoutStateConflictError('Payout not found or already processed');
   }
   
   return normalizePayout(result);
@@ -447,54 +456,34 @@ export async function rejectPayout(
   rejectedBy: string,
   reason: string
 ): Promise<Payout> {
-  const payoutsCollection = await getCollection(PAYOUTS_COLLECTION);
-  const walletsCollection = await getCollection(WALLETS_COLLECTION);
-  
-  // Get payout
-  const payout = await payoutsCollection.findOne({ 
-    _id: new ObjectId(payoutId), 
-    status: 'pending_approval' 
+  return withWalletTransaction(async session => {
+    const payoutsCollection = await getCollection<Payout>(PAYOUTS_COLLECTION);
+    const result = await payoutsCollection.findOneAndUpdate(
+      { _id: new ObjectId(payoutId), status: 'pending_approval' },
+      {
+        $set: {
+          status: 'rejected',
+          rejectedAt: new Date(),
+          rejectedBy,
+          rejectionReason: reason,
+        }
+      },
+      { session, returnDocument: 'after' }
+    );
+    if (!result) throw new PayoutStateConflictError('Payout not found or already processed');
+
+    await applyWalletTransaction(
+      session,
+      result.walletId,
+      result.partnerId,
+      'credit',
+      'payout',
+      result.amount,
+      `Payout rejected - refund: ${reason}`,
+      { payoutId }
+    );
+    return normalizePayout(result);
   });
-  
-  if (!payout) {
-    throw new Error('Payout not found or already processed');
-  }
-  
-  // Refund the amount back to wallet
-  await walletsCollection.updateOne(
-    { _id: new ObjectId(payout.walletId) },
-    { 
-      $inc: { 'balance.available': payout.amount },
-      $set: { updatedAt: new Date() }
-    }
-  );
-  
-  // Update payout status
-  const result = await payoutsCollection.findOneAndUpdate(
-    { _id: new ObjectId(payoutId) },
-    { 
-      $set: { 
-        status: 'rejected',
-        rejectedAt: new Date(),
-        rejectedBy,
-        rejectionReason: reason,
-      } 
-    },
-    { returnDocument: 'after' }
-  );
-  
-  // Create refund transaction
-  await createTransaction(
-    payout.walletId,
-    payout.partnerId,
-    'credit',
-    'payout',
-    payout.amount,
-    `Payout rejected - refund: ${reason}`,
-    { payoutId }
-  );
-  
-  return normalizePayout(result);
 }
 
 /**
@@ -504,7 +493,7 @@ export async function completePayout(
   payoutId: string,
   transactionId: string
 ): Promise<Payout> {
-  const collection = await getCollection(PAYOUTS_COLLECTION);
+  const collection = await getCollection<Payout>(PAYOUTS_COLLECTION);
   
   const result = await collection.findOneAndUpdate(
     { _id: new ObjectId(payoutId), status: 'approved' },
@@ -532,14 +521,14 @@ export async function completePayout(
 export async function getPartnerPayouts(
   partnerId: string,
   options?: {
-    status?: string;
+    status?: PayoutStatus;
     page?: number;
     limit?: number;
   }
 ): Promise<{ payouts: Payout[]; total: number }> {
-  const collection = await getCollection(PAYOUTS_COLLECTION);
+  const collection = await getCollection<Payout>(PAYOUTS_COLLECTION);
   
-  const filter: any = { partnerId };
+  const filter: Filter<Payout> = { partnerId };
   
   if (options?.status) {
     filter.status = options.status;
@@ -571,9 +560,9 @@ export async function getPartnerPayouts(
 export async function getPendingPayouts(
   options?: { page?: number; limit?: number }
 ): Promise<{ payouts: Payout[]; total: number }> {
-  const collection = await getCollection(PAYOUTS_COLLECTION);
+  const collection = await getCollection<Payout>(PAYOUTS_COLLECTION);
   
-  const filter = { status: 'pending_approval' };
+  const filter: Filter<Payout> = { status: 'pending_approval' };
   const page = options?.page || 1;
   const limit = options?.limit || 20;
   const skip = (page - 1) * limit;
@@ -594,7 +583,7 @@ export async function getPendingPayouts(
   };
 }
 
-function normalizePayout(doc: any): Payout {
+function normalizePayout(doc: WithId<Payout>): Payout {
   return {
     id: doc._id.toString(),
     partnerId: doc.partnerId,
@@ -628,7 +617,7 @@ export async function addBankAccount(
   walletId: string,
   bankAccount: Omit<BankAccount, 'id' | 'verified' | 'createdAt'>
 ): Promise<BankAccount> {
-  const collection = await getCollection(WALLETS_COLLECTION);
+  const collection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
   
   const newBankAccount: BankAccount = {
     ...bankAccount,
@@ -638,11 +627,11 @@ export async function addBankAccount(
   };
   
   await collection.updateOne(
-    { _id: new ObjectId(walletId) } as any,
+    { _id: new ObjectId(walletId) },
     { 
       $push: { bankAccounts: newBankAccount },
       $set: { updatedAt: new Date() }
-    } as any
+    }
   );
   
   // If this is the first bank account, make it default
@@ -664,7 +653,7 @@ export async function verifyBankAccount(
   walletId: string,
   bankAccountId: string
 ): Promise<void> {
-  const collection = await getCollection(WALLETS_COLLECTION);
+  const collection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
   
   await collection.updateOne(
     { _id: new ObjectId(walletId), 'bankAccounts.id': bankAccountId },
@@ -685,7 +674,7 @@ export async function setDefaultBankAccount(
   walletId: string,
   bankAccountId: string
 ): Promise<void> {
-  const collection = await getCollection(WALLETS_COLLECTION);
+  const collection = await getCollection<PartnerWallet>(WALLETS_COLLECTION);
   
   await collection.updateOne(
     { _id: new ObjectId(walletId) },

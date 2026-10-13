@@ -231,7 +231,7 @@ export default function LoadersDemo() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Do's */}
             <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-              <h3 className="text-lg font-semibold mb-4 text-green-700">✅ Do's</h3>
+              <h3 className="text-lg font-semibold mb-4 text-green-700">✅ Do&apos;s</h3>
               <ul className="space-y-2 text-gray-700">
                 <li>✓ Use skeleton loaders for better UX</li>
                 <li>✓ Show loading text for operations &gt;2s</li>
@@ -243,13 +243,13 @@ export default function LoadersDemo() {
 
             {/* Don'ts */}
             <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-              <h3 className="text-lg font-semibold mb-4 text-red-700">❌ Don'ts</h3>
+              <h3 className="text-lg font-semibold mb-4 text-red-700">❌ Don&apos;ts</h3>
               <ul className="space-y-2 text-gray-700">
-                <li>✗ Don't use full-screen for small ops</li>
-                <li>✗ Don't show loaders for &lt;300ms</li>
-                <li>✗ Don't use multiple loaders together</li>
-                <li>✗ Don't forget error states</li>
-                <li>✗ Don't block UI unnecessarily</li>
+                <li>✗ Don&apos;t use full-screen for small ops</li>
+                <li>✗ Don&apos;t show loaders for &lt;300ms</li>
+                <li>✗ Don&apos;t use multiple loaders together</li>
+                <li>✗ Don&apos;t forget error states</li>
+                <li>✗ Don&apos;t block UI unnecessarily</li>
               </ul>
             </div>
           </div>

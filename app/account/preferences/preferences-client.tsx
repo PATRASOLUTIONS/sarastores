@@ -4,15 +4,10 @@ import { useEffect, useState } from "react"
 import { toast } from "react-hot-toast"
 import { Bell, Loader2, Mail, MessageCircle, Smartphone, ShieldCheck } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
-import { formatPrice } from "@/utils/formatPrice"
 
 type Consent = { email: boolean; whatsapp: boolean; sms: boolean }
 
 type Profile = {
-  tier?: string
-  lifetimeSpend?: number
-  orderCount?: number
-  categoriesBought?: string[]
   consent?: Consent
 }
 
@@ -27,14 +22,7 @@ const CHANNELS: Array<{
   { key: "sms", icon: Smartphone, label: "SMS", description: "Occasional time-sensitive offers" },
 ]
 
-const TIER_LABEL: Record<string, string> = {
-  silver: "Silver",
-  gold: "Gold",
-  platinum: "Platinum",
-}
-
 export default function PreferencesClient() {
-  const [profile, setProfile] = useState<Profile | null>(null)
   const [consent, setConsent] = useState<Consent>({ email: false, whatsapp: false, sms: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<keyof Consent | null>(null)
@@ -45,8 +33,8 @@ export default function PreferencesClient() {
       .then((res) => res.json())
       .then((data) => {
         if (cancelled || !data?.success) return
-        setProfile(data.profile)
-        if (data.profile?.consent) setConsent(data.profile.consent)
+        const profile: Profile | undefined = data.profile
+        if (profile?.consent) setConsent(profile.consent)
       })
       .catch(() => toast.error("Could not load your preferences"))
       .finally(() => !cancelled && setLoading(false))
@@ -85,8 +73,6 @@ export default function PreferencesClient() {
     )
   }
 
-  const tier = TIER_LABEL[profile?.tier ?? "silver"] ?? "Silver"
-
   return (
     <div className="space-y-6">
       <div>
@@ -95,23 +81,6 @@ export default function PreferencesClient() {
           Choose how you&apos;d like to hear from Sara. You can change this at any time.
         </p>
       </div>
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-brand-border bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-text-tertiary">Membership</p>
-          <p className="mt-1 text-xl font-bold text-brand-text-primary">{tier}</p>
-        </div>
-        <div className="rounded-2xl border border-brand-border bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-text-tertiary">Orders</p>
-          <p className="mt-1 text-xl font-bold text-brand-text-primary">{profile?.orderCount ?? 0}</p>
-        </div>
-        <div className="rounded-2xl border border-brand-border bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-text-tertiary">Total spent</p>
-          <p className="mt-1 text-xl font-bold text-brand-text-primary">
-            {formatPrice(profile?.lifetimeSpend ?? 0)}
-          </p>
-        </div>
-      </section>
 
       <section className="overflow-hidden rounded-2xl border border-brand-border bg-white">
         <div className="flex items-center gap-2 border-b border-brand-border px-5 py-4">
@@ -131,7 +100,7 @@ export default function PreferencesClient() {
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-brand-text-primary">{label}</p>
-                  <p className="text-xs text-brand-text-tertiary">{description}</p>
+                  <p className="text-xs text-brand-text-secondary">{description}</p>
                 </div>
               </div>
 
@@ -157,7 +126,7 @@ export default function PreferencesClient() {
         </ul>
       </section>
 
-      <p className="flex items-start gap-2 text-xs text-brand-text-tertiary">
+      <p className="flex items-start gap-2 text-xs text-brand-text-secondary">
         <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-success" />
         We&apos;ll always email you about your own orders and deliveries — those are service messages,
         not marketing, and they aren&apos;t affected by these settings.

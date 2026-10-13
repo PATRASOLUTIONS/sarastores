@@ -1,144 +1,106 @@
-import { NextResponse } from "next/server"
-import nodemailer from "nodemailer"
+import crypto from "node:crypto"
+import { type NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
+import { getCollection } from "@/lib/db-service"
+import { getSession } from "@/lib/auth"
+import { sendEmail } from "@/lib/email"
+import { handleApiError } from "@/lib/api-error"
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
+import { CheckoutQuoteSchema, quoteCheckout, createCheckoutIntent, type CheckoutIntent } from "@/lib/checkout-payment"
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_FROM,
-    pass: process.env.SMTP_PASS
-  }
+const StorePurchaseSchema = z.object({
+  email: z.string().email().max(254).transform((value) => value.toLowerCase()),
+  employeeId: z.string().trim().min(1).max(100),
+  action: z.enum(["verify", "validate"]),
+  otp: z.string().regex(/^\d{6}$/).optional(),
+  challengeId: z.string().uuid().optional(),
+  checkout: CheckoutQuoteSchema,
 })
 
-const otpStore: Record<string, { otp: string; timestamp: number }> = {}
+interface StoreChallenge {
+  _id: string
+  userId: string | null
+  employeeId: string
+  employeeEmail: string
+  fingerprint: string
+  otpHash: string
+  attempts: number
+  consumed: boolean
+  expiresAt: Date
+}
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { email, employeeId, action, otp } = await req.json()
-
-    if (action === "verify") {
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString()
-
-      otpStore[email] = {
-        otp: generatedOtp,
-        timestamp: Date.now() + 5 * 60 * 1000
-      }
-
-      try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_FROM,
-          to: email,
-          subject: 'In-store Purchase Verification',
-          html: `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Store Purchase Verification</title>
-              <style>
-                body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-                .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-                .header { background-color: #1a1a1a; padding: 30px; text-align: center; }
-                .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 1px; }
-                .content { padding: 40px 30px; color: #333333; line-height: 1.6; }
-                .otp-box { background-color: #f8f9fa; border: 2px dashed #e9ecef; border-radius: 8px; padding: 20px; text-align: center; margin: 30px 0; }
-                .otp-code { font-size: 32px; font-weight: 700; color: #1a1a1a; letter-spacing: 8px; display: inline-block; }
-                .footer { background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #888888; border-top: 1px solid #eeeeee; }
-                .info-item { margin-bottom: 10px; }
-                .label { font-weight: 600; color: #555555; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>Sara Electronics</h1>
-                </div>
-                <div class="content">
-                  <h2 style="color: #1a1a1a; margin-top: 0;">Verification Required</h2>
-                  <p>Hello,</p>
-                  <p>You are initiating an in-store purchase that requires authorization. Please use the following One-Time Password (OTP) to complete the verification process.</p>
-                  
-                  <div class="otp-box">
-                    <span class="otp-code">${generatedOtp}</span>
-                  </div>
-                  
-                  <div class="info-item">
-                    <span class="label">Employee ID:</span> ${employeeId}
-                  </div>
-                  <div class="info-item">
-                    <span class="label">Time:</span> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                  </div>
-                  
-                  <p style="margin-top: 30px; font-size: 14px; color: #666;">
-                    For security reasons, this OTP is valid for only <strong>5 minutes</strong>. Do not share this code with anyone.
-                  </p>
-                </div>
-                <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Sara Electronics. All rights reserved.</p>
-                  <p>This is an automated message, please do not reply.</p>
-                </div>
-              </div>
-            </body>
-            </html>
-          `
-        })
-
-        return NextResponse.json({
-          success: true,
-          message: "OTP sent successfully"
-        })
-      } catch (emailError) {
-        console.error("Email sending error:", emailError instanceof Error ? emailError.message : String(emailError))
-        return NextResponse.json({
-          success: false,
-          message: "Failed to send OTP email"
-        }, { status: 500 })
-      }
+    const limit = await checkRateLimit(request, RATE_LIMITS.AUTH)
+    if (!limit.success) return NextResponse.json({ success: false, message: RATE_LIMITS.AUTH.message }, { status: 429 })
+    const parsed = StorePurchaseSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
+    const data = parsed.data
+    const secret = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET
+    if (!secret || secret.length < 16) {
+      return NextResponse.json({ success: false, message: "Store approval is not configured" }, { status: 503 })
     }
+    const employee = await (await getCollection("employees")).findOne({
+      employeeId: data.employeeId, email: data.email, status: "active",
+    })
+    if (!employee) return NextResponse.json({ success: false, message: "Invalid employee credentials" }, { status: 400 })
+    const session = await getSession()
+    const userId = session?.user.id || null
+    const quote = await quoteCheckout(data.checkout.items, { ...data.checkout, userId })
+    if (!quote.ok) return NextResponse.json({ success: false, message: quote.error }, { status: 400 })
+    const challenges = await getCollection<StoreChallenge>("store_purchase_challenges")
+    const otpHash = (id: string, otp: string) =>
+      crypto.createHmac("sha256", secret).update(`${id}:${otp}`).digest("hex")
 
-    if (action === "validate") {
-      const storedData = otpStore[email]
-
-      if (!storedData || !storedData.otp) {
-        return NextResponse.json({
-          success: false,
-          message: "No OTP found. Please request a new OTP."
-        }, { status: 400 })
+    if (data.action === "verify") {
+      const challengeId = crypto.randomUUID()
+      const otp = crypto.randomInt(100000, 1000000).toString()
+      await challenges.insertOne({
+        _id: challengeId, userId, employeeId: data.employeeId, employeeEmail: data.email,
+        fingerprint: quote.fingerprint, otpHash: otpHash(challengeId, otp), attempts: 0,
+        consumed: false, expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      })
+      try {
+        const sent = await sendEmail({
+          to: employee.email,
+          subject: "Approve an in-store purchase",
+          html: `<p>Approval code: <strong>${otp}</strong></p><p>Purchase amount: INR ${quote.amount.toFixed(2)}. Items: ${quote.pricing.items.length}.</p><p>Only enter this code after confirming receipt of payment for this checkout. It expires in five minutes.</p>`,
+        })
+        if (!sent.success) throw new Error("Employee approval email could not be sent")
+      } catch (error) {
+        await challenges.deleteOne({ _id: challengeId })
+        throw error
       }
-
-      if (Date.now() > storedData.timestamp) {
-        delete otpStore[email]
-        return NextResponse.json({
-          success: false,
-          message: "OTP expired. Please request a new OTP."
-        }, { status: 400 })
-      }
-
-      if (storedData.otp !== otp) {
-        return NextResponse.json({
-          success: false,
-          message: "Invalid OTP. Please check and try again."
-        }, { status: 400 })
-      }
-
-      delete otpStore[email]
-
-      return NextResponse.json({
-        success: true,
-        message: "OTP verified successfully"
+      return NextResponse.json({ success: true, challengeId, message: "Approval code sent to the employee" }, {
+        headers: { "Cache-Control": "private, no-store" },
       })
     }
 
-    return NextResponse.json({
-      success: false,
-      message: "Invalid action"
-    }, { status: 400 })
-
+    if (!data.challengeId || !data.otp) {
+      return NextResponse.json({ success: false, message: "Approval code and challenge are required" }, { status: 400 })
+    }
+    const challenge = await challenges.findOneAndUpdate({
+      _id: data.challengeId, userId, employeeId: data.employeeId, employeeEmail: data.email,
+      fingerprint: quote.fingerprint, consumed: false, attempts: { $lt: 5 }, expiresAt: { $gt: new Date() },
+    }, { $inc: { attempts: 1 } }, { returnDocument: "after" })
+    if (!challenge || !crypto.timingSafeEqual(Buffer.from(challenge.otpHash), Buffer.from(otpHash(challenge._id, data.otp)))) {
+      return NextResponse.json({ success: false, message: "Invalid, expired or exhausted approval code" }, { status: 400 })
+    }
+    const consumed = await challenges.updateOne(
+      { _id: challenge._id, consumed: false, expiresAt: { $gt: new Date() } },
+      { $set: { consumed: true } },
+    )
+    if (!consumed.modifiedCount) return NextResponse.json({ success: false, message: "Approval code already used" }, { status: 409 })
+    const approvalId = `store_${crypto.randomUUID()}`
+    const approvalToken = await createCheckoutIntent(approvalId, userId, quote, "instore")
+    await (await getCollection<CheckoutIntent>("checkout_intents")).updateOne(
+      { _id: approvalId },
+      { $set: { status: "verified", employeeId: data.employeeId, employeeEmail: data.email, expiresAt: new Date(Date.now() + 5 * 60 * 1000) } },
+    )
+    return NextResponse.json({ success: true, approvalId, approvalToken, message: "Purchase approved" }, {
+      headers: { "Cache-Control": "private, no-store" },
+    })
   } catch (error) {
-    console.error("Store purchase auth error:", error)
-    return NextResponse.json({
-      success: false,
-      message: "Server error"
-    }, { status: 500 })
+    return handleApiError(error, "Store purchase approval failed")
   }
 }

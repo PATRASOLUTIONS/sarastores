@@ -1,309 +1,112 @@
-import { MetadataRoute } from 'next'
-import { connectToDatabase } from '@/lib/mongodb'
-import { getAllStoreLocations } from '@/lib/store-locations'
-import { getArticleCategories, listArticles } from '@/lib/articles'
+import type { MetadataRoute } from "next"
+import { getCollection } from "@/lib/db-service"
+import { getAllStoreLocations } from "@/lib/store-locations"
+import { listArticles } from "@/lib/articles"
+import { absoluteSeoImage, getOriginFromHeaders } from "@/lib/seo-metadata"
+import { productImageUrls } from "@/lib/product-images"
 
-// Revalidate sitemap every hour
 export const revalidate = 3600
 
-// Helper to get the site origin
-function getOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-  )
+const STATIC_PATHS = [
+  "/", "/products", "/brands", "/about", "/contact", "/careers", "/press",
+  "/returns", "/shipping-policy", "/warranty", "/installation", "/emi",
+  "/business-enquiries", "/corporate-information", "/disclaimer", "/sitemap",
+  "/privacy-policy", "/terms-and-conditions", "/cancellation-policy", "/complaints",
+  "/store-locator", "/stores", "/offers", "/ganesh", "/blog", "/faq", "/rewards", "/lucky-draw",
+  "/software", "/brand-guidelines", "/bosch", "/haier", "/lg", "/tcl", "/epic-sale",
+]
+
+function modifiedAt(value: unknown): Date | undefined {
+  if (!(typeof value === "string" || typeof value === "number" || value instanceof Date)) return undefined
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) ? date : undefined
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = getOrigin()
-  const now = new Date()
-
-  // ── Static pages ────────────────────────────────────────────────────
-  const staticPages: MetadataRoute.Sitemap = [
-    {
-      url: origin,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 1.0,
-    },
-    {
-      url: `${origin}/products`,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 0.9,
-    },
-    {
-      url: `${origin}/brands`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.8,
-    },
-    {
-      url: `${origin}/about`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${origin}/contact`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${origin}/careers`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    {
-      url: `${origin}/press`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    ...[
-      '/returns',
-      '/shipping-policy',
-      '/warranty',
-      '/installation',
-      '/emi',
-      '/business-enquiries',
-      '/corporate-information',
-      '/disclaimer',
-      '/sitemap',
-    ].map((path) => ({
-      url: `${origin}${path}`,
-      lastModified: now,
-      changeFrequency: 'monthly' as const,
-      priority: 0.3,
-    })),
-    {
-      url: `${origin}/privacy-policy`,
-      lastModified: now,
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-    {
-      url: `${origin}/terms-and-conditions`,
-      lastModified: now,
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-    {
-      url: `${origin}/cancellation-policy`,
-      lastModified: now,
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-    {
-      url: `${origin}/complaints`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.3,
-    },
-    {
-      url: `${origin}/store-locator`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${origin}/stores`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.7,
-    },
-    {
-      url: `${origin}/offers`,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 0.8,
-    },
-    {
-      url: `${origin}/ganesh`,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 0.9,
-    },
-    {
-      url: `${origin}/blog`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.7,
-    },
-  ]
-
-  // ── Dynamic pages from database ──────────────────────────────
-  let productEntries: MetadataRoute.Sitemap = []
-  let categoryEntries: MetadataRoute.Sitemap = []
-  let subCategoryEntries: MetadataRoute.Sitemap = []
-  let brandEntries: MetadataRoute.Sitemap = []
-  let storeEntries: MetadataRoute.Sitemap = []
-  let campaignEntries: MetadataRoute.Sitemap = []
-  let articleEntries: MetadataRoute.Sitemap = []
-
-  try {
-    const { db } = await connectToDatabase()
-
-    // Products — only active ones
-    const products = await db
-      .collection('products')
-      .find(
-        { active: true },
-        {
-          projection: { _id: 1, slug: 1, updatedAt: 1, createdAt: 1, image: 1, images: 1 },
-        }
-      )
-      .toArray()
-
-    productEntries = products.map((p) => {
-      // Image sitemap entries are how product photography gets discovered by
-      // Google Images; data URIs and relative paths are not valid there.
-      const images = [p.image, ...(Array.isArray(p.images) ? p.images : [])]
-        .filter(
-          (src): src is string =>
-            typeof src === 'string' && (src.startsWith('https://') || src.startsWith('http://')),
-        )
-        .slice(0, 5)
-
-      return {
-        url: `${origin}/product/${p.slug || p._id.toString()}`,
-        lastModified: p.updatedAt ? new Date(p.updatedAt) : p.createdAt ? new Date(p.createdAt) : now,
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-        ...(images.length > 0 ? { images } : {}),
-      }
-    })
-
-    // Categories — only enabled ones
-    const categories = await db
-      .collection('categories')
-      .find(
-        { isEnabled: { $ne: false } },
-        { projection: { _id: 1, slug: 1, name: 1, updatedAt: 1 } }
-      )
-      .toArray()
-
-    categoryEntries = categories.map((c) => ({
-      url: `${origin}/category/${c.slug || c._id.toString()}`,
-      lastModified: c.updatedAt ? new Date(c.updatedAt) : now,
-      changeFrequency: 'weekly' as const,
-      priority: 0.7,
-    }))
-
-    // Sub-categories (from sub_categories collection)
-    try {
-      const subCategories = await db
-        .collection('sub_categories')
-        .find(
-          {},
-          { projection: { _id: 1, name: 1, slug: 1, updatedAt: 1 } }
-        )
-        .toArray()
-
-      subCategoryEntries = subCategories.map((sc: any) => ({
-        url: `${origin}/sub-category/${sc.slug || encodeURIComponent(sc.name || sc._id.toString())}`,
-        lastModified: sc.updatedAt ? new Date(sc.updatedAt) : now,
-        changeFrequency: 'weekly' as const,
-        priority: 0.6,
-      }))
-    } catch {
-      // sub_categories collection may not exist
-    }
-
-    // Brands — only enabled ones
-    const brands = await db
-      .collection('brands')
-      .find(
-        { enabled: true },
-        { projection: { slug: 1, updatedAt: 1 } }
-      )
-      .toArray()
-
-    brandEntries = brands.map((b) => ({
-      url: `${origin}/brands/${b.slug}`,
-      lastModified: b.updatedAt ? new Date(b.updatedAt) : now,
-      changeFrequency: 'weekly' as const,
-      priority: 0.8,
-    }))
-
-    // Store pages — one per city plus one per showroom, for local SEO
-    try {
-      const stores = await getAllStoreLocations()
-      const citySlugs = new Set(stores.map((s) => s.citySlug))
-
-      storeEntries = [
-        ...Array.from(citySlugs, (citySlug) => ({
-          url: `${origin}/stores/${citySlug}`,
-          lastModified: now,
-          changeFrequency: 'monthly' as const,
-          priority: 0.7,
-        })),
-        ...stores.map((s) => ({
-          url: `${origin}/stores/${s.citySlug}/${s.slug}`,
-          lastModified: now,
-          changeFrequency: 'monthly' as const,
-          priority: 0.6,
-        })),
-      ]
-    } catch {
-      // store_locations collection may not exist
-    }
-
-    // Campaign landing pages
-    try {
-      const campaigns = await db
-        .collection('campaign_pages')
-        .find({ isActive: { $ne: false } }, { projection: { slug: 1, updatedAt: 1 } })
-        .toArray()
-
-      campaignEntries = campaigns
-        .filter((c: any) => !!c.slug)
-        .map((c: any) => ({
-          url: `${origin}/campaign/${c.slug}`,
-          lastModified: c.updatedAt ? new Date(c.updatedAt) : now,
-          changeFrequency: 'daily' as const,
-          priority: 0.6,
-        }))
-    } catch {
-      // campaign_pages collection may not exist
-    }
-
-    // Buying guides plus one landing page per article category
-    try {
-      const [articles, categories] = await Promise.all([listArticles(), getArticleCategories()])
-
-      articleEntries = [
-        ...articles.map((a) => ({
-          url: `${origin}/blog/${a.slug}`,
-          lastModified: a.updatedAt ? new Date(a.updatedAt) : now,
-          changeFrequency: 'monthly' as const,
-          priority: 0.6,
-        })),
-        ...categories.map((c) => ({
-          url: `${origin}/blog?category=${encodeURIComponent(c.name)}`,
-          lastModified: now,
-          changeFrequency: 'weekly' as const,
-          priority: 0.5,
-        })),
-      ]
-    } catch {
-      // articles collection may not exist
-    }
-  } catch (error) {
-    console.error('Sitemap: Error fetching dynamic routes from DB:', error)
-    // Return static pages only if DB fails
+  const origin = await getOriginFromHeaders()
+  const entries: MetadataRoute.Sitemap = STATIC_PATHS.map(path => ({
+    url: new URL(path, origin).href,
+    changeFrequency: path === "/" || path === "/products" ? "daily" : "monthly",
+    priority: path === "/" ? 1 : path === "/products" ? 0.9 : 0.5,
+  }))
+  const appendCollection = async (name: string, operation: () => Promise<MetadataRoute.Sitemap>) => {
+    try { entries.push(...await operation()) }
+    catch (error) { console.error(`[SEO] Sitemap ${name} entries could not be loaded:`, error) }
   }
 
-  return [
-    ...staticPages,
-    ...productEntries,
-    ...categoryEntries,
-    ...subCategoryEntries,
-    ...brandEntries,
-    ...storeEntries,
-    ...campaignEntries,
-    ...articleEntries,
-  ]
+  await appendCollection("products", async () => {
+    const products = await (await getCollection("products")).find({ active: true }, {
+      projection: { slug: 1, updatedAt: 1, createdAt: 1, image: 1, images: 1 },
+    }).toArray()
+    return products.map(product => {
+      const images = productImageUrls([product.image, product.images])
+        .map(image => absoluteSeoImage(image, origin))
+        .filter((image): image is string => Boolean(image?.startsWith("https://"))).slice(0, 5)
+      return {
+        url: `${origin}/product/${encodeURIComponent(product.slug || product._id.toString())}`,
+        lastModified: modifiedAt(product.updatedAt || product.createdAt),
+        changeFrequency: "weekly", priority: 0.7,
+        ...(images.length && { images }),
+      }
+    })
+  })
+  await appendCollection("categories", async () => {
+    const categories = await (await getCollection("categories")).find({ isEnabled: { $ne: false } }, {
+      projection: { slug: 1, updatedAt: 1, createdAt: 1 },
+    }).toArray()
+    return categories.map(category => ({
+      url: `${origin}/category/${encodeURIComponent(category.slug || category._id.toString())}`,
+      lastModified: modifiedAt(category.updatedAt || category.createdAt),
+      changeFrequency: "weekly", priority: 0.7,
+    }))
+  })
+  await appendCollection("sub-categories", async () => {
+    const categories = await (await getCollection("sub_categories")).find({ active: { $ne: false } }, {
+      projection: { name: 1, updatedAt: 1, createdAt: 1 },
+    }).toArray()
+    return categories.filter(category => typeof category.name === "string" && category.name.trim()).map(category => ({
+      url: `${origin}/sub-category/${encodeURIComponent(category.name)}`,
+      lastModified: modifiedAt(category.updatedAt || category.createdAt),
+      changeFrequency: "weekly", priority: 0.6,
+    }))
+  })
+  await appendCollection("brands", async () => {
+    const brands = await (await getCollection("brands")).find({
+      enabled: { $ne: false }, isEnabled: { $ne: false }, active: { $ne: false }, landingPageEnabled: { $ne: false },
+      slug: { $type: "string", $ne: "" },
+    }, { projection: { slug: 1, updatedAt: 1, createdAt: 1 } }).toArray()
+    return brands.map(brand => ({
+      url: `${origin}/brands/${encodeURIComponent(brand.slug)}`,
+      lastModified: modifiedAt(brand.updatedAt || brand.createdAt),
+      changeFrequency: "weekly", priority: 0.8,
+    }))
+  })
+  await appendCollection("stores", async () => {
+    const stores = await getAllStoreLocations()
+    return [
+      ...Array.from(new Set(stores.map(store => store.citySlug)), city => ({
+        url: `${origin}/stores/${city}`, changeFrequency: "monthly" as const, priority: 0.7,
+      })),
+      ...stores.map(store => ({
+        url: `${origin}/stores/${store.citySlug}/${store.slug}`,
+        changeFrequency: "monthly" as const, priority: 0.6,
+      })),
+    ]
+  })
+  await appendCollection("campaigns", async () => {
+    const campaigns = await (await getCollection("campaign_pages")).find({
+      isActive: true, slug: { $type: "string", $ne: "" },
+    }, { projection: { slug: 1, updatedAt: 1, createdAt: 1 } }).toArray()
+    return campaigns.map(campaign => ({
+      url: `${origin}/campaign/${encodeURIComponent(campaign.slug)}`,
+      lastModified: modifiedAt(campaign.updatedAt || campaign.createdAt),
+      changeFrequency: "daily", priority: 0.6,
+    }))
+  })
+  await appendCollection("articles", async () => (await listArticles()).filter(article => article.slug).map(article => ({
+    url: `${origin}/blog/${encodeURIComponent(article.slug)}`,
+    lastModified: modifiedAt(article.updatedAt || article.publishedAt || article.createdAt),
+    changeFrequency: "monthly", priority: 0.6,
+  })))
+  return [...new Map(entries.map(entry => [entry.url, entry])).values()]
 }

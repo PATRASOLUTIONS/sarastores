@@ -1,10 +1,10 @@
 import { connectToDatabase } from './mongodb'
-import type { SoftwareProduct, LicenseKey } from '@/types/software'
-import { ObjectId } from 'mongodb'
+import type { SoftwareProduct, LicenseKey, StoredLicenseKey } from '@/types/software'
+import { ObjectId, type Document, type Filter } from 'mongodb'
 
 export async function getAllSoftwareProducts(filter: { status?: string } = {}) {
   const { db } = await connectToDatabase()
-  const query: any = {}
+  const query: Filter<Document> = {}
   
   if (filter.status) {
     query.status = filter.status
@@ -47,7 +47,7 @@ export async function updateSoftwareProduct(id: string, updates: Partial<Softwar
   const { db } = await connectToDatabase()
   
   // Remove immutable fields that shouldn't be updated
-  const { _id, createdAt, totalKeysAvailable, totalKeysAssigned, ...updateData } = updates as any
+  const { _id, createdAt, totalKeysAvailable, totalKeysAssigned, ...updateData } = updates
   
   const result = await db.collection('software_products').updateOne(
     { _id: new ObjectId(id) },
@@ -254,11 +254,11 @@ export async function revokeLicenseKey(keyId: string, reason: string) {
 
 export async function getAllLicenseKeys(filter: {
   softwareId?: string
-  status?: string
+  status?: LicenseKey['status']
   customerEmail?: string
 } = {}) {
   const { db } = await connectToDatabase()
-  const query: any = {}
+  const query: Filter<StoredLicenseKey> = {}
   
   if (filter.softwareId) {
     query.softwareId = new ObjectId(filter.softwareId)
@@ -271,7 +271,7 @@ export async function getAllLicenseKeys(filter: {
   }
   
   const keys = await db
-    .collection('license_keys')
+    .collection<StoredLicenseKey>('license_keys')
     .find(query)
     .sort({ createdAt: -1 })
     .toArray()

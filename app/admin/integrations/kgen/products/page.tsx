@@ -3,28 +3,7 @@
 import { apiFetch } from "@/lib/api-client"
 import { IntegrationError, readErrorMessage } from "../integration-error"
 import React, { useEffect, useMemo, useState } from 'react'
-
-type Variant = {
-  variantID?: string
-  variantName?: string
-  variantDisplayName?: string
-  mrp?: number
-  price?: number
-  margin?: number
-  stock?: number
-}
-
-type Prod = {
-  productID?: string
-  productName?: string
-  productDisplayName?: string
-  descriptionText?: string
-  attachments?: string[]
-  categories?: Array<{ categoryName?: string }>
-  variants?: Variant[]
-  redemptionInstructions?: string
-  termsAndConditions?: string
-}
+import type { IntegrationProduct as Prod } from "@/types/integration"
 
 export default function KGenProductsPage() {
   const [items, setItems] = useState<Prod[]>([])
@@ -58,9 +37,9 @@ export default function KGenProductsPage() {
       setNextCursor(next)
       setHasMore(more)
       setItems(prev => append ? prev.concat(list) : list)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch products', err)
-      setError(err?.message || 'Failed to fetch products')
+      setError(err instanceof Error ? err.message : 'Failed to fetch products')
     } finally {
       setLoading(false)
     }

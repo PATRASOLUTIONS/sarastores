@@ -1,32 +1,35 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useSWRConfig } from "swr"
 import toast from "react-hot-toast"
 import { Loader2, Plus, Trash2, Upload } from "lucide-react"
 import { apiFetchJson } from "@/lib/api-client"
-import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
+import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, siteBannerListResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
+import { imageUploadResponseSchema } from "@/lib/media-response"
 import { ListingHero, ListingPromoRow } from "@/components/products/ListingBanners"
 import LandingHero from "@/components/home/landing/LandingHero"
-import { PromoDuo, PromoStrip, StatementBand } from "@/components/home/landing/LandingSections"
+import { HomepagePromotions } from "@/components/home/landing/HomepageSections"
+import homepageStyles from "@/components/home/landing/homepage.module.css"
 
 type Draft = Omit<SiteBanner, "id"> & { id?: string }
 
 const BLANK: Draft = {
-  placement: "hero",
+  placement: "home-hero",
   scope: "",
   title: "",
   subtitle: "",
   script: "",
   ctaText: "Shop Now",
   ctaLink: "/products",
-  image: "/banners/appliances-lineup.svg",
+  image: "/homepage/hero-iphone.webp",
   bgFrom: "#1560BD",
   bgTo: "#0B3C87",
   accent: "#E11D2E",
   dark: false,
   bullets: [],
   order: 0,
-  active: true,
+  active: false,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -47,13 +50,17 @@ export default function ListingBannersAdminPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [busyId, setBusyId] = useState<string>()
+  const [placementFilter, setPlacementFilter] = useState("all")
   const fileInput = useRef<HTMLInputElement>(null)
+  const { mutate } = useSWRConfig()
+  const invalidate = () => mutate((key) => typeof key === "string" && key.startsWith("/api/listing-banners"))
 
   const load = async () => {
     setLoading(true)
     try {
-      const data = await apiFetchJson<SiteBanner[]>("/api/listing-banners?all=1")
-      setBanners(Array.isArray(data) ? data : [])
+      const data = await apiFetchJson("/api/listing-banners?all=1", undefined, siteBannerListResponseSchema.parse)
+      setBanners(data)
     } catch {
       toast.error("Could not load banners")
     } finally {
@@ -72,13 +79,12 @@ export default function ListingBannersAdminPage() {
     try {
       const body = new FormData()
       body.append("file", file)
-      const res = await fetch("/api/media/upload", { method: "POST", body, credentials: "include" })
-      const json = await res.json()
-      if (!res.ok || !json.images?.[0]) throw new Error(json.errors?.[0] || json.error || "Upload failed")
+      const json = await apiFetchJson("/api/media/upload", { method: "POST", body }, imageUploadResponseSchema.parse)
+      if (!json.images?.[0]) throw new Error(json.errors?.[0] || json.error || "Upload failed")
       set("image", json.images[0].url)
       toast.success("Image uploaded")
-    } catch (err: any) {
-      toast.error(err.message || "Upload failed")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed")
     } finally {
       setUploading(false)
       if (fileInput.current) fileInput.current.value = ""
@@ -98,22 +104,44 @@ export default function ListingBannersAdminPage() {
         toast.success("Banner created")
       }
       setDraft(BLANK)
-      load()
-    } catch (err: any) {
-      toast.error(err.message || "Could not save banner")
+      await invalidate()
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save banner")
     } finally {
       setSaving(false)
     }
   }
 
   const remove = async (id: string) => {
+    if (!window.confirm("Delete this banner permanently?")) return
+    setBusyId(id)
     try {
       await apiFetchJson(`/api/listing-banners?id=${id}`, { method: "DELETE" })
       toast.success("Banner deleted")
       if (draft.id === id) setDraft(BLANK)
-      load()
-    } catch (err: any) {
-      toast.error(err.message || "Could not delete banner")
+      await invalidate()
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete banner")
+    } finally {
+      setBusyId(undefined)
+    }
+  }
+
+  const toggle = async (banner: SiteBanner) => {
+    setBusyId(banner.id)
+    try {
+      const active = !banner.active
+      await apiFetchJson(`/api/listing-banners?id=${banner.id}`, { method: "PUT", json: { active } })
+      if (draft.id === banner.id) set("active", active)
+      setBanners((current) => current.map((item) => item.id === banner.id ? { ...item, active } : item))
+      await invalidate()
+      toast.success(active ? "Banner turned on" : "Banner turned off")
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not change banner visibility")
+    } finally {
+      setBusyId(undefined)
     }
   }
 
@@ -126,14 +154,20 @@ export default function ListingBannersAdminPage() {
       case "promo":
         return <ListingPromoRow banners={[preview]} />
       case "home-hero":
-        return <LandingHero />
+        return <div className={homepageStyles.homepage}><LandingHero previewBanners={[preview]} /></div>
       case "home-strip":
-        return <PromoStrip banner={preview} />
+        return <div className={homepageStyles.homepage}><HomepagePromotions banners={[preview]} /></div>
       case "home-duo":
+        return <div className={homepageStyles.homepage}><LandingHero previewBanners={[]} sideBanners={[preview]} /></div>
       case "home-card":
-        return <PromoDuo banners={[preview]} />
+        return <div className={homepageStyles.homepage}><HomepagePromotions banners={[preview]} /></div>
       case "home-statement":
-        return <StatementBand banner={preview} />
+        return <div className={homepageStyles.homepage}><HomepagePromotions banners={[preview]} /></div>
+      case "cart-promo":
+      case "brands-hero":
+      case "pdp-offer":
+      case "pdp-rail":
+        return <ListingHero banner={preview} />
       default:
         return null
     }
@@ -144,9 +178,10 @@ export default function ListingBannersAdminPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Banners &amp; Promos</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Every campaign banner on the home page and the product listing pages. Leave “Scope” blank to show a
+          Campaign banners on home, listing, product, brand and cart pages. Upload artwork and edit copy, links, colours, visibility and order here. Leave “Scope” blank to show a
           banner everywhere, or type a category name (e.g. <code>TV</code>) to target one listing.
         </p>
+        <p className="mt-2 text-sm text-gray-600">New posters start off. Turn on the ones you want to show. Main posters rotate; the first two enabled sub banners and first three enabled below-deals banners appear by order. The first enabled Cart promotional banner appears by order; turning all Cart banners off hides its promotional area.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
@@ -256,7 +291,7 @@ export default function ListingBannersAdminPage() {
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={draft.active !== false} onChange={(e) => set("active", e.target.checked)} className="h-4 w-4" />
-                Active
+                On — visible on storefront
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 Order
@@ -273,7 +308,7 @@ export default function ListingBannersAdminPage() {
               <button
                 type="button"
                 onClick={save}
-                disabled={saving}
+                disabled={saving || uploading}
                 className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-brand-primary text-sm font-semibold text-white hover:bg-brand-primary-hover disabled:opacity-60"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -300,21 +335,28 @@ export default function ListingBannersAdminPage() {
 
           <div>
             <h2 className="mb-3 text-base font-bold text-gray-900">All banners</h2>
+            <label className="mb-3 block text-sm text-gray-600">
+              Filter placement
+              <select value={placementFilter} onChange={(event) => setPlacementFilter(event.target.value)} className={`${inputClass} mt-1`}>
+                <option value="home">All homepage banners</option>
+                <option value="all">All placements</option>
+                {BANNER_PLACEMENTS.map((placement) => <option key={placement} value={placement}>{BANNER_PLACEMENT_LABELS[placement]}</option>)}
+              </select>
+            </label>
             {loading ? (
               <p className="text-sm text-gray-500">Loading…</p>
             ) : banners.length === 0 ? (
               <p className="text-sm text-gray-500">No banners yet — create one on the left.</p>
             ) : (
               <ul className="space-y-2">
-                {banners.map((banner) => (
+                {banners.filter((banner) => placementFilter === "all" || (placementFilter === "home" ? banner.placement.startsWith("home-") : banner.placement === placementFilter)).map((banner) => (
                   <li
                     key={banner.id}
                     className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3"
                   >
-                    <span
-                      className="h-10 w-16 flex-shrink-0 rounded-md"
-                      style={{ backgroundImage: `linear-gradient(115deg, ${banner.bgFrom}, ${banner.bgTo})` }}
-                    />
+                    <span className="flex h-12 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-md" style={{ backgroundImage: `linear-gradient(115deg, ${banner.bgFrom}, ${banner.bgTo})` }}>
+                      {banner.image && <img src={banner.image} alt="" className="h-full w-full object-contain" />}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-gray-900">{banner.title}</p>
                       <p className="truncate text-xs text-gray-500">
@@ -322,6 +364,17 @@ export default function ListingBannersAdminPage() {
                         {banner.active === false ? "inactive" : "active"}
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={banner.active === true}
+                      aria-label={`Visibility of ${banner.title}`}
+                      disabled={busyId === banner.id}
+                      onClick={() => void toggle(banner)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${banner.active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
+                    >
+                      {busyId === banner.id ? "Saving..." : banner.active ? "On" : "Off"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setDraft({ ...BLANK, ...banner })}
@@ -332,6 +385,7 @@ export default function ListingBannersAdminPage() {
                     <button
                       type="button"
                       onClick={() => remove(banner.id)}
+                      disabled={busyId === banner.id}
                       className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
                       aria-label={`Delete ${banner.title}`}
                     >

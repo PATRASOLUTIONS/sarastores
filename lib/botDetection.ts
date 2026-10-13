@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store'
+import { z } from 'zod'
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000 // 15 minutes
 const MAX_REQUESTS_PER_WINDOW = 5 // 5 signup attempts per 15 minutes per IP
@@ -50,7 +51,7 @@ export async function getRateLimitResetTime(identifier: string): Promise<number>
 /**
  * Verify honeypot field (should be empty)
  */
-export function verifyHoneypot(honeypotValue: any): boolean {
+export function verifyHoneypot(honeypotValue: unknown): boolean {
   // Honeypot should be empty or undefined
   return !honeypotValue || honeypotValue === ''
 }
@@ -58,7 +59,8 @@ export function verifyHoneypot(honeypotValue: any): boolean {
 /**
  * Verify form submission timing (not too fast)
  */
-export function verifyTimestamp(timestamp: number): boolean {
+export function verifyTimestamp(timestamp: unknown): boolean {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return false
   const now = Date.now()
   const timeDiff = now - timestamp
   
@@ -87,7 +89,11 @@ export async function verifyRecaptcha(token: string, secretKey: string): Promise
       body: `secret=${secretKey}&response=${token}`,
     })
     
-    const data = await response.json()
+    if (!response.ok) throw new Error(`reCAPTCHA returned HTTP ${response.status}`)
+    const data = z.object({
+      success: z.boolean(),
+      score: z.number().min(0).max(1).optional(),
+    }).parse(await response.json())
     
     if (!data.success) {
       return {
@@ -125,7 +131,11 @@ export async function verifyRecaptcha(token: string, secretKey: string): Promise
 /**
  * Comprehensive bot detection middleware
  */
-export async function detectBot(request: NextRequest, body: any): Promise<{
+export async function detectBot(request: NextRequest, body: {
+  website?: unknown
+  formTimestamp?: unknown
+  recaptchaToken?: unknown
+}): Promise<{
   isBot: boolean
   reason?: string
   waitTime?: number
@@ -169,6 +179,9 @@ export async function detectBot(request: NextRequest, body: any): Promise<{
   
   // 5. Verify reCAPTCHA if token is provided
   if (body.recaptchaToken && process.env.RECAPTCHA_SECRET_KEY) {
+    if (typeof body.recaptchaToken !== 'string') {
+      return { isBot: true, reason: 'Invalid reCAPTCHA token' }
+    }
     const recaptchaResult = await verifyRecaptcha(
       body.recaptchaToken,
       process.env.RECAPTCHA_SECRET_KEY

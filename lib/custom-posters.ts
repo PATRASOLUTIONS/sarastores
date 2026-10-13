@@ -1,5 +1,8 @@
 import { getCollection } from "@/lib/db-service"
 import { POSTER_BY_SLUG, type Poster, type PosterMotif } from "@/lib/posters"
+import { z } from "zod"
+import type { ClientSession } from "mongodb"
+import { MongoServerError } from "mongodb"
 
 /**
  * Admin-authored hero posters.
@@ -12,8 +15,15 @@ import { POSTER_BY_SLUG, type Poster, type PosterMotif } from "@/lib/posters"
 
 const COLLECTION = "custom_posters"
 
-const MOTIFS: readonly PosterMotif[] = ["rays", "dots", "grid", "waves", "arcs"]
-const GROUPS: readonly Poster["group"][] = ["Festival", "Category", "Offer", "Trust", "Seasonal"]
+const motifSchema = z.enum(["rays", "dots", "grid", "waves", "arcs"])
+const groupSchema = z.enum(["Festival", "Category", "Offer", "Trust", "Seasonal"])
+const posterInputSchema = z.object({
+  slug: z.unknown().optional(), motif: z.unknown().optional(), group: z.unknown().optional(),
+  eyebrow: z.unknown().optional(), headline: z.unknown().optional(), headlineAccent: z.unknown().optional(),
+  subline: z.unknown().optional(), cta: z.unknown().optional(),
+  from: z.unknown().optional(), via: z.unknown().optional(), to: z.unknown().optional(),
+  accent: z.unknown().optional(), ink: z.unknown().optional(), photo: z.unknown().optional(),
+})
 
 /**
  * Colours are interpolated into raw SVG markup, not escaped like the text is,
@@ -52,9 +62,11 @@ export function slugify(value: string): string {
   return `custom-${base || "poster"}`
 }
 
-function sanitize(input: any, slug: string): CustomPoster {
-  const motif: PosterMotif = MOTIFS.includes(input?.motif) ? input.motif : "rays"
-  const group = GROUPS.includes(input?.group) ? input.group : "Offer"
+function sanitize(input: z.infer<typeof posterInputSchema>, slug: string): CustomPoster {
+  const parsedMotif = motifSchema.safeParse(input.motif)
+  const parsedGroup = groupSchema.safeParse(input.group)
+  const motif: PosterMotif = parsedMotif.success ? parsedMotif.data : "rays"
+  const group = parsedGroup.success ? parsedGroup.data : "Offer"
 
   return {
     custom: true,
@@ -75,13 +87,14 @@ function sanitize(input: any, slug: string): CustomPoster {
   }
 }
 
-export async function listCustomPosters(): Promise<CustomPoster[]> {
+export async function listCustomPosters(session?: ClientSession): Promise<CustomPoster[]> {
   try {
     const collection = await getCollection(COLLECTION)
-    const docs = await collection.find({}).sort({ createdAt: -1 }).toArray()
-    return docs.map((doc) => sanitize(doc, String(doc.slug)))
-  } catch {
-    return []
+    const docs = await collection.find({}, { session }).sort({ createdAt: -1 }).toArray()
+    return docs.map((doc) => sanitize(posterInputSchema.parse(doc), String(doc.slug)))
+  } catch (error) {
+    console.error("[Custom posters] Failed to load poster catalog", error)
+    throw error
   }
 }
 
@@ -90,38 +103,49 @@ export async function getCustomPoster(slug: string): Promise<CustomPoster | null
   try {
     const collection = await getCollection(COLLECTION)
     const doc = await collection.findOne({ slug })
-    return doc ? sanitize(doc, String(doc.slug)) : null
-  } catch {
-    return null
+    return doc ? sanitize(posterInputSchema.parse(doc), String(doc.slug)) : null
+  } catch (error) {
+    console.error("[Custom posters] Failed to load poster", error)
+    throw error
   }
 }
 
 /** Creates, or overwrites when `slug` names an existing custom poster. */
-export async function saveCustomPoster(input: any): Promise<CustomPoster> {
+export async function saveCustomPoster(value: unknown): Promise<CustomPoster> {
+  const input = posterInputSchema.parse(value)
   const collection = await getCollection(COLLECTION)
 
-  let slug = typeof input?.slug === "string" && input.slug.startsWith("custom-") ? input.slug : ""
+  const slug = typeof input?.slug === "string" && input.slug.startsWith("custom-") ? input.slug : ""
   if (!slug) {
     const base = slugify(`${input?.headline ?? ""} ${input?.headlineAccent ?? ""}`)
-    slug = base
-    // Bundled slugs and existing custom ones both have to stay reachable.
-    for (let n = 2; POSTER_BY_SLUG[slug] || (await collection.findOne({ slug })); n++) {
-      slug = `${base}-${n}`
+    for (let n = 1; n <= 1000; n++) {
+      const candidate = n === 1 ? base : `${base}-${n}`
+      if (POSTER_BY_SLUG[candidate] || await collection.findOne({ slug: candidate })) continue
+      const poster = sanitize(input, candidate)
+      try {
+        await collection.insertOne({ ...poster, createdAt: new Date(), updatedAt: new Date() })
+        return poster
+      } catch (error) {
+        if (error instanceof MongoServerError && error.code === 11000) continue
+        throw error
+      }
     }
+    throw new Error("Could not allocate a unique custom poster slug")
   }
 
   const poster = sanitize(input, slug)
-  await collection.updateOne(
+  const saved = await collection.updateOne(
     { slug },
     { $set: { ...poster, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
     { upsert: true },
   )
+  if (!saved.matchedCount && !saved.upsertedId) throw new Error("Custom poster write was not acknowledged")
   return poster
 }
 
-export async function deleteCustomPoster(slug: string): Promise<boolean> {
+export async function deleteCustomPoster(slug: string, session?: ClientSession): Promise<boolean> {
   if (!slug.startsWith("custom-")) return false
   const collection = await getCollection(COLLECTION)
-  const result = await collection.deleteOne({ slug })
+  const result = await collection.deleteOne({ slug }, { session })
   return result.deletedCount > 0
 }

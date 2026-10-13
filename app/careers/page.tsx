@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { useState } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
@@ -80,9 +82,9 @@ export default function CareersPage() {
       if (!res.ok || !data.success) throw new Error(data.error || "Something went wrong")
       setStatus("done")
       toast.success("Thanks! Our hiring team will be in touch.")
-    } catch (err: any) {
+    } catch (err) {
       setStatus("idle")
-      toast.error(err.message || "Could not submit right now. Please try again.")
+      toast.error(getErrorMessage(err, "Could not submit right now. Please try again."))
     } finally {
       lock.release()
     }

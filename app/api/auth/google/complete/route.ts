@@ -14,6 +14,7 @@ import { z } from "zod"
 import { createGoogleUser } from "@/lib/auth-google"
 import { verifyPendingSignupToken } from "@/lib/pending-signup"
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
+import { buildSessionPayload } from "@/lib/auth-credentials"
 
 export const dynamic = "force-dynamic"
 
@@ -77,14 +78,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const sessionToken = await createSessionToken({
-      id: created.user.id,
-      email: created.user.email,
-      name: String(created.user.name || "").slice(0, 80),
-      role: (created.user.role || "user") as any,
-      dashboardAccess: !!created.user.dashboardAccess,
-      allowedPages: [],
-    })
+    const sessionToken = await createSessionToken(buildSessionPayload(created.user))
 
     const response = NextResponse.json({
       success: true,

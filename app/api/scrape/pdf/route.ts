@@ -44,11 +44,11 @@ export async function POST(request: Request) {
       sourceLabel: SCRAPER_LABELS.pdf,
       product,
     })
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof ScraperError) {
       return NextResponse.json({ success: false, error: error.message, hint: error.hint }, { status: error.status })
     }
     console.error("[scrape/pdf] failed:", error)
-    return NextResponse.json({ success: false, error: error?.message || "Could not read the PDF" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Could not read the PDF" }, { status: 500 })
   }
 }

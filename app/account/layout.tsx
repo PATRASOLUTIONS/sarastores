@@ -4,6 +4,13 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { getSession } from "@/lib/auth"
 import AccountClientShell from "./account-client-shell"
+import { pageMetadata } from "@/lib/seo-page"
+
+export const generateMetadata = pageMetadata({
+  path: "/account", title: brand => `My Account | ${brand}`,
+  description: "Manage your SARA account and preferences. Personal information is available only after sign-in.",
+  noIndex: true,
+})
 
 // Reads the session cookie, so it can never be prerendered at build time.
 export const dynamic = "force-dynamic"

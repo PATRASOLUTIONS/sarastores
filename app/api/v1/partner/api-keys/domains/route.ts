@@ -203,7 +203,7 @@ async function handlePut(request: PartnerAuthRequest) {
     // Update the API key in database
     const collection = await getCollection(API_KEYS_COLLECTION);
     
-    const updateData: any = {
+    const updateData: { updatedAt: Date; allowedDomains?: string[]; allowedMethods?: string[] } = {
       updatedAt: new Date(),
     };
 

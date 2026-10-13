@@ -9,11 +9,12 @@ import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Eye, Chevro
 import * as XLSX from "xlsx"
 import { toast } from "react-hot-toast"
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import type { ProductSpecificationResponse } from "@/lib/product-specification-response"
 
 type ExcelRow = {
   sku?: string
   amazon_link?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 
@@ -27,11 +28,11 @@ interface UploadResult {
 }
 
 interface ProductSpecification {
-  _id: string
+  id: string
   name: string
   sku: string
   mrp?: number // MRP as number
-  technical_details?: Record<string, any>
+  technical_details?: Record<string, unknown>
   from_manufacturer?: string
   specification_images?: string[]
   updatedAt?: string
@@ -40,7 +41,7 @@ interface ProductSpecification {
   included_components?: string[]
   overview?: string
   features?: string[]
-  reviews?: any[]
+  reviews?: ProductSpecificationResponse["reviews"]
   category?: string
   subCategory?: string
   isSynced?: boolean
@@ -48,13 +49,35 @@ interface ProductSpecification {
   manufacturer_name?: string
   group_name?: string
   char_desc?: string
+  description?: string
+  itemNo?: string
+  price?: number | string
+  printedprice?: number | string
+}
+
+type SpecificationInput = Omit<ProductSpecification, "id">
+interface Classification {
+  id: string
+  name: string
+}
+interface ProductLookup {
+  id: string
+  category?: string
+  subCategory?: string
+  groupName?: string
+  group_name?: string
+  prod_desc?: string
+  char_desc?: string
+  manufacturerName?: string
+  manufacturer_name?: string
+  raw?: Record<string, unknown>
 }
 
 export default function ProductSpecificationsPage() {
   const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
-  const [previewData, setPreviewData] = useState<any[]>([])
+  const [previewData, setPreviewData] = useState<ExcelRow[]>([])
   const [specifications, setSpecifications] = useState<ProductSpecification[]>([]) // This will now hold SYNCED specs
   const [pendingSpecs, setPendingSpecs] = useState<ProductSpecification[]>([]) // New state for PENDING SYNC specs
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 })
@@ -74,13 +97,13 @@ export default function ProductSpecificationsPage() {
   const [syncProgress, setSyncProgress] = useState<{ current: number;
  total: number } | null>(null)
   const [pendingProductCreation, setPendingProductCreation] = useState<{
-    spec: any;
+    spec: SpecificationInput;
     progress: string;
     resolve: (value: 'create' | 'skip') => void;
   } | null>(null)
   const [skuToProductIdMap, setSkuToProductIdMap] = useState<Record<string, string>>({})
-  const [categories, setCategories] = useState<any[]>([])
-  const [allSubCategories, setAllSubCategories] = useState<any[]>([])
+  const [categories, setCategories] = useState<Classification[]>([])
+  const [allSubCategories, setAllSubCategories] = useState<Classification[]>([])
   const [isCreateMode, setIsCreateMode] = useState(false)
   const [createForm, setCreateForm] = useState<{
     sku: string
@@ -132,7 +155,7 @@ export default function ProductSpecificationsPage() {
   }
 
   // Function to get product details by SKU (returns full product)
-  const getProductDetailsBySku = async (sku: string): Promise<any | null> => {
+  const getProductDetailsBySku = async (sku: string): Promise<ProductLookup | null> => {
     try {
       const response = await apiFetch(`/api/products/sku/${encodeURIComponent(sku)}`)
       if (response.ok) {
@@ -152,18 +175,18 @@ export default function ProductSpecificationsPage() {
     }
 
     const product = await getProductDetailsBySku(sku)
-    if (product && product._id) {
+    if (product && product.id) {
       // Cache the mapping
-      setSkuToProductIdMap(prev => ({ ...prev, [sku]: product._id }))
-      return product._id
+      setSkuToProductIdMap(prev => ({ ...prev, [sku]: product.id }))
+      return product.id
     }
 
     return null
   }
 
   // Function to handle eye icon click
-  const handleViewProduct = async (spec: any) => {
-    let productId = spec.product_id
+  const handleViewProduct = async (spec: SpecificationInput) => {
+    let productId: string | null | undefined = spec.product_id
 
     // If no product_id but spec is locked, try to find product by SKU
     if (!productId && spec.locked) {
@@ -185,7 +208,7 @@ export default function ProductSpecificationsPage() {
     technicalDetails: Array<{ key: string; value: string }>
     images: string[]
     included: string[]
-    reviews: any[]
+    reviews: NonNullable<ProductSpecificationResponse["reviews"]>
     showAddImageInput?: boolean
     newImageUrl?: string
     category?: string
@@ -254,7 +277,7 @@ export default function ProductSpecificationsPage() {
 
       const res = await apiFetch(`/api/products/specifications?${params}`, { cache: 'no-store' })
       const body = await res.json()
-      const rows: any[] = body?.data ?? []
+      const rows: ProductSpecification[] = body?.data ?? []
       if (rows.length === 0) {
         toast.error('Nothing matches the current filters')
         return
@@ -400,7 +423,7 @@ export default function ProductSpecificationsPage() {
       const product = await getProductDetailsBySku(spec.sku)
       if (product) {
         const normalized = normalizeProductForSchema(product)
-        if (!cat) cat = product.category || product.raw?.["ITEM CATEGORY"] || ''
+        if (!cat) cat = normalized.categoryGroupName
         if (!sub) sub = normalized.subCategoryProdDesc || product.subCategory || ''
         if (!pDesc) pDesc = normalized.subCategoryProdDesc || product.prod_desc || ''
         if (!gName) gName = normalized.categoryGroupName || product.group_name || ''
@@ -427,7 +450,7 @@ export default function ProductSpecificationsPage() {
       included: Array.isArray(spec.included_components) && spec.included_components.length > 0
         ? spec.included_components
         : (spec.technical_details && spec.technical_details['Included Components']
-          ? String(spec.technical_details['Included Components']).split(',').map((s: any) => s.trim()).filter(Boolean)
+          ? String(spec.technical_details['Included Components']).split(',').map((s) => s.trim()).filter(Boolean)
           : []),
       reviews: spec.reviews || [],
       showAddImageInput: false,
@@ -483,7 +506,7 @@ export default function ProductSpecificationsPage() {
 
     try {
       // Build technical_details object from key/value pairs
-      const techObj: Record<string, any> = {}
+      const techObj: Record<string, unknown> = {}
       for (const f of createForm.technicalDetails || []) {
         if (f.key && f.key.trim() !== '') {
           const val = f.value
@@ -552,9 +575,9 @@ Please go to the Products page and create this product manually first, then come
       } else {
         alert(`Creation failed: ${result.errors?.[0] || 'Unknown error'}`)
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Create error:', error)
-      alert('Failed to create specification: ' + error.message)
+      alert('Failed to create specification: ' + (error instanceof Error ? error.message : "Unknown error"))
     }
   }
 
@@ -568,7 +591,7 @@ Please go to the Products page and create this product manually first, then come
   const handleSaveEdit = async () => {
     if (!editSpec) return
     try {
-      const body: any = {
+      const body: Partial<SpecificationInput> = {
         name: editForm.name,
         category: editForm.category,
         subCategory: editForm.subCategory,
@@ -583,7 +606,7 @@ Please go to the Products page and create this product manually first, then come
       // ... rest of logic uses body ...
 
       // Build technical_details object from key/value pairs
-      const techObj: Record<string, any> = {}
+      const techObj: Record<string, unknown> = {}
       for (const f of editForm.technicalDetails || []) {
         if (f.key && f.key.trim() !== '') {
           // try parse JSON value for complex values, otherwise store string
@@ -630,9 +653,9 @@ Please go to the Products page and create this product manually first, then come
         try {
           const productRes = await apiFetch(`/api/products/sku/${encodeURIComponent(editSpec.sku)}`)
           if (productRes.ok) {
-            const product = await productRes.json()
-            if (product._id) {
-              const updateData: any = {}
+            const product: ProductLookup = await productRes.json()
+            if (product.id) {
+              const updateData: Partial<ProductLookup> = {}
               if (editForm.category && editForm.category !== product.category) {
                 updateData.category = editForm.category
               }
@@ -653,12 +676,12 @@ Please go to the Products page and create this product manually first, then come
               }
 
               if (Object.keys(updateData).length > 0) {
-                await apiFetch(`/api/products/${product._id}`, {
+                await apiFetch(`/api/products/${product.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(updateData)
                 })
-                console.log(`✅ Synced category/subcategory/classification to product ${product._id}`)
+                console.log(`✅ Synced category/subcategory/classification to product ${product.id}`)
               }
             }
           }
@@ -872,7 +895,7 @@ Please go to the Products page and create this product manually first, then come
         const workbook = XLSX.read(data, { type: "binary" })
         const sheetName = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[sheetName]
-        const jsonData = XLSX.utils.sheet_to_json(worksheet)
+        const jsonData = XLSX.utils.sheet_to_json<ExcelRow>(worksheet)
         if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Preview data:", jsonData.slice(0, 5))
         setPreviewData(jsonData.slice(0, 5))
       } catch (error) {
@@ -914,10 +937,11 @@ Please go to the Products page and create this product manually first, then come
           }
 
           // Bulk fetch from /api/scrape-amazon
-          let success = 0, failed = 0, errors: string[] = []
+          let success = 0, failed = 0
+          const errors: string[] = []
           // Optionally: throttle requests if you expect a lot of rows
           await Promise.all(
-            jsonData.map(async (row: any) => {
+            jsonData.map(async (row) => {
               try {
                 const res = await apiFetch("/api/scrape-amazon", {
                   method: "POST",
@@ -976,14 +1000,14 @@ Please go to the Products page and create this product manually first, then come
   }
 
   // Helper function to prompt user for product creation
-  const promptProductCreation = (spec: any, progress: string): Promise<'create' | 'skip'> => {
+  const promptProductCreation = (spec: SpecificationInput, progress: string): Promise<'create' | 'skip'> => {
     return new Promise((resolve) => {
       setPendingProductCreation({ spec, progress, resolve });
     });
   };
 
   // Helper function to create a new product
-  const createProduct = async (spec: any): Promise<{ ok: boolean; errorMessage?: string }> => {
+  const createProduct = async (spec: SpecificationInput): Promise<{ ok: boolean; errorMessage?: string }> => {
     try {
       const productName = spec.name || `Product ${spec.sku}`
       // Category = Group Name, Sub-Category = PROD DESC (use as fallback for each other)
@@ -1008,7 +1032,7 @@ Please go to the Products page and create this product manually first, then come
         char_desc: spec.char_desc || '',
         groupName: resolvedGroupName,   // camelCase – matches products API
         prod_desc: resolvedProdDesc,
-        price: spec.price || (spec.printedprice ? spec.printedprice.replace(/[₹, ]/g, '') : '') || (spec.mrp ? String(spec.mrp) : '0'),
+        price: spec.price || (spec.printedprice ? String(spec.printedprice).replace(/[₹, ]/g, '') : '') || (spec.mrp ? String(spec.mrp) : '0'),
         stock: 0,
         images: Array.isArray(spec.specification_images) ? spec.specification_images.slice(0, 4) : [],
         category: resolvedCategory,
@@ -1067,13 +1091,14 @@ Please go to the Products page and create this product manually first, then come
       const pendingParams = new URLSearchParams({ page: '1', limit: '500', synced: 'false' });
       const pendingRes = await apiFetch(`/api/products/specifications?${pendingParams}`);
       const pendingDataRaw = await pendingRes.json();
-      const specs = pendingDataRaw.data || [];
+      const specs: ProductSpecification[] = pendingDataRaw.data || [];
 
       console.log("[Product Specs] ✅ Total pending specifications to sync:", specs.length)
       console.log("[Product Specs] ✅ Total fetched specifications:", specs.length)
       console.log("[Product Specs] 📊 First 2 specs:", specs.slice(0, 2))
 
-      let success = 0, failed = 0, errors: string[] = [];
+      let success = 0, failed = 0;
+      const errors: string[] = [];
       const totalSpecs = specs.length;
 
       console.log(`[Product Specs] 🔄 Starting sync for ${totalSpecs} specifications...`);
@@ -1102,7 +1127,7 @@ Please go to the Products page and create this product manually first, then come
           }
 
           // Helper function to clean "NA" values
-          const cleanValue = (value: any): string => {
+          const cleanValue = (value: unknown): string => {
             if (!value) return "";
             const str = String(value).trim();
             // Remove quotes and check for NA variations
@@ -1121,7 +1146,7 @@ Please go to the Products page and create this product manually first, then come
           // Filter and clean image URLs - remove empty/invalid URLs
           const cleanedImages = Array.isArray(spec.specification_images)
             ? spec.specification_images
-              .filter((img: any) => img && typeof img === 'string' && img.trim() !== '' && img.trim().toLowerCase() !== 'na')
+              .filter((img) => img && typeof img === 'string' && img.trim() !== '' && img.trim().toLowerCase() !== 'na')
               .slice(0, 4)
             : [];
 
@@ -1345,7 +1370,7 @@ Please go to the Products page and create this product manually first, then come
       }
       const specs = await res.json()
 
-      const rows = (specs || []).map((s: any) => ({
+      const rows = (specs || []).map((s: ProductSpecification) => ({
         sku: s.sku || '',
         name: s.name || '',
         mrp: s.mrp ?? '',
@@ -1509,7 +1534,7 @@ Please go to the Products page and create this product manually first, then come
                 <tbody className="bg-white divide-y divide-gray-200">
                   {previewData.map((row, idx) => (
                     <tr key={idx}>
-                      {Object.values(row).map((value: any, cellIdx) => (
+                      {Object.values(row).map((value, cellIdx) => (
                         <td key={cellIdx} className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                           {typeof value === "object" ? JSON.stringify(value).substring(0, 50) + "..." : String(value)}
                         </td>
@@ -1626,7 +1651,7 @@ Please go to the Products page and create this product manually first, then come
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {pendingSpecs.map((spec) => (
-                    <tr key={spec._id} className="hover:bg-amber-50">
+                    <tr key={spec.id || spec.sku} className="hover:bg-amber-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-xs truncate" title={spec.name}>
                         {spec.name || <span className="text-gray-400 italic">No Name</span>}
                       </td>
@@ -1833,7 +1858,7 @@ Please go to the Products page and create this product manually first, then come
                   <tbody className="bg-white divide-y divide-gray-200">
                     {(() => {
                       // Apply sorting, then pagination (filtering is done on server)
-                      const sorted = currentItems.sort((a: any, b: any) => {
+                      const sorted = currentItems.sort((a, b) => {
                         if (a.locked === b.locked) return 0;
                         if (lockSortAsc) {
                           return a.locked ? 1 : -1;
@@ -1842,13 +1867,13 @@ Please go to the Products page and create this product manually first, then come
                         }
                       });
                       const paginated = sorted;
-                      return paginated.map((spec: any) => {
+                      return paginated.map((spec) => {
                         const specCount = spec.technical_details ? Object.keys(spec.technical_details).length : 0
                         const imageCount = spec.specification_images?.length ?? 0
                         const includedCount = spec.included_components?.length ?? 0
                         const featureCount = spec.features?.length ?? 0
                         return (
-                        <tr key={spec._id} className="hover:bg-gray-50 align-top">
+                        <tr key={spec.id || spec.sku} className="hover:bg-gray-50 align-top">
                           <td className="px-4 py-3">
                             <p className="line-clamp-2 max-w-sm text-sm font-medium text-gray-900" title={spec.name}>
                               {spec.name || <span className="text-gray-400">Unnamed</span>}
@@ -2033,7 +2058,7 @@ Please go to the Products page and create this product manually first, then come
                         // Smart pagination - show limited page numbers
                         const maxVisiblePages = 7
                         let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2))
-                        let endPage = Math.min(pagination.totalPages, startPage + maxVisiblePages - 1)
+                        const endPage = Math.min(pagination.totalPages, startPage + maxVisiblePages - 1)
 
                         // Adjust if we're near the end
                         if (endPage - startPage < maxVisiblePages - 1) {
@@ -2180,11 +2205,11 @@ Please go to the Products page and create this product manually first, then come
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {lockedSpecs.map((spec: any) => {
+                  {lockedSpecs.map((spec) => {
                     const specCount = spec.technical_details ? Object.keys(spec.technical_details).length : 0
                     const imageCount = spec.specification_images?.length ?? 0
                     return (
-                      <tr key={spec._id} className="align-top hover:bg-yellow-50/40">
+                      <tr key={spec.id || spec.sku} className="align-top hover:bg-yellow-50/40">
                         <td className="px-4 py-3">
                           <p className="line-clamp-2 max-w-sm text-sm font-medium text-gray-900" title={spec.name}>
                             {spec.name || <span className="text-gray-400">Unnamed</span>}
@@ -2365,7 +2390,7 @@ Please go to the Products page and create this product manually first, then come
                           onClick={async () => {
                             const p = await getProductDetailsBySku(editSpec.sku)
                             if (p) {
-                              const fetchedCat = p.category || p.raw?.["ITEM CATEGORY"]
+                              const fetchedCat = normalizeProductForSchema(p).categoryGroupName
                               if (fetchedCat) setEditForm(f => ({ ...f, category: fetchedCat }))
                             }
                           }}
@@ -2380,8 +2405,8 @@ Please go to the Products page and create this product manually first, then come
                         className="w-full border rounded p-2"
                       >
                         <option value="">-- Select Category --</option>
-                        {categories.map((cat: any, idx: number) => (
-                          <option key={cat._id || cat.id || idx} value={cat.name}>{cat.name}</option>
+                        {categories.map((cat, idx) => (
+                          <option key={cat.id || idx} value={cat.name}>{cat.name}</option>
                         ))}
                       </select>
                     </div>
@@ -2412,8 +2437,8 @@ Please go to the Products page and create this product manually first, then come
                           <option value={editForm.subCategory}>{editForm.subCategory} (Current)</option>
                         )}
                         {allSubCategories
-                          .map((sub: any, idx: number) => (
-                            <option key={sub._id || sub.id || idx} value={sub.name}>{sub.name}</option>
+                          .map((sub, idx) => (
+                            <option key={sub.id || idx} value={sub.name}>{sub.name}</option>
                           ))}
                       </select>
                     </div>
@@ -2440,7 +2465,7 @@ Please go to the Products page and create this product manually first, then come
                           type="button"
                           onClick={async () => {
                             const p = await getProductDetailsBySku(editSpec.sku)
-                            const val = p?.prod_desc || p?.raw?.["PROD DESC"] || ''
+                            const val = normalizeProductForSchema(p).subCategoryProdDesc
                             if (val) setEditForm(f => ({ ...f, prod_desc: val }))
                             else alert('No PROD DESC on the product record')
                           }}
@@ -2463,7 +2488,7 @@ Please go to the Products page and create this product manually first, then come
                           type="button"
                           onClick={async () => {
                             const p = await getProductDetailsBySku(editSpec.sku)
-                            const val = p?.group_name || p?.raw?.["Group Name"] || ''
+                            const val = p?.group_name || normalizeProductForSchema(p).categoryGroupName
                             if (val) setEditForm(f => ({ ...f, group_name: val }))
                             else alert('No Group Name on the product record')
                           }}
@@ -2689,7 +2714,7 @@ Please go to the Products page and create this product manually first, then come
                     </div>
                   </div>
 
-                  <label className="text-sm">What's Included</label>
+                  <label className="text-sm">What&apos;s Included</label>
                   <div className="border rounded p-3">
                     <div className="space-y-2">
                       {(editForm.included || []).map((item, idx) => (
@@ -2725,7 +2750,7 @@ Please go to the Products page and create this product manually first, then come
                     <div className="border rounded p-3 bg-gray-50 max-h-48 overflow-y-auto">
                       {editForm.reviews && editForm.reviews.length > 0 ? (
                         <div className="space-y-3">
-                          {editForm.reviews.map((rev: any, idx: number) => (
+                          {editForm.reviews.map((rev, idx) => (
                             <div key={idx} className="pb-2 border-b last:border-b-0 border-gray-200">
                               <div className="flex items-center justify-between mb-1">
                                 <span className="font-semibold text-xs text-gray-800 truncate pr-2">{rev.title || 'Review'}</span>
@@ -2849,8 +2874,8 @@ Please go to the Products page and create this product manually first, then come
                         className="w-full border rounded p-2 mt-1"
                       >
                         <option value="">-- Select Category --</option>
-                        {categories.map((cat: any, idx: number) => (
-                          <option key={cat._id || cat.id || idx} value={cat.name}>{cat.name}</option>
+                        {categories.map((cat, idx) => (
+                          <option key={cat.id || idx} value={cat.name}>{cat.name}</option>
                         ))}
                       </select>
                     </div>
@@ -2862,8 +2887,8 @@ Please go to the Products page and create this product manually first, then come
                         className="w-full border rounded p-2 mt-1"
                       >
                         <option value="">-- Select Sub-Category --</option>
-                        {allSubCategories.map((sub: any, idx: number) => (
-                          <option key={sub._id || sub.id || idx} value={sub.name}>{sub.name}</option>
+                        {allSubCategories.map((sub, idx) => (
+                          <option key={sub.id || idx} value={sub.name}>{sub.name}</option>
                         ))}
                       </select>
                     </div>
@@ -2988,7 +3013,7 @@ Please go to the Products page and create this product manually first, then come
 
                   {/* What's Included */}
                   <div>
-                    <label className="text-sm font-medium">What's Included</label>
+                    <label className="text-sm font-medium">What&apos;s Included</label>
                     <div className="border rounded p-3 mt-1">
                       <div className="space-y-2">
                         {(createForm.included || []).map((item, idx) => (

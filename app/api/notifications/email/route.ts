@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/auth'
 import { sendEmail } from '@/lib/email'
-import { getEmailTemplate, getEmailSubject, type EmailData } from '@/lib/emailTemplates'
+import { getEmailTemplate, getEmailSubject, emailTemplateDataSchemas } from '@/lib/emailTemplates'
 
 const notificationSchema = z.object({
   to: z.string().email(),
@@ -16,10 +16,7 @@ const notificationSchema = z.object({
     'SOFTWARE_ACTIVATION_KEY',
     'CART_ABANDONMENT',
   ]),
-  data: z.object({
-    orderNumber: z.string().trim().min(1).max(100),
-    customerName: z.string().trim().min(1).max(160),
-  }).passthrough(),
+  data: z.unknown(),
 })
 
 export async function POST(request: Request) {
@@ -31,14 +28,20 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid notification request' }, { status: 400 })
     }
-    const { to, templateId, data } = parsed.data
+    const { to, templateId } = parsed.data
+    const templateData = emailTemplateDataSchemas[templateId].safeParse(parsed.data.data)
+    if (!templateData.success) {
+      return NextResponse.json({ error: 'Invalid email template data' }, { status: 400 })
+    }
+    const data = templateData.data
+    const orderNumber = "orderNumber" in data ? data.orderNumber : ""
 
-    if (process.env.NODE_ENV === "development") console.log('Email request received:', { to, templateId, orderNumber: data?.orderNumber })
+    if (process.env.NODE_ENV === "development") console.log('Email request received:', { templateId })
 
     const result = await sendEmail({
       to,
-      subject: getEmailSubject(templateId, data.orderNumber),
-      html: getEmailTemplate(templateId, data as unknown as EmailData),
+      subject: getEmailSubject(templateId, orderNumber),
+      html: getEmailTemplate(templateId, data),
     })
     if (!result.success) {
       return NextResponse.json({ error: 'Failed to send email' }, { status: 502 })

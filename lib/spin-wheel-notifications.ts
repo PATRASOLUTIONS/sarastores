@@ -1,8 +1,12 @@
-import { sendEmail } from "@/lib/email"
+import { sendEmail, escapeHtml } from "@/lib/email"
+import type { WhatsAppPayload } from "@/lib/marketing/whatsapp"
+import { z } from "zod"
 
 // ==================== EMAIL TEMPLATES ====================
 
 export function getOtpEmailTemplate(name: string, otp: string): string {
+  const safeName = escapeHtml(name)
+  const safeOtp = escapeHtml(otp)
   return `
     <!DOCTYPE html>
     <html>
@@ -23,7 +27,7 @@ export function getOtpEmailTemplate(name: string, otp: string): string {
         </div>
         
         <div style="padding: 40px 30px;">
-          <h2 style="color: #7c3aed; margin-top: 0; font-size: 22px;">Hello ${name}! 👋</h2>
+          <h2 style="color: #7c3aed; margin-top: 0; font-size: 22px;">Hello ${safeName}! 👋</h2>
           
           <p style="font-size: 16px; margin-bottom: 20px;">
             Your One-Time Password (OTP) for the Spin the Wheel campaign is:
@@ -32,7 +36,7 @@ export function getOtpEmailTemplate(name: string, otp: string): string {
           <div style="background: linear-gradient(135deg, #f5f3ff, #fdf2f8); padding: 30px; border-radius: 12px; margin: 25px 0; text-align: center; border: 2px solid #7c3aed;">
             <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">Your OTP</p>
             <div style="background: #7c3aed; color: white; padding: 15px 25px; border-radius: 8px; display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 8px;">
-              ${otp}
+              ${safeOtp}
             </div>
           </div>
           
@@ -64,6 +68,9 @@ export function getSpinWheelWinnerEmailTemplate(
   prize: string,
   couponCode: string
 ): string {
+  const safeName = escapeHtml(name)
+  const safePrize = escapeHtml(prize)
+  const safeCouponCode = escapeHtml(couponCode)
   return `
     <!DOCTYPE html>
     <html>
@@ -84,7 +91,7 @@ export function getSpinWheelWinnerEmailTemplate(
         </div>
         
         <div style="padding: 40px 30px;">
-          <h2 style="color: #7c3aed; margin-top: 0; font-size: 24px;">Hello ${name}! 🎊</h2>
+          <h2 style="color: #7c3aed; margin-top: 0; font-size: 24px;">Hello ${safeName}! 🎊</h2>
           
           <p style="font-size: 16px; margin-bottom: 20px;">
             We are thrilled to announce that you have won in our <strong>Spin the Wheel Campaign</strong>!
@@ -92,11 +99,11 @@ export function getSpinWheelWinnerEmailTemplate(
           
           <div style="background: linear-gradient(135deg, #f5f3ff, #fdf2f8); padding: 30px; border-radius: 12px; margin: 25px 0; text-align: center; border: 2px solid #7c3aed;">
             <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">Your Prize</p>
-            <h3 style="color: #7c3aed; margin: 0 0 20px 0; font-size: 28px;">🏆 ${prize}</h3>
+            <h3 style="color: #7c3aed; margin: 0 0 20px 0; font-size: 28px;">🏆 ${safePrize}</h3>
             
             <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">Your Coupon Code</p>
             <div style="background: #7c3aed; color: white; padding: 15px 25px; border-radius: 8px; display: inline-block; font-size: 24px; font-weight: bold; letter-spacing: 3px;">
-              ${couponCode}
+              ${safeCouponCode}
             </div>
           </div>
           
@@ -127,308 +134,88 @@ export function getSpinWheelWinnerEmailTemplate(
   `
 }
 
-// ==================== EMAIL FUNCTIONS ====================
-
 export async function sendOtpEmail(email: string, name: string, otp: string) {
-  const html = getOtpEmailTemplate(name, otp)
   return sendEmail({
     to: email,
     subject: `🔐 Your OTP: ${otp} - Spin the Wheel Campaign`,
-    html
+    html: getOtpEmailTemplate(name, otp),
   })
 }
 
-export async function sendSpinWheelEmail(
-  email: string,
-  name: string,
-  prize: string,
-  couponCode: string
-) {
-  try {
-    console.log(`[EMAIL_SEND_START] Preparing winner email for ${name} (${email}). Prize: ${prize}, Coupon: ${couponCode}`)
-    
-    const html = getSpinWheelWinnerEmailTemplate(name, prize, couponCode)
-    
-    console.log(`[EMAIL_TEMPLATE_READY] Email template generated. Characters: ${html.length}`)
-    
-    const result = await sendEmail({
-      to: email,
-      subject: `🎉 Congratulations ${name}! You won ${prize} - Spin the Wheel Campaign`,
-      html
-    })
-    
-    console.log(`[EMAIL_SEND_SUCCESS] Winner email sent to ${email}. Response:`, result)
-    return result
-  } catch (error) {
-    console.error(`[EMAIL_SEND_ERROR] Failed to send winner email to ${email}:`, error instanceof Error ? error.message : String(error))
-    console.error(`[EMAIL_SEND_ERROR_DETAILS]`, error)
-    throw error
-  }
+export async function sendSpinWheelEmail(email: string, name: string, prize: string, couponCode: string) {
+  return sendEmail({
+    to: email,
+    subject: `🎉 Congratulations ${name}! You won ${prize} - Spin the Wheel Campaign`,
+    html: getSpinWheelWinnerEmailTemplate(name, prize, couponCode),
+  })
 }
 
-// ==================== WHATSAPP (AskEva) FUNCTIONS ====================
+const whatsappAcceptanceSchema = z.object({
+  messaging_product: z.literal("whatsapp"),
+  messages: z.array(z.object({
+    id: z.string().min(1),
+    message_status: z.enum(["accepted", "sent"]).optional(),
+  })).min(1),
+})
+export type WhatsAppNotificationResult =
+  | { success: true; data: z.infer<typeof whatsappAcceptanceSchema> }
+  | { success: false; error: string }
 
-export async function sendWhatsAppOTP(phone: string, otp: string, senderOverride?: string) {
-  const apiKey = process.env.ASKEVA_API_KEY
-  const apiUrl = process.env.ASKEVA_API_URL
-  const senderNumber = senderOverride || process.env.ASKEVA_SENDER_NUMBER
-
-  if (!apiKey || !apiUrl) {
-    console.log(`[WhatsApp OTP - Placeholder] To: +91${phone}`)
-    console.log(`[WhatsApp OTP - Placeholder] OTP: ${otp}`)
-    return { success: true, placeholder: true }
-  }
-
-  try {
-    console.log(`[WHATSAPP_OTP_VALIDATION] Starting WhatsApp OTP notification:`)
-    console.log(`  - Phone: ${phone}`)
-    console.log(`  - OTP: ${otp}`)
-    console.log(`  - Sender: ${senderNumber}`)
-    console.log(`  - API URL: ${apiUrl}`)
-    
-    // Validate phone format (should be 10 digits)
-    if (!/^\d{10}$/.test(phone)) {
-      console.error(`[WHATSAPP_OTP_VALIDATION_ERROR] Invalid phone format. Expected 10 digits, got: "${phone}"`)
-      return { success: false, error: "Invalid phone format" }
-    }
-
-    // OTP payload structure
-    const payload: any = {
-      to: `91${phone}`,
-      type: "template",
-      template: {
-        language: {
-          policy: "deterministic",
-          code: "en"
-        },
-        name: "spin_win_auth",  // Keep original OTP template name
-        components: [
-          {
-            type: "body",
-            parameters: [
-              {
-                type: "text",
-                text: otp
-              }
-            ]
-          },
-          {
-            type: "button",
-            sub_type: "url",
-            index: "0",
-            parameters: [
-              {
-                type: "text",
-                text: otp
-              }
-            ]
-          }
-        ]
-      }
-    }
-
-    if (senderNumber) {
-      payload.sender = senderNumber
-    }
-
-    console.log(`[WHATSAPP_OTP_PAYLOAD] Full payload being sent to AskEva:`)
-    console.log(`  To: ${payload.to}`)
-    console.log(`  Template Name: ${payload.template.name}`)
-    console.log(`  OTP Parameter: ${payload.template.components[0].parameters[0].text}`)
-    console.log(`  Sender: ${payload.sender}`)
-    console.log(`  Full Payload JSON:`, JSON.stringify(payload, null, 2))
-
-    // Use Authorization header for OTP (this was working before)
-    console.log(`[WHATSAPP_OTP_REQUEST] Sending request to AskEva API with Authorization header: ${apiUrl}`)
-
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(payload)
-    })
-
-    console.log(`[WHATSAPP_OTP_RESPONSE_STATUS] HTTP Status: ${response.status} ${response.statusText}`)
-
-    const textData = await response.text()
-    let data;
-    try {
-      data = JSON.parse(textData)
-    } catch {
-      data = textData.length > 200 ? textData.substring(0, 200) + '... (truncated HTTP response)' : textData
-    }
-
-    console.log(`[WHATSAPP_OTP_RESPONSE_DATA] Response from AskEva:`, data)
-    
-    // Check if response contains messaging_product and messages
-    if (data?.messaging_product === 'whatsapp' && data?.messages && data.messages.length > 0) {
-      console.log(`[WHATSAPP_OTP_SUCCESS_DETAILED] Message delivered:`)
-      data.messages.forEach((msg: any, idx: number) => {
-        console.log(`  Message [${idx}] Status: ${msg.message_status}`)
-      })
-    }
-
-    const isSuccess = response.ok || data?.messaging_product === 'whatsapp'
-    
-    if (!isSuccess) {
-      console.error(`[WHATSAPP_OTP_API_ERROR] Request failed. Status: ${response.status}`)
-      console.error(`[WHATSAPP_OTP_API_ERROR_DETAILS]`, data)
-      
-      if (data?.error) {
-        console.error(`[WHATSAPP_OTP_ERROR_REASON]`, data.error)
-      }
-      if (data?.errors) {
-        console.error(`[WHATSAPP_OTP_ERROR_DETAILS]`, data.errors)
-      }
-    } else {
-      console.log(`[WHATSAPP_OTP_SUCCESS] OTP sent successfully to +91${phone}`)
-    }
-
-    return { success: isSuccess, data }
-  } catch (error) {
-    console.error("[WhatsApp OTP] Error:", error)
-    return { success: false, error }
-  }
-}
-
-/**
- * Send winning notification via WhatsApp using AskEva API
- */
-export async function sendWhatsAppWinNotification(
+async function sendWhatsAppTemplate(
   phone: string,
-  name: string,
-  prize: string,
-  couponCode: string,
-  senderOverride?: string
-) {
+  template: WhatsAppPayload["template"],
+  senderOverride?: string,
+): Promise<WhatsAppNotificationResult> {
   const apiKey = process.env.ASKEVA_API_KEY
   const apiUrl = process.env.ASKEVA_API_URL
-  const senderNumber = senderOverride || process.env.ASKEVA_SENDER_NUMBER
-
   if (!apiKey || !apiUrl) {
-    console.log(`[WhatsApp Win - Placeholder] To: +91${phone}`)
-    console.log(`[WhatsApp Win - Placeholder] Prize: ${prize}, Coupon: ${couponCode}`)
-    return { success: true, placeholder: true }
+    console.error("[Spin WhatsApp] Provider is not configured")
+    return { success: false, error: "WhatsApp notifications are not configured" }
   }
-
+  if (!/^\d{10}$/.test(phone)) {
+    console.error("[Spin WhatsApp] Invalid phone format")
+    return { success: false, error: "Invalid phone format" }
+  }
+  const payload: WhatsAppPayload = {
+    to: `91${phone}`,
+    type: "template",
+    sender: senderOverride || process.env.ASKEVA_SENDER_NUMBER,
+    template,
+  }
   try {
-    // Validate and log input parameters
-    console.log(`[WHATSAPP_WIN_VALIDATION] Starting WhatsApp win notification:`)
-    console.log(`  - Phone: ${phone} (format: 10 digits?)`)
-    console.log(`  - Name: ${name}`)
-    console.log(`  - Prize: ${prize}`)
-    console.log(`  - Coupon: ${couponCode}`)
-    console.log(`  - Sender: ${senderNumber}`)
-    console.log(`  - API URL: ${apiUrl}`)
-    
-    // Validate phone format (should be 10 digits)
-    if (!/^\d{10}$/.test(phone)) {
-      console.error(`[WHATSAPP_WIN_VALIDATION_ERROR] Invalid phone format. Expected 10 digits, got: "${phone}"`)
-      return { success: false, error: "Invalid phone format" }
-    }
-
-    const payload: any = {
-      to: `91${phone}`,
-      type: "template",
-      template: {
-        language: {
-          policy: "deterministic",
-          code: "en"
-        },
-        name: "spin_win_confirm", // Winning message template
-        components: [
-          {
-            type: "body",
-            parameters: [
-              {
-                type: "text",
-                text: name // Variable 1: {{name}}
-              },
-              {
-                type: "text",
-                text: prize // Variable 2: {{prize}}
-              },
-              {
-                type: "text",
-                text: couponCode // Variable 3: {{CouponCode}}
-              }
-            ]
-          }
-        ]
-      }
-    }
-
-    if (senderNumber) {
-      payload.sender = senderNumber
-    }
-
-    console.log(`[WHATSAPP_WIN_PAYLOAD] Full payload being sent to AskEva:`)
-    console.log(`  To: ${payload.to}`)
-    console.log(`  Template Name: ${payload.template.name}`)
-    console.log(`  Parameters:`)
-    payload.template.components[0].parameters.forEach((param: any, idx: number) => {
-      console.log(`    [${idx}] ${param.text}`)
-    })
-    console.log(`  Sender: ${payload.sender}`)
-    console.log(`  Full Payload JSON:`, JSON.stringify(payload, null, 2))
-
-    // Use Authorization header (same method as OTP which works)
-    console.log(`[WHATSAPP_WIN_REQUEST] Sending request to AskEva API with Authorization header: ${apiUrl}`)
-    console.log(`[WHATSAPP_WIN_REQUEST_DETAILS] Method: POST, Headers will include Authorization Bearer token`)
-    
     const response = await fetch(apiUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(payload)
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     })
-
-    console.log(`[WHATSAPP_WIN_RESPONSE_STATUS] HTTP Status: ${response.status} ${response.statusText}`)
-
-    const textData = await response.text()
-    let data;
-    try {
-      data = JSON.parse(textData)
-    } catch {
-      data = textData.length > 200 ? textData.substring(0, 200) + '... (truncated HTTP response)' : textData
+    const parsed = whatsappAcceptanceSchema.safeParse(await response.json().catch(() => null))
+    if (!response.ok || !parsed.success) {
+      console.error("[Spin WhatsApp] Provider did not accept the message", { status: response.status })
+      return { success: false, error: "WhatsApp provider did not accept the message" }
     }
-
-    console.log(`[WHATSAPP_WIN_RESPONSE_DATA] Response from AskEva:`, data)
-    
-    // Check if response contains messaging_product and messages
-    if (data?.messaging_product === 'whatsapp' && data?.messages && data.messages.length > 0) {
-      console.log(`[WHATSAPP_WIN_SUCCESS_DETAILED] Message object:`)
-      data.messages.forEach((msg: any, idx: number) => {
-        console.log(`  Message [${idx}]:`, JSON.stringify(msg, null, 2))
-      })
-      if (data.contacts && data.contacts.length > 0) {
-        console.log(`[WHATSAPP_WIN_CONTACT_INFO] Contact:`, JSON.stringify(data.contacts, null, 2))
-      }
-    }
-
-    // More detailed success check
-    const isSuccess = response.ok || data?.messaging_product === 'whatsapp'
-    
-    if (!isSuccess) {
-      console.error(`[WHATSAPP_WIN_API_ERROR] Request failed. Status: ${response.status}`)
-      console.error(`[WHATSAPP_WIN_API_ERROR_DETAILS]`, data)
-      
-      // Check for specific error reasons
-      if (data?.error) {
-        console.error(`[WHATSAPP_WIN_ERROR_REASON] Error details:`, data.error)
-      }
-      if (data?.errors) {
-        console.error(`[WHATSAPP_WIN_ERROR_DETAILS] Errors:`, data.errors)
-      }
-    }
-
-    return { success: isSuccess, data }
-  } catch (error) {
-    console.error("[WhatsApp Win] Error:", error)
-    return { success: false, error }
+    return { success: true, data: parsed.data }
+  } catch {
+    console.error("[Spin WhatsApp] Request failed")
+    return { success: false, error: "WhatsApp request failed" }
   }
+}
+
+export function sendWhatsAppOTP(phone: string, otp: string, senderOverride?: string) {
+  return sendWhatsAppTemplate(phone, {
+    language: { policy: "deterministic", code: "en" },
+    name: "spin_win_auth",
+    components: [
+      { type: "body", parameters: [{ type: "text", text: otp }] },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] },
+    ],
+  }, senderOverride)
+}
+
+export function sendWhatsAppWinNotification(phone: string, name: string, prize: string, couponCode: string, senderOverride?: string) {
+  return sendWhatsAppTemplate(phone, {
+    language: { policy: "deterministic", code: "en" },
+    name: "spin_win_confirm",
+    components: [{ type: "body", parameters: [name, prize, couponCode].map(text => ({ type: "text", text })) }],
+  }, senderOverride)
 }

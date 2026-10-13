@@ -22,31 +22,16 @@ import {
 } from "lucide-react"
 import toast from "react-hot-toast"
 import { apiFetchJson } from "@/lib/api-client"
+import {
+  homeSectionListResponseSchema, homeSectionUpdateResponseSchema, homeCategoryListResponseSchema,
+  homeProductListResponseSchema, updateHomeSection, type HomeSection, type HomeProduct as Product,
+} from "@/lib/home-components-client"
 
 type SectionType = "category" | "manual"
-
-interface HomeSection {
-  id: string
-  type: SectionType
-  title: string | null
-  config: { categoryId?: string; productIds?: string[] }
-  enabled: boolean
-  order: number
-}
 
 interface Category {
   id: string
   name: string
-}
-
-interface Product {
-  id: string
-  name: string
-  image?: string
-  images?: string[]
-  price?: number
-  sku?: string
-  active?: boolean
 }
 
 interface EditorState {
@@ -91,8 +76,8 @@ export default function HomeComponentsPage() {
     try {
       setLoading(true)
       const [sectionData, categoryData] = await Promise.all([
-        apiFetchJson<HomeSection[]>("/api/home-components"),
-        apiFetchJson<Category[]>("/api/categories"),
+        apiFetchJson("/api/home-components", undefined, homeSectionListResponseSchema.parse),
+        apiFetchJson("/api/categories", undefined, homeCategoryListResponseSchema.parse),
       ])
       const ordered = [...sectionData].sort((a, b) => a.order - b.order)
       setSections(ordered)
@@ -100,10 +85,10 @@ export default function HomeComponentsPage() {
 
       const productIds = [...new Set(ordered.flatMap((section) => section.config.productIds || []))]
       if (productIds.length > 0) {
-        const products = await apiFetchJson<Product[]>("/api/products/bulk", {
+        const products = await apiFetchJson("/api/products/bulk", {
           method: "POST",
           body: JSON.stringify({ ids: productIds, include_inactive: true }),
-        })
+        }, homeProductListResponseSchema.parse)
         setProductMap(Object.fromEntries(products.map((product) => [product.id, product])))
       }
     } catch (error) {
@@ -120,10 +105,7 @@ export default function HomeComponentsPage() {
   async function updateSection(id: string, updates: Partial<HomeSection>, successMessage?: string) {
     setSavingId(id)
     try {
-      const updated = await apiFetchJson<HomeSection>("/api/home-components", {
-        method: "PUT",
-        body: JSON.stringify({ id, ...updates }),
-      })
+      const updated = await updateHomeSection(id, updates)
       setSections((current) => current.map((section) => (section.id === id ? updated : section)))
       if (successMessage) toast.success(successMessage)
       return updated
@@ -149,10 +131,7 @@ export default function HomeComponentsPage() {
     setSavingId(current.id)
     try {
       await Promise.all(
-        normalized.map((section) => apiFetchJson("/api/home-components", {
-          method: "PUT",
-          body: JSON.stringify({ id: section.id, order: section.order }),
-        })),
+        normalized.map(section => updateHomeSection(section.id, { order: section.order })),
       )
     } catch (error) {
       setSections(sections)
@@ -222,8 +201,10 @@ export default function HomeComponentsPage() {
     const timer = window.setTimeout(async () => {
       try {
         setSearching(true)
-        const products = await apiFetchJson<Product[]>(
+        const products = await apiFetchJson(
           `/api/products?search=${encodeURIComponent(query.trim())}&fields=card&include_inactive=true`,
+          undefined,
+          homeProductListResponseSchema.parse,
         )
         setResults(products)
         setProductMap((current) => ({
@@ -275,10 +256,11 @@ export default function HomeComponentsPage() {
             : { productIds: editor.productIds },
         enabled: editor.enabled,
       }
-      await apiFetchJson("/api/home-components", {
-        method: editor.id ? "PUT" : "POST",
-        body: JSON.stringify(payload),
-      })
+      if (editor.id) {
+        await updateHomeSection(editor.id, payload)
+      } else {
+        await apiFetchJson("/api/home-components", { method: "POST", json: payload }, homeSectionUpdateResponseSchema.parse)
+      }
       toast.success(editor.id ? "Section updated" : "Section created")
       setEditor(null)
       await loadData()

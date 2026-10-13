@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     const { db } = await connectToDatabase()
     const usersCollection = db.collection("users")
 
-    let user = await usersCollection.findOne({ email: googleUser.email.toLowerCase() })
+    const user = await usersCollection.findOne({ email: googleUser.email.toLowerCase() })
 
     if (!user) {
       /**
@@ -114,6 +114,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (user.status === "inactive" || user.status === "deleted") {
+      return NextResponse.redirect(`${siteUrl}/login?error=account_inactive`)
+    }
     if (!user.authProvider) {
       await usersCollection.updateOne(
         { _id: user._id },
@@ -124,7 +127,11 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = user._id.toString()
-    const userRole = user.role || "user"
+    const userRole: unknown = user.role || "user"
+    if (userRole !== "user" && userRole !== "vendor" && userRole !== "admin" && userRole !== "superadmin") {
+      console.error("[Google callback] Stored account has an unsupported role")
+      return NextResponse.redirect(`${siteUrl}/login?error=account_invalid`)
+    }
     const dashboardAccess = !!user.dashboardAccess
     const allowedPages = Array.isArray(user.allowedPages) ? user.allowedPages : []
 
@@ -132,9 +139,10 @@ export async function GET(request: NextRequest) {
       id: userId,
       email: user.email,
       name: String(user.name || "").slice(0, 80),
-      role: userRole as any,
+      role: userRole,
       dashboardAccess,
       allowedPages: allowedPages.map((p: string) => String(p).slice(0, 200)).filter(Boolean).slice(0, 200),
+      sessionVersion: user.sessionVersion ?? 0,
     })
 
     const response = NextResponse.redirect(`${siteUrl}${state.startsWith("/") ? state : "/"}`)

@@ -5,6 +5,7 @@ import { OCCASIONS, upcomingOccasions } from "@/lib/marketing/occasions"
 import { applyCoupon, THEMES } from "@/lib/marketing/email-layout"
 import { isTemplateApproved } from "@/lib/marketing/whatsapp"
 import { getCollection } from "@/lib/db-service"
+import { StoredCouponFieldsSchema } from "@/lib/coupon-validation"
 
 export const dynamic = "force-dynamic"
 
@@ -13,14 +14,25 @@ export const dynamic = "force-dynamic"
 async function resolveCoupon(code: string) {
   if (!code) return null
   const coupons = await getCollection("coupons")
-  const doc: any = await coupons.findOne({ code: code.toUpperCase().trim() })
+  const doc = await coupons.findOne({ code: code.toUpperCase().trim() })
   if (!doc) return { error: `Coupon "${code}" does not exist` }
   if (doc.isActive === false || doc.active === false) return { error: `Coupon "${code}" is not active` }
-  const value = doc.discountValue ?? doc.value
-  const isPct = (doc.discountType ?? doc.type) === "percentage"
+  const parsed = StoredCouponFieldsSchema.safeParse({
+    ...doc, type: doc.type ?? doc.discountType, value: doc.value ?? doc.discountValue,
+  })
+  if (!parsed.success) return { error: `Coupon "${code}" has invalid settings` }
+  const coupon = parsed.data
+  const now = new Date()
+  if ((coupon.startDate && coupon.startDate > now) ||
+    (!coupon.noEndDate && coupon.endDate && coupon.endDate < now) ||
+    (coupon.usageLimit > 0 && Number(doc.usageCount || 0) >= coupon.usageLimit)) {
+    return { error: `Coupon "${code}" is not currently available` }
+  }
   return {
-    code: doc.code,
-    note: isPct ? `${value}% off your order` : `₹${Number(value).toLocaleString("en-IN")} off your order`,
+    code: coupon.code,
+    note: coupon.type === "buy_get" ? `Buy ${coupon.buyQty}, get ${coupon.getQty} free on eligible products`
+      : coupon.type === "percentage" ? `${coupon.value}% off eligible products`
+        : `₹${coupon.value.toLocaleString("en-IN")} off an eligible order`,
   }
 }
 

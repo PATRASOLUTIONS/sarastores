@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, type SpinVisitStats, type SpinParticipantStats } from "@/lib/spin-wheel-campaigns"
 import { requireAdmin } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -14,13 +14,13 @@ export async function GET(request: NextRequest) {
     const participantsCol = await getCampaignCollection(campaignSlug, "participants")
 
     // Store visits
-    const storeVisits = await visitsCol.aggregate([
+    const storeVisits = await visitsCol.aggregate<SpinVisitStats>([
       { $group: { _id: "$store", visits: { $sum: 1 } } },
       { $sort: { visits: -1 } }
     ]).toArray()
 
     // Store conversions (participants per store)
-    const storeParticipants = await participantsCol.aggregate([
+    const storeParticipants = await participantsCol.aggregate<SpinParticipantStats>([
       {
         $group: {
           _id: "$store",
@@ -46,16 +46,16 @@ export async function GET(request: NextRequest) {
     ]).toArray()
 
     // Merge data
-    const visitMap: Record<string, number> = {}
-    storeVisits.forEach((s: any) => { visitMap[s._id] = s.visits })
+    const visitMap: Record<string, number> = Object.create(null)
+    storeVisits.forEach((s) => { visitMap[s._id] = s.visits })
 
-    const participantMap: Record<string, any> = {}
-    storeParticipants.forEach((s: any) => { participantMap[s._id] = s })
+    const participantMap: Record<string, SpinParticipantStats> = Object.create(null)
+    storeParticipants.forEach((s) => { participantMap[s._id] = s })
 
     // Get all unique stores
     const allStores = new Set([
-      ...storeVisits.map((s: any) => s._id),
-      ...storeParticipants.map((s: any) => s._id)
+      ...storeVisits.map((s) => s._id),
+      ...storeParticipants.map((s) => s._id)
     ])
 
     const stores = Array.from(allStores).map(store => ({

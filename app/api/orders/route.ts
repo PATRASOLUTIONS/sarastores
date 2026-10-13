@@ -1,14 +1,17 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse, after } from "next/server"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { createGuestAccessToken, hashGuestAccessToken } from "@/lib/guest-order"
 import { redeemPoints, quoteRedemption, reverseOrderPoints } from "@/lib/loyalty"
 import { generateOrderId } from "@/lib/order-id"
-import { priceOrder } from "@/lib/order-pricing"
+import { priceOrder, consumeOrderCoupon } from "@/lib/order-pricing"
 import { verifyRazorpayPayment } from "@/lib/razorpay"
 import { z } from "zod"
 import { ObjectId } from "mongodb"
+import { checkoutFingerprint, getCheckoutIntent, persistCheckoutOrder, CheckoutConflictError, type CheckoutIntent } from "@/lib/checkout-payment"
+import { fulfillSoftwareOrder } from "@/lib/software-fulfillment"
+import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfillment"
 
 export const dynamic = "force-dynamic"
 
@@ -371,7 +374,7 @@ export async function POST(request: NextRequest) {
         zipCode: z.string().optional(),
         country: z.string().optional(),
       }).optional(),
-      paymentMethod: z.string().optional(),
+      paymentMethod: z.enum(["cash", "cod", "cash-on-delivery", "online", "razorpay", "instore"]).optional(),
       paymentDetails: z.record(z.unknown()).optional(),
       fulfilment: z.object({
         method: z.enum(["delivery", "pickup"]),
@@ -407,6 +410,7 @@ export async function POST(request: NextRequest) {
     const pricing = await priceOrder(items, {
       couponCode: parsed.data.coupon?.code ?? null,
       userId,
+      fulfilment: parsed.data.fulfilment,
     })
     if (!pricing.ok) {
       return NextResponse.json({ error: pricing.error }, { status: 400 })
@@ -434,70 +438,69 @@ export async function POST(request: NextRequest) {
     const method = paymentMethod || "cash"
     let status = "pending"
     let paymentVerification: Record<string, unknown> = { verified: false, method }
+    let checkoutIntent: CheckoutIntent | null = null
+    const fingerprint = checkoutFingerprint(pricing, parsed.data, payableTotal)
 
     if (method === "online" || method === "razorpay") {
-      const razorpayPaymentId =
-        (paymentDetails?.paymentId as string) || (paymentDetails?.transactionId as string) || ""
-      if (!razorpayPaymentId) {
-        return NextResponse.json({ error: "Payment reference missing" }, { status: 400 })
+      const paymentId = paymentDetails?.paymentId || paymentDetails?.transactionId
+      const paymentOrderId = paymentDetails?.orderId
+      const checkoutToken = paymentDetails?.checkoutToken
+      if (typeof paymentId !== "string" || typeof paymentOrderId !== "string" || typeof checkoutToken !== "string") {
+        return NextResponse.json({ error: "Verified checkout reference is required" }, { status: 400 })
       }
-      const check = await verifyRazorpayPayment(razorpayPaymentId, payableTotal)
+      checkoutIntent = await getCheckoutIntent(paymentOrderId, checkoutToken, userId)
+      if (!checkoutIntent || checkoutIntent.method !== "razorpay" || checkoutIntent.status !== "verified" ||
+        checkoutIntent.paymentId !== paymentId || checkoutIntent.fingerprint !== fingerprint ||
+        checkoutIntent.amount !== Math.round(payableTotal * 100)) {
+        return NextResponse.json({ error: "Checkout is mismatched, expired or already completed" }, { status: 409 })
+      }
+      const check = await verifyRazorpayPayment(paymentId, payableTotal, paymentOrderId)
+      if (!check.verified) {
+        return NextResponse.json({ error: "Payment could not be verified", reason: check.reason }, { status: check.reason === "verification_error" ? 503 : 400 })
+      }
       paymentVerification = {
-        verified: check.verified,
+        verified: true,
         method,
-        razorpayPaymentId,
+        razorpayPaymentId: paymentId,
+        razorpayOrderId: paymentOrderId,
         amountPaid: check.amountPaid ?? null,
         reason: check.reason ?? null,
         checkedAt: new Date(),
       }
-      if (check.verified) {
-        status = "confirmed"
-      } else {
-        console.warn(
-          `[Orders POST] unverified online payment ${razorpayPaymentId} for user ${userId}: ${check.reason}`,
-        )
-      }
+      status = "confirmed"
     } else if (method === "instore") {
-      const employeeId = String(paymentDetails?.employeeId || "").trim()
-      const verifiedEmail = String(paymentDetails?.verifiedEmail || "").trim()
+      const approvalId = paymentDetails?.approvalId
+      const approvalToken = paymentDetails?.approvalToken
+      if (typeof approvalId !== "string" || typeof approvalToken !== "string") {
+        return NextResponse.json({ error: "Employee purchase approval is required" }, { status: 400 })
+      }
+      checkoutIntent = await getCheckoutIntent(approvalId, approvalToken, userId)
+      if (!checkoutIntent || checkoutIntent.method !== "instore" || checkoutIntent.status !== "verified" ||
+        checkoutIntent.fingerprint !== fingerprint || checkoutIntent.amount !== Math.round(payableTotal * 100)) {
+        return NextResponse.json({ error: "Purchase approval is mismatched, expired or already used" }, { status: 409 })
+      }
       const employees = await getCollection("employees")
-      const employee = employeeId
-        ? await employees.findOne({ employeeId, status: "active" })
-        : null
-      const emailMatches = !verifiedEmail || employee?.email === verifiedEmail
-      const verified = !!employee && emailMatches
+      const employee = await employees.findOne({
+        employeeId: checkoutIntent.employeeId, email: checkoutIntent.employeeEmail, status: "active",
+      })
+      if (!employee) return NextResponse.json({ error: "Approving employee is no longer active" }, { status: 403 })
       paymentVerification = {
-        verified,
+        verified: true,
         method,
-        employeeId: employeeId || null,
-        reason: verified ? null : "employee_not_verified",
+        employeeId: checkoutIntent.employeeId,
+        approvalId: checkoutIntent._id,
         checkedAt: new Date(),
       }
-      if (verified) status = "confirmed"
+      status = "confirmed"
     }
 
-    const collection = await getCollection("orders")
     const orderId = await generateOrderId()
 
     // Guests get a one-time capability token; order ids are sequential and so
     // are never sufficient on their own to read an order.
     const guestAccessToken = isGuest ? createGuestAccessToken() : null
 
-    // Commit the debit now that the order id exists. A failure here must not
-    // hand out a discount for free, so the order is rejected.
-    if (userId && loyalty) {
-      const redemption = await redeemPoints({
-        userId,
-        orderId,
-        points: loyalty.pointsRedeemed,
-        orderTotal: total,
-      })
-      if (!redemption.ok) {
-        return NextResponse.json({ error: redemption.error }, { status: 400 })
-      }
-    }
-
-    const newOrder: Record<string, unknown> = {
+    const newOrder = {
       orderId,
       userId,
       isGuest,
@@ -526,7 +529,12 @@ export async function POST(request: NextRequest) {
         country: customer.country || "India",
       },
       paymentMethod: method,
-      paymentDetails: paymentDetails || {},
+      paymentDetails: {
+        method,
+        status: paymentVerification.verified ? "completed" : "pending",
+        ...(checkoutIntent?.method === "razorpay" ? { paymentId: checkoutIntent.paymentId, orderId: checkoutIntent._id } : {}),
+        ...(checkoutIntent?.method === "instore" ? { employeeId: checkoutIntent.employeeId, verifiedEmail: checkoutIntent.employeeEmail } : {}),
+      },
       paymentVerification,
       // Store pickup is recorded here; reserving the unit against store stock
       // waits on the SAP inventory feed (see docs/brd/PENDING-EXTERNAL-INTEGRATIONS.md).
@@ -539,6 +547,7 @@ export async function POST(request: NextRequest) {
       status,
       trackingNumber: null,
       coupon,
+      notes: "",
       timeline: [
         {
           date: new Date().toISOString(),
@@ -552,62 +561,45 @@ export async function POST(request: NextRequest) {
 
     const orderNotes = generateOrderNotes({
       items: validatedItems,
-      customer: newOrder.customer as Record<string, string>,
-      shippingAddress: newOrder.shippingAddress as Record<string, string>,
-      paymentMethod: newOrder.paymentMethod as string,
-      subtotal: newOrder.subtotal as number,
-      tax: newOrder.tax as number,
-      shipping: newOrder.shipping as number,
-      total: newOrder.total as number,
-      coupon: newOrder.coupon as { code: string; name: string; discount: number } | undefined,
+      customer: newOrder.customer,
+      shippingAddress: newOrder.shippingAddress,
+      paymentMethod: newOrder.paymentMethod,
+      subtotal: newOrder.subtotal,
+      tax: newOrder.tax,
+      shipping: newOrder.shipping,
+      total: newOrder.total,
+      coupon: newOrder.coupon,
     })
 
     newOrder.notes = orderNotes
 
-    const result = await collection.insertOne(newOrder)
-    const insertedId = result.insertedId.toString()
+    const insertedId = await persistCheckoutOrder(newOrder, checkoutIntent, async (transaction) => {
+      if (coupon) {
+        const consumption = await consumeOrderCoupon(items, coupon, userId, transaction)
+        if (!consumption.ok) throw new CheckoutConflictError(consumption.error)
+      }
+      if (userId && loyalty) {
+        const redemption = await redeemPoints({
+          userId, orderId, points: loyalty.pointsRedeemed, orderTotal: total, session: transaction,
+        })
+        if (!redemption.ok) throw new CheckoutConflictError(redemption.error)
+      }
+    })
+    const result = { insertedId }
 
     const softwareItems = validatedItems.filter((item) => item.type === 'software')
 
-    if (softwareItems.length > 0) {
-      try {
-        const proto = request.headers.get('x-forwarded-proto') || (request.headers.get('referer')?.split(':')[0]) || 'http'
-        const host = request.headers.get('host') || 'localhost:3000'
-        const origin = `${proto}://${host}`
-
-        for (const item of softwareItems) {
-          try {
-            if (item.provider) continue
-
-            const qty = Number(item.quantity || 1)
-            const validityYears = item.validityYears ? Number(item.validityYears) : undefined
-            const validityDays = item.validity ? Number(item.validity) : (validityYears ? validityYears * 365 : undefined)
-
-            const assignPayload = {
-              softwareId: item.kgenProductId || item.id,
-              validity: validityDays,
-              validityYears: validityYears,
-              maxDevices: item.maxDevices || 1,
-              quantity: qty
-            }
-
-            try {
-              const resp = await fetch(`${origin}/api/orders/${orderId}/assign-license`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(assignPayload)
-              })
-              await resp.json().catch(() => null)
-            } catch {
-              // assign-license network error — non-critical
-            }
-          } catch {
-            // per-item error — continue with next item
-          }
+    if (softwareItems.some((item) => !item.provider) && paymentVerification.verified) {
+      after(async () => {
+        try {
+          await fulfillSoftwareOrder(insertedId.toString())
+        } catch (error) {
+          console.error("[Orders] Software fulfillment requires administrator attention", error)
+          await (await getCollection("orders")).updateOne({ _id: insertedId }, {
+            $set: { licenseFulfillment: { status: "needs_inventory", updatedAt: new Date() } },
+          })
         }
-      } catch {
-        // license delegation error — non-critical
-      }
+      })
     }
 
     const { guestAccessTokenHash: _guestAccessTokenHash, ...orderWithoutSecrets } = newOrder
@@ -620,15 +612,15 @@ export async function POST(request: NextRequest) {
       const { sendEmail } = await import("@/lib/email")
       const { emailTemplates } = await import("@/lib/emailTemplates")
 
-      const customerEmail = (newOrder.customer as Record<string, string>)?.email || customer?.email
+      const customerEmail = newOrder.customer.email || customer?.email
 
       if (customerEmail) {
-        const customerName = (newOrder.customer as Record<string, string>)?.name || `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Customer"
+        const customerName = newOrder.customer.name || `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Customer"
 
         const emailData = {
           orderNumber: orderId,
           customerName,
-          status: (newOrder.status as string) || "pending",
+          status: newOrder.status || "pending",
           orderDetails: {
             total: payableTotal,
             items: validatedItems.map((item) => ({
@@ -718,38 +710,16 @@ export async function POST(request: NextRequest) {
       // cart clearing failure — non-critical
     }
 
-    try {
-      const integrationItems = validatedItems.filter((it) => (it.provider && it.provider === 'exlr8') || it.source === 'kgen' || it.kgenProductId)
-      if (integrationItems.length > 0) {
-        const proto = request.headers.get('x-forwarded-proto') || (request.headers.get('referer')?.split(':')[0]) || 'http'
-        const host = request.headers.get('host') || 'localhost:3000'
-        const origin = `${proto}://${host}`
-
-        const isConfirmed = (newOrder.status === 'confirmed' || newOrder.status === 'paid' || (newOrder.paymentDetails as Record<string, unknown>)?.status === 'completed')
-
-        if (isConfirmed) {
-          fetch(`${origin}/api/integrations/exlr8/place-order`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              // Forwarded so the integration route can authenticate this internal call.
-              cookie: request.headers.get('cookie') || '',
-            },
-            body: JSON.stringify({ orderId, userId, items: integrationItems }),
-          }).catch(() => {}) // fire-and-forget — order already returned to client
-        } else {
-          fetch(`${origin}/api/integrations/exlr8/queue-order`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              cookie: request.headers.get('cookie') || '',
-            },
-            body: JSON.stringify({ orderId, userId, items: integrationItems }),
-          }).catch(() => {}) // fire-and-forget — order already returned to client
+    const hasExternalItems = validatedItems.some((item) => item.provider === "exlr8" || item.source === "kgen" || item.kgenProductId)
+    if (hasExternalItems && paymentVerification.verified) {
+      after(async () => {
+        try {
+          await queueExternalOrder(insertedId.toString())
+          await fulfillExternalOrder(insertedId.toString())
+        } catch (error) {
+          console.error("[Orders] External fulfillment remains queued or requires reconciliation", error)
         }
-      }
-    } catch {
-      // integration routing failure — non-critical
+      })
     }
 
     return NextResponse.json({
@@ -760,6 +730,9 @@ export async function POST(request: NextRequest) {
       ...(guestAccessToken ? { guestAccessToken } : {}),
     })
   } catch (error) {
+    if (error instanceof CheckoutConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     console.error("[Orders POST]", error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: "Failed to create order" }, { status: 500 })
   }

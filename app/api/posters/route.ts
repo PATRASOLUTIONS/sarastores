@@ -6,6 +6,9 @@ import { getPosterSettings, setPosterSettings, type PosterFeature } from "@/lib/
 import { listCustomPosters } from "@/lib/custom-posters"
 import { getCollection, normalizeId, COLLECTIONS } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
+import { PosterSettingsWriteSchema } from "@/lib/validation"
+import { connectToDatabase } from "@/lib/mongodb"
+class PosterSelectionError extends Error {}
 
 interface ResolvedFeature {
   type: PosterFeature["type"]
@@ -19,15 +22,28 @@ interface ResolvedFeature {
 }
 
 const featureKey = (f: PosterFeature) => `${f.type}:${f.id}`
+interface FeatureDocument {
+  _id: ObjectId | string
+  id?: string
+  name?: string
+  image?: string | null
+  slug?: string
+  price?: number | null
+  mrp?: number | null
+  active?: boolean
+}
 
 async function findByIds(name: string, ids: string[], projection: Record<string, 1>) {
   if (ids.length === 0) return []
-  const collection = await getCollection(name)
+  const collection = await getCollection<FeatureDocument>(name)
   const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id))
   const docs = await collection
-    .find({ $or: [{ _id: { $in: objectIds } }, { id: { $in: ids } }] }, { projection })
+    .find({
+      ...(name === COLLECTIONS.PRODUCTS ? { active: true } : { active: { $ne: false } }),
+      $or: [{ _id: { $in: objectIds } }, { _id: { $in: ids } }, { id: { $in: ids } }],
+    }, { projection })
     .toArray()
-  return docs.map((doc) => normalizeId(doc) as any)
+  return docs.map((doc) => normalizeId(doc))
 }
 
 /** Featured items are resolved server-side so the hero needs one request, not N. */
@@ -91,8 +107,9 @@ async function resolveFeatures(features: PosterFeature[]): Promise<Record<string
         caption: "Explore the range",
       }
     }
-  } catch {
-    return map
+  } catch (error) {
+    console.error("[Posters] Featured catalogue lookup failed", error)
+    throw error
   }
 
   return map
@@ -143,10 +160,27 @@ export async function PUT(request: Request) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const settings = await setPosterSettings(body)
-    return NextResponse.json({ success: true, ...settings })
+    const parsed = PosterSettingsWriteSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    const { client } = await connectToDatabase()
+    const session = client.startSession()
+    try {
+      const settings = await session.withTransaction(async () => {
+        const custom = await listCustomPosters(session)
+        const known = new Set([...POSTERS, ...custom].map(poster => poster.slug))
+        if ([...parsed.data.enabled, ...Object.keys(parsed.data.links)].some(slug => !known.has(slug))) {
+          throw new PosterSelectionError("A selected poster no longer exists; reload before publishing")
+        }
+        return setPosterSettings(parsed.data, session)
+      })
+      if (!settings) throw new Error("Poster publication transaction did not commit")
+      return NextResponse.json({ success: true, ...settings })
+    } finally {
+      await session.endSession()
+    }
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    if (error instanceof PosterSelectionError) return NextResponse.json({ error: error.message }, { status: 400 })
     return handleApiError(error, "Failed to save posters")
   }
 }

@@ -7,8 +7,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const companyName = getCompanyName(settings)
 
   return buildPageMetadata({
-    title: `Privacy Policy | ${companyName}`,
-    description: `Read the privacy policy of ${companyName}. Learn how we collect, use, and protect your personal information when you use our services.`,
+    title: `Privacy Notice | ${companyName}`,
+    description: `How ${companyName} collects, uses, shares and protects personal data under India's Digital Personal Data Protection Act, 2023.`,
     pageUrl: `${origin}/privacy-policy`,
     origin,
     companyName,

@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server"
 
+export class RateLimitUnavailableError extends Error {
+  constructor() {
+    super("Request protection is temporarily unavailable. Please try again later.")
+    this.name = "RateLimitUnavailableError"
+  }
+}
+
 export function handleApiError(error: unknown, message?: string) {
   console.error("API Error:", error)
+
+  if (error instanceof RateLimitUnavailableError) {
+    return NextResponse.json(
+      { error: error.message, success: false },
+      { status: 503, headers: { "Retry-After": "60" } },
+    )
+  }
 
   const errorMessage = message || (error instanceof Error ? error.message : "An unknown error occurred")
 

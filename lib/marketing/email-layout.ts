@@ -24,6 +24,18 @@ export const THEMES: Record<string, BrandTheme> = {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://sarastores.com"
 
+export function withEmailUnsubscribe(html: string, token: string): string {
+  if (!token) throw new Error("An email unsubscribe token is required")
+  const link = new URL("/api/unsubscribe", SITE)
+  if (link.protocol !== "https:" && link.protocol !== "http:") throw new Error("Marketing site URL must use HTTP(S)")
+  link.searchParams.set("token", token)
+  link.searchParams.set("channel", "email")
+  const personalized = html.replace(/\{\{\s*unsubscribeToken\s*\}\}/gi, () => encodeURIComponent(token))
+  if (html.includes(`${SITE}/api/unsubscribe?token={{unsubscribeToken}}`)) return personalized
+  const footer = `<p style="font-family:Arial,sans-serif;font-size:12px;color:#64748b;text-align:center;"><a href="${link.href.replace(/&/g, "&amp;")}">Unsubscribe from marketing emails</a></p>`
+  return /<\/body>/i.test(personalized) ? personalized.replace(/<\/body>/i, () => `${footer}</body>`) : personalized + footer
+}
+
 export type BlockOptions = {
   theme: BrandTheme
   eyebrow?: string

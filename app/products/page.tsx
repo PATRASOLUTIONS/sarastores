@@ -1,18 +1,26 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { ChevronDown, SlidersHorizontal, X } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import SpecFacets from "@/components/SpecFacets"
 import ProductListingCard from "@/components/products/ProductListingCard"
-import SubCategoryTiles from "@/components/products/SubCategoryTiles"
-import { ListingHero, ListingPromoRow, useListingBanners } from "@/components/products/ListingBanners"
-import { fetchWithCache, revalidateCache } from "@/utils/cache"
-import { normalizeProductForSchema } from "@/lib/product-schema"
-import { calculateDiscount, getEffectiveMRP, getRatingInfo, titleCaseLabel } from "@/lib/product-display"
+import { useListingBanners } from "@/components/products/ListingBanners"
+import { OfferTabs, OffersHero, OffersPromotions, OffersTrustStrip, type OfferTab } from "@/components/products/OffersPresentation"
+import RazorpayOffers from "@/components/product/RazorpayOffers"
+import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
+import { applicableOffers, isEmiOffer, isNoCostEmiOffer } from "@/lib/razorpay-offers"
+import { fetchWithCache } from "@/utils/cache"
+import { productListingListResponseSchema, type ProductListingResponse as Product } from "@/lib/product-card-response"
+import { catalogCategoryListResponseSchema } from "@/lib/catalog-list-response"
+import { categoryOf, isInStock } from "@/utils/catalog"
+import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { MarketingStatus } from "@/components/marketing/MarketingSections"
+import { normalizeProductForSchema, type ProductSchemaInput } from "@/lib/product-schema"
+import { calculateDiscount, getCatalogMRP, getCatalogRatingInfo, titleCaseLabel } from "@/lib/product-display"
 import {
   buildFacets,
   countActiveFacets,
@@ -21,31 +29,13 @@ import {
   type FacetSelection,
 } from "@/lib/product-facets"
 
-interface Product {
-  id: string
-  slug?: string
-  name: string
-  description: string
-  price: number
-  image: string
-  stock: number
-  category?: string
-  manufacturer?: string
-  manufacturerName?: string
-  images?: string[]
-  sku?: string
-  type?: string
-  trusted?: boolean
-  mrp?: number
-}
-
 interface Category {
   id: string
   name: string
   icon?: string
 }
 
-const PRICE_MAX = 200000
+const PRICE_MAX = Infinity
 
 const PRICE_BANDS: { label: string; range: [number, number] }[] = [
   { label: "Under ₹10,000", range: [0, 10000] },
@@ -60,18 +50,30 @@ const RATING_BANDS = [4, 3, 2]
 
 const titleCase = titleCaseLabel
 
-const getCanonicalMeta = (product: any) => normalizeProductForSchema(product)
-const getProductSubCategory = (product: any) =>
+const getCanonicalMeta = (product: ProductSchemaInput) => normalizeProductForSchema(product)
+const getProductSubCategory = (product: ProductSchemaInput) =>
   String(product?.subCategory || getCanonicalMeta(product).subCategoryProdDesc || "")
-const getProductType = (product: any) => String(product?.type || getCanonicalMeta(product).subCategoryProdDesc || "")
-const getProductBrand = (product: any) => String(getCanonicalMeta(product).manufacturerName || "")
-const getProductCharDesc = (product: any) => String(getCanonicalMeta(product).charDesc || "")
-const getProductCategoryGroupName = (product: any): string =>
+const getProductBrand = (product: ProductSchemaInput) => String(getCanonicalMeta(product).manufacturerName || "")
+const getProductCategoryGroupName = (product: ProductSchemaInput): string =>
   String(product?.groupName || product?.category || getCanonicalMeta(product).categoryGroupName || "")
 
 /** "TV 55 INCH" and friends collapse into a single browsable label. */
 const normaliseSubCategory = (sub: string) =>
   sub.toLowerCase().startsWith("tv ") || sub.toLowerCase() === "tv" ? "TV" : sub
+
+const shopperCategory = (product: Product) =>
+  categoryOf({ ...product, subCategory: getProductSubCategory(product) }) || normaliseSubCategory(getProductSubCategory(product))
+
+async function fetchCatalog(): Promise<Product[]> {
+  const catalog: Product[] = []
+  for (let skip = 0; ; skip += 500) {
+    const response = await fetch(`/api/products?limit=500&skip=${skip}`)
+    if (!response.ok) throw new Error("Products could not be loaded. Please try again.")
+    const page = productListingListResponseSchema.parse(await response.json())
+    catalog.push(...page)
+    if (page.length < 500) return catalog
+  }
+}
 
 function FilterSection({
   title,
@@ -118,13 +120,14 @@ function CheckOption({
         onChange={onChange}
         className="h-3.5 w-3.5 rounded border-gray-300 text-[#1560BD] focus:ring-[#1560BD]"
       />
-      <span className="flex-1 truncate">{label}</span>
-      {typeof count === "number" && <span className="text-gray-400">({count})</span>}
+      <span className="min-w-0 flex-1 leading-tight">{label}</span>
+      {typeof count === "number" && <span className="shrink-0 text-[11px] text-gray-600">({count})</span>}
     </label>
   )
 }
 
 export default function ProductsPage() {
+  const marketing = useMarketingContent("products")
   const searchParams = useSearchParams()
 
   const [searchTerm, setSearchTerm] = useState("")
@@ -134,20 +137,50 @@ export default function ProductsPage() {
   const [priceRange, setPriceRange] = useState<[number, number]>([0, PRICE_MAX])
   const [minDiscount, setMinDiscount] = useState(0)
   const [minRating, setMinRating] = useState(0)
-  const [inStockOnly, setInStockOnly] = useState(false)
+  const [availability, setAvailability] = useState<"all" | "in" | "out">("all")
   const [facetSelection, setFacetSelection] = useState<FacetSelection>({})
   const [sortBy, setSortBy] = useState("relevance")
 
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [subCategoryImages, setSubCategoryImages] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [showFilters, setShowFilters] = useState(false)
+  const filterRef = useRef<HTMLElement>(null)
   const [showAllBrands, setShowAllBrands] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 20
+  const [retryCount, setRetryCount] = useState(0)
+  const [offerTab, setOfferTab] = useState<OfferTab>("all-offers")
+  const bankOffers = useRazorpayOffers()
+  const currentOffers = applicableOffers(bankOffers.offers, Infinity)
+  const itemsPerPage = 24
+
+  useEffect(() => {
+    if (!showFilters) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    filterRef.current?.querySelector<HTMLElement>("button")?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowFilters(false)
+      if (event.key !== "Tab") return
+      const controls = Array.from(filterRef.current?.querySelectorAll<HTMLElement>("button, input, select, a[href]") || [])
+        .filter(element => element.getClientRects().length > 0)
+      const first = controls[0], last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+    }
+    const onResize = () => { if (window.innerWidth >= 1024) setShowFilters(false) }
+    document.addEventListener("keydown", onKeyDown)
+    window.addEventListener("resize", onResize)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("resize", onResize)
+      previousFocus?.focus()
+    }
+  }, [showFilters])
 
   // ── URL hydration + data ────────────────────────────────────────────
   useEffect(() => {
@@ -157,26 +190,23 @@ export default function ProductsPage() {
     const subCategoryFromUrl = searchParams.get("subCategory")
     const subCategoriesFromUrl = searchParams.get("subCategories")
 
-    if (categoryFromUrl) setSelectedCategories([categoryFromUrl])
-    if (searchFromUrl) setSearchTerm(searchFromUrl)
-    if (brandFromUrl) setSelectedBrands([brandFromUrl])
+    setSelectedCategories(categoryFromUrl ? [categoryFromUrl] : [])
+    setSearchTerm(searchFromUrl || searchParams.get("q") || "")
+    setSelectedBrands(brandFromUrl ? brandFromUrl.split(",").map(value => value.trim()).filter(Boolean) : [])
+    setOfferTab(searchParams.size > 0 ? "all-products" : "all-offers")
+    setMinDiscount(0)
+    setMinRating(0)
+    setAvailability("all")
 
     const sortFromUrl = searchParams.get("sort")
-    if (sortFromUrl) setSortBy(sortFromUrl)
-
-    // Search suggestions deep-link structured intent here, so "55 inch tv under
-    // 60000" arrives as real filters rather than a raw string.
-    const qFromUrl = searchParams.get("q")
-    if (qFromUrl && !searchFromUrl) setSearchTerm(qFromUrl)
+    setSortBy(sortFromUrl || "relevance")
 
     const minPrice = Number(searchParams.get("minPrice"))
     const maxPrice = Number(searchParams.get("maxPrice"))
-    if (Number.isFinite(minPrice) || Number.isFinite(maxPrice)) {
-      setPriceRange([
-        Number.isFinite(minPrice) ? minPrice : 0,
-        Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : PRICE_MAX,
-      ])
-    }
+    setPriceRange([
+      Number.isFinite(minPrice) && minPrice >= 0 ? minPrice : 0,
+      Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : PRICE_MAX,
+    ])
 
     const urlFacets: FacetSelection = {}
     const size = searchParams.get("size")
@@ -185,27 +215,22 @@ export default function ProductsPage() {
     if (star) urlFacets.energyRating = [`${star} Star`]
     const features = searchParams.getAll("feature")
     if (features.length > 0) urlFacets.smartFeatures = features.map((f) => f.replace(/\b\w/g, (c) => c.toUpperCase()))
-    if (Object.keys(urlFacets).length > 0) setFacetSelection(urlFacets)
+    setFacetSelection(urlFacets)
 
     const selections: string[] = []
     if (subCategoryFromUrl) selections.push(subCategoryFromUrl)
     if (subCategoriesFromUrl) selections.push(...subCategoriesFromUrl.split(",").map((s) => s.trim()).filter(Boolean))
-    if (selections.length > 0) setSelectedSubCategories(selections)
+    setSelectedSubCategories(selections)
+  }, [searchParams])
 
+  useEffect(() => {
+    let cancelled = false
     const load = async () => {
       setIsLoading(true)
       setError(null)
       try {
-        const [productsData, categoriesData, subCategoryData] = await Promise.all([
-          fetchWithCache(
-            "products",
-            async () => {
-              const r = await fetch("/api/products")
-              if (!r.ok) throw new Error("Failed to fetch products")
-              return r.json()
-            },
-            5 * 60 * 1000,
-          ),
+        const [productsData, categoriesData] = await Promise.all([
+          retryCount > 0 ? fetchCatalog() : fetchWithCache("products-offers-catalog", fetchCatalog, productListingListResponseSchema, 5 * 60 * 1000),
           fetchWithCache(
             "categories",
             async () => {
@@ -213,79 +238,58 @@ export default function ProductsPage() {
               if (!r.ok) throw new Error("Failed to fetch categories")
               return r.json()
             },
-            5 * 60 * 1000,
-          ),
-          fetchWithCache(
-            "sub-categories",
-            async () => {
-              const r = await fetch("/api/sub-categories")
-              return r.ok ? r.json() : []
-            },
+            catalogCategoryListResponseSchema,
             5 * 60 * 1000,
           ),
         ])
 
+        if (cancelled) return
+        if (!Array.isArray(categoriesData)) throw new Error("Invalid categories response.")
         setProducts(productsData)
         setCategories(categoriesData)
-        setSubCategoryImages(
-          Object.fromEntries(
-            (Array.isArray(subCategoryData) ? subCategoryData : [])
-              .filter((s: any) => s?.name)
-              .map((s: any) => [String(s.name).toLowerCase(), s.image || ""]),
-          ),
-        )
-
-        revalidateCache(
-          "products",
-          async () => {
-            const r = await fetch("/api/products")
-            if (!r.ok) throw new Error("Failed to fetch products")
-            return r.json()
-          },
-          5 * 60 * 1000,
-        )
       } catch (err) {
         console.error("Error fetching data:", err)
-        setError(err instanceof Error ? err.message : "An unknown error occurred")
+        if (!cancelled) setError(err instanceof Error ? err.message : "An unknown error occurred")
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
     load()
-  }, [searchParams])
+    return () => { cancelled = true }
+  }, [retryCount])
+
+  const eligibleProducts = useMemo(() => products.filter(product => {
+    const price = Number(product.price)
+    if (offerTab === "all-offers" || offerTab === "brand") return price > 0 && getCatalogMRP(product) > price
+    if (offerTab === "bank") return applicableOffers(bankOffers.offers, price).some(offer => !isEmiOffer(offer))
+    if (offerTab === "no-cost-emi") return applicableOffers(bankOffers.offers, price).some(isNoCostEmiOffer)
+    if (["festival", "exchange", "bundle", "online"].includes(offerTab)) return false
+    return true
+  }), [products, offerTab, bankOffers.offers])
 
   // ── Derived options ─────────────────────────────────────────────────
   const subCategoryCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const p of products) {
-      const sub = normaliseSubCategory(getProductSubCategory(p))
+    for (const p of eligibleProducts) {
+      const sub = shopperCategory(p)
       if (sub) counts.set(sub, (counts.get(sub) || 0) + 1)
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
-  }, [products])
+  }, [eligibleProducts])
 
   const brandCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const p of products) {
+    for (const p of eligibleProducts) {
       const brand = getProductBrand(p)
       if (brand) counts.set(brand, (counts.get(brand) || 0) + 1)
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
-  }, [products])
-
-  const tiles = useMemo(
-    () =>
-      subCategoryCounts.slice(0, 14).map(([label]) => ({
-        label,
-        image: subCategoryImages[label.toLowerCase()] || undefined,
-      })),
-    [subCategoryCounts, subCategoryImages],
-  )
+  }, [eligibleProducts])
 
   // ── Filtering ───────────────────────────────────────────────────────
   const filteredProducts = useMemo(
     () =>
-      products.filter((product: any) => {
+      eligibleProducts.filter((product) => {
         const term = searchTerm.trim().toLowerCase()
         if (
           term &&
@@ -299,18 +303,18 @@ export default function ProductsPage() {
           const matching = categories.find(
             (c) => c.id === raw || c.name.toLowerCase() === raw.toLowerCase(),
           )
-          if (!selectedCategories.includes(raw) && !(matching && selectedCategories.includes(matching.id))) return false
+          if (!selectedCategories.some(value => value.toLowerCase() === raw.toLowerCase() ||
+            value === matching?.id || value.toLowerCase() === matching?.name.toLowerCase())) return false
         }
 
         if (selectedSubCategories.length > 0) {
-          // Tiles select the collapsed label ("TV"), but footer/menu links deep-link
-          // the exact stored value ('TV 43"'), so match either form.
+          // Sidebar categories are normalized; existing menu links use stored labels.
           const rawSub = getProductSubCategory(product).toLowerCase()
           const sub = normaliseSubCategory(getProductSubCategory(product)).toLowerCase()
           if (
             !selectedSubCategories.some((s) => {
               const target = s.toLowerCase()
-              return target === sub || target === rawSub
+              return target === sub || target === rawSub || target === shopperCategory(product).toLowerCase()
             })
           )
             return false
@@ -323,14 +327,14 @@ export default function ProductsPage() {
 
         if (product.price < priceRange[0] || product.price > priceRange[1]) return false
 
-        if (minDiscount > 0 && calculateDiscount(getEffectiveMRP(product), product.price) < minDiscount) return false
-        if (minRating > 0 && getRatingInfo(product).rating < minRating) return false
-        if (inStockOnly && typeof product.stock === "number" && product.stock <= 0) return false
-
+        if (minDiscount > 0 && calculateDiscount(getCatalogMRP(product), product.price) < minDiscount) return false
+        if (minRating > 0 && getCatalogRatingInfo(product).rating < minRating) return false
+        if (availability === "in" && !isInStock(product)) return false
+        if (availability === "out" && isInStock(product)) return false
         return true
       }),
     [
-      products,
+      eligibleProducts,
       categories,
       searchTerm,
       selectedCategories,
@@ -339,7 +343,7 @@ export default function ProductsPage() {
       priceRange,
       minDiscount,
       minRating,
-      inStockOnly,
+      availability,
     ],
   )
 
@@ -347,7 +351,7 @@ export default function ProductsPage() {
   // erase the sibling options from the sidebar.
   const facets = useMemo(() => buildFacets(filteredProducts), [filteredProducts])
   const facetedProducts = useMemo(
-    () => filteredProducts.filter((p: any) => matchesFacets(p, facetSelection)),
+    () => filteredProducts.filter((p) => matchesFacets(p, facetSelection)),
     [filteredProducts, facetSelection],
   )
 
@@ -361,13 +365,13 @@ export default function ProductsPage() {
       case "discount":
         return list.sort(
           (a, b) =>
-            calculateDiscount(getEffectiveMRP(b), b.price) - calculateDiscount(getEffectiveMRP(a), a.price),
+            calculateDiscount(getCatalogMRP(b), b.price) - calculateDiscount(getCatalogMRP(a), a.price),
         )
       case "rating":
-        return list.sort((a, b) => getRatingInfo(b).rating - getRatingInfo(a).rating)
+        return list.sort((a, b) => getCatalogRatingInfo(b).rating - getCatalogRatingInfo(a).rating)
       case "newest":
         return list.sort(
-          (a: any, b: any) =>
+          (a, b) =>
             (new Date(b.createdAt ?? b.updatedAt ?? 0).getTime() || 0) -
             (new Date(a.createdAt ?? a.updatedAt ?? 0).getTime() || 0),
         )
@@ -388,9 +392,12 @@ export default function ProductsPage() {
     priceRange,
     minDiscount,
     minRating,
-    inStockOnly,
+    availability,
     sortBy,
     facetSelection,
+    offerTab,
+    products,
+    bankOffers.offers,
   ])
 
   const totalPages = Math.max(1, Math.ceil(sortedProducts.length / itemsPerPage))
@@ -404,7 +411,9 @@ export default function ProductsPage() {
     selectedSubCategories[0] ||
     (selectedCategories[0] ? getCategoryName(selectedCategories[0]) : "") ||
     ""
-  const heading = activeScope ? titleCase(activeScope) : "All Products"
+  const heading = offerTab === "all-products" ? (activeScope ? titleCase(activeScope) : "All Products") : marketing.text("results", "title")
+  const pageNumbers = [...new Set([1, ...Array.from({ length: 5 }, (_, index) => currentPage - 2 + index), totalPages])]
+    .filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b)
 
   const heroBanners = useListingBanners("hero", activeScope)
   const promoBanners = useListingBanners("promo", activeScope)
@@ -415,7 +424,9 @@ export default function ProductsPage() {
     setPriceRange(priceBandActive(band) ? [0, PRICE_MAX] : band)
 
   const toggleIn = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string) =>
-    setter((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]))
+    setter((prev) => (prev.some(item => item.toLowerCase() === value.toLowerCase())
+      ? prev.filter(item => item.toLowerCase() !== value.toLowerCase())
+      : [...prev, value]))
 
   const toggleSubCategory = toggleIn(setSelectedSubCategories)
   const toggleBrand = toggleIn(setSelectedBrands)
@@ -430,7 +441,7 @@ export default function ProductsPage() {
     setPriceRange([0, PRICE_MAX])
     setMinDiscount(0)
     setMinRating(0)
-    setInStockOnly(false)
+    setAvailability("all")
     setFacetSelection({})
     setSearchTerm("")
   }
@@ -441,7 +452,8 @@ export default function ProductsPage() {
     selectedBrands.length > 0 ||
     minDiscount > 0 ||
     minRating > 0 ||
-    inStockOnly ||
+    availability !== "all" ||
+    Boolean(searchTerm) ||
     countActiveFacets(facetSelection) > 0 ||
     !(priceRange[0] === 0 && priceRange[1] === PRICE_MAX)
 
@@ -484,14 +496,14 @@ export default function ProductsPage() {
         </div>
       </FilterSection>
 
-      <FilterSection title="Brand">
+      <FilterSection key={offerTab === "brand" ? "brand-offers" : "brand-filter"} title="Brand" defaultOpen={offerTab === "brand"}>
         <div className="max-h-64 overflow-y-auto pr-1">
           {visibleBrands.map(([label, count]) => (
             <CheckOption
               key={label}
-              label={titleCase(label)}
+              label={label}
               count={count}
-              checked={selectedBrands.includes(label)}
+              checked={selectedBrands.some(brand => brand.toLowerCase() === label.toLowerCase())}
               onChange={() => toggleBrand(label)}
             />
           ))}
@@ -507,7 +519,7 @@ export default function ProductsPage() {
         )}
       </FilterSection>
 
-      <FilterSection title="Price Range">
+      <FilterSection title="Price Range" defaultOpen={false}>
         {PRICE_BANDS.map((band) => (
           <CheckOption
             key={band.label}
@@ -529,8 +541,9 @@ export default function ProductsPage() {
         ))}
       </FilterSection>
 
-      <FilterSection title="Availability" defaultOpen={false}>
-        <CheckOption label="In stock only" checked={inStockOnly} onChange={() => setInStockOnly((v) => !v)} />
+      <FilterSection title="Availability">
+        <CheckOption label="In Stock" count={eligibleProducts.filter(isInStock).length} checked={availability === "in"} onChange={() => setAvailability(value => value === "in" ? "all" : "in")} />
+        <CheckOption label="Out of Stock" count={eligibleProducts.filter(product => !isInStock(product)).length} checked={availability === "out"} onChange={() => setAvailability(value => value === "out" ? "all" : "out")} />
       </FilterSection>
 
       <FilterSection title="Rating" defaultOpen={false}>
@@ -553,32 +566,24 @@ export default function ProductsPage() {
   )
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen min-w-0 flex-col bg-white">
       <Header />
 
-      <main className="flex-grow">
+      <main id="main-content" className="w-full min-w-0 flex-grow">
         <div className="section-container py-4">
+          <MarketingStatus page="products" />
           <nav className="flex items-center text-[13px] text-gray-500" aria-label="Breadcrumb">
             <Link href="/" className="hover:text-[#1560BD]">
               Home
             </Link>
             <span className="mx-2 text-gray-300">/</span>
-            <span className="font-medium text-gray-700">{heading}</span>
+            <span className="font-medium text-gray-700">Offers</span>
           </nav>
 
-          {heroBanners[0] && (
-            <div className="mt-3">
-              <ListingHero banner={heroBanners[0]} />
-            </div>
-          )}
+          <div className="mt-3"><OffersHero banner={heroBanners[0]} /></div>
+          <OfferTabs selected={offerTab} onSelect={setOfferTab} />
 
-          {tiles.length > 0 && (
-            <div className="mt-4">
-              <SubCategoryTiles items={tiles} selected={selectedSubCategories} onToggle={toggleSubCategory} />
-            </div>
-          )}
-
-          <div className="mt-5 flex gap-5">
+          <div className="mt-4 flex gap-4">
             {showFilters && (
               <div
                 className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
@@ -587,11 +592,15 @@ export default function ProductsPage() {
             )}
 
             <aside
+              ref={filterRef}
+              role={showFilters ? "dialog" : undefined}
+              aria-modal={showFilters ? true : undefined}
+              aria-label="Product filters"
               className={`${
                 showFilters
                   ? "fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[330px] overflow-y-auto bg-white p-3 shadow-2xl"
                   : "hidden"
-              } flex-shrink-0 lg:block lg:w-[236px] lg:bg-transparent lg:p-0 lg:shadow-none`}
+              } flex-shrink-0 lg:block lg:w-[195px] lg:bg-transparent lg:p-0 lg:shadow-none`}
             >
               <div className="lg:sticky lg:top-24">{filterPanel}</div>
             </aside>
@@ -606,14 +615,15 @@ export default function ProductsPage() {
                 Filters
               </button>
 
-              {promoBanners.length > 0 && (
-                <div className="mb-5">
-                  <ListingPromoRow banners={promoBanners} />
-                </div>
-              )}
+              <div className="mb-4"><OffersPromotions banners={promoBanners} onBank={() => setOfferTab("bank")} onExchange={() => setOfferTab("exchange")} /></div>
+
+              {(offerTab === "bank" || offerTab === "no-cost-emi") && <div className="mb-4">
+                <RazorpayOffers offers={offerTab === "no-cost-emi" ? currentOffers.filter(isNoCostEmiOffer) : currentOffers}
+                  loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} mode={offerTab === "no-cost-emi" ? "emi" : "offers"} />
+              </div>}
 
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-xl font-bold text-gray-900">
+                <h1 className={marketing.enabled("results") ? "text-xl font-bold text-gray-900" : "sr-only"}>
                   {heading}{" "}
                   <span className="text-sm font-normal text-gray-500">
                     ({sortedProducts.length.toLocaleString("en-IN")} Products)
@@ -629,7 +639,7 @@ export default function ProductsPage() {
                     onChange={(e) => setSortBy(e.target.value)}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-700 focus:border-[#1560BD] focus:outline-none"
                   >
-                    <option value="relevance">Popularity</option>
+                    <option value="relevance">Featured</option>
                     <option value="price-asc">Price: Low to High</option>
                     <option value="price-desc">Price: High to Low</option>
                     <option value="discount">Discount</option>
@@ -649,16 +659,17 @@ export default function ProductsPage() {
                     <FilterPill key={`sub-${sub}`} label={titleCase(sub)} onRemove={() => toggleSubCategory(sub)} />
                   ))}
                   {selectedBrands.map((brand) => (
-                    <FilterPill key={`brand-${brand}`} label={titleCase(brand)} onRemove={() => toggleBrand(brand)} />
+                    <FilterPill key={`brand-${brand}`} label={brand} onRemove={() => toggleBrand(brand)} />
                   ))}
+                  {searchTerm && <FilterPill label={`Search: ${searchTerm}`} onRemove={() => setSearchTerm("")} />}
                   {minDiscount > 0 && (
                     <FilterPill label={`${minDiscount}%+ off`} onRemove={() => setMinDiscount(0)} />
                   )}
                   {minRating > 0 && <FilterPill label={`${minRating}★ & above`} onRemove={() => setMinRating(0)} />}
-                  {inStockOnly && <FilterPill label="In stock" onRemove={() => setInStockOnly(false)} />}
+                  {availability !== "all" && <FilterPill label={availability === "in" ? "In stock" : "Out of stock"} onRemove={() => setAvailability("all")} />}
                   {!(priceRange[0] === 0 && priceRange[1] === PRICE_MAX) && (
                     <FilterPill
-                      label={`₹${priceRange[0].toLocaleString("en-IN")} – ₹${priceRange[1].toLocaleString("en-IN")}`}
+                      label={priceRange[1] === Infinity ? `Above ₹${priceRange[0].toLocaleString("en-IN")}` : `₹${priceRange[0].toLocaleString("en-IN")} – ₹${priceRange[1].toLocaleString("en-IN")}`}
                       onRemove={() => setPriceRange([0, PRICE_MAX])}
                     />
                   )}
@@ -671,7 +682,7 @@ export default function ProductsPage() {
               )}
 
               {isLoading ? (
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+                <div role="status" aria-label="Loading products" className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="animate-pulse rounded-lg border border-gray-200 bg-white">
                       <div className="aspect-[4/3] rounded-t-lg bg-gray-100" />
@@ -687,54 +698,66 @@ export default function ProductsPage() {
               ) : error ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
                   {error}
+                  <button type="button" onClick={() => setRetryCount(count => count + 1)} className="ml-3 underline">Retry products</button>
                 </div>
               ) : currentProducts.length === 0 ? (
                 <div className="rounded-lg border border-gray-200 bg-white py-16 text-center">
-                  <p className="text-gray-500">No products found matching your criteria.</p>
+                  <p className={`px-4 text-sm text-gray-500 ${offerTab === "exchange" && !marketing.enabled("results") ? "sr-only" : ""}`}>
+                    {offerTab === "exchange" ? marketing.text("results", "exchangeDescription") :
+                      ["festival", "bundle", "online"].includes(offerTab) ? "No eligible products are currently published for this offer category. Explore current catalog savings instead." :
+                      "No products found matching your criteria."}
+                  </p>
+                  {offerTab === "exchange" && marketing.enabled("results") && <Link href={marketing.text("results", "exchangeCtaLink")} className="mt-3 inline-block text-sm font-semibold text-[#1560bd] underline">{marketing.text("results", "exchangeCtaText")}</Link>}
                   <button
                     type="button"
-                    onClick={clearFilters}
+                    onClick={() => { clearFilters(); setOfferTab("all-products") }}
                     className="mt-4 rounded-md bg-[#1560BD] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4C99]"
                   >
-                    Clear Filters
+                    View All Products
                   </button>
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+                  <div aria-label="Product results" className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                     {currentProducts.map((product) => (
-                      <ProductListingCard key={product.id} product={product} />
+                      <ProductListingCard key={product.id} product={product} offersMode
+                        offerLabels={applicableOffers(bankOffers.offers, Number(product.price)).slice(0, 2).map(offer => `${offer.name} · Terms apply`)} />
                     ))}
                   </div>
 
                   {totalPages > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
+                    <nav aria-label="Product pagination" className="mt-5 flex flex-wrap items-center justify-center gap-2">
                       <button
                         type="button"
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 disabled:opacity-40"
+                        aria-label="Previous page"
+                        className="rounded-md border border-gray-200 bg-white p-2 text-[#1560bd] disabled:opacity-40"
                       >
-                        Previous
+                        <ChevronLeft size={14} />
                       </button>
-                      <span className="px-2 text-[13px] text-gray-600">
-                        Page {currentPage} of {totalPages}
-                      </span>
+                      {pageNumbers.map((page, index) => <span key={page} className="inline-flex items-center gap-2">
+                        {index > 0 && page - pageNumbers[index - 1] > 1 && <span className="text-xs text-slate-500">...</span>}
+                        <button type="button" aria-label={`Page ${page}`} aria-current={currentPage === page ? "page" : undefined}
+                          onClick={() => setCurrentPage(page)} className={`h-8 min-w-8 rounded px-2 text-xs ${currentPage === page ? "bg-[#1560bd] font-bold text-white" : "text-[#0f2557] hover:bg-blue-50"}`}>{page}</button>
+                      </span>)}
                       <button
                         type="button"
                         onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 disabled:opacity-40"
+                        aria-label="Next page"
+                        className="rounded-md border border-gray-200 bg-white p-2 text-[#1560bd] disabled:opacity-40"
                       >
-                        Next
+                        <ChevronRight size={14} />
                       </button>
-                    </div>
+                    </nav>
                   )}
                 </>
               )}
             </div>
           </div>
         </div>
+        <OffersTrustStrip />
       </main>
 
       <Footer />

@@ -182,6 +182,7 @@ function ResetPasswordForm() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                       className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
                       {showPassword ? (
@@ -243,6 +244,7 @@ function ResetPasswordForm() {
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
                       className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
                       {showConfirmPassword ? (
@@ -259,22 +261,22 @@ function ResetPasswordForm() {
                   <p className="text-xs font-medium text-gray-700 mb-2">Password must contain:</p>
                   <ul className="text-xs text-gray-600 space-y-1">
                     <li className="flex items-center">
-                      <span className={password.length >= 8 ? "text-green-600" : ""}>
+                      <span className={password.length >= 8 ? "text-green-700" : ""}>
                         {password.length >= 8 ? "✓" : "○"} At least 8 characters
                       </span>
                     </li>
                     <li className="flex items-center">
-                      <span className={/[A-Z]/.test(password) ? "text-green-600" : ""}>
+                      <span className={/[A-Z]/.test(password) ? "text-green-700" : ""}>
                         {/[A-Z]/.test(password) ? "✓" : "○"} One uppercase letter
                       </span>
                     </li>
                     <li className="flex items-center">
-                      <span className={/[a-z]/.test(password) ? "text-green-600" : ""}>
+                      <span className={/[a-z]/.test(password) ? "text-green-700" : ""}>
                         {/[a-z]/.test(password) ? "✓" : "○"} One lowercase letter
                       </span>
                     </li>
                     <li className="flex items-center">
-                      <span className={/[0-9]/.test(password) ? "text-green-600" : ""}>
+                      <span className={/[0-9]/.test(password) ? "text-green-700" : ""}>
                         {/[0-9]/.test(password) ? "✓" : "○"} One number
                       </span>
                     </li>

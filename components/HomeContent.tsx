@@ -2,16 +2,25 @@
 
 import { useState, useEffect, useCallback } from "react"
 import dynamic from "next/dynamic"
-import { fetchWithCache, revalidateCache, prefetchAll } from "@/utils/cache"
+import { fetchWithCache, revalidateCache } from "@/utils/cache"
+import { catalogCategoryListResponseSchema } from "@/lib/catalog-list-response"
+import { homeSectionListResponseSchema } from "@/lib/home-components-client"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import HeroSection from "@/components/HeroSection"
 import CategoryCircles from "@/components/CategoryCircles"
 import TrustBar from "@/components/TrustBar"
 import { Reveal, StaggerChildren, StaggerItem } from '@/components/motion/AnimationComponents'
-import { usePrefetchHomeProducts } from '@/hooks/usePrefetchHomeProducts'
+import { usePrefetchHomeProducts, homeComponentResponseSchema, type HomeComponent } from '@/hooks/usePrefetchHomeProducts'
 import { DEALS_ANCHOR_ID } from '@/utils/deals'
-import { buildCategoryRails, buildPriceRails, buildCategoryTiles, buildBrandList, pickSpotlights, type Rail } from '@/utils/catalog'
+import { buildCategoryRails, buildPriceRails, buildCategoryTiles, buildBrandList, pickSpotlights, catalogProductResponseSchema, catalogProductListResponseSchema, type CatalogProduct, type Rail } from '@/utils/catalog'
+import { z } from 'zod'
+
+const categoryResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  isEnabled: z.boolean().optional(),
+}).passthrough()
 
 // ─── Dynamic imports: below-the-fold components loaded on demand ──────
 const DealsOfTheDay = dynamic(() => import("@/components/DealsOfTheDay"))
@@ -29,16 +38,16 @@ const DATA_TTL = 5 * 60 * 1000 // 5 minutes
 export default function HomeContent() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [categoryIds, setCategoryIds] = useState<{ [key: string]: string }>({})
-  const [homeComponents, setHomeComponents] = useState<any[]>([])
-  const [manualProductsMap, setManualProductsMap] = useState<Record<string, any[]>>({})
-  const [categoryProductsMap, setCategoryProductsMap] = useState<Record<string, any[]>>({})
+  const [homeComponents, setHomeComponents] = useState<HomeComponent[]>([])
+  const [manualProductsMap, setManualProductsMap] = useState<Record<string, CatalogProduct[]>>({})
+  const [categoryProductsMap, setCategoryProductsMap] = useState<Record<string, CatalogProduct[]>>({})
   const [catalogRails, setCatalogRails] = useState<Rail[]>([])
-  const [catalogProducts, setCatalogProducts] = useState<any[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
 
-  const handleCategoryProducts = useCallback((map: Record<string, any[]>) => {
+  const handleCategoryProducts = useCallback((map: Record<string, CatalogProduct[]>) => {
     setCategoryProductsMap(prev => ({ ...prev, ...map }))
   }, [])
-  const handleManualProducts = useCallback((map: Record<string, any[]>) => {
+  const handleManualProducts = useCallback((map: Record<string, CatalogProduct[]>) => {
     setManualProductsMap(prev => ({ ...prev, ...map }))
   }, [])
 
@@ -49,9 +58,9 @@ export default function HomeContent() {
       const storedCategories = localStorage.getItem("categories")
       if (storedCategories) {
         try {
-          const categories = JSON.parse(storedCategories)
+          const categories = z.array(categoryResponseSchema).parse(JSON.parse(storedCategories))
           const ids: { [key: string]: string } = {}
-          categories.forEach((cat: any) => {
+          categories.forEach((cat) => {
             const name = cat.name.toLowerCase()
             if (name.includes("home") && name.includes("appliance")) ids.home = cat.id
             if (name.includes("panel")) ids.panel = cat.id
@@ -59,13 +68,17 @@ export default function HomeContent() {
             if (name.includes("refrigerators") || name.includes("fridge")) ids.refrigerators = cat.id
           })
           setCategoryIds(ids)
-        } catch { /* corrupted localStorage data — will refetch from API */ }
+        } catch (error) {
+          console.warn("Ignoring invalid cached categories; fetching current data", error)
+        }
       }
       const storedHomeComponents = localStorage.getItem("home-components")
       if (storedHomeComponents) {
         try {
-          setHomeComponents(JSON.parse(storedHomeComponents))
-        } catch { /* corrupted localStorage data — will refetch from API */ }
+          setHomeComponents(z.array(homeComponentResponseSchema).parse(JSON.parse(storedHomeComponents)))
+        } catch (error) {
+          console.warn("Ignoring invalid cached homepage sections; fetching current data", error)
+        }
       }
     }
 
@@ -73,12 +86,12 @@ export default function HomeContent() {
       const allCategories = await fetchWithCache("categories", async () => {
         const response = await fetch("/api/categories")
         if (!response.ok) throw new Error("Failed to fetch categories")
-        return response.json()
-      }, DATA_TTL)
-      const categories = allCategories.filter((cat: any) => cat.isEnabled !== false)
+        return z.array(categoryResponseSchema).parse(await response.json())
+      }, catalogCategoryListResponseSchema, DATA_TTL)
+      const categories = allCategories.filter((cat) => cat.isEnabled !== false)
       localStorage.setItem("categories", JSON.stringify(categories))
       const ids: { [key: string]: string } = {}
-      categories.forEach((cat: any) => {
+      categories.forEach((cat) => {
         const name = cat.name.toLowerCase()
         if (name.includes("home") && name.includes("appliance")) ids.home = cat.id
         if (name.includes("panel")) ids.panel = cat.id
@@ -89,28 +102,28 @@ export default function HomeContent() {
       revalidateCache("categories", async () => {
         const response = await fetch("/api/categories")
         if (!response.ok) throw new Error("Failed to fetch categories")
-        const allFresh = await response.json()
-        const fresh = allFresh.filter((cat: any) => cat.isEnabled !== false)
+        const allFresh = z.array(categoryResponseSchema).parse(await response.json())
+        const fresh = allFresh.filter((cat) => cat.isEnabled !== false)
         localStorage.setItem("categories", JSON.stringify(fresh))
         return fresh
-      }, DATA_TTL)
+      }, catalogCategoryListResponseSchema)
     }
 
     const fetchHomeComponents = async () => {
       const data = await fetchWithCache("home-components", async () => {
         const res = await fetch('/api/home-components')
         if (!res.ok) throw new Error("Failed to fetch home components")
-        return res.json()
-      }, DATA_TTL)
+        return z.array(homeComponentResponseSchema).parse(await res.json())
+      }, homeSectionListResponseSchema, DATA_TTL)
       localStorage.setItem("home-components", JSON.stringify(data))
       setHomeComponents(data || [])
       revalidateCache("home-components", async () => {
         const res = await fetch('/api/home-components')
         if (!res.ok) throw new Error("Failed to fetch home components")
-        const fresh = await res.json()
+        const fresh = z.array(homeComponentResponseSchema).parse(await res.json())
         localStorage.setItem("home-components", JSON.stringify(fresh))
         return fresh
-      }, DATA_TTL)
+      }, homeSectionListResponseSchema)
     }
 
     const fetchCatalogRails = async () => {
@@ -118,18 +131,18 @@ export default function HomeContent() {
         const products = await fetchWithCache("products-card", async () => {
           const res = await fetch('/api/products?fields=card')
           if (!res.ok) throw new Error("Failed to fetch products")
-          return res.json()
-        }, DATA_TTL)
+          return z.array(catalogProductResponseSchema).parse(await res.json())
+        }, catalogProductListResponseSchema, DATA_TTL)
         if (!Array.isArray(products)) return
         setCatalogProducts(products)
         setCatalogRails([...buildCategoryRails(products), ...buildPriceRails(products)])
-      } catch {
-        /* rails are supplementary — the page still works without them */
+      } catch (error) {
+        console.error("Failed to load homepage catalogue", error)
       }
     }
 
-    fetchCategoryIds()
-    fetchHomeComponents()
+    fetchCategoryIds().catch(error => console.error("Failed to load homepage categories", error))
+    fetchHomeComponents().catch(error => console.error("Failed to load homepage sections", error))
     fetchCatalogRails()
     setIsLoaded(true)
   }, [])
@@ -207,7 +220,7 @@ export default function HomeContent() {
                   <StaggerItem key={c.id}>
                     <CategoryProductsSection
                       categoryId={catId}
-                      categoryName={c.title || undefined}
+                      categoryName={c.title || ""}
                       prefetchedProducts={categoryProductsMap[catId]}
                     />
                   </StaggerItem>

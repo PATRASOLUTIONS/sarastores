@@ -33,6 +33,8 @@ Write-Host "Collecting files..." -ForegroundColor Cyan
 $rootPrefix = $root.TrimEnd('\') + '\'
 $files = Get-ChildItem -Path $root -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
     $rel = $_.FullName.Substring($rootPrefix.Length)
+    if ($rel.StartsWith('scripts\archive\', [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+    if ($rel.StartsWith('documents\private-artifacts\', [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
     $parts = $rel.Split('\')
     $dirHit = $false
     foreach ($p in $parts[0..([Math]::Max(0, $parts.Length - 2))]) {

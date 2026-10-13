@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { Search, ChevronDown, ChevronUp, ShoppingCart, CreditCard, Truck, Package, RotateCcw, Shield, User, Headphones, MapPin, Gift, Monitor, Tag, MessageSquare } from "lucide-react"
+import { Search, ChevronDown, ChevronUp, ShoppingCart, CreditCard, Truck, Package, RotateCcw, Shield, User, Headphones, MapPin, Gift, Monitor, Tag, MessageSquare, type LucideIcon } from "lucide-react"
 import { FAQ_CATEGORIES as FAQ_CONTENT, type FaqItem } from "@/lib/faq-data"
 
 interface FAQItem {
@@ -14,14 +14,14 @@ interface FAQItem {
 interface FAQCategory {
   id: string
   label: string
-  icon: any
+  icon: LucideIcon
   color: string
   items: FAQItem[]
 }
 
 // Presentation only; the copy itself lives in lib/faq-data.ts so the FAQPage
 // schema in the layout cannot drift from what is rendered here.
-const CATEGORY_STYLE: Record<string, { icon: any; color: string }> = {
+const CATEGORY_STYLE: Record<string, { icon: LucideIcon; color: string }> = {
   ordering: { icon: ShoppingCart, color: "from-blue-500 to-blue-600" },
   payment: { icon: CreditCard, color: "from-emerald-500 to-emerald-600" },
   shipping: { icon: Truck, color: "from-amber-500 to-amber-600" },
@@ -134,7 +134,7 @@ export default function FAQPage() {
                           <Icon className="w-4 h-4 text-white" />
                         </div>
                         <span className="text-sm">{cat.label}</span>
-                        <span className="ml-auto text-xs text-gray-400">{cat.items.length}</span>
+                        <span className="ml-auto text-xs text-gray-600">{cat.items.length}</span>
                       </button>
                     )
                   })}
@@ -181,7 +181,7 @@ export default function FAQPage() {
                           <activeCat.icon className="w-5 h-5 text-white" />
                         </div>
                         <h2 className="text-2xl font-bold text-gray-900">{activeCat.label}</h2>
-                        <span className="text-sm text-gray-400 ml-1">({activeCat.items.length} questions)</span>
+                        <span className="text-sm text-gray-600 ml-1">({activeCat.items.length} questions)</span>
                       </div>
                       <div className="space-y-3">
                         {activeCat.items.map((item, idx) => (

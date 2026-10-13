@@ -9,7 +9,11 @@ export async function GET(request: Request) {
     const section = params.get("section")
     const liveOnly = params.get("live") === "true"
 
-    const collection = await getCollection("offers")
+    const collection = await getCollection<{
+      section?: string
+      active?: boolean
+      endsAt?: Date | string | number | null
+    }>("offers")
     const query: Record<string, unknown> = {}
     if (section) query.section = section
 
@@ -18,7 +22,7 @@ export async function GET(request: Request) {
 
     // Expiry is applied here rather than in the query so legacy offers with no
     // endsAt keep showing.
-    const visible = liveOnly ? normalizedOffers.filter((o: any) => isOfferLive(o)) : normalizedOffers
+    const visible = liveOnly ? normalizedOffers.filter((o) => isOfferLive(o)) : normalizedOffers
 
     return NextResponse.json({
       success: true,

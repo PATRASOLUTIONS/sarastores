@@ -5,7 +5,7 @@ import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { apiFetch } from "@/lib/api-client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Save, Eye } from "lucide-react"
@@ -24,7 +24,8 @@ interface ProductAdvertisementForm {
   order: number
 }
 
-export default function EditProductAdvertisementPage({ params }: { params: { id: string } }) {
+export default function EditProductAdvertisementPage({ params: pendingParams }: { params: Promise<{ id: string }> }) {
+  const params = use(pendingParams)
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const lock = useSubmitLock()

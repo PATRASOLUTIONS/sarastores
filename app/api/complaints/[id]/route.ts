@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCollection, createObjectId, normalizeId } from "@/lib/db-service"
 import { COMPLAINT_STATUS_LABELS } from "@/lib/complaintTypes"
 import { requireAdmin } from "@/lib/auth"
+import { UpdateComplaintSchema } from "@/lib/validation"
+import { complaintStatusTemplate, sendComplaintEmail } from "@/lib/complaint-email"
+import { handleApiError } from "@/lib/api-error"
+
+interface ComplaintDocument {
+  customerName: string
+  email: string
+  subject: string
+  orderNumber?: string | null
+  status: string
+  updatedAt?: Date
+  timeline?: Array<{ date: string; status: string; description: string }>
+  lastAdminNote?: string
+}
 
 // GET single complaint
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -9,7 +23,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   if (!guard.ok) return guard.response
   try {
     const { id } = await context.params
-    const collection = await getCollection("complaints")
+    const collection = await getCollection<ComplaintDocument>("complaints")
 
     let complaintId
     try {
@@ -37,14 +51,13 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   if (!guard.ok) return guard.response
   try {
     const { id } = await context.params
-    const body = await request.json()
-    const { status, adminNote } = body
-
-    if (!status) {
-      return NextResponse.json({ error: "Status is required" }, { status: 400 })
+    const parsed = UpdateComplaintSchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
+    const { status, adminNote } = parsed.data
 
-    const collection = await getCollection("complaints")
+    const collection = await getCollection<ComplaintDocument>("complaints")
 
     let complaintId
     try {
@@ -60,7 +73,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     }
 
     // Update timeline
-    const existingTimeline = complaint.timeline || []
     const statusDescriptions: Record<string, string> = {
       pending: "Complaint is pending review",
       processing: "Complaint is being processed by our team",
@@ -70,55 +82,58 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       revoked: "Complaint has been revoked",
     }
 
-    existingTimeline.unshift({
+    const timelineEntry = {
       date: new Date().toISOString(),
       status: COMPLAINT_STATUS_LABELS[status] || status,
       description: adminNote || statusDescriptions[status] || "Status updated",
-    })
+    }
 
     const updateData = {
       status,
-      updatedAt: new Date(),
-      timeline: existingTimeline,
+      updatedAt: new Date(Math.max(Date.now(), (complaint.updatedAt?.getTime() ?? 0) + 1)),
       ...(adminNote && { lastAdminNote: adminNote }),
     }
 
-    await collection.updateOne({ _id: complaintId }, { $set: updateData })
+    const result = await collection.updateOne({
+      _id: complaintId,
+      updatedAt: complaint.updatedAt ?? { $exists: false },
+    }, {
+      $set: updateData,
+      $push: { timeline: { $each: [timelineEntry], $position: 0 } },
+    })
+    if (!result.acknowledged) throw new Error("Complaint update was not acknowledged")
+    if (result.matchedCount !== 1) {
+      return NextResponse.json({ error: "Complaint changed; reload before updating" }, { status: 409 })
+    }
 
     const updatedComplaint = await collection.findOne({ _id: complaintId })
+    if (!updatedComplaint) throw new Error("Updated complaint could not be reloaded")
     const normalizedComplaint = normalizeId(updatedComplaint)
+    let notification: { status: "sent" | "failed" } = { status: "failed" }
 
     // Send status update email
     try {
-      const emailTemplateId = getComplaintEmailTemplateId(status)
-      
-      await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/complaints/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      await sendComplaintEmail({
           to: normalizedComplaint.email,
-          templateId: emailTemplateId,
+          templateId: complaintStatusTemplate[status],
           data: {
             complaintId: normalizedComplaint.id,
             customerName: normalizedComplaint.customerName,
-            status,
-            complaintType: normalizedComplaint.complaintType,
             subject: normalizedComplaint.subject,
             orderNumber: normalizedComplaint.orderNumber,
-            productName: normalizedComplaint.productName,
             adminNote
           }
-        })
       })
+      notification = { status: "sent" }
     } catch (emailError) {
       console.error('Failed to send status update email:', emailError)
       // Don't fail the update if email fails
     }
 
-    return NextResponse.json({ complaint: normalizedComplaint })
+    return NextResponse.json({ complaint: normalizedComplaint, notification })
   } catch (error) {
-    console.error("Error updating complaint:", error)
-    return NextResponse.json({ error: "Failed to update complaint" }, { status: 500 })
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    return handleApiError(error, "Failed to update complaint")
   }
 }
 
@@ -147,24 +162,5 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   } catch (error) {
     console.error("Error deleting complaint:", error)
     return NextResponse.json({ error: "Failed to delete complaint" }, { status: 500 })
-  }
-}
-
-function getComplaintEmailTemplateId(status: string): string {
-  switch (status) {
-    case 'pending':
-      return 'COMPLAINT_PENDING'
-    case 'processing':
-      return 'COMPLAINT_PROCESSING'
-    case 'refund_initiated':
-      return 'COMPLAINT_REFUND_INITIATED'
-    case 'no_refund':
-      return 'COMPLAINT_NO_REFUND'
-    case 'resolved':
-      return 'COMPLAINT_RESOLVED'
-    case 'revoked':
-      return 'COMPLAINT_REVOKED'
-    default:
-      return 'COMPLAINT_STATUS_UPDATE'
   }
 }

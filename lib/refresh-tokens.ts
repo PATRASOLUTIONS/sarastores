@@ -18,6 +18,7 @@
 
 import crypto from "crypto"
 import { getCollection } from "@/lib/db-service"
+import { getAuthenticatedUserById } from "@/lib/auth-credentials"
 
 export const REFRESH_TOKENS_COLLECTION = "refresh_tokens"
 
@@ -47,6 +48,7 @@ export interface RefreshTokenRecord {
   rotatedAt?: Date
   revokedAt?: Date
   revokedReason?: string
+  sessionVersion?: number
 }
 
 function hashToken(raw: string): string {
@@ -73,7 +75,10 @@ export async function issueRefreshToken(
   userId: string,
   device: DeviceInfo = {},
   familyId?: string,
+  sessionVersion?: number,
 ): Promise<{ token: string; expiresAt: Date; familyId: string }> {
+  const user = await getAuthenticatedUserById(userId)
+  if (!user) throw new Error("Cannot issue a refresh token for an inactive account")
   const collection = await getCollection(REFRESH_TOKENS_COLLECTION)
   const token = newOpaqueToken()
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000)
@@ -83,6 +88,7 @@ export async function issueRefreshToken(
     tokenHash: hashToken(token),
     familyId: resolvedFamily,
     userId,
+    sessionVersion: sessionVersion ?? user.sessionVersion,
     ...sanitizeDevice(device),
     createdAt: new Date(),
     expiresAt,
@@ -92,7 +98,7 @@ export async function issueRefreshToken(
 }
 
 export type RotateResult =
-  | { ok: true; userId: string; token: string; expiresAt: Date; familyId: string }
+  | { ok: true; userId: string; token: string; expiresAt: Date; familyId: string; sessionVersion: number }
   | { ok: false; reason: "not_found" | "expired" | "revoked" | "reused" }
 
 /**
@@ -120,6 +126,19 @@ export async function rotateRefreshToken(
   }
   if (record.revokedAt) return { ok: false, reason: "revoked" }
   if (record.expiresAt.getTime() <= Date.now()) return { ok: false, reason: "expired" }
+  const user = await getAuthenticatedUserById(record.userId)
+  if (!user || user.sessionVersion !== (record.sessionVersion ?? 0)) {
+    await revokeFamily(record.familyId, "account_session_revoked")
+    return { ok: false, reason: "revoked" }
+  }
+  const claimed = await collection.updateOne(
+    { tokenHash: record.tokenHash, rotatedAt: { $exists: false }, revokedAt: { $exists: false }, expiresAt: { $gt: new Date() } },
+    { $set: { rotatedAt: new Date(), lastUsedAt: new Date() } },
+  )
+  if (!claimed.modifiedCount) {
+    await revokeFamily(record.familyId, "concurrent_refresh_token_reuse")
+    return { ok: false, reason: "reused" }
+  }
 
   const next = await issueRefreshToken(
     record.userId,
@@ -129,14 +148,9 @@ export async function rotateRefreshToken(
       platform: device.platform ?? record.platform,
     },
     record.familyId,
+    record.sessionVersion ?? 0,
   )
-
-  await collection.updateOne(
-    { tokenHash: record.tokenHash },
-    { $set: { rotatedAt: new Date(), lastUsedAt: new Date() } },
-  )
-
-  return { ok: true, userId: record.userId, token: next.token, expiresAt: next.expiresAt, familyId: record.familyId }
+  return { ok: true, userId: record.userId, token: next.token, expiresAt: next.expiresAt, familyId: record.familyId, sessionVersion: record.sessionVersion ?? 0 }
 }
 
 export async function revokeRefreshToken(rawToken: string, reason = "logout"): Promise<boolean> {

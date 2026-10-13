@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     // Re-read the user so a role change, or a deactivated account, takes effect
     // now rather than at the end of the refresh token's 60-day life.
     const user = await getAuthenticatedUserById(rotated.userId)
-    if (!user) {
+    if (!user || user.sessionVersion !== rotated.sessionVersion) {
       await revokeAllForUser(rotated.userId, "user_missing_or_inactive")
       return NextResponse.json({ error: "Account is no longer active" }, { status: 401 })
     }

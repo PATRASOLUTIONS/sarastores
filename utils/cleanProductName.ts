@@ -87,10 +87,27 @@ export function cleanProductDescription(description: string | null | undefined):
 
 const MARKETPLACE_NOISE = /(amazon|flipkart)\.in|home\s*&\s*kitchen|home\s+and\s+kitchen|see more product details|product description|free delivery by|emi from|amazon\.com|amazon prime|prime delivery/i
 
+interface DescriptionProduct {
+  name?: string | null
+  subCategory?: string | null
+  sub_category?: string | null
+  subcategory?: string | null
+  prod_desc?: string | null
+  subCategoryProdDesc?: string | null
+  category?: string | null
+  groupName?: string | null
+  manufacturerName?: string | null
+  manufacturer_name?: string | null
+  brand?: string | null
+  brands?: string[]
+  char_desc?: string | null
+  characteristics?: string | null
+}
+
 /**
  * Pick a sub-category label from any of the legacy fields the catalog uses.
  */
-function pickSubCategory(p: any): string {
+function pickSubCategory(p: DescriptionProduct | null | undefined): string {
   if (!p) return ""
   return (
     p.subCategory ||
@@ -109,7 +126,7 @@ function pickSubCategory(p: any): string {
  * fall back to the first word of the cleaned name (e.g. "Bosch" out of
  * "Bosch KGN56LB42I...").
  */
-function pickBrand(p: any, cleanNameStr: string): string {
+function pickBrand(p: DescriptionProduct | null | undefined, cleanNameStr: string): string {
   if (p) {
     const explicit =
       p.manufacturerName ||
@@ -133,23 +150,11 @@ function pickBrand(p: any, cleanNameStr: string): string {
  * storefront never shows a blank or duplicated-name "Product Description"
  * block.
  *
- * Mirrors the logic in `scripts/backfill-descriptions.js` so the
+ * Mirrors the logic in `scripts/backfill-descriptions.mjs` so the
  * server-rendered HTML always has *something* useful, even for products
  * the script has not yet touched.
  */
-export function generateProductDescription(product: {
-  name?: string | null
-  subCategory?: string | null
-  sub_category?: string | null
-  subcategory?: string | null
-  category?: string | null
-  groupName?: string | null
-  manufacturerName?: string | null
-  manufacturer_name?: string | null
-  brand?: string | null
-  char_desc?: string | null
-  characteristics?: string | null
-} | null | undefined): string {
+export function generateProductDescription(product: DescriptionProduct | null | undefined): string {
   if (!product) return ""
   const rawName = (product.name || "").toString().trim()
   const cleanedName = cleanProductName(rawName)

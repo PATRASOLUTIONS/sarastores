@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignsCollection, findCampaignBySlug, getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignsCollection, findCampaignBySlug, getCampaignCollection, type SpinCampaign } from "@/lib/spin-wheel-campaigns"
 import { requireAdmin } from "@/lib/auth"
+import { connectToDatabase } from "@/lib/mongodb"
+import { z } from "zod"
+
+const updateSchema = z.object({
+  name: z.string().trim().min(1).max(150).optional(),
+  description: z.string().max(5000).optional(),
+  isActive: z.boolean().optional(),
+}).strict().refine(value => Object.keys(value).length > 0)
 
 /** GET — fetch a single campaign by slug */
 export async function GET(
@@ -31,8 +39,8 @@ export async function GET(
         .toArray(),
     ])
 
-    const totalCoupons = couponStats.reduce((s: number, c: any) => s + c.total, 0)
-    const usedCoupons = couponStats.reduce((s: number, c: any) => s + c.used, 0)
+    const totalCoupons = couponStats.reduce((s: number, c) => s + c.total, 0)
+    const usedCoupons = couponStats.reduce((s: number, c) => s + c.used, 0)
 
     return NextResponse.json({
       id: campaign._id.toString(),
@@ -66,8 +74,9 @@ export async function PUT(
 
   try {
     const { slug } = await params
-    const body = await request.json()
-    const { name, description, isActive } = body
+    const parsed = updateSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: "Invalid campaign data" }, { status: 400 })
+    const { name, description, isActive } = parsed.data
 
     const col = await getCampaignsCollection()
     const campaign = await findCampaignBySlug(slug)
@@ -75,15 +84,18 @@ export async function PUT(
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 })
     }
 
-    const updateFields: Record<string, any> = { updatedAt: new Date() }
+    const updateFields: Partial<SpinCampaign> = { updatedAt: new Date() }
     if (name !== undefined) updateFields.name = name
     if (description !== undefined) updateFields.description = description
     if (isActive !== undefined) updateFields.isActive = isActive
 
-    await col.updateOne({ slug }, { $set: updateFields })
+    const updated = await col.updateOne({ slug }, { $set: updateFields })
+    if (!updated.acknowledged) throw new Error("Campaign update was not acknowledged")
+    if (updated.matchedCount !== 1) return NextResponse.json({ error: "Campaign not found" }, { status: 404 })
 
     return NextResponse.json({ success: true, message: "Campaign updated" })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
     console.error("Campaign PUT error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -111,7 +123,7 @@ export async function DELETE(
     }
 
     // Drop all prefixed collections
-    const { db } = await require("@/lib/mongodb").connectToDatabase()
+    const { db } = await connectToDatabase()
     const collectionsToDrop = [
       `spin_${slug}_participants`,
       `spin_${slug}_inventory`,
@@ -124,13 +136,14 @@ export async function DELETE(
     for (const collName of collectionsToDrop) {
       try {
         await db.dropCollection(collName)
-      } catch {
-        // collection might not exist
+      } catch (error) {
+        if (!error || typeof error !== "object" || !("code" in error) || error.code !== 26) throw error
       }
     }
 
     // Delete campaign metadata
-    await col.deleteOne({ slug })
+    const deleted = await col.deleteOne({ slug })
+    if (!deleted.acknowledged || deleted.deletedCount !== 1) throw new Error("Campaign deletion was not completed")
 
     return NextResponse.json({ success: true, message: `Campaign "${campaign.name}" deleted` })
   } catch (error) {

@@ -133,8 +133,8 @@ async function handlePost(req: PartnerAuthRequest) {
 }
 
 // Export wrapped handlers
-export const GET = withPartnerAuth(handleGet as any, ['wallet:read']);
-export const POST = withPartnerAuth(handlePost as any, ['wallet:write']);
+export const GET = withPartnerAuth(handleGet, ['wallet:read']);
+export const POST = withPartnerAuth(handlePost, ['wallet:write']);
 
 // Handle CORS preflight requests
 export { OPTIONS } from '@/lib/partner/auth';

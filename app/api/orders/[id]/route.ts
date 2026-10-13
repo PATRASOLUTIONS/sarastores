@@ -7,6 +7,9 @@ import { verifyGuestAccessToken } from "@/lib/guest-order"
 import { rebuildCustomerProfile, recordEvent, EARNING_STATUSES } from "@/lib/customer-profile"
 import { awardPointsForOrder, reverseOrderPoints } from "@/lib/loyalty"
 import { notifyOrderStatus } from "@/lib/push"
+import { AdminOrderUpdateSchema } from "@/lib/validation"
+import type { OrderDocument } from "@/lib/order-document"
+import type { UpdateFilter } from "mongodb"
 
 // Get a specific order
 export async function GET(
@@ -23,11 +26,6 @@ export async function GET(
 
   try {
     const { id } = await context.params
-    console.log("-----------------------------------------")
-    console.log("!!! API ORDER DETAIL - VERSION 2.3 !!!")
-    console.log("Order ID Search:", id)
-    console.log("-----------------------------------------")
-
     if (!id || typeof id !== 'string' || id.trim() === '') {
       return NextResponse.json(
         { error: "Invalid order ID provided" },
@@ -35,7 +33,7 @@ export async function GET(
       )
     }
 
-    let collection = await getCollection("orders")
+    let collection = await getCollection<OrderDocument>("orders")
     let orderId
 
     // Try to find in main orders collection first
@@ -51,7 +49,7 @@ export async function GET(
     // If not found in main orders, check partner_orders
     let source = 'direct'
     if (!order) {
-      const partnerCollection = await getCollection("partner_orders")
+      const partnerCollection = await getCollection<OrderDocument>("partner_orders")
       order = await partnerCollection.findOne({
         $or: [
           { orderId: id.trim() },
@@ -83,7 +81,7 @@ export async function GET(
     }
 
     // Default format for main orders
-    let formattedOrder: any = {
+    const formattedOrder = {
       id: normalizedOrder.id,
       orderId: normalizedOrder.orderId || null,
       userId: normalizedOrder.userId || normalizedOrder.customerId || null,
@@ -113,41 +111,51 @@ export async function GET(
       }),
       paymentMethod: normalizedOrder.paymentMethod || "cash",
       paymentDetails: normalizedOrder.paymentDetails || {},
+      paymentVerification: normalizedOrder.paymentVerification || { verified: false },
+      fulfilment: normalizedOrder.fulfilment || { method: "delivery" },
       trackingNumber: normalizedOrder.trackingNumber || (normalizedOrder.tracking?.trackingNumber) || null,
-      timeline: normalizedOrder.timeline || (normalizedOrder.statusHistory || []).map((sh: any) => ({
+      timeline: normalizedOrder.timeline || (normalizedOrder.statusHistory || []).map(sh => ({
         date: sh.timestamp || new Date().toISOString(),
         status: sh.status,
         description: sh.details?.note || `Order ${sh.status}`,
       })),
       notes: normalizedOrder.notes || null,
+      cancellation: normalizedOrder.cancellation,
+      licenseKey: normalizedOrder.licenseKey,
+      licenseKeys: normalizedOrder.licenseKeys,
+      licenseAssignedAt: normalizedOrder.licenseAssignedAt,
+      softwareLicenses: normalizedOrder.softwareLicenses,
       source: source,
       createdAt: normalizedOrder.createdAt || new Date().toISOString(),
       updatedAt: normalizedOrder.updatedAt || new Date().toISOString(),
     }
 
-    // Add partner specific fields
+    let partnerFields: {
+      partnerId?: string; partnerOrderId?: string; commission?: number
+      razorpayPaymentDetails?: unknown; partnerName?: string
+    } = {}
     if (source === 'partner') {
-      formattedOrder.partnerId = normalizedOrder.partnerId
-      formattedOrder.partnerOrderId = normalizedOrder.partnerOrderId
-      formattedOrder.commission = typeof normalizedOrder.commission === 'object'
-        ? (normalizedOrder.commission.amount || 0)
-        : (normalizedOrder.commission || 0)
-      formattedOrder.razorpayPaymentDetails = normalizedOrder.paymentDetails
-      formattedOrder.paymentVerification = normalizedOrder.paymentVerification || { verified: false }
+      partnerFields = {
+        partnerId: normalizedOrder.partnerId,
+        partnerOrderId: normalizedOrder.partnerOrderId,
+        commission: typeof normalizedOrder.commission === 'object' && normalizedOrder.commission
+          ? (normalizedOrder.commission.amount || 0) : (normalizedOrder.commission || 0),
+        razorpayPaymentDetails: normalizedOrder.paymentDetails,
+      }
 
       // Fetch partner name
       try {
-        const partnersCol = await getCollection("partners")
+        const partnersCol = await getCollection<{ id?: string; name?: string }>("partners")
         const partner = await partnersCol.findOne({ id: normalizedOrder.partnerId })
         if (partner) {
-          formattedOrder.partnerName = partner.name
+          partnerFields.partnerName = partner.name
         }
-      } catch (e) {
-        console.warn("Failed to fetch partner name for order detail")
+      } catch (error) {
+        console.warn("Failed to fetch partner name for order detail:", error)
       }
     }
 
-    return NextResponse.json(formattedOrder)
+    return NextResponse.json({ ...formattedOrder, ...partnerFields })
   } catch (error) {
     console.error("Error getting order:", error)
     return NextResponse.json({ error: "Failed to get order" }, { status: 500 })
@@ -166,7 +174,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       return NextResponse.json({ error: "Order ID is required" }, { status: 400 })
     }
 
-    let body
+    let body: unknown
     try {
       body = await request.json()
     } catch (jsonError) {
@@ -174,8 +182,13 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
     }
 
+    const parsed = AdminOrderUpdateSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid order update" }, { status: 400 })
+    }
+
     // Determine collection
-    let collection = await getCollection("orders")
+    let collection = await getCollection<OrderDocument>("orders")
     let orderId
     try {
       orderId = createObjectId(id)
@@ -187,10 +200,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     let isPartnerOrder = false
 
     if (!existingOrder) {
-      collection = await getCollection("partner_orders")
+      collection = await getCollection<OrderDocument>("partner_orders")
       existingOrder = await collection.findOne({
         $or: [
           { orderId: id },
+          { partnerOrderId: id },
           ...(orderId ? [{ _id: orderId }] : [])
         ]
       })
@@ -200,18 +214,18 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       isPartnerOrder = true
     }
 
-    const { id: _, _id, ...updateData } = body
-    updateData.updatedAt = new Date()
+    const now = new Date()
+    const { carrier, cancellation, ...fields } = parsed.data
+    const updateData = {
+      ...fields,
+      ...(carrier ? { "tracking.carrier": carrier } : {}),
+      ...(cancellation ? { cancellation: { ...cancellation, date: now.toISOString() } } : {}),
+      updatedAt: now,
+    }
+    const mutation: UpdateFilter<OrderDocument> = { $set: updateData }
+    const statusChanged = !!updateData.status && updateData.status !== existingOrder.status
 
-    if (updateData.status) {
-      const existingTimeline = isPartnerOrder
-        ? (existingOrder.statusHistory || []).map((sh: any) => ({
-          date: sh.timestamp,
-          status: sh.status,
-          description: sh.details?.note
-        }))
-        : (existingOrder.timeline || [])
-
+    if (statusChanged && updateData.status) {
       const statusDescriptions: Record<string, string> = {
         pending: "Your order is being processed",
         confirmed: "Your order has been confirmed",
@@ -228,39 +242,39 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       }
 
       if (isPartnerOrder) {
-        // Map back to partner_orders schema if needed, but for simplicity we'll just use statusHistory
         const newHistoryEntry = {
           status: updateData.status,
-          timestamp: new Date(),
+          timestamp: now,
           details: { note: statusDescriptions[updateData.status] }
         }
-        updateData.statusHistory = [...(existingOrder.statusHistory || []), newHistoryEntry]
+        mutation.$push = { statusHistory: newHistoryEntry }
       } else {
-        existingTimeline.unshift(newTimelineEntry)
-        updateData.timeline = existingTimeline
+        mutation.$push = { timeline: { $each: [newTimelineEntry], $position: 0 } }
       }
     }
 
-    if (updateData.status === "shipped" && !updateData.trackingNumber && !isPartnerOrder) {
+    if (updateData.status === "shipped" && !updateData.trackingNumber &&
+      !existingOrder.trackingNumber && !existingOrder.tracking?.trackingNumber && !isPartnerOrder) {
       return NextResponse.json({ error: "Tracking number is required when marking order as shipped" }, { status: 400 })
     }
 
     // Anchor for post-delivery journeys (review invites, accessory nudges).
-    if (EARNING_STATUSES.includes(updateData.status) && !existingOrder.deliveredAt) {
-      updateData.deliveredAt = new Date()
+    if (updateData.status && EARNING_STATUSES.some(status => status === updateData.status) && !existingOrder.deliveredAt) {
+      mutation.$set = { ...mutation.$set, deliveredAt: now }
     }
 
-    const filter = orderId ? { _id: orderId } : { orderId: id }
-    const result = await collection.updateOne(filter, { $set: updateData })
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 })
+    const updatedOrder = await collection.findOneAndUpdate({
+      _id: existingOrder._id,
+      status: existingOrder.status ?? { $exists: false },
+      updatedAt: existingOrder.updatedAt ?? { $exists: false },
+    }, mutation, { returnDocument: "after" })
+    if (!updatedOrder) {
+      return NextResponse.json({ error: "Order changed before this update; reload and try again" }, { status: 409 })
     }
 
-    const updatedOrder = await collection.findOne(filter)
     let emailSent: boolean | null = null
 
-    if (updateData.status && updateData.status !== existingOrder.status && existingOrder.customer?.email) {
+    if (statusChanged && updateData.status && existingOrder.customer?.email) {
       try {
         const templateId = getEmailTemplateId(updateData.status)
         const orderNumber = String(existingOrder.orderId || id)
@@ -288,20 +302,20 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
         console.error("Order status notification failed:", emailError)
       }
 
-      // Push is best-effort and must never fail the status update.
-      if (existingOrder.userId) {
-        void notifyOrderStatus(
-          String(existingOrder.userId),
-          String(existingOrder.orderId || id),
-          updateData.status,
-        )
-      }
+    }
+
+    if (statusChanged && updateData.status && existingOrder.userId) {
+      void notifyOrderStatus(
+        String(existingOrder.userId),
+        String(existingOrder.orderId || id),
+        updateData.status,
+      ).catch(error => console.error("Order status push failed:", error))
     }
 
     // Reaching a value-realising status changes lifetime spend and tier, so refresh
     // the rollup now rather than waiting for the nightly rebuild. Never fatal.
     const customerId = String(existingOrder.userId || "")
-    if (customerId && EARNING_STATUSES.includes(updateData.status)) {
+    if (customerId && statusChanged && updateData.status && EARNING_STATUSES.some(status => status === updateData.status)) {
       try {
         await rebuildCustomerProfile(customerId)
         await recordEvent(customerId, "order_delivered", { orderId: id })
@@ -322,7 +336,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       }
     }
 
-    if (customerId && ["cancelled", "returned", "refunded"].includes(updateData.status)) {
+    if (customerId && statusChanged && updateData.status && ["cancelled", "returned", "refunded"].includes(updateData.status)) {
       try {
         await reverseOrderPoints(customerId, String(existingOrder.orderId || id))
       } catch (loyaltyError) {
@@ -357,7 +371,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       orderId = null
     }
 
-    let filter = orderId ? { _id: orderId } : { orderId: id }
+    const filter = orderId ? { _id: orderId } : { orderId: id }
     let result = await collection.deleteOne(filter)
 
     if (result.deletedCount === 0) {

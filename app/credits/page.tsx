@@ -3,12 +3,13 @@ import { safeJsonLd } from "@/lib/jsonld-safe"
 import { Building2, Code2, Shield, Wrench, ChevronRight, Calendar, ExternalLink } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
+import { pageMetadata } from "@/lib/seo-page"
 
-export const metadata = {
-  title: "Credits & Site Information | Sara Mobiles & Electronics",
+export const generateMetadata = pageMetadata({
+  path: "/credits", title: brand => `Credits & Site Information | ${brand}`,
   description: "Technical acknowledgements, engineering credits, and platform information for Sara Mobiles & Electronics.",
-  robots: "noindex, follow",
-}
+  noIndex: true,
+})
 
 const ORG_SCHEMA = {
   "@context": "https://schema.org",

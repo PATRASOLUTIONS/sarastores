@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, type SpinVisitStats } from "@/lib/spin-wheel-campaigns"
 import { requireAdmin } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const dailyVisits = await visitsCol.aggregate([
+    const dailyVisits = await visitsCol.aggregate<SpinVisitStats>([
       { $match: { timestamp: { $gte: thirtyDaysAgo } } },
       {
         $group: {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     ]).toArray()
 
     // Daily registrations
-    const dailyRegistrations = await participantsCol.aggregate([
+    const dailyRegistrations = await participantsCol.aggregate<{ _id: string; registrations: number; spins: number; winners: number }>([
       { $match: { createdAt: { $gte: thirtyDaysAgo } } },
       {
         $group: {
@@ -56,13 +56,13 @@ export async function GET(request: NextRequest) {
     ]).toArray()
 
     // Merge data for daily graph
-    const dateMap: Record<string, any> = {}
+    const dateMap: Record<string, { date: string; visits: number; registrations: number; spins: number; winners: number }> = Object.create(null)
 
-    dailyVisits.forEach((d: any) => {
+    dailyVisits.forEach((d) => {
       dateMap[d._id] = { date: d._id, visits: d.visits, registrations: 0, spins: 0, winners: 0 }
     })
 
-    dailyRegistrations.forEach((d: any) => {
+    dailyRegistrations.forEach((d) => {
       if (dateMap[d._id]) {
         dateMap[d._id].registrations = d.registrations
         dateMap[d._id].spins = d.spins
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const dailyData = Object.values(dateMap).sort((a: any, b: any) => a.date.localeCompare(b.date))
+    const dailyData = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
 
     // Overall stats
     const totalVisits = await visitsCol.countDocuments()

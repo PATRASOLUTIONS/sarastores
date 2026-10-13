@@ -5,7 +5,7 @@ description: Technical SEO rules and conventions for the ecommerce-sara storefro
 
 # SEO for ecommerce-sara
 
-Verified against the code on 2026-09-05.
+Metadata and sharing conventions updated on 2026-10-11.
 
 ## The rule that breaks most often
 
@@ -30,19 +30,48 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 }
 ```
 
-`pageMetadata` resolves the origin from request headers, reads the company name from the
-`settings` collection, and sets canonical, Open Graph, Twitter and robots. Pass `noIndex: true`
+`pageMetadata` uses `NEXT_PUBLIC_SITE_URL` when configured, otherwise the request origin,
+reads the company name from the `settings` collection, and sets canonical, Open Graph, Twitter and robots. Pass `noIndex: true`
 for anything transactional, private or per-visitor.
 
 For a dynamic route, write `generateMetadata` by hand and use `buildPageMetadata` from
 [lib/seo-metadata.ts](../../lib/seo-metadata.ts) — see
 [app/campaign/[slug]/layout.tsx](../../app/campaign/%5Bslug%5D/layout.tsx).
 
+## Link-sharing previews
+
+Always use `buildPageMetadata` for complete metadata: a title/description-only export
+inherits the homepage's Open Graph and Twitter content. The helper emits absolute
+canonical/image URLs, matching sharing text and a page-specific 1200 x 630 PNG from
+`/og` when no usable image is supplied. SVG/data-URI images are not sharing previews;
+real product photos keep their own dimensions rather than claiming a fabricated size.
+
+Homepage title/description come from **Admin Settings → Homepage SEO & Sharing** fields,
+falling back to store branding. Product metadata honours the catalogue `seoTitle` and
+`seoDescription` attributes; its lookup, prices, photos and published-review aggregate
+are shared with the server Product JSON-LD via `lib/seo-product.ts`.
+
+Configure `NEXT_PUBLIC_SITE_URL` to the single public HTTPS origin in production.
+Do not use `NEXT_PUBLIC_APP_URL` as a canonical: legacy configurations contain a
+comma-separated list of origins. Previews are checked in crawler HTML, not only after
+browser hydration. Sharing platforms cache old previews independently; deploying changes
+does not immediately invalidate WhatsApp/Facebook caches.
+
+Dynamic lookups decode URL segments before querying MongoDB and use the same canonical
+identifier as the sitemap. Category and sub-category links on the HTML sitemap must point
+to those clean routes, not blocked filter URLs.
+
+Missing/inactive product, brand and campaign routes are checked server-side before rendering.
+Keep loading boundaries below those checks: the old `app/brands/loading.tsx` streamed an HTTP
+200 before a missing brand could become a 404. The brand index still has its client grid
+skeleton, and brand landing pages retain their leaf loading screen.
+
 ## What must be noindex
 
 Transactional, personal, or infinitely variable: `/cart`, `/checkout`, `/order/*`, `/thank-you`,
 `/track`, `/compare`, `/login`, `/register`, `/forgot-password`, `/reset-password`,
-`/verify-email`, `/account/*`, `/dashboard/*`, `/admin/*`, `/vendor/*`, internal demos.
+`/verify-email`, `/account/*`, `/dashboard/*`, `/admin/*`, `/vendor/*`, internal demos,
+`/spin/*` participation screens and private lucky-draw token links.
 
 Guest order pages are reachable by capability token — they must never be indexed.
 
@@ -53,7 +82,8 @@ Filters multiply URLs combinatorially. Two defences, both already in place:
 1. **Canonical stays clean.** `/products/layout.tsx` canonicalises to `/products` with no
    params, so no filtered view competes with it.
 2. **robots.txt blocks the params.** `FACET_PARAMS` in [app/robots.ts](../../app/robots.ts)
-   disallows `q`, `sort`, `minPrice`, `maxPrice`, `size`, `star`, `capacity`, `feature`, `page`.
+   disallows `q`, `search`, category/brand/sub-category filters, article tags, `sort`,
+   `minPrice`, `maxPrice`, `size`, `star`, `capacity`, `feature` and `page`.
 
 If a facet combination deserves to rank ("55 inch TVs under ₹50,000"), do **not** unblock the
 param — build a real static route for it and put that in the sitemap. Parameter URLs are for
@@ -76,15 +106,20 @@ against competitors who declare them.
 
 **Never duplicate copy into schema.** The FAQ schema reads the same `lib/faq-data.ts` the page
 renders. Two sources of truth drift, and mismatched schema is a manual-action risk.
+Do not add FAQ schema to a page with no visible FAQ content, invent ratings/price expiry
+dates, or invent a store's coordinates. Product shipping rates use the same settings as
+order pricing; return information links to the published `/returns` policy.
 
 ## Sitemap
 
 [app/sitemap.ts](../../app/sitemap.ts) covers static pages, products (with image entries),
 categories, sub-categories, brands, stores, campaigns and articles. `lastModified` comes from
-real `updatedAt` — never fake it, Google learns to distrust it.
+real `updatedAt`/creation/publication dates where available; undated static/store pages omit
+`lastModified`. Never replace missing dates with the current time.
 
-Only `https://` absolute URLs are valid in image sitemap entries; data URIs and relative paths
-are dropped.
+Image sitemap entries use absolute HTTPS URLs. Valid local image paths are resolved against
+the public HTTPS origin; data URIs and non-HTTPS images are dropped. Only enabled brand
+landing pages and active campaigns are included; filtered article URLs are not sitemap entries.
 
 If the catalogue passes ~40,000 URLs, split into a sitemap index before the 50,000 limit.
 

@@ -5,12 +5,23 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
+import type { Filter, WithId } from 'mongodb';
 import { checkAdminAuthorization } from '@/lib/auth';
 import { getCollection } from '@/lib/db-service';
+import { PAYOUT_STATUSES, type Partner, type Payout } from '@/lib/partner/types';
+import { z } from 'zod';
 
 const PAYOUTS_COLLECTION = 'partner_payouts';
 const PARTNERS_COLLECTION = 'partners';
+const querySchema = z.object({
+  page: z.string().regex(/^[1-9]\d*$/).transform(Number).pipe(z.number().int().max(100000)).default('1'),
+  limit: z.string().regex(/^[1-9]\d*$/).transform(Number).pipe(z.number().int().max(100)).default('20'),
+  status: z.enum(PAYOUT_STATUSES).optional(),
+  partnerId: z.string().min(1).max(100).optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+}).refine(value => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo);
+type ListedPayout = WithId<Payout> & { payoutId?: string; partner?: WithId<Partner> };
 
 /**
  * GET /api/admin/payouts
@@ -28,19 +39,17 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 100);
+    const parsed = querySchema.safeParse(Object.fromEntries(searchParams));
+    if (!parsed.success) return NextResponse.json(
+      { success: false, error: { code: 'INVALID_INPUT', message: 'Invalid payout filters' } }, { status: 400 }
+    );
+    const { page, limit, status, partnerId, dateFrom, dateTo } = parsed.data;
     const skip = (page - 1) * limit;
-    const status = searchParams.get('status');
-    const partnerId = searchParams.get('partnerId');
-    const dateFrom = searchParams.get('dateFrom');
-    const dateTo = searchParams.get('dateTo');
     
-    const collection = await getCollection(PAYOUTS_COLLECTION);
-    const partnersCollection = await getCollection(PARTNERS_COLLECTION);
+    const collection = await getCollection<Payout>(PAYOUTS_COLLECTION);
     
     // Build filter
-    const filter: any = {};
+    const filter: Filter<Payout> = {};
     
     if (status) {
       filter.status = status;
@@ -51,15 +60,16 @@ export async function GET(request: NextRequest) {
     }
     
     if (dateFrom || dateTo) {
-      filter.requestedAt = {};
-      if (dateFrom) filter.requestedAt.$gte = new Date(dateFrom);
-      if (dateTo) filter.requestedAt.$lte = new Date(dateTo);
+      filter.requestedAt = {
+        ...(dateFrom ? { $gte: dateFrom } : {}),
+        ...(dateTo ? { $lte: dateTo } : {}),
+      };
     }
     
     // Fetch payouts with partner info
     const [payouts, total] = await Promise.all([
       collection
-        .aggregate([
+        .aggregate<ListedPayout>([
           { $match: filter },
           { $sort: { requestedAt: -1 } },
           { $skip: skip },
@@ -71,7 +81,10 @@ export async function GET(request: NextRequest) {
               pipeline: [
                 {
                   $match: {
-                    $expr: { $eq: [{ $toString: '$_id' }, '$$partnerId'] }
+                    $expr: { $or: [
+                      { $eq: [{ $toString: '$_id' }, '$$partnerId'] },
+                      { $eq: ['$id', '$$partnerId'] },
+                    ] }
                   }
                 }
               ],
@@ -85,7 +98,7 @@ export async function GET(request: NextRequest) {
     ]);
     
     // Transform payouts for response
-    const payoutList = payouts.map((payout: any) => ({
+    const payoutList = payouts.map((payout) => ({
       id: payout._id?.toString() || payout.id,
       payoutId: payout.payoutId || payout.id,
       partner: payout.partner ? {
@@ -104,7 +117,7 @@ export async function GET(request: NextRequest) {
     }));
     
     // Get summary stats
-    const pendingStats = await collection.aggregate([
+    const pendingStats = await collection.aggregate<{ count: number; totalAmount: number }>([
       { $match: { status: 'pending_approval' } },
       {
         $group: {

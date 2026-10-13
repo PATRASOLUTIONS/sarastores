@@ -26,6 +26,16 @@ export interface Facet {
 
 export type FacetSelection = Record<string, string[]>
 
+export interface FacetProduct {
+  name?: unknown
+  char_desc?: unknown
+  charDesc?: unknown
+  type?: unknown
+  subCategory?: unknown
+  technical_details?: Record<string, unknown> | null
+  features?: readonly unknown[] | null
+}
+
 interface FacetDefinition {
   key: string
   label: string
@@ -209,7 +219,7 @@ const FACET_DEFINITIONS: FacetDefinition[] = [
 ]
 
 /** Everything on a product that might carry a spec, flattened to one string. */
-function productText(product: any): string {
+function productText(product: FacetProduct): string {
   const parts: string[] = [
     String(product?.name || ""),
     String(product?.char_desc || product?.charDesc || ""),
@@ -231,7 +241,7 @@ function productText(product: any): string {
 }
 
 /** Prefer an explicit spec key over anything scraped out of the name. */
-function specValueFor(product: any, definition: FacetDefinition): string[] {
+function specValueFor(product: FacetProduct, definition: FacetDefinition): string[] {
   const details = product?.technical_details
   if (!details || typeof details !== "object" || Array.isArray(details)) return []
 
@@ -246,7 +256,7 @@ function specValueFor(product: any, definition: FacetDefinition): string[] {
 }
 
 /** Normalised facet values for a single product. */
-export function facetValuesFor(product: any): Record<string, string[]> {
+export function facetValuesFor(product: FacetProduct): Record<string, string[]> {
   const text = productText(product)
   const result: Record<string, string[]> = {}
 
@@ -265,7 +275,7 @@ export function facetValuesFor(product: any): Record<string, string[]> {
  * A facet with a single value cannot narrow anything, so it is dropped — that
  * is what stops a TV category showing an empty "Load Type" filter.
  */
-export function buildFacets(products: any[], minValues = 2): Facet[] {
+export function buildFacets(products: FacetProduct[], minValues = 2): Facet[] {
   const counters = new Map<string, Map<string, number>>()
 
   for (const product of products) {
@@ -297,7 +307,7 @@ export function buildFacets(products: any[], minValues = 2): Facet[] {
 }
 
 /** Values within a facet are OR-ed; separate facets are AND-ed. */
-export function matchesFacets(product: any, selection: FacetSelection): boolean {
+export function matchesFacets(product: FacetProduct, selection: FacetSelection): boolean {
   const active = Object.entries(selection).filter(([, values]) => values.length > 0)
   if (active.length === 0) return true
 

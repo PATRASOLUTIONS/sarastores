@@ -1,231 +1,120 @@
-/**
- * Admin Partner Products API
- * 
- * GET /api/admin/partners/[partnerId]/products - Get partner product assignments
- * POST /api/admin/partners/[partnerId]/products - Update partner product assignments
- */
+import { NextRequest, NextResponse } from 'next/server'
+import { ObjectId, MongoServerError, type Filter } from 'mongodb'
+import { requireAdmin } from '@/lib/auth'
+import { getPartnerById } from '@/lib/partner/service'
+import { getCollection } from '@/lib/db-service'
+import { connectToDatabase } from '@/lib/mongodb'
+import { PartnerProductAssignmentsSchema } from '@/lib/validation'
+import { partnerCatalogSnapshot, type PartnerCatalogDocument } from '@/lib/partner/catalogue'
+import type { PartnerProductAssignmentDocument } from '@/lib/partner/types'
 
-import { NextRequest, NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { checkAdminAuthorization } from '@/lib/auth';
-import { getPartnerById } from '@/lib/partner/service';
-import { getCollection } from '@/lib/db-service';
-
-const PARTNER_PRODUCTS_COLLECTION = 'partner_products';
-
-interface PartnerProduct {
-  productId: string;
-  customPrice?: number;
-  customCommission?: number;
-  enabled: boolean;
+type Context = { params: Promise<{ partnerId: string }> }
+const COLLECTION = 'partner_products'
+class AssignmentInputError extends Error {}
+function assignmentFilter(partnerId: string, productId?: string): Filter<PartnerProductAssignmentDocument> {
+  const ids = (id: string) => ObjectId.isValid(id) ? [id, new ObjectId(id)] : [id]
+  return { partnerId: { $in: ids(partnerId) }, ...(productId ? { productId: { $in: ids(productId) } } : {}) }
+}
+function productFilter(ids: string[]): Filter<PartnerCatalogDocument> {
+  return { $or: [
+    { _id: { $in: ids.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id)) } },
+    { _id: { $in: ids } },
+  ] }
+}
+function failure(message: string, status: number) {
+  return NextResponse.json({ success: false, error: { code: status === 400 ? 'VALIDATION_ERROR' : status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : 'INTERNAL_ERROR', message } }, { status })
 }
 
-/**
- * GET /api/admin/partners/[partnerId]/products
- * Get product assignments for a partner
- */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ partnerId: string }> }
-) {
-  const authCheck = await checkAdminAuthorization();
-  if (!authCheck.authorized) {
-    return NextResponse.json(
-      { success: false, error: { code: 'UNAUTHORIZED', message: authCheck.error } },
-      { status: 401 }
-    );
-  }
-
+export async function GET(request: NextRequest, context: Context) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
   try {
-    const { partnerId } = await params;
+    const { partnerId } = await context.params
+    if (!partnerId.trim() || partnerId.length > 100) return failure('Invalid partner ID', 400)
+    const partner = await getPartnerById(partnerId)
+    if (!partner) return failure('Partner not found', 404)
+    const collection = await getCollection<PartnerProductAssignmentDocument>(COLLECTION)
+    const assignments = await collection.find(assignmentFilter(partner.id)).toArray()
+    const products = assignments.map(assignment => ({
+      productId: assignment.productId.toString(), customPrice: assignment.customPrice,
+      customCommission: assignment.customCommission, enabled: assignment.enabled !== false,
+    }))
+    const enabledIds = products.filter(product => product.enabled).map(product => product.productId)
+    const catalog = await getCollection<PartnerCatalogDocument>('products')
+    const details = enabledIds.length ? await catalog.find(productFilter(enabledIds)).toArray() : []
+    return NextResponse.json({
+      success: true,
+      data: {
+        partnerId: partner.id, products, total: products.length, enabledCount: enabledIds.length,
+        enabledProductDetails: details.map(product => ({ ...partnerCatalogSnapshot(product), active: product.active !== false })),
+      },
+    })
+  } catch (error) {
+    console.error('[Admin Partner Products] Get error:', error)
+    return failure('Failed to get product assignments', 500)
+  }
+}
 
-    // Verify partner exists
-    const partner = await getPartnerById(partnerId);
-    if (!partner) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: 'Partner not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Get partner product assignments. Match partnerId stored as a string or as an ObjectId.
-    const collection = await getCollection(PARTNER_PRODUCTS_COLLECTION);
-    let partnerFilter: any = { partnerId };
+export async function POST(request: NextRequest, context: Context) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+  try {
+    const { partnerId } = await context.params
+    if (!partnerId.trim() || partnerId.length > 100) return failure('Invalid partner ID', 400)
+    const parsed = PartnerProductAssignmentsSchema.safeParse(await request.json())
+    if (!parsed.success) return failure(parsed.error.issues[0].message, 400)
+    const partner = await getPartnerById(partnerId)
+    if (!partner) return failure('Partner not found', 404)
+    const collection = await getCollection<PartnerProductAssignmentDocument>(COLLECTION)
+    const catalog = await getCollection<PartnerCatalogDocument>('products')
+    const partners = await getCollection<{ _id?: ObjectId | string; id?: string; productAssignmentsRevision?: number; updatedAt?: Date }>('partners')
+    const { client } = await connectToDatabase()
+    const session = client.startSession()
     try {
-      partnerFilter = { $or: [{ partnerId }, { partnerId: new ObjectId(partnerId) }] };
-    } catch (e) {
-      partnerFilter = { partnerId };
-    }
-
-    const assignments = await collection.find(partnerFilter).toArray();
-
-    // Normalize productId values to strings to avoid mixed-type issues
-    const products = assignments.map(a => {
-      const rawProductId = a.productId;
-      const pid = rawProductId && typeof rawProductId === 'object' && rawProductId.toString
-        ? rawProductId.toString()
-        : String(rawProductId);
-
-      return {
-        productId: pid,
-        customPrice: a.customPrice,
-        customCommission: a.customCommission,
-        enabled: a.enabled !== false,
-      };
-    });
-
-    // Fetch full product details for enabled products
-    const enabledProductIds = products
-      .filter(p => p.enabled)
-      .map(p => p.productId)
-      .filter(Boolean);
-
-    let enabledProductDetails: any[] = [];
-    if (enabledProductIds.length > 0) {
-      const productsCollection = await getCollection('products');
-      // Try matching by ObjectId first, fallback to string
-      const objectIds = enabledProductIds.map(id => {
-        try { return new ObjectId(id); } catch { return null; }
-      }).filter((id): id is ObjectId => id !== null);
-
-      // First try to fetch by ObjectId (for ids that are valid ObjectId hex strings)
-      let productDocs: any[] = []
-      if (objectIds.length > 0) {
-        productDocs = await productsCollection.find({ _id: { $in: objectIds } }).project({
-          _id: 1, name: 1, sku: 1, price: 1, mrp: 1, images: 1, image: 1,
-          category: 1, stock: 1, active: 1
-        }).toArray();
-      }
-
-      // If some products are still missing (because _id is ObjectId but we only have string ids),
-      // try a lookup that compares the stringified _id values using $expr + $toString.
-      if (productDocs.length < enabledProductIds.length) {
-        const missingIds = enabledProductIds.filter(id => !productDocs.find(d => d._id && d._id.toString() === id))
-        if (missingIds.length > 0) {
-          const extra = await productsCollection.find({
-            $expr: { $in: [{ $toString: '$_id' }, missingIds] }
-          }).project({ _id: 1, name: 1, sku: 1, price: 1, mrp: 1, images: 1, image: 1,
-            category: 1, stock: 1, active: 1 }).toArray();
-          // Merge extra docs (avoid duplicates)
-          const existingIds = new Set(productDocs.map(d => d._id.toString()))
-          for (const ex of extra) {
-            if (!existingIds.has(ex._id.toString())) productDocs.push(ex)
+      const result = await session.withTransaction(async () => {
+        const enabledIds = parsed.data.products.filter(product => product.enabled).map(product => product.productId)
+        const available = enabledIds.length ? await catalog.find({ ...productFilter(enabledIds), active: true }, { session }).toArray() : []
+        const found = new Set(available.map(product => product._id.toString()))
+        if (enabledIds.some(id => !found.has(id))) throw new AssignmentInputError('Enabled products must exist and be active')
+        const lock = await partners.updateOne({
+          $or: [...(ObjectId.isValid(partner.id) ? [{ _id: new ObjectId(partner.id) }] : []), { _id: partner.id }, { id: partner.id }],
+        }, { $inc: { productAssignmentsRevision: 1 }, $set: { updatedAt: new Date() } }, { session })
+        if (!lock.matchedCount) throw new Error('Partner disappeared during assignment update')
+        const operations = parsed.data.products.map(product => {
+          const set: Partial<PartnerProductAssignmentDocument> = {
+            partnerId: partner.id, productId: product.productId, enabled: product.enabled, updatedAt: new Date(),
           }
+          const unset: { customPrice?: ''; customCommission?: '' } = {}
+          for (const field of ['customPrice', 'customCommission'] as const) {
+            if (product[field] === null) unset[field] = ''
+            else if (product[field] !== undefined) set[field] = product[field]
+          }
+          return { updateOne: {
+            filter: assignmentFilter(partner.id, product.productId),
+            update: { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}), $setOnInsert: { createdAt: new Date() } },
+            upsert: true,
+          } }
+        })
+        if (operations.length) {
+          const saved = await collection.bulkWrite(operations, { session, ordered: true })
+          if (saved.matchedCount + saved.upsertedCount !== operations.length) throw new Error('Product assignment writes were not acknowledged')
         }
-      }
-
-      enabledProductDetails = productDocs.map(p => ({
-        _id: p._id.toString(),
-        name: p.name || '',
-        sku: p.sku || '',
-        price: p.price || 0,
-        mrp: p.mrp || p.price || 0,
-        images: p.images || (p.image ? [p.image] : []),
-        category: p.category || '',
-        stock: p.stock || 0,
-        active: p.active !== false,
-      }));
+        const enabled = await collection.countDocuments({ ...assignmentFilter(partner.id), enabled: true }, { session })
+        return { enabled }
+      })
+      if (!result) throw new Error('Product assignment transaction did not commit')
+      return NextResponse.json({
+        success: true, data: { partnerId: partner.id, updated: parsed.data.products.length, enabled: result.enabled },
+        message: `Successfully updated ${parsed.data.products.length} product assignments`,
+      })
+    } finally {
+      await session.endSession()
     }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        partnerId,
-        products,
-        total: products.length,
-        enabledCount: enabledProductIds.length,
-        enabledProductDetails,
-      },
-    });
   } catch (error) {
-    console.error('[Admin Partner Products] Get error:', error);
-    return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to get product assignments' } },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * POST /api/admin/partners/[partnerId]/products
- * Update product assignments for a partner
- */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ partnerId: string }> }
-) {
-  const authCheck = await checkAdminAuthorization();
-  if (!authCheck.authorized) {
-    return NextResponse.json(
-      { success: false, error: { code: 'UNAUTHORIZED', message: authCheck.error } },
-      { status: 401 }
-    );
-  }
-
-  try {
-    const { partnerId } = await params;
-    const body = await request.json();
-    const { products } = body as { products: PartnerProduct[] };
-
-    if (!Array.isArray(products)) {
-      return NextResponse.json(
-        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Products array is required' } },
-        { status: 400 }
-      );
-    }
-
-    // Verify partner exists
-    const partner = await getPartnerById(partnerId);
-    if (!partner) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: 'Partner not found' } },
-        { status: 404 }
-      );
-    }
-
-    const collection = await getCollection(PARTNER_PRODUCTS_COLLECTION);
-
-    // Process each product assignment
-    for (const product of products) {
-      await collection.updateOne(
-        { partnerId, productId: product.productId },
-        {
-          $set: {
-            partnerId,
-            productId: product.productId,
-            customPrice: product.customPrice,
-            customCommission: product.customCommission,
-            enabled: product.enabled,
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            createdAt: new Date(),
-          },
-        },
-        { upsert: true }
-      );
-    }
-
-    // Count enabled products
-    const enabledCount = await collection.countDocuments({
-      partnerId,
-      enabled: true
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        partnerId,
-        updated: products.length,
-        enabled: enabledCount,
-      },
-      message: `Successfully updated ${products.length} product assignments`,
-    });
-  } catch (error) {
-    console.error('[Admin Partner Products] Update error:', error);
-    return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to update product assignments' } },
-      { status: 500 }
-    );
+    if (error instanceof SyntaxError) return failure('Invalid JSON body', 400)
+    if (error instanceof AssignmentInputError) return failure(error.message, 400)
+    if (error instanceof MongoServerError && error.code === 11000) return failure('Product assignment conflicted with another request; reload and retry', 409)
+    console.error('[Admin Partner Products] Update error:', error)
+    return failure('Failed to update product assignments', 500)
   }
 }

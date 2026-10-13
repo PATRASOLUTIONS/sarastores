@@ -23,7 +23,7 @@ import {
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import ExcelUpload from "@/components/ExcelUpload"
-import { normalizeProductForSchema } from "@/lib/product-schema"
+import { normalizeProductForSchema, type CanonicalProductMetadata } from "@/lib/product-schema"
 
 interface Product {
   id: string
@@ -54,7 +54,7 @@ interface Product {
     "EAN Number"?: string
     "Tax Category"?: string
     "ITEM CATEGORY"?: string
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -64,16 +64,40 @@ interface Category {
   description?: string
 }
 
-type ProductSortField = keyof Product | "updatedAt"
+type ProductSortField = Exclude<keyof Product, "raw">
 
-function normalizeAdminProduct(product: any): Product {
+type ProductApiResponse = Omit<Partial<Product>, "price" | "stock"> & {
+  id: string
+  price?: number | string
+  stock?: number | string
+  images?: string[]
+  manufacturer_name?: string
+  prod_desc?: string
+}
+
+interface PricePreview {
+  sku: string
+  name: string
+  mrp: number | null
+  oldPrice: number | null
+  newPrice: number
+  status: string
+  error?: string
+}
+
+interface MetadataPreview extends CanonicalProductMetadata {
+  status: string
+  error?: string
+}
+
+function normalizeAdminProduct(product: ProductApiResponse): Product {
   const canonical = normalizeProductForSchema(product)
   const raw = product?.raw || {}
 
   return {
     ...product,
-    id: product?.id || product?._id || canonical.itemno || raw["itemno"] || raw["Item No."] || "",
-    name: product?.name || canonical.name || raw["Name"] || "Unnamed Product",
+    id: product.id,
+    name: canonical.name || "Unnamed Product",
     price: Number(product?.price ?? 0),
     mrp: product?.mrp,
     stock: Number(product?.stock ?? 0),
@@ -83,19 +107,14 @@ function normalizeAdminProduct(product: any): Product {
       canonical.categoryGroupName ||
       product?.groupName ||
       product?.itemCategory ||
-      raw["Category/Group Name"] ||
-      raw["Category"] ||
-      raw["Group Name"] ||
       raw["ITEM CATEGORY"],
-    groupName: product?.groupName || canonical.categoryGroupName || raw["Category/Group Name"] || raw["Group Name"],
+    groupName: product?.groupName || canonical.categoryGroupName,
     itemCategory: product?.itemCategory || raw["ITEM CATEGORY"],
     manufacturerName:
       product?.manufacturerName ||
       canonical.manufacturerName ||
-      product?.manufacturer_name ||
-      raw["Manufacturer Name"] ||
-      raw["Manufacturer"],
-    subCategory: product?.subCategory || canonical.subCategoryProdDesc || product?.prod_desc || raw["sub-category/PROD DESC"] || raw["PROD DESC"],
+      product?.manufacturer_name,
+    subCategory: product?.subCategory || canonical.subCategoryProdDesc || product?.prod_desc,
     ean: product?.ean || raw["EAN Number"],
     updatedAt: product?.updatedAt,
   }
@@ -110,7 +129,7 @@ export default function AdminProducts() {
   const [activeProductsCount, setActiveProductsCount] = useState<number>(0)
   const [allProductsLoaded, setAllProductsLoaded] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
-  const [subCategories, setSubCategories] = useState<any[]>([])
+  const [subCategories, setSubCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>("all")
   const [filterActiveStatus, setFilterActiveStatus] = useState<"all" | "active" | "inactive">("all")
@@ -135,7 +154,7 @@ export default function AdminProducts() {
     failed: number;
     errors: string[];
   } | null>(null)
-  const [previewData, setPreviewData] = useState<any[] | null>(null)
+  const [previewData, setPreviewData] = useState<PricePreview[] | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [updatingActiveIds, setUpdatingActiveIds] = useState<string[]>([])
   const [activatingAll, setActivatingAll] = useState(false)
@@ -144,7 +163,7 @@ export default function AdminProducts() {
   // Metadata update modal state
   const [showMetadataUpdateModal, setShowMetadataUpdateModal] = useState(false)
   const [metadataUpdateFile, setMetadataUpdateFile] = useState<File | null>(null)
-  const [metadataPreviewData, setMetadataPreviewData] = useState<any[] | null>(null)
+  const [metadataPreviewData, setMetadataPreviewData] = useState<MetadataPreview[] | null>(null)
   const [isMetadataUpdating, setIsMetadataUpdating] = useState(false)
   const [metadataUpdateResult, setMetadataUpdateResult] = useState<{
     success: number;
@@ -189,11 +208,9 @@ export default function AdminProducts() {
         console.error('[Admin Products] ❌ Failed to fetch sub-categories', res.status)
         return
       }
-      const data = await res.json()
-      // ensure we have id and name fields
-      const normalized = data.map((s: any) => ({ id: s.id || s._id || s._key || s.name, name: s.name || s.label || s.title }))
-      setSubCategories(normalized)
-      console.log('[Admin Products] ✅ Sub-categories fetched:', normalized.length)
+      const data: Category[] = await res.json()
+      setSubCategories(data)
+      console.log('[Admin Products] ✅ Sub-categories fetched:', data.length)
     } catch (err) {
       console.error('[Admin Products] ❌ Error fetching sub-categories:', err)
     }
@@ -266,10 +283,10 @@ export default function AdminProducts() {
       const normalizedProducts = Array.isArray(productsData) ? productsData.map(normalizeAdminProduct) : []
 
       // Get category lookup map (id -> name) from categories collection
-      let categoryLookup: Record<string, string> = {}
+      const categoryLookup: Record<string, string> = {}
       if (categoriesResponse.ok) {
         const categoriesData = await categoriesResponse.json()
-        categoriesData.forEach((cat: any) => {
+        categoriesData.forEach((cat: Category) => {
           categoryLookup[cat.id] = cat.name
         })
       }
@@ -456,7 +473,7 @@ export default function AdminProducts() {
           console.warn('[Admin Products] ⚠️ Could not open window for', p.id, e)
         }
         // small delay to reduce popup blocking and avoid overwhelming the browser
-        // eslint-disable-next-line no-await-in-loop
+         
         await sleep(250)
       }
 
@@ -573,6 +590,8 @@ export default function AdminProducts() {
       console.log("[Admin Products] 📡 Sending POST request to /api/seed-database...")
       const response = await apiFetch("/api/seed-database", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apply: true }),
       });
       console.log("[Admin Products] 📥 Seed database response status:", response.status)
 
@@ -601,7 +620,7 @@ export default function AdminProducts() {
     }
   }
 
-  const handleSort = (field: keyof Product) => {
+  const handleSort = (field: ProductSortField) => {
     console.log("[Admin Products] 🔗 Sorting by:", field)
     if (field === sortField) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
@@ -655,9 +674,9 @@ export default function AdminProducts() {
         toast.success(`Updated ${result.success} products`)
         fetchProducts() // Refresh the list
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Metadata update error:", error)
-      toast.error(error.message || "Failed to update metadata")
+      toast.error(error instanceof Error ? error.message : "Failed to update metadata")
     } finally {
       setIsMetadataUpdating(false)
     }
@@ -672,7 +691,7 @@ export default function AdminProducts() {
       if (!response.ok) {
         throw new Error("Failed to fetch products from database")
       }
-      const allProducts = await response.json()
+      const allProducts: ProductApiResponse[] = await response.json()
 
       if (!allProducts || allProducts.length === 0) {
         toast.error("No products found in database", { id: "metadata-export" })
@@ -684,9 +703,9 @@ export default function AdminProducts() {
       const categoriesData = await categoriesResponse.json()
       const categoriesMap = new Map<string, string>()
       if (Array.isArray(categoriesData)) {
-        categoriesData.forEach((cat: any) => {
-          if (cat.id || cat._id) {
-            categoriesMap.set(String(cat.id || cat._id), cat.name)
+        categoriesData.forEach((cat: Category) => {
+          if (cat.id) {
+            categoriesMap.set(cat.id, cat.name)
           }
         })
       }
@@ -695,7 +714,7 @@ export default function AdminProducts() {
 
       // Map products to the required format - filter out products without SKU
       const templateData = allProducts
-        .map((product: any) => {
+        .map((product) => {
           const raw = product.raw || {}
           const normalized = normalizeProductForSchema(product)
           const sku = normalized.itemno
@@ -726,7 +745,7 @@ export default function AdminProducts() {
             "Manufacturer Name": normalized.manufacturerName,
           }
         })
-        .filter((row: any) => row.itemno && String(row.itemno).trim() !== "") // Only include rows with valid SKU
+        .filter((row) => row.itemno && row.itemno.trim() !== "")
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(templateData)
@@ -749,9 +768,9 @@ export default function AdminProducts() {
       // Download file
       XLSX.writeFile(wb, "product-metadata-export.xlsx")
       toast.success(`Exported ${templateData.length} products successfully!`, { id: "metadata-export" })
-    } catch (error: any) {
+    } catch (error) {
       console.error("Metadata export error:", error)
-      toast.error(error.message || "Failed to export product metadata", { id: "metadata-export" })
+      toast.error(error instanceof Error ? error.message : "Failed to export product metadata", { id: "metadata-export" })
     }
   }
 
@@ -910,7 +929,7 @@ export default function AdminProducts() {
     let matchesSub = true
     if (selectedSubCategory !== "all") {
       const prodSubValue = normalizeProductForSchema(product).subCategoryProdDesc
-      const selectedSub = subCategories.find((s: any) => (s.id || s._id || s.name) === selectedSubCategory)
+      const selectedSub = subCategories.find((s) => s.id === selectedSubCategory)
       const selectedSubName = selectedSub ? selectedSub.name : null
       matchesSub = selectedSubName ? prodSubValue.toString() === selectedSubName.toString() : false
     }
@@ -937,13 +956,15 @@ export default function AdminProducts() {
     }
 
     // Fallback generic comparison for other fields
-    const va: any = (a as any)[sortField]
-    const vb: any = (b as any)[sortField]
+    const va = a[sortField]
+    const vb = b[sortField]
     if (va == null && vb == null) return 0
     if (va == null) return sortDirection === "asc" ? -1 : 1
     if (vb == null) return sortDirection === "asc" ? 1 : -1
-    if (va < vb) return sortDirection === "asc" ? -1 : 1
-    if (va > vb) return sortDirection === "asc" ? 1 : -1
+    const comparableA = typeof va === "boolean" ? Number(va) : va
+    const comparableB = typeof vb === "boolean" ? Number(vb) : vb
+    if (comparableA < comparableB) return sortDirection === "asc" ? -1 : 1
+    if (comparableA > comparableB) return sortDirection === "asc" ? 1 : -1
     return 0
   })
 
@@ -1165,7 +1186,10 @@ export default function AdminProducts() {
             <div className="relative">
               <select
                 value={filterActiveStatus}
-                onChange={(e) => setFilterActiveStatus(e.target.value as any)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value === "all" || value === "active" || value === "inactive") setFilterActiveStatus(value)
+                }}
                 className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[120px] sm:max-w-[120px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="all">All Status</option>
@@ -1664,8 +1688,8 @@ export default function AdminProducts() {
             <div className="mt-6 flex justify-between items-center border-t pt-4">
               <div className="text-sm text-gray-500">
                 Total Items: {previewData.length} |
-                Valid: {previewData.filter((i: any) => i.status === 'valid').length} |
-                Errors: {previewData.filter((i: any) => i.status === 'error').length}
+                Valid: {previewData.filter((i) => i.status === 'valid').length} |
+                Errors: {previewData.filter((i) => i.status === 'error').length}
               </div>
               <div className="flex gap-3">
                 <button
@@ -1796,7 +1820,7 @@ export default function AdminProducts() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {metadataPreviewData.map((item: any, idx: number) => (
+                      {metadataPreviewData.map((item, idx) => (
                         <tr key={idx} className={item.status === 'error' ? 'bg-red-50' : 'hover:bg-gray-50'}>
                           <td className="px-3 py-2 text-sm text-gray-900">{item.itemno}</td>
                           <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.name}>{item.name || '-'}</td>
@@ -1825,8 +1849,8 @@ export default function AdminProducts() {
                 <div className="mt-4 flex justify-between items-center">
                   <div className="text-sm text-gray-500">
                     Total: {metadataPreviewData.length} |
-                    Found: {metadataPreviewData.filter((i: any) => i.status !== 'error').length} |
-                    Errors: {metadataPreviewData.filter((i: any) => i.status === 'error').length}
+                    Found: {metadataPreviewData.filter((i) => i.status !== 'error').length} |
+                    Errors: {metadataPreviewData.filter((i) => i.status === 'error').length}
                   </div>
                   <button
                     onClick={() => handleMetadataUpdate(false)}

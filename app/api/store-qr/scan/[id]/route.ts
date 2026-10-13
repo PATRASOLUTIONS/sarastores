@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
+import { StoreHttpUrlSchema } from "@/lib/validation"
+import type { StoreQrDocument } from "@/lib/store-qr"
 
 const COLLECTION = "store_qr_codes"
-
-interface StoreQrDocument {
-  isActive?: boolean
-  targetUrl: string
-  scanCount?: number
-  lastScannedAt?: Date
-  updatedAt?: Date
-  scanHistory?: Array<{
-    timestamp: Date
-    userAgent: string
-    referer: string
-    ip: string
-  }>
-}
 
 // GET - Track a scan and redirect to the target URL
 // This is a PUBLIC endpoint (no auth required) - called when someone scans the QR code
@@ -50,18 +38,19 @@ export async function GET(
         { status: 410 }
       )
     }
+    if (!StoreHttpUrlSchema.safeParse(qr.targetUrl).success) throw new Error("Stored QR target must use HTTP(S)")
 
     // Capture scan metadata
     const scanEntry = {
       timestamp: new Date(),
-      userAgent: request.headers.get("user-agent") || "Unknown",
-      referer: request.headers.get("referer") || "",
-      ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "Unknown",
+      userAgent: (request.headers.get("user-agent") || "Unknown").slice(0, 512),
+      referer: (request.headers.get("referer") || "").slice(0, 2048),
+      ip: (request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "Unknown").slice(0, 64),
     }
 
     // Increment scan count and add to history (keep last 500 entries)
-    await collection.updateOne(
-      { _id: new ObjectId(id) },
+    const result = await collection.updateOne(
+      { _id: new ObjectId(id), isActive: true, targetUrl: qr.targetUrl },
       {
         $inc: { scanCount: 1 },
         $set: { lastScannedAt: new Date(), updatedAt: new Date() },
@@ -73,20 +62,12 @@ export async function GET(
         },
       }
     )
+    if (!result.matchedCount) return NextResponse.json({ success: false, message: "QR code changed; scan again" }, { status: 409 })
 
     // Redirect to the target URL
-    return NextResponse.redirect(qr.targetUrl)
+    return NextResponse.redirect(qr.targetUrl, { status: 307, headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     console.error("Error tracking scan:", error)
-    // Still redirect even if tracking fails
-    try {
-      const { id } = await params
-      const collection = await getCollection(COLLECTION)
-      const qr = await collection.findOne({ _id: new ObjectId(id) })
-      if (qr?.targetUrl) {
-        return NextResponse.redirect(qr.targetUrl)
-      }
-    } catch {}
     return NextResponse.json(
       { success: false, message: "Failed to process scan" },
       { status: 500 }

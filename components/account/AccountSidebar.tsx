@@ -4,7 +4,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
-  Bell,
   ChevronDown,
   Crown,
   Headphones,
@@ -15,12 +14,16 @@ import {
   Package,
   Settings,
   ShoppingCart,
+  MapPin,
   Store,
   Tag,
-  User,
 } from "lucide-react"
-import { useAuth } from "@/contexts/AuthContext"
+import { useAuth, type User } from "@/contexts/AuthContext"
 import { useSettingsData } from "@/hooks/useSettingsData"
+import { defaultProfileAvatar } from "@/lib/profile-avatars"
+import { apiFetch } from "@/lib/api-client"
+import { InStoreOrderShortcutListSchema } from "@/lib/validation"
+import styles from "./AccountSidebar.module.css"
 
 interface NavItem {
   name: string
@@ -30,58 +33,64 @@ interface NavItem {
   badge?: string
 }
 
-export default function AccountSidebar() {
+export default function AccountSidebar({ initialUser }: {
+  initialUser?: Pick<User, "id" | "name" | "email"> & { avatar?: string | null }
+}) {
   const pathname = usePathname() || ""
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { user: liveUser, logout, isLoading } = useAuth()
+  // Preserve the server-verified sidebar during hydration, never after logout.
+  const user = liveUser || (isLoading ? initialUser : undefined)
   const { data: settings } = useSettingsData()
   const [isOpen, setIsOpen] = useState(false)
   const [hasInstoreOrders, setHasInstoreOrders] = useState(false)
 
   useEffect(() => {
+    setHasInstoreOrders(false)
     if (!user?.email) return
     let cancelled = false
 
     ;(async () => {
       try {
-        const response = await fetch(`/api/orders?employeeId=${encodeURIComponent(user.email)}`)
-        if (!response.ok || cancelled) return
-        const orders = await response.json()
-        if (!Array.isArray(orders)) return
+        const response = await apiFetch(`/api/orders?employeeId=${encodeURIComponent(user.email)}`)
+        if (cancelled) return
+        if (!response.ok) throw new Error("In-store purchase shortcut could not be loaded")
+        const orders = InStoreOrderShortcutListSchema.parse(await response.json())
         const instore = orders.filter(
-          (order: any) => order.paymentMethod === "instore" || order.paymentDetails?.verifiedEmail === user.email,
+          order => order.paymentMethod === "instore" || order.paymentDetails?.verifiedEmail === user.email,
         )
-        setHasInstoreOrders(instore.length > 0)
-      } catch {
-        // The in-store shortcut is optional chrome — stay quiet on failure.
+        if (!cancelled) setHasInstoreOrders(instore.length > 0)
+      } catch (error) {
+        if (!cancelled) console.warn("[Account sidebar] In-store purchases unavailable:", error)
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user?.email])
 
   if (!user) return null
 
   const navItems: NavItem[] = [
     { name: "My Account", href: "/dashboard", icon: Home, exact: true },
     { name: "My Orders", href: "/dashboard/orders", icon: Package },
+    { name: "My Addresses", href: "/dashboard/addresses", icon: MapPin },
     { name: "My Cart", href: "/dashboard/cart", icon: ShoppingCart },
     { name: "My Wishlist", href: "/dashboard/wishlist", icon: Heart },
+    { name: "My Membership", href: "/dashboard/membership", icon: Crown },
     { name: "My Offers", href: "/dashboard/offers", icon: Tag },
     ...(hasInstoreOrders
       ? [{ name: "In-Store Purchases", href: "/dashboard/instore-purchases", icon: Store, badge: "Employee" }]
       : []),
-    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
     { name: "Account Settings", href: "/dashboard/settings", icon: Settings },
-    { name: "Help & Support", href: "/contact", icon: Headphones },
+    { name: "Help & Support", href: "/dashboard/support", icon: Headphones },
   ]
 
   const isActive = (href: string, exact = false) => (exact ? pathname === href : pathname.startsWith(href))
 
   const firstName = (user.name || "there").split(" ")[0]
-  const phone = settings?.storePhone || "1800 123 7272"
+  const phone = settings?.storePhone
   const whatsapp = String(settings?.whatsappNumber || "").replace(/\D/g, "")
 
   const handleLogout = () => {
@@ -90,12 +99,11 @@ export default function AccountSidebar() {
   }
 
   return (
-    <aside className="lg:sticky lg:top-4">
+    <aside className={styles.overview}>
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-            <User className="h-6 w-6" strokeWidth={1.6} />
-          </span>
+          <img src={user.avatar || defaultProfileAvatar(user.id)} alt={`${firstName}'s profile`} className={styles.avatar}
+            onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = defaultProfileAvatar(user.id) }} />
           <div className="min-w-0">
             <p className="text-[13px] leading-tight text-gray-500">Hello,</p>
             <p className="truncate font-heading text-[15px] font-bold leading-tight text-[#0F2557]">{firstName}</p>
@@ -172,9 +180,9 @@ export default function AccountSidebar() {
           <Headphones className="h-5 w-5 text-[#1560BD]" strokeWidth={1.7} />
           <p className="font-heading text-[14px] font-bold text-[#0F2557]">Need Help?</p>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-slate-600">
-          Call us at <span className="font-semibold text-[#0F2557]">{phone}</span> (Toll Free)
-        </p>
+        {phone && <p className="mt-2 text-[11px] leading-snug text-slate-600">
+          Call us at <a href={`tel:${phone}`} className="font-semibold text-[#0F2557]">{phone}</a>
+        </p>}
         {whatsapp ? (
           <a
             href={`https://wa.me/${whatsapp}`}
@@ -187,7 +195,7 @@ export default function AccountSidebar() {
           </a>
         ) : (
           <Link
-            href="/contact"
+            href="/dashboard/support"
             className="mt-3 flex items-center justify-center rounded-lg border border-[#1560BD] px-3 py-2 text-[12px] font-semibold text-[#1560BD] transition-colors hover:bg-[#1560BD] hover:text-white"
           >
             Contact Support

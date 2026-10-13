@@ -160,7 +160,7 @@ export const POST = withRateLimit(async (req: Request) => {
       ok: true,
       message: "If an account exists with this email, you will receive a password reset link.",
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("Forgot password error:", error)
     return NextResponse.json(
       { error: "Failed to process password reset request. Please try again later." },

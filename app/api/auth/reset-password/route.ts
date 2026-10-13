@@ -2,19 +2,17 @@ import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import crypto from "crypto"
 import bcrypt from "bcryptjs"
+import { revokeAllForUser } from "@/lib/refresh-tokens"
+import { z } from "zod"
+import { passwordSchema } from "@/lib/validation"
+
+const ResetSchema = z.object({ token: z.string().min(1).max(200), password: passwordSchema })
 
 export async function POST(req: Request) {
   try {
-    const { token, password } = await req.json()
-
-    if (!token || !password) {
-      return NextResponse.json({ error: "Token and password are required" }, { status: 400 })
-    }
-
-    // Validate password strength
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
-    }
+    const parsed = ResetSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    const { token, password } = parsed.data
 
     // Hash the token to compare with stored hash
     const resetTokenHash = crypto.createHash("sha256").update(token).digest("hex")
@@ -39,8 +37,8 @@ export async function POST(req: Request) {
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Update password and clear reset token
-    await usersCollection.updateOne(
-      { _id: user._id },
+    const result = await usersCollection.updateOne(
+      { _id: user._id, resetPasswordToken: resetTokenHash, resetPasswordExpiry: { $gt: new Date() } },
       {
         $set: {
           password: hashedPassword,
@@ -50,14 +48,19 @@ export async function POST(req: Request) {
           resetPasswordToken: "",
           resetPasswordExpiry: "",
         },
+        $inc: { sessionVersion: 1 },
       }
     )
+    if (!result.matchedCount) {
+      return NextResponse.json({ error: "Invalid or expired reset token" }, { status: 400 })
+    }
+    await revokeAllForUser(user._id.toString(), "password_reset")
 
     return NextResponse.json({
       ok: true,
       message: "Password has been reset successfully. You can now login with your new password.",
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("Reset password error:", error)
     return NextResponse.json(
       { error: "Failed to reset password. Please try again later." },

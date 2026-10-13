@@ -3,7 +3,7 @@
 import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
 import { ArrowLeft, Save } from "lucide-react"
@@ -25,7 +25,8 @@ interface Product {
   vendorId?: string
 }
 
-export default function EditVendorProduct({ params }: { params: { id: string } }) {
+export default function EditVendorProduct({ params: pendingParams }: { params: Promise<{ id: string }> }) {
+  const params = use(pendingParams)
   const { user, isVendor, isLoading } = useAuth()
   const router = useRouter()
   const [product, setProduct] = useState<Product | null>(null)
@@ -126,7 +127,7 @@ export default function EditVendorProduct({ params }: { params: { id: string } }
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          <p>Product not found or you don't have permission to edit it.</p>
+          <p>Product not found or you don&apos;t have permission to edit it.</p>
           <p className="mt-2">
             <Link href="/vendor/products" className="underline">
               Return to products

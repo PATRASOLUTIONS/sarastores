@@ -3,6 +3,14 @@
 import type React from "react"
 
 import { useState } from "react"
+import { apiFetchJson } from "@/lib/api-client"
+import { z } from "zod"
+
+const saveResponseSchema = z.object({
+  success: z.literal(true),
+  action: z.enum(["created", "updated"]),
+  product: z.object({ id: z.string().min(1), sku: z.string().min(1) }),
+})
 
 export function SpecsAmazonFetcher() {
   const [sku, setSku] = useState("")
@@ -21,20 +29,16 @@ export function SpecsAmazonFetcher() {
     }
     setLoading(true)
     try {
-      const res = await fetch("/api/scrape-amazon", {
+      const data = await apiFetchJson("/api/scrape-amazon", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku, url }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to fetch/insert")
-      }
+        json: { itemno: sku.trim(), url: url.trim(), saveToDatabase: true },
+      }, value => saveResponseSchema.parse(value))
+      if (data.product.sku !== sku.trim()) throw new Error("Saved specifications did not match the requested SKU")
       setMessage("Fetched and saved successfully.")
       setSku("")
       setUrl("")
-    } catch (err: any) {
-      setError(err?.message || "Something went wrong")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
     }

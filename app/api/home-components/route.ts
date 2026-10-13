@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       updatedAt: new Date(),
     }
     const result = await col.insertOne(doc)
-    return NextResponse.json({ success: true, id: result.insertedId.toString(), component: { ...doc, _id: result.insertedId } })
+    return NextResponse.json({ success: true, id: result.insertedId.toString(), component: normalizeId({ ...doc, _id: result.insertedId }) })
   } catch (err) {
     console.error("/api/home-components POST error", err)
     return NextResponse.json({ error: "Failed to create component" }, { status: 500 })

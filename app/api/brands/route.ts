@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Filter } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
 
 // Brand document schema
@@ -105,11 +105,11 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: true, brand })
         }
 
-        const filter: any = {}
+        const filter: Filter<BrandDocument> = {}
         if (enabledOnly) filter.enabled = true
         if (landingPagesOnly) filter.landingPageEnabled = { $ne: false }
 
-        const brands = await db.collection("brands")
+        const brands = await db.collection<BrandDocument>("brands")
             .find(filter)
             .sort({ name: 1 })
             .toArray()

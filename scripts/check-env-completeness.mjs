@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
 
-const SKIP_DIRS = new Set(["node_modules", ".next", ".git", "mobile", "archive", ".expo", "public", "docs"])
+const SKIP_DIRS = new Set(["node_modules", ".next", ".git", "mobile", "archive", ".expo", "public", "documents"])
 
 function walk(dir) {
   const out = []

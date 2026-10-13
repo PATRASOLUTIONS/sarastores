@@ -17,9 +17,14 @@ const PLACEMENTS = [
   "pdp-offer",
   "pdp-rail",
   "brands-hero",
+  "cart-promo",
 ] as const
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a #rrggbb colour")
+const safeLink = z.string().max(300).refine(
+  (value) => !value || /^\/(?!\/)/.test(value) || /^https?:\/\//i.test(value),
+  "Use a site-relative path or an http(s) URL",
+)
 
 const BannerSchema = z.object({
   placement: z.enum(PLACEMENTS),
@@ -30,7 +35,7 @@ const BannerSchema = z.object({
   subtitle: z.string().max(200).optional().default(""),
   script: z.string().max(120).optional().default(""),
   ctaText: z.string().max(60).optional().default(""),
-  ctaLink: z.string().max(300).optional().default(""),
+  ctaLink: safeLink.optional().default(""),
   image: z.string().max(600).optional().default(""),
   bgFrom: hexColor.optional().default("#1560BD"),
   bgTo: hexColor.optional().default("#0B3C87"),
@@ -38,7 +43,7 @@ const BannerSchema = z.object({
   dark: z.boolean().optional().default(false),
   bullets: z.array(z.string().max(60)).max(6).optional().default([]),
   order: z.number().int().min(0).max(999).optional().default(0),
-  active: z.boolean().optional().default(true),
+  active: z.boolean().optional().default(false),
 })
 
 export async function GET(request: NextRequest) {
@@ -46,6 +51,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const placement = searchParams.get("placement")
     const includeInactive = searchParams.get("all") === "1"
+    if (includeInactive) {
+      const guard = await requireAdmin()
+      if (!guard.ok) return guard.response
+    }
 
     const filter: Record<string, unknown> = {}
     if (placement && (PLACEMENTS as readonly string[]).includes(placement)) filter.placement = placement
@@ -54,7 +63,7 @@ export async function GET(request: NextRequest) {
     const collection = await getCollection(COLLECTION)
     const docs = await collection.find(filter).sort({ order: 1, createdAt: 1 }).toArray()
 
-    return NextResponse.json(docs.map(normalizeId))
+    return NextResponse.json(docs.map(normalizeId), { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     return handleApiError(error, "Failed to fetch listing banners")
   }
@@ -88,6 +97,7 @@ export async function PUT(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 })
+    if (!/^[a-f\d]{24}$/i.test(id)) return NextResponse.json({ error: "Invalid banner id" }, { status: 400 })
 
     const parsed = BannerSchema.partial().safeParse(await request.json())
     if (!parsed.success) {
@@ -115,6 +125,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 })
+    if (!/^[a-f\d]{24}$/i.test(id)) return NextResponse.json({ error: "Invalid banner id" }, { status: 400 })
 
     const collection = await getCollection(COLLECTION)
     const result = await collection.deleteOne({ _id: createObjectId(id) })

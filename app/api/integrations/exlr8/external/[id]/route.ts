@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { getCollection, createObjectId, normalizeId } from '@/lib/db-service'
+import { getCollection, normalizeId } from '@/lib/db-service'
+import { ObjectId } from 'mongodb'
+import type { ExternalFulfillmentRecord } from '@/lib/external-fulfillment'
 
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const guard = await requireAdmin()
@@ -8,19 +10,13 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
   try {
     const { id } = await context.params
-    const externalCollection: any = await getCollection('external_orders')
-
-    let doc: any = null
-    // Try to treat id as ObjectId first
-    try {
-      doc = await externalCollection.findOne({ _id: createObjectId(id) })
-    } catch (e) {
-      // ignore
-    }
+    if (!id || id.length > 150) return NextResponse.json({ error: 'Valid external order ID is required' }, { status: 400 })
+    const externalCollection = await getCollection<ExternalFulfillmentRecord>('external_orders')
+    let doc = ObjectId.isValid(id) ? await externalCollection.findOne({ _id: new ObjectId(id) }) : null
 
     // Fallback: try queueId or externalOrderId
     if (!doc) {
-      doc = await externalCollection.findOne({ $or: [{ queueId: id }, { externalOrderId: id }, { 'response.data.orderID': id }, { 'response.data.orderId': id }] })
+      doc = await externalCollection.findOne({ $or: [{ _id: id }, { queueId: id }, { externalOrderId: id }, { 'response.data.orderID': id }, { 'response.data.orderId': id }] })
     }
 
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 })

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignsCollection, findCampaignBySlug, seedCampaignPrizes, getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignsCollection, findCampaignBySlug, DEFAULT_PRIZES, getCampaignCollection, type SpinCampaign, type SpinPrize, type SpinCouponStats } from "@/lib/spin-wheel-campaigns"
 import { requireAdmin } from "@/lib/auth"
+import type { Filter } from "mongodb"
+import { z } from "zod"
+import { connectToDatabase } from "@/lib/mongodb"
+
+const createSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  description: z.string().max(5000).optional(),
+  cloneFrom: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(),
+}).strict()
 
 function generateSlug(name: string): string {
   return name
@@ -22,14 +31,14 @@ export async function GET(request: NextRequest) {
     const activeOnly = searchParams.get("active") === "true"
 
     const col = await getCampaignsCollection()
-    const filter: Record<string, any> = {}
+    const filter: Filter<SpinCampaign> = {}
     if (activeOnly) filter.isActive = true
 
     const campaigns = await col.find(filter).sort({ createdAt: -1 }).toArray()
 
     // Enrich with counts
     const enriched = await Promise.all(
-      campaigns.map(async (c: any) => {
+      campaigns.map(async (c) => {
         const slug = c.slug
         const invCol = await getCampaignCollection(slug, "inventory")
         const partCol = await getCampaignCollection(slug, "participants")
@@ -39,14 +48,14 @@ export async function GET(request: NextRequest) {
           invCol.countDocuments(),
           partCol.countDocuments(),
           couponCol
-            .aggregate([
+            .aggregate<SpinCouponStats>([
               { $group: { _id: "$prizeName", total: { $sum: 1 }, used: { $sum: { $cond: ["$isUsed", 1, 0] } } } },
             ])
             .toArray(),
         ])
 
-        const totalCoupons = couponStats.reduce((s: number, c: any) => s + c.total, 0)
-        const usedCoupons = couponStats.reduce((s: number, c: any) => s + c.used, 0)
+        const totalCoupons = couponStats.reduce((s: number, c) => s + c.total, 0)
+        const usedCoupons = couponStats.reduce((s: number, c) => s + c.used, 0)
 
         return {
           id: c._id.toString(),
@@ -80,12 +89,9 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { name, description, cloneFrom } = body
-
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json({ error: "Campaign name is required" }, { status: 400 })
-    }
+    const parsed = createSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: "Invalid campaign data" }, { status: 400 })
+    const { name, description, cloneFrom } = parsed.data
 
     let slug = generateSlug(name.trim())
     if (!slug) {
@@ -96,6 +102,9 @@ export async function POST(request: NextRequest) {
     const existing = await findCampaignBySlug(slug)
     if (existing) {
       slug = `${slug}-${Date.now().toString(36)}`
+    }
+    if (cloneFrom && !await findCampaignBySlug(cloneFrom)) {
+      return NextResponse.json({ error: "Source campaign not found" }, { status: 404 })
     }
 
     const col = await getCampaignsCollection()
@@ -109,31 +118,35 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     }
 
-    await col.insertOne(campaign)
-
-    // Seed default prizes
-    await seedCampaignPrizes(slug)
-
-    // If cloneFrom is provided, copy ONLY prize inventory from another campaign
-    // No participant, visit, OTP, or coupon code data is carried over
-    if (cloneFrom && typeof cloneFrom === "string") {
-      const srcInvCol = await getCampaignCollection(cloneFrom, "inventory")
-      const destInvCol = await getCampaignCollection(slug, "inventory")
-
-      // Clone prizes (overwrite defaults)
-      const srcPrizes = await srcInvCol.find().toArray()
-      if (srcPrizes.length > 0) {
-        await destInvCol.deleteMany({})
-        const cloned = srcPrizes.map(({ _id, ...rest }: any) => ({ ...rest, distributed: 0 }))
-        await destInvCol.insertMany(cloned)
-        await destInvCol.createIndex({ prizeName: 1 }, { unique: true })
-      }
+    await col.createIndex({ slug: 1 }, { unique: true, name: "slug_unique" })
+    const destInvCol = await getCampaignCollection<SpinPrize>(slug, "inventory")
+    await destInvCol.createIndex({ prizeName: 1 }, { unique: true })
+    const { client } = await connectToDatabase()
+    const session = client.startSession()
+    let insertedId: string | undefined
+    try {
+      insertedId = await session.withTransaction(async () => {
+        const inserted = await col.insertOne(campaign, { session })
+        if (!inserted.acknowledged) throw new Error("Campaign creation was not acknowledged")
+        let prizes = DEFAULT_PRIZES.map(prize => ({ ...prize, distributed: 0 }))
+        if (cloneFrom) {
+          const srcInvCol = await getCampaignCollection<SpinPrize>(cloneFrom, "inventory")
+          const source = await srcInvCol.find({}, { session }).toArray()
+          if (source.length) prizes = source.map(({ _id, ...rest }) => ({ ...rest, distributed: 0 }))
+        }
+        const seeded = await destInvCol.insertMany(prizes, { session })
+        if (!seeded.acknowledged || seeded.insertedCount !== prizes.length) throw new Error("Campaign prizes were not fully stored")
+        return inserted.insertedId.toString()
+      })
+    } finally {
+      await session.endSession()
     }
+    if (!insertedId) throw new Error("Campaign creation did not complete")
 
     return NextResponse.json({
       success: true,
       campaign: {
-        id: (campaign as any)._id?.toString() || "",
+        id: insertedId,
         name: campaign.name,
         slug: campaign.slug,
         description: campaign.description,
@@ -145,6 +158,11 @@ export async function POST(request: NextRequest) {
       message: `Campaign "${name}" created with slug: ${slug}`,
     })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    if (error && typeof error === "object" && "code" in error && error.code === 11000) {
+      console.error("Campaign uniqueness conflict:", error)
+      return NextResponse.json({ error: "Campaign name or stored inventory conflicts; reconcile before retrying" }, { status: 409 })
+    }
     console.error("Campaigns POST error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

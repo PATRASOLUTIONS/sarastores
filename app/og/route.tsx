@@ -2,7 +2,11 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams
+  const title = (params.get("title") || "Sara Electronics").slice(0, 160)
+  const description = (params.get("description") || "Explore electronics, home appliances and mobiles at SARA.").slice(0, 240)
+  const brand = (params.get("brand") || "Sara Electronics").slice(0, 80)
   return new ImageResponse(
     (
       <div
@@ -29,7 +33,7 @@ export async function GET() {
         >
           <div
             style={{
-              fontSize: "72px",
+              fontSize: title.length > 65 ? "44px" : "60px",
               fontWeight: "bold",
               color: "#ffffff",
               textAlign: "center" as const,
@@ -37,18 +41,18 @@ export async function GET() {
               marginBottom: "20px",
             }}
           >
-            Sara Electronics
+            {title}
           </div>
 
           <div
             style={{
-              fontSize: "32px",
+              fontSize: "26px",
               color: "#94a3b8",
               textAlign: "center" as const,
               marginBottom: "40px",
             }}
           >
-            Shop Smart, Live Better
+            {description}
           </div>
 
           <div
@@ -59,11 +63,7 @@ export async function GET() {
               color: "#60a5fa",
             }}
           >
-            <span>Televisions</span>
-            <span>|</span>
-            <span>Refrigerators</span>
-            <span>|</span>
-            <span>Washing Machines</span>
+            <span>{brand}</span>
           </div>
 
           <div
@@ -75,11 +75,7 @@ export async function GET() {
               marginTop: "15px",
             }}
           >
-            <span>Air Conditioners</span>
-            <span>|</span>
-            <span>Smartphones</span>
-            <span>|</span>
-            <span>Home Appliances</span>
+            <span>Electronics &amp; Home Appliances</span>
           </div>
         </div>
       </div>

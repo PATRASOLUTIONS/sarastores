@@ -41,9 +41,9 @@ export interface ApiFetchOptions extends Omit<RequestInit, "body" | "credentials
 
 export class ApiError extends Error {
   status: number
-  data: any
+  data: unknown
 
-  constructor(message: string, status: number, data: any) {
+  constructor(message: string, status: number, data: unknown) {
     super(message)
     this.name = "ApiError"
     this.status = status
@@ -90,13 +90,16 @@ export async function apiFetch(
  * responses with the parsed body attached, so call sites can show the
  * server's error message directly.
  */
-export async function apiFetchJson<T = any>(
+export function apiFetchJson(input: string, init?: ApiFetchOptions): Promise<unknown>
+export function apiFetchJson<T>(input: string, init: ApiFetchOptions | undefined, parse: (value: unknown) => T): Promise<T>
+export async function apiFetchJson(
   input: string,
   init: ApiFetchOptions = {},
-): Promise<T> {
+  parse?: (value: unknown) => unknown,
+): Promise<unknown> {
   const response = await apiFetch(input, init)
   const text = await response.text()
-  let data: any = null
+  let data: unknown = null
   if (text) {
     try {
       data = JSON.parse(text)
@@ -106,11 +109,13 @@ export async function apiFetchJson<T = any>(
   }
 
   if (!response.ok) {
-    const message =
-      (data && typeof data === "object" && (data.error || data.message)) ||
-      `Request failed with status ${response.status}`
+    let message = `Request failed with status ${response.status}`
+    if (data && typeof data === "object") {
+      if ("error" in data && typeof data.error === "string" && data.error) message = data.error
+      else if ("message" in data && typeof data.message === "string" && data.message) message = data.message
+    }
     throw new ApiError(message, response.status, data)
   }
 
-  return data as T
+  return parse ? parse(data) : data
 }

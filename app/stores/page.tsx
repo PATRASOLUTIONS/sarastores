@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import { pageMetadata } from "@/lib/seo-page"
 import Link from "next/link"
 import { MapPin, Store as StoreIcon } from "lucide-react"
 import Header from "@/components/Header"
@@ -7,12 +7,12 @@ import { getStoreCities } from "@/lib/store-locations"
 
 export const revalidate = 3600
 
-export const metadata: Metadata = {
-  title: "Sara Electronics Store Locator — Find an Electronics Store Near You",
+export const generateMetadata = pageMetadata({
+  path: "/stores",
+  title: brand => `Electronics Stores Near You | ${brand}`,
   description:
     "Browse Sara Electronics stores by city. Get addresses, phone numbers, opening hours and directions for every showroom.",
-  alternates: { canonical: "/stores" },
-}
+})
 
 export default async function StoresIndexPage() {
   const cities = await getStoreCities()

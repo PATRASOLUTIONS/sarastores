@@ -93,7 +93,7 @@ export function RailCards({ cards }: { cards: SiteBanner[] }) {
 
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
   return (
-    <div className="flex items-center" aria-label={`Rated ${rating} out of 5`}>
+    <div className="flex items-center" role="img" aria-label={`Rated ${rating} out of 5`}>
       {[0, 1, 2, 3, 4].map((i) => {
         const fill = Math.max(0, Math.min(1, rating - i))
         return (

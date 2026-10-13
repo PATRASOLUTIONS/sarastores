@@ -1,43 +1,49 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId, type WithId, type Document } from "mongodb";
+import { getCollection, normalizeId } from "@/lib/db-service";
+import { ObjectId } from "mongodb";
+import { type CampaignPageDocument, campaignPageResponseSchema } from "@/lib/campaign-page";
+import { productCardResponseSchema, type ProductCardResponse } from "@/lib/product-card-response";
+
+interface CampaignProductDocument {
+  _id: ObjectId | string;
+  id?: string;
+  active?: boolean;
+  [field: string]: unknown;
+}
 
 export async function GET(req: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
   try {
-    const { db } = await connectToDatabase();
+    const campaigns = await getCollection<CampaignPageDocument>("campaign_pages");
     
     // Find active campaign
-    const campaign = await db.collection("campaign_pages").findOne({ slug, isActive: true });
+    const campaign = await campaigns.findOne({ slug, isActive: true });
     
     if (!campaign) {
       return NextResponse.json({ success: false, error: "Campaign not found" }, { status: 404 });
     }
 
-    // Populate products
-    let products: WithId<Document>[] = [];
-    if (campaign.productIds && campaign.productIds.length > 0) {
-      // Filter out invalid IDs to prevent cast errors
-      const validIds = campaign.productIds
-        .filter((id: string) => ObjectId.isValid(id))
-        .map((id: string) => new ObjectId(id));
-        
-      if (validIds.length > 0) {
-        // Fetch matching products. Using standard find so we get full product data for <CategoryProductCard />
-        products = await db.collection("products")
-          .find({ _id: { $in: validIds } })
-          .toArray();
-      }
+    const normalized = campaignPageResponseSchema.parse(normalizeId(campaign));
+    let products: ProductCardResponse[] = [];
+    if (normalized.productIds.length) {
+      if (normalized.productIds.length > 500) throw new Error("Stored campaign exceeds product limit");
+      const collection = await getCollection<CampaignProductDocument>("products");
+      const nativeIds = normalized.productIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+      const documents = await collection.find({
+        active: { $ne: false },
+        $or: [{ _id: { $in: nativeIds } }, { _id: { $in: normalized.productIds } }, { id: { $in: normalized.productIds } }],
+      }).toArray();
+      products = documents.map(product => productCardResponseSchema.parse(normalizeId(product)));
     }
 
     return NextResponse.json({ 
       success: true, 
       campaign: {
-        _id: campaign._id,
-        name: campaign.name,
-        slug: campaign.slug,
-        banner: campaign.banner,
-        isActive: campaign.isActive,
+        id: normalized.id,
+        name: normalized.name,
+        slug: normalized.slug,
+        banner: normalized.banner,
+        isActive: normalized.isActive,
         products
       } 
     });

@@ -3,6 +3,17 @@ import { getCollection } from "@/lib/db-service"
 import { normalizeId } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
 import { getSession } from "@/lib/auth"
+import { AccountProfileSchema } from "@/lib/validation"
+import { z } from "zod"
+
+const AdminProfileSchema = AccountProfileSchema.extend({
+  role: z.enum(["user", "vendor", "admin", "superadmin"]).optional(),
+  dashboardAccess: z.boolean().optional(),
+  allowedPages: z.array(z.string().startsWith("/admin/").max(200)).max(100).optional(),
+  storeAccess: z.enum(["none", "selected", "all"]).optional(),
+  storeIds: z.array(z.string().max(100)).max(100).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+}).strict()
 
 function isAdminRole(role?: string) {
   return role === "admin" || role === "superadmin"
@@ -37,7 +48,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 
     // Don't send the password back to the client
-    const { password, ...userWithoutPassword } = user
+    const { password, resetPasswordToken, resetPasswordExpiry, emailVerificationToken, emailVerificationExpiry, ...userWithoutPassword } = user
 
     return NextResponse.json(normalizeId(userWithoutPassword))
   } catch (error) {
@@ -67,16 +78,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return NextResponse.json({ message: "Invalid user id" }, { status: 400 })
     }
     const data = await request.json()
+    const profile = (requesterIsAdmin ? AdminProfileSchema : AccountProfileSchema.strict()).safeParse(data)
+    if (!profile.success) return NextResponse.json({ message: profile.error.issues[0].message }, { status: 400 })
     const usersCollection = await getCollection("users")
 
-    // Never allow changing email/password here. Privilege fields can only be
-    // changed by an admin — prevents self privilege-escalation to admin.
-    const { email, password, role, dashboardAccess, allowedPages, _id, ...rest } = data
-    const updateData: any = { ...rest }
-    if (requesterIsAdmin) {
-      if (typeof role === "string") updateData.role = role
-      if (typeof dashboardAccess === "boolean") updateData.dashboardAccess = dashboardAccess
-      if (Array.isArray(allowedPages)) updateData.allowedPages = allowedPages
+    const updateData: Record<string, unknown> = { ...profile.data }
+    const target = await usersCollection.findOne({ _id: objectId })
+    if (!target) return NextResponse.json({ message: "User not found" }, { status: 404 })
+    if (session.user.role !== "superadmin" && (updateData.role === "superadmin" || target.role === "superadmin")) {
+      return NextResponse.json({ message: "Only a superadmin may manage superadmin accounts" }, { status: 403 })
     }
 
     const result = await usersCollection.updateOne(
@@ -91,7 +101,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const updatedUser = await usersCollection.findOne({ _id: objectId })
 
     // Don't send the password back to the client
-    const { password: _, ...userWithoutPassword } = updatedUser!
+    const { password: _, resetPasswordToken, resetPasswordExpiry, emailVerificationToken, emailVerificationExpiry, ...userWithoutPassword } = updatedUser!
 
     return NextResponse.json(normalizeId(userWithoutPassword))
   } catch (error) {
@@ -99,4 +109,3 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ message: "An error occurred while updating user" }, { status: 500 })
   }
 }
-

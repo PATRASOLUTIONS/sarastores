@@ -49,7 +49,7 @@ export default function DeliverToPincode({ variant = "dark" }: { variant?: "dark
       >
         <MapPin className="h-4 w-4 flex-shrink-0" />
         <span className="flex flex-col items-start leading-none">
-          <span className="text-[10px] opacity-70">Deliver to</span>
+          <span className="text-[10px]">Deliver to</span>
           <span className="font-semibold text-[13px]">{pincode ? pincode : "Select location"}</span>
         </span>
         <ChevronDown className="h-3.5 w-3.5 opacity-70" />

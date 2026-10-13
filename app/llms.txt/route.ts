@@ -1,239 +1,122 @@
-/**
- * llms.txt — proposed standard (https://llmstxt.org) for LLM/AI agents.
- *
- * Served as text/plain at /llms.txt. Helps ChatGPT, Claude, Perplexity,
- * Google AI Overviews, Bing Copilot, and other AI systems ground their
- * product/store answers on first-party structured data instead of guessing
- * from raw HTML. Re-uses the same data sources as app/sitemap.ts so the
- * two stay in sync.
- *
- * Spec: # SiteName, > one-line summary, ## sections with markdown links.
- * Keep under ~5-10KB so it stays cheap for crawlers to ingest.
- */
-
-import { connectToDatabase } from "@/lib/mongodb"
+import { getCollection } from "@/lib/db-service"
 import { getStoreSettings, pickStoreName } from "@/lib/jsonld-store"
 import { getOriginFromHeaders } from "@/lib/seo-metadata"
 
-export const revalidate = 3600 // hourly, same cadence as sitemap
-export const dynamic = "force-dynamic" // pulls from MongoDB
+export const revalidate = 3600
+export const dynamic = "force-dynamic"
 
-const MAX_PRODUCTS = 60
-const MAX_CATEGORIES = 30
-const MAX_BRANDS = 30
-
-function mdEscape(text: string | null | undefined): string {
-  if (!text) return ""
-  return text.replace(/[\[\]]/g, "").replace(/\s+/g, " ").trim()
+interface IndexEntry {
+  name?: string | null
+  slug?: string | null
+  description?: string | null
+  tagline?: string | null
+  price?: number | null
+  mrp?: number | null
+  stock?: number | null
+  brand?: string | null
 }
 
-function shortDesc(text: string | undefined, max = 140): string {
-  if (!text) return ""
-  const stripped = mdEscape(text)
-  return stripped.length <= max ? stripped : stripped.slice(0, max - 1).trimEnd() + "…"
+function text(value: unknown, max = 140): string {
+  if (typeof value !== "string") return ""
+  return value.replace(/<[^>]*>/g, "").replace(/[\\`*_{}\[\]()<>#!|]/g, "").replace(/\s+/g, " ").trim().slice(0, max)
 }
 
 export async function GET() {
-  const [origin, settings] = await Promise.all([
-    getOriginFromHeaders(),
-    getStoreSettings(),
-  ])
-  const storeName = pickStoreName(settings)
-  const tagline =
-    settings?.storeDescription ||
-    "Buy genuine electronics, home appliances, smartphones, TVs and more online at best prices with fast delivery across India."
-
-  const lines: string[] = []
-  lines.push(`# ${storeName}`)
-  lines.push(`> ${mdEscape(tagline)}`)
-  lines.push("")
-  lines.push(
-    `This file is a machine-readable index of ${storeName}. It is served at ${origin}/llms.txt and is intended for AI assistants, search-engine AI Overviews, and crawlers that want to ground their answers in first-party data.`,
+  const [origin, settings] = await Promise.all([getOriginFromHeaders(), getStoreSettings()])
+  const name = text(pickStoreName(settings), 120)
+  const lines = [
+    `# ${name}`,
+    `> ${text(settings?.storeDescription || "Genuine electronics, appliances, smartphones and TVs with delivery across India.")}`,
+    "",
+    `Selected first-party catalogue links for ${name}. Excerpts are bounded; use the sitemap for the complete index.`,
+    `- Store URL: <${origin}>`,
+    `- Sitemap: <${origin}/sitemap.xml>`,
+  ]
+  if (settings?.email && settings.email.length <= 255 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(settings.email)) lines.push(`- Contact: <mailto:${settings.email}>`)
+  if (settings?.phone) lines.push(`- Phone: ${text(settings.phone, 40)}`)
+  lines.push("", "## Storefront",
+    `- [All products](${origin}/products)`, `- [All brands](${origin}/brands)`,
+    `- [Store locator](${origin}/store-locator)`, `- [Offers](${origin}/offers)`,
+    "", "## Policies",
+    `- [Privacy policy](${origin}/privacy-policy)`, `- [Terms and conditions](${origin}/terms-and-conditions)`,
+    `- [Cancellation policy](${origin}/cancellation-policy)`, `- [Complaints](${origin}/complaints)`,
   )
-  lines.push("")
-  lines.push(`- Store URL: <${origin}>`)
-  lines.push(
-    `- Contact: <${settings?.email || `mailto:${settings?.email || "support@" + origin.replace(/^https?:\/\//, "")}`}>`,
-  )
-  if (settings?.phone) lines.push(`- Phone: ${settings.phone}`)
-  lines.push("- Sitemap: <" + origin + "/sitemap.xml>")
-  lines.push("- Human-readable sitemap: <" + origin + "/sitemap.xml>")
-  lines.push("")
+  const address = settings?.address
+  if (address) {
+    const parts = [address.street, address.city, address.state, address.postalCode, address.country].map(part => text(part, 120)).filter(Boolean)
+    if (parts.length) lines.push("", "## Address", ...parts.map(part => `- ${part}`))
+  }
+  const hours = settings?.hours || settings?.openingHours
+  if (hours) lines.push("", "## Hours", ...(Array.isArray(hours) ? hours.slice(0, 7) : [hours]).map(hour => `- ${text(hour, 120)}`))
 
-  // Try to load live data. Failures are non-fatal — the file still
-  // represents the store at a "we don't know" level.
-  let products: any[] = []
-  let categories: any[] = []
-  let brands: any[] = []
-  let contactInfo: any = null
-
+  let catalogueUnavailable = false
+  const sections: Array<{ heading: string; entries: string[] }> = []
   try {
-    const { db } = await connectToDatabase()
-    const [pRes, cRes, bRes, contact] = await Promise.all([
-      db
-        .collection("products")
-        .find(
-          { active: { $ne: false } },
-          {
-            projection: {
-              name: 1,
-              slug: 1,
-              brand: 1,
-              category: 1,
-              price: 1,
-              mrp: 1,
-              description: 1,
-              stock: 1,
-            },
-          },
-        )
-        .sort({ updatedAt: -1 })
-        .limit(MAX_PRODUCTS)
-        .toArray(),
-      db
-        .collection("categories")
-        .find(
-          { isEnabled: { $ne: false } },
-          { projection: { name: 1, slug: 1, description: 1 } },
-        )
-        .limit(MAX_CATEGORIES)
-        .toArray(),
-      db
-        .collection("brands")
-        .find(
-          { enabled: true },
-          { projection: { name: 1, slug: 1, description: 1 } },
-        )
-        .limit(MAX_BRANDS)
-        .toArray(),
-      db.collection("settings").findOne({}, { projection: { contact: 1, address: 1, hours: 1 } }),
+    const [products, categories, brands] = await Promise.all([
+      (await getCollection<IndexEntry>("products")).find({ active: true }, {
+        projection: { name: 1, slug: 1, brand: 1, price: 1, mrp: 1, description: 1, stock: 1 },
+      }).sort({ updatedAt: -1 }).limit(60).toArray(),
+      (await getCollection<IndexEntry>("categories")).find({ isEnabled: { $ne: false } }, {
+        projection: { name: 1, slug: 1, description: 1 },
+      }).limit(30).toArray(),
+      (await getCollection<IndexEntry>("brands")).find({
+        enabled: { $ne: false }, isEnabled: { $ne: false }, active: { $ne: false }, landingPageEnabled: { $ne: false },
+        slug: { $type: "string", $ne: "" },
+      }, { projection: { name: 1, slug: 1, description: 1, tagline: 1 } }).limit(30).toArray(),
     ])
-    products = pRes
-    categories = cRes
-    brands = bRes
-    contactInfo = contact
-  } catch (e) {
-    // DB unavailable — continue with empty lists.
-  }
-
-  // Categories
-  if (categories.length) {
-    lines.push("## Categories")
-    for (const c of categories) {
-      const slug = c.slug || c._id?.toString()
-      if (!slug) continue
-      const name = mdEscape(c.name) || "Category"
-      const desc = shortDesc(c.description)
-      lines.push(
-        desc
-          ? `- [${name}](${origin}/category/${slug}): ${desc}`
-          : `- [${name}](${origin}/category/${slug})`,
-      )
+    const link = (entry: IndexEntry & { _id: { toString(): string } }, path: string) => {
+      const slug = typeof entry.slug === "string" && entry.slug.trim() ? entry.slug.trim() : entry._id.toString()
+      return `- [${text(entry.name, 120) || path}](${origin}/${path}/${encodeURIComponent(slug)})`
     }
-    lines.push("")
+    sections.push(
+      { heading: "## Categories", entries: categories.map(entry => `${link(entry, "category")}${entry.description ? `: ${text(entry.description)}` : ""}`) },
+      { heading: "## Brand pages", entries: brands.map(entry => `${link(entry, "brands")}${entry.description || entry.tagline ? `: ${text(entry.description || entry.tagline)}` : ""}`) },
+      { heading: "## Products", entries: products.map(entry => {
+        const price = typeof entry.price === "number" && Number.isFinite(entry.price) && entry.price > 0 ? ` INR ${entry.price.toLocaleString("en-IN")}` : ""
+        const mrp = price && typeof entry.mrp === "number" && Number.isFinite(entry.mrp) && entry.mrp > (entry.price || 0) ? ` (MRP INR ${entry.mrp.toLocaleString("en-IN")})` : ""
+        const stock = typeof entry.stock === "number" && Number.isFinite(entry.stock) ? entry.stock > 0 ? " - In stock" : " - Out of stock" : ""
+        const brand = text(entry.brand, 80)
+        const description = text(entry.description, 110)
+        return `${link(entry, "product")}${price}${mrp}${brand ? ` - ${brand}` : ""}${stock}${description ? `: ${description}` : ""}`
+      }) },
+    )
+  } catch (error) {
+    catalogueUnavailable = true
+    console.error("[SEO] llms.txt catalogue could not be loaded:", error instanceof Error ? error.message : "Unexpected database failure")
+    lines.push("", "Catalogue data is temporarily unavailable. Retry later; no empty catalogue is implied.")
   }
 
-  // Brands
-  if (brands.length) {
-    lines.push("## Brand pages")
-    for (const b of brands) {
-      const slug = b.slug || b._id?.toString()
-      if (!slug) continue
-      const name = mdEscape(b.name) || "Brand"
-      const desc = shortDesc(b.description || b.tagline)
-      lines.push(
-        desc
-          ? `- [${name}](${origin}/brands/${slug}): ${desc}`
-          : `- [${name}](${origin}/brands/${slug})`,
-      )
+  // Reserve the fixed storefront/policy content, then fit complete links by UTF-8 bytes.
+  const maxBytes = 10000
+  let bytes = Buffer.byteLength(lines.join("\n"), "utf8")
+  if (bytes > maxBytes) {
+    console.error("[SEO] llms.txt public configuration exceeds the output budget")
+    return new Response("Public index configuration requires administrator reconciliation.", {
+      status: 503, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    })
+  }
+  for (const [index, section] of sections.entries()) {
+    const heading = `\n\n${section.heading}`
+    const reserved = sections.slice(index + 1).reduce((sum, next) => next.entries.length
+      ? sum + Buffer.byteLength(`\n\n${next.heading}\n${next.entries[0]}`, "utf8") : sum, 0)
+    const sectionLimit = maxBytes - reserved
+    if (!section.entries.length || bytes + Buffer.byteLength(`${heading}\n${section.entries[0]}`, "utf8") > sectionLimit) continue
+    lines.push("", section.heading)
+    bytes += Buffer.byteLength(heading, "utf8")
+    for (const entry of section.entries) {
+      const size = Buffer.byteLength(`\n${entry}`, "utf8")
+      if (bytes + size > sectionLimit) break
+      lines.push(entry)
+      bytes += size
     }
-    lines.push("")
   }
-
-  // Products
-  if (products.length) {
-    lines.push("## Products")
-    for (const p of products) {
-      const slugOrId = p.slug || p._id?.toString()
-      if (!slugOrId) continue
-      const name = mdEscape(p.name) || "Product"
-      const price =
-        typeof p.price === "number" && p.price > 0
-          ? `₹${p.price.toLocaleString("en-IN")}`
-          : ""
-      const mrp =
-        typeof p.mrp === "number" && p.mrp > 0 && p.mrp > (p.price || 0)
-          ? ` (MRP ₹${p.mrp.toLocaleString("en-IN")})`
-          : ""
-      const stock =
-        typeof p.stock === "number"
-          ? p.stock > 0
-            ? " — In stock"
-            : " — Out of stock"
-          : ""
-      const brand = p.brand ? ` — ${mdEscape(p.brand)}` : ""
-      const desc = shortDesc(p.description, 110)
-      const meta = [price ? price + mrp : "", brand, stock].filter(Boolean).join("")
-      lines.push(
-        desc
-          ? `- [${name}](${origin}/product/${slugOrId})${meta}: ${desc}`
-          : `- [${name}](${origin}/product/${slugOrId})${meta}`,
-      )
-    }
-    lines.push("")
-  }
-
-  // Storefront links
-  lines.push("## Storefront")
-  lines.push(`- [All products](${origin}/products)`)
-  lines.push(`- [All brands](${origin}/brands)`)
-  lines.push(`- [Store locator](${origin}/store-locator)`)
-  lines.push(`- [Today's deals](${origin}/products?deals=true)`)
-  lines.push("")
-
-  // Customer / company info
-  if (contactInfo?.address) {
-    const a = contactInfo.address
-    const parts = [a.street, a.city, a.state, a.postalCode, a.country].filter(Boolean)
-    if (parts.length) lines.push("## Address")
-    for (const p of parts) lines.push(`- ${mdEscape(p)}`)
-    if (parts.length) lines.push("")
-  }
-  if (contactInfo?.hours) {
-    lines.push("## Hours")
-    if (typeof contactInfo.hours === "string") {
-      lines.push(`- ${mdEscape(contactInfo.hours)}`)
-    } else if (Array.isArray(contactInfo.hours)) {
-      for (const h of contactInfo.hours) lines.push(`- ${mdEscape(String(h))}`)
-    }
-    lines.push("")
-  }
-
-  // Policies
-  lines.push("## Policies")
-  lines.push(`- [Privacy policy](${origin}/privacy-policy)`)
-  lines.push(`- [Terms and conditions](${origin}/terms-and-conditions)`)
-  lines.push(`- [Cancellation policy](${origin}/cancellation-policy)`)
-  lines.push(`- [Complaints](${origin}/complaints)`)
-  lines.push("")
-
-  // Optional brand-specific landing pages
-  for (const b of brands.slice(0, 12)) {
-    const slug = b.slug
-    if (!slug) continue
-    // The brand's first-party landing page (bosch/, haier/, lg/, tcl/…).
-    lines.push(`- [${mdEscape(b.name)} landing](${origin}/${slug.toLowerCase()})`)
-  }
-  lines.push("")
-
-  const body = lines.join("\n")
-
-  return new Response(body, {
-    status: 200,
+  return new Response(lines.join("\n"), {
+    status: catalogueUnavailable ? 503 : 200,
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      "Cache-Control": catalogueUnavailable ? "no-store" : "public, s-maxage=3600, stale-while-revalidate=86400",
       "X-Content-Type-Options": "nosniff",
+      "X-Catalogue-Status": catalogueUnavailable ? "unavailable" : "available",
     },
   })
 }

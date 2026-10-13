@@ -3,8 +3,9 @@
 import { apiFetch } from "@/lib/api-client"
 import { IntegrationError } from "./integration-error"
 import React, { useEffect, useMemo, useState } from "react"
+import type { IntegrationProduct, IntegrationProductList } from "@/types/integration"
 
-const RotateCw = (props: any) => (
+const RotateCw = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
@@ -19,7 +20,7 @@ const RotateCw = (props: any) => (
   </svg>
 )
 
-const ChevronDown = (props: any) => (
+const ChevronDown = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
@@ -33,7 +34,7 @@ const ChevronDown = (props: any) => (
   </svg>
 )
 
-const ChevronUp = (props: any) => (
+const ChevronUp = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
@@ -47,7 +48,7 @@ const ChevronUp = (props: any) => (
   </svg>
 )
 
-const ArrowRight = (props: any) => (
+const ArrowRight = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 24 24"
     fill="none"
@@ -62,16 +63,8 @@ const ArrowRight = (props: any) => (
   </svg>
 )
 
-interface ProductRow {
-  productID?: string
-  name?: string
-  category?: string
-  variants?: any[]
-  [k: string]: any
-}
-
 export default function KGenIntegrationPage() {
-  const [items, setItems] = useState<ProductRow[]>([])
+  const [items, setItems] = useState<IntegrationProduct[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
@@ -105,16 +98,16 @@ export default function KGenIntegrationPage() {
         const text = await res.text()
         throw new Error(text || `Status ${res.status}`)
       }
-      const data = await res.json()
+      const data: IntegrationProduct[] | (IntegrationProduct & IntegrationProductList) = await res.json()
 
-      let list: any[] = []
+      let list: IntegrationProduct[] = []
       if (Array.isArray(data)) list = data
       else if (Array.isArray(data.data)) list = data.data
       else if (Array.isArray(data.products)) list = data.products
       else if (Array.isArray(data.items)) list = data.items
       else list = [data]
 
-      const pagination = data?.paginationInfo || data?.meta || null
+      const pagination = Array.isArray(data) ? null : data.paginationInfo || data.meta || null
       const next = pagination?.nextCursor || pagination?.next_cursor || null
       const more = typeof pagination?.hasMore !== "undefined" ? pagination.hasMore : (pagination?.has_more ?? null)
 
@@ -123,9 +116,9 @@ export default function KGenIntegrationPage() {
 
       if (append) setItems((prev) => prev.concat(list))
       else setItems(list)
-    } catch (err: any) {
+    } catch (err) {
       console.error("Failed to fetch exlr8 products", err)
-      setError(err?.message || "Failed to fetch")
+      setError(err instanceof Error ? err.message : "Failed to fetch")
     } finally {
       setLoading(false)
     }
@@ -247,9 +240,9 @@ export default function KGenIntegrationPage() {
           setWalletBalance(null)
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       console.warn("Failed to fetch exlr8 wallet balance", e)
-      setWalletError(String(e?.message || e))
+      setWalletError(e instanceof Error ? e.message : "Failed to fetch wallet balance")
       setWalletBalance(null)
     }
 
@@ -258,23 +251,25 @@ export default function KGenIntegrationPage() {
       if (sales.ok) {
         const d = await sales.json()
         if (Array.isArray(d))
-          setSalesData(d.map((r: any) => ({ date: String(r.date), value: Number(r.value || r.sales || r.total || 0) })))
+          setSalesData(d.map((r: { date: string | number; value?: number; sales?: number; total?: number }) => ({ date: String(r.date), value: Number(r.value || r.sales || r.total || 0) })))
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Failed to fetch integration sales:", e)
+    }
   }
 
   useEffect(() => {
     setCurrentPage(1)
   }, [items, rowsPerPage, searchTerm])
 
-  const getCellValue = (it: any, key: string) => {
+  const getCellValue = (it: IntegrationProduct, key: string) => {
     switch (key) {
       case "productID":
         return it.productID || it.productId || it.id || ""
       case "name":
         return it.productDisplayName || it.productName || it.name || ""
       case "category":
-        if (Array.isArray(it.categories)) return it.categories.map((c: any) => c.categoryName || c.name).join(" | ")
+        if (Array.isArray(it.categories)) return it.categories.map((c) => c.categoryName || c.name).join(" | ")
         return it.category || it.categoryName || it.segment || ""
       case "variants":
         if (Array.isArray(it.variants)) return it.variants.length
@@ -285,7 +280,7 @@ export default function KGenIntegrationPage() {
       case "status":
         return it.active === false ? "inactive" : it.status || it.availability || (it.active ? "active" : "")
       default:
-        return it[key] ?? ""
+        return ""
     }
   }
 
@@ -293,14 +288,14 @@ export default function KGenIntegrationPage() {
     const term = searchTerm.trim().toLowerCase()
     let list = items.slice()
     if (term) {
-      list = list.filter((it: any) => {
+      list = list.filter((it) => {
         const vals = [getCellValue(it, "productID"), getCellValue(it, "name"), getCellValue(it, "category")]
-        return vals.some((v: any) => String(v).toLowerCase().includes(term))
+        return vals.some((v) => String(v).toLowerCase().includes(term))
       })
     }
 
     if (sortKey) {
-      list.sort((a: any, b: any) => {
+      list.sort((a, b) => {
         const va = getCellValue(a, sortKey)
         const vb = getCellValue(b, sortKey)
         const na = Number(va)
@@ -390,7 +385,7 @@ export default function KGenIntegrationPage() {
     : null
   const walletSubtitle = walletBalance ? "Available balance" : walletError ? `Error: ${walletError}` : undefined
 
-  const DetailsButton = ({ rowId, item }: { rowId: string; item: any }) => {
+  const DetailsButton = ({ rowId, item }: { rowId: string; item: IntegrationProduct }) => {
     const isOpen = expandedId === rowId
     return (
       <button
@@ -404,17 +399,17 @@ export default function KGenIntegrationPage() {
     )
   }
 
-  const DetailsRow = ({ item, rowId }: { item: any; rowId: string }) => {
+  const DetailsRow = ({ item, rowId }: { item: IntegrationProduct; rowId: string }) => {
     if (expandedId !== rowId) return <div style={{ display: "none" }} />
 
     const attachments: string[] = Array.isArray(item.attachments)
       ? item.attachments
       : Array.isArray(item.images)
-        ? item.images.map((i: any) => i.url || i)
+        ? item.images.map((i) => typeof i === "string" ? i : i.url)
         : []
     const img = attachments[0] || ""
     const categories = Array.isArray(item.categories)
-      ? item.categories.map((c: any) => c.categoryName || c.name).filter(Boolean)
+      ? item.categories.map((c) => c.categoryName || c.name).filter(Boolean)
       : []
     const variants = Array.isArray(item.variants) ? item.variants : Array.isArray(item.items) ? item.items : []
 
@@ -488,7 +483,7 @@ export default function KGenIntegrationPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-300">
-                      {variants.map((v: any, i: number) => (
+                      {variants.map((v, i) => (
                         <tr key={v.variantID || v.id || i} className="hover:bg-gray-50 transition-colors">
                           <td className="p-3 text-gray-900">
                             {v.variantDisplayName || v.variantName || v.name || "-"}

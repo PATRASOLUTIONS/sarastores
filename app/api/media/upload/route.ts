@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: images.length > 0, images, errors })
-  } catch (error: any) {
+  } catch (error) {
     console.error("[media/upload] failed:", error)
     return NextResponse.json({ success: false, error: "Upload failed" }, { status: 500 })
   }

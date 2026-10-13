@@ -163,7 +163,7 @@ export default function InstorePurchasesPage() {
                 <Store className="h-6 w-6 text-purple-600" />
                 In-Store Purchases
               </h1>
-              <p className="text-gray-600 text-sm mt-1">Orders you've processed as a store employee</p>
+              <p className="text-gray-600 text-sm mt-1">Orders you&apos;ve processed as a store employee</p>
             </div>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function InstorePurchasesPage() {
           <Store className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">No In-Store Purchases Yet</h2>
           <p className="text-gray-600 mb-4">
-            You haven't processed any in-store purchases yet.
+            You haven&apos;t processed any in-store purchases yet.
           </p>
           <p className="text-sm text-gray-500">
             In-store purchases you process will appear here for tracking and reference.

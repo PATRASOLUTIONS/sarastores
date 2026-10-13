@@ -14,11 +14,8 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { ArrowLeft, Save } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
-
-interface Category {
-  _id: string
-  name: string
-}
+import { z } from "zod"
+import { catalogCategoryListResponseSchema, type CatalogCategoryResponse } from "@/lib/catalog-list-response"
 
 export default function NewAdvertisementPage() {
   const { user, isAdmin } = useAuth()
@@ -26,7 +23,7 @@ export default function NewAdvertisementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const lock = useSubmitLock()
   const [error, setError] = useState<string | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [categories, setCategories] = useState<CatalogCategoryResponse[]>([])
 
   const [formData, setFormData] = useState({
     title: "",
@@ -46,10 +43,12 @@ export default function NewAdvertisementPage() {
     const fetchCategories = async () => {
       try {
         const res = await apiFetch("/api/categories") // Adjust your API route as necessary
-        const data = await res.json()
+        if (!res.ok) throw new Error("Failed to load categories")
+        const data = catalogCategoryListResponseSchema.parse(await res.json())
         setCategories(data)
       } catch (err) {
         console.error("Failed to fetch categories:", err)
+        setError("Failed to load categories. Reload before selecting a category.")
       }
     }
 
@@ -77,8 +76,11 @@ export default function NewAdvertisementPage() {
 
     try {
       const response = await apiFetch("/api/advertisements")
-      const existingAds = await response.json()
-      const highestOrder = existingAds.length > 0 ? Math.max(...existingAds.map((ad: any) => ad.order)) : -1
+      if (!response.ok) throw new Error("Failed to load existing advertisements")
+      const existingAds = z.array(z.object({
+        order: z.number().int().nonnegative().nullish().transform(value => value ?? 0),
+      })).parse(await response.json())
+      const highestOrder = existingAds.length > 0 ? Math.max(...existingAds.map(ad => ad.order)) : -1
 
       const dataToSubmit = {
         ...formData,
@@ -198,7 +200,7 @@ export default function NewAdvertisementPage() {
               >
                 <option value="">Select a category</option>
                 {categories.map((cat) => (
-                  <option key={cat._id} value={cat._id}>
+                  <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>
                 ))}

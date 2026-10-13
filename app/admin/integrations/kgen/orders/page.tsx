@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { apiFetch } from "@/lib/api-client"
 import { IntegrationError, readErrorMessage } from "../integration-error"
@@ -15,7 +17,7 @@ type LineItem = {
   variantName?: string
   productName?: string
   attachments?: string[]
-  vouchers?: any[]
+  vouchers?: unknown[]
   fulfillmentStatus?: string
 }
 
@@ -68,9 +70,9 @@ export default function KGenOrdersPage() {
       setHasMore(more)
 
       setOrders(prev => append ? prev.concat(list) : list)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch exlr8 orders', err)
-      setError(err?.message || 'Failed to fetch orders')
+      setError(getErrorMessage(err, 'Failed to fetch orders'))
     } finally {
       setLoading(false)
     }

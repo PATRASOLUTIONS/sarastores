@@ -1,3 +1,5 @@
+
+import { getErrorMessage } from "@/lib/utils"
 /**
  * Partner Payout Request API
  * 
@@ -93,11 +95,11 @@ async function handlePost(req: PartnerAuthRequest) {
         message: 'Payout request submitted successfully. Processing time: 1-3 business days.',
       },
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Partner Payout Request] Error:', error);
     
     // Return specific error message if available
-    const message = error?.message || 'Failed to create payout request';
+    const message = getErrorMessage(error, 'Failed to create payout request');
     return NextResponse.json(
       { success: false, error: message },
       { status: 400 }
@@ -106,7 +108,7 @@ async function handlePost(req: PartnerAuthRequest) {
 }
 
 // Export wrapped handler
-export const POST = withPartnerAuth(handlePost as any, ['wallet:write']);
+export const POST = withPartnerAuth(handlePost, ['wallet:write']);
 
 // Handle CORS preflight requests
 export { OPTIONS } from '@/lib/partner/auth';

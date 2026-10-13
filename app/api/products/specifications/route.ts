@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { normalizeId } from "@/lib/db-service"
+import type { Filter, Document } from "mongodb"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -9,25 +11,30 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Fetching product specifications from product_specifications")
 
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const page = Number(searchParams.get('page') || '1')
+    const limit = Number(searchParams.get('limit') || '50')
     const search = searchParams.get('search') || ''
     const lightweight = searchParams.get('lightweight') === 'true'
     const syncedParam = searchParams.get('synced') // 'true', 'false', or null/undefined
     const lockedParam = searchParams.get('locked') // 'true', 'false', or null/undefined
     const categoryParam = searchParams.get('category') || ''
     const contentParam = searchParams.get('content') || '' // 'complete' | 'empty' | 'noImages'
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isSafeInteger(limit) ||
+      limit < 1 || limit > 5000 || search.length > 200) {
+      return NextResponse.json({ error: "Invalid specification pagination or search" }, { status: 400 })
+    }
 
     const { db } = await connectToDatabase()
     const specsCollection = db.collection("product_specifications")
 
     // Build query
-    const query: any = {}
+    const query: Filter<Document> = {}
     if (search) {
+      const literalSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { sku: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: literalSearch, $options: 'i' } },
+        { sku: { $regex: literalSearch, $options: 'i' } },
+        { description: { $regex: literalSearch, $options: 'i' } }
       ]
     }
 
@@ -132,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        data: specs,
+        data: normalizeId(specs),
         pagination: {
           page,
           limit,

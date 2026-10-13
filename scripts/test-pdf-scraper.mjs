@@ -9,7 +9,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 
 const BASE = process.env.SCRAPER_TEST_BASE ?? "http://localhost:3005"
-const DIR = path.join(process.cwd(), ".scrape-probe", "pdfs")
+const DIR = path.join(process.cwd(), "documents", "private-artifacts", "archive", "scrape-probe", "pdfs")
 
 const SHEETS = [
   ["bosch-CST22U14PI", "https://media3.bsh-group.com/Documents/specsheet/en-IN/CST22U14PI.pdf"],

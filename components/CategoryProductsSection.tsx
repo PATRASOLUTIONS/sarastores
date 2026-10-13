@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react"
 import CategoryProductCard from "./CategoryProductCard"
 import { Reveal } from '@/components/motion/AnimationComponents'
 import { fetchWithCache, revalidateCache, getCached } from '@/utils/cache'
+import { catalogProductListResponseSchema } from '@/utils/catalog'
 
 interface Product {
   id: string
@@ -59,7 +60,7 @@ export default function CategoryProductsSection({
     if (productsProp && Array.isArray(productsProp) && productsProp.length > 0) return productsProp
     // Check in-memory cache synchronously for instant render
     if (categoryId) {
-      const cached = getCached<Product[]>(`cat-products-${categoryId}`, PRODUCTS_TTL)
+      const cached = getCached(`cat-products-${categoryId}`, catalogProductListResponseSchema, PRODUCTS_TTL)
       if (cached && cached.length > 0) return cached
     }
     return []
@@ -69,7 +70,7 @@ export default function CategoryProductsSection({
     if (prefetchedProducts && prefetchedProducts.length > 0) return false
     if (productsProp && Array.isArray(productsProp) && productsProp.length > 0) return false
     if (categoryId) {
-      const cached = getCached<Product[]>(`cat-products-${categoryId}`, PRODUCTS_TTL)
+      const cached = getCached(`cat-products-${categoryId}`, catalogProductListResponseSchema, PRODUCTS_TTL)
       if (cached && cached.length > 0) return false
     }
     return true
@@ -104,13 +105,14 @@ export default function CategoryProductsSection({
     const cacheKey = `cat-products-${categoryId}`
 
     try {
-      const data = await fetchWithCache<Product[]>(
+      const data = await fetchWithCache(
         cacheKey,
         async () => {
           const response = await fetch(`/api/products?category=${categoryId}&limit=${limit}`)
           if (!response.ok) throw new Error("Failed to fetch products")
           return response.json()
         },
+        catalogProductListResponseSchema,
         PRODUCTS_TTL
       )
       setProducts(data)
@@ -121,7 +123,7 @@ export default function CategoryProductsSection({
         const response = await fetch(`/api/products?category=${categoryId}&limit=${limit}`)
         if (!response.ok) throw new Error("Failed to fetch products")
         return response.json()
-      }, PRODUCTS_TTL)
+      }, catalogProductListResponseSchema)
     } catch (err) {
       console.error("Error fetching products:", err)
       setError(err instanceof Error ? err.message : "An unknown error occurred")

@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { fetchWithCache, revalidateCache } from "@/utils/cache"
+import { homeSectionListResponseSchema } from "@/lib/home-components-client"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import HeroSection from "@/components/HeroSection"
 import CategoryCircles from "@/components/CategoryCircles"
 import SaraAdvantageBar from "@/components/home/SaraAdvantageBar"
 import { Reveal, StaggerChildren, StaggerItem } from "@/components/motion/AnimationComponents"
-import { usePrefetchHomeProducts } from "@/hooks/usePrefetchHomeProducts"
+import { usePrefetchHomeProducts, homeComponentResponseSchema, type HomeComponent } from "@/hooks/usePrefetchHomeProducts"
 import { DEALS_ANCHOR_ID } from "@/utils/deals"
 import {
   buildCategoryRails,
@@ -19,7 +20,11 @@ import {
   pickSpotlights,
   isInStock,
   type Rail,
+  type CatalogProduct,
+  catalogProductResponseSchema,
+  catalogProductListResponseSchema,
 } from "@/utils/catalog"
+import { z } from "zod"
 
 // ─── Below-the-fold: loaded on demand to protect first paint ──────────
 const DealsOfTheDay = dynamic(() => import("@/components/DealsOfTheDay"))
@@ -51,7 +56,7 @@ async function fetchJson(url: string) {
 
 /** In-stock products with a believable discount, richest savings first — the
  *  spine of the "members-only prices" rail. */
-function buildMemberDeals(products: any[], limit = 12): any[] {
+function buildMemberDeals(products: CatalogProduct[], limit = 12): CatalogProduct[] {
   return products
     .filter((p) => {
       if (!isInStock(p) || !p.image || /placeholder/i.test(p.image)) return false
@@ -66,16 +71,16 @@ function buildMemberDeals(products: any[], limit = 12): any[] {
 }
 
 export default function HomeExperience() {
-  const [homeComponents, setHomeComponents] = useState<any[]>([])
-  const [manualProductsMap, setManualProductsMap] = useState<Record<string, any[]>>({})
-  const [categoryProductsMap, setCategoryProductsMap] = useState<Record<string, any[]>>({})
+  const [homeComponents, setHomeComponents] = useState<HomeComponent[]>([])
+  const [manualProductsMap, setManualProductsMap] = useState<Record<string, CatalogProduct[]>>({})
+  const [categoryProductsMap, setCategoryProductsMap] = useState<Record<string, CatalogProduct[]>>({})
   const [catalogRails, setCatalogRails] = useState<Rail[]>([])
-  const [catalogProducts, setCatalogProducts] = useState<any[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
 
-  const handleCategoryProducts = useCallback((map: Record<string, any[]>) => {
+  const handleCategoryProducts = useCallback((map: Record<string, CatalogProduct[]>) => {
     setCategoryProductsMap((prev) => ({ ...prev, ...map }))
   }, [])
-  const handleManualProducts = useCallback((map: Record<string, any[]>) => {
+  const handleManualProducts = useCallback((map: Record<string, CatalogProduct[]>) => {
     setManualProductsMap((prev) => ({ ...prev, ...map }))
   }, [])
 
@@ -86,17 +91,18 @@ export default function HomeExperience() {
       try {
         const data = await fetchWithCache(
           "home-components",
-          () => fetchJson("/api/home-components"),
+          async () => z.array(homeComponentResponseSchema).parse(await fetchJson("/api/home-components")),
+          homeSectionListResponseSchema,
           DATA_TTL,
         )
         setHomeComponents(data || [])
         revalidateCache(
           "home-components",
-          () => fetchJson("/api/home-components"),
-          DATA_TTL,
+          async () => z.array(homeComponentResponseSchema).parse(await fetchJson("/api/home-components")),
+          homeSectionListResponseSchema,
         )
-      } catch {
-        /* curated blocks are optional — the catalogue rails still render */
+      } catch (error) {
+        console.error("Failed to load homepage sections", error)
       }
     }
 
@@ -105,14 +111,15 @@ export default function HomeExperience() {
         // `fields=card` keeps this to what the rails and tiles actually render.
         const products = await fetchWithCache(
           "products-card",
-          () => fetchJson("/api/products?fields=card"),
+          async () => z.array(catalogProductResponseSchema).parse(await fetchJson("/api/products?fields=card")),
+          catalogProductListResponseSchema,
           DATA_TTL,
         )
         if (!Array.isArray(products)) return
         setCatalogProducts(products)
         setCatalogRails([...buildCategoryRails(products), ...buildPriceRails(products)])
-      } catch {
-        /* rails are supplementary — the page still works without them */
+      } catch (error) {
+        console.error("Failed to load homepage catalogue", error)
       }
     }
 
@@ -190,7 +197,7 @@ export default function HomeExperience() {
                     <StaggerItem key={c.id}>
                       <CategoryProductsSection
                         categoryId={catId}
-                        categoryName={c.title || undefined}
+                        categoryName={c.title || ""}
                         prefetchedProducts={categoryProductsMap[catId]}
                       />
                     </StaggerItem>

@@ -2,30 +2,33 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import * as XLSX from "xlsx";
 import { normalizeProductForSchema } from "@/lib/product-schema";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET() {
+    const guard = await requireAdmin();
+    if (!guard.ok) return guard.response;
     try {
         const { db } = await connectToDatabase();
         const [specs, categories, subCategories] = await Promise.all([
             db.collection("product_specifications").find({}).toArray(),
             db.collection("categories").find({}).toArray(),
-            db.collection("sub-categories").find({}).toArray()
+            db.collection("sub_categories").find({}).toArray()
         ]);
 
         // Build lookup maps
         const categoryMap = new Map();
-        categories.forEach((cat: any) => {
+        categories.forEach((cat) => {
             categoryMap.set(String(cat._id), cat.name);
             categoryMap.set(String(cat.id), cat.name);
         });
 
         const subCategoryMap = new Map();
-        subCategories.forEach((sub: any) => {
+        subCategories.forEach((sub) => {
             subCategoryMap.set(String(sub._id), sub.name);
             subCategoryMap.set(String(sub.id), sub.name);
         });
 
-        const data: any[] = specs.map((spec) => {
+        const data: Record<string, unknown>[] = specs.map((spec) => {
             const canonical = normalizeProductForSchema(spec);
             return {
                 "Category/Group Name": canonical.categoryGroupName || categoryMap.get(String(spec.category)) || spec.group_name || spec.category || "",
@@ -49,7 +52,8 @@ export async function GET() {
             status: 200,
             headers: {
                 "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "Content-Disposition": `attachment; filename="specifications-export-${new Date().toISOString().slice(0, 19)}.xlsx"`
+                "Content-Disposition": `attachment; filename="specifications-export-${new Date().toISOString().slice(0, 19)}.xlsx"`,
+                "Cache-Control": "no-store",
             }
         });
     } catch (error) {

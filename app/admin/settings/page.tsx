@@ -1,6 +1,7 @@
 "use client"
 
-import { apiFetch } from "@/lib/api-client"
+import { apiFetchJson } from "@/lib/api-client"
+import { StoreSettingsSchema, type StoreSettings, type StoreSettingsFields } from "@/lib/validation"
 import { useState, useRef, useEffect } from "react"
 import {
   Save,
@@ -212,8 +213,9 @@ function ImageUpload({
 }
 
 export default function AdminSettings() {
-  const { data, mutate, isLoading } = useSettingsData()
-  const [settings, setSettings] = useState<any>({})
+  const { data, error, mutate, isLoading } = useSettingsData()
+  const [settings, setSettings] = useState<StoreSettings>({})
+  const [loadFailed, setLoadFailed] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
@@ -229,50 +231,78 @@ export default function AdminSettings() {
 
   useEffect(() => {
     if (data) {
-      setSettings(data)
-      setLogoPreview(data.brandLogo || null)
-      setSignaturePreview(data.signature || null)
+      const parsed = StoreSettingsSchema.safeParse(data)
+      if (!parsed.success) {
+        console.error("Invalid settings response", parsed.error)
+        setLoadFailed(true)
+        setSuccessMessage("Failed to load valid settings. Saving is disabled.")
+        return
+      }
+      setLoadFailed(false)
+      setSettings(parsed.data)
+      setLogoPreview(parsed.data.brandLogo || null)
+      setSignaturePreview(parsed.data.signature || null)
     }
   }, [data])
+
+  useEffect(() => {
+    if (error) {
+      console.error("Failed to load settings", error)
+      setLoadFailed(true)
+      setSuccessMessage("Failed to load settings. Saving is disabled.")
+    }
+  }, [error])
 
   const toBase64 = (file: File) =>
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.readAsDataURL(file)
-      reader.onload = () => resolve(reader.result as string)
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Image could not be read"))
       reader.onerror = (error) => reject(error)
     })
 
   const handleLogoChange = async (file: File) => {
-    const base64 = await toBase64(file)
-    setSettings((s: any) => ({ ...s, brandLogo: base64 }))
-    setLogoPreview(base64)
+    try {
+      const base64 = await toBase64(file)
+      setSettings(s => ({ ...s, brandLogo: base64 }))
+      setLogoPreview(base64)
+    } catch (error) {
+      console.error("Failed to read logo", error)
+      setSuccessMessage("Failed to read logo. Please try again.")
+    }
   }
 
   const handleSignatureChange = async (file: File) => {
-    const base64 = await toBase64(file)
-    setSettings((s: any) => ({ ...s, signature: base64 }))
-    setSignaturePreview(base64)
+    try {
+      const base64 = await toBase64(file)
+      setSettings(s => ({ ...s, signature: base64 }))
+      setSignaturePreview(base64)
+    } catch (error) {
+      console.error("Failed to read signature", error)
+      setSuccessMessage("Failed to read signature. Please try again.")
+    }
   }
 
   const toggleSection = (key: SectionKey) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const updateField = (field: string, value: any) => {
-    setSettings((s: any) => ({ ...s, [field]: value }))
+  const updateField = <K extends keyof StoreSettingsFields>(field: K, value: StoreSettingsFields[K]) => {
+    setSettings(s => ({ ...s, [field]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loadFailed || isLoading || isSaving) return
     setIsSaving(true)
     try {
-      await apiFetch("/api/settings", {
+      const updated = await apiFetchJson("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
-      })
-      mutate()
+      }, value => StoreSettingsSchema.parse(value))
+      setSettings(updated)
+      void mutate().catch(error => console.error("Settings saved, but reloading failed", error))
       setSuccessMessage("Settings saved successfully!")
       setTimeout(() => setSuccessMessage(""), 3000)
     } catch (err) {
@@ -617,21 +647,21 @@ export default function AdminSettings() {
               />
             </FieldGroup>
 
-            <FieldGroup label="Meta Title" icon={FileText}>
+            <FieldGroup label="Homepage SEO & Sharing Title" icon={FileText}>
               <TextInput
                 id="metaTitle"
                 value={settings.metaTitle || ""}
                 onChange={(v) => updateField("metaTitle", v)}
-                placeholder="Page title for SEO"
+                placeholder="Homepage title shown in search and link previews"
               />
             </FieldGroup>
 
-            <FieldGroup label="Meta Description" icon={FileText}>
+            <FieldGroup label="Homepage SEO & Sharing Description" icon={FileText}>
               <TextInput
                 id="metaDescription"
                 value={settings.metaDescription || ""}
                 onChange={(v) => updateField("metaDescription", v)}
-                placeholder="Page description for SEO"
+                placeholder="Homepage description shown in search and link previews"
               />
             </FieldGroup>
           </div>
@@ -649,7 +679,7 @@ export default function AdminSettings() {
         </div>
         <button
           onClick={handleSubmit}
-          disabled={isSaving}
+          disabled={isSaving || isLoading || loadFailed}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-maroon-800 text-white rounded-lg hover:bg-maroon-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
         >
           {isSaving ? (
@@ -740,7 +770,7 @@ export default function AdminSettings() {
         <div className="flex justify-end pt-2 pb-4">
           <button
             type="submit"
-            disabled={isSaving}
+            disabled={isSaving || isLoading || loadFailed}
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-maroon-800 text-white rounded-lg hover:bg-maroon-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
           >
             {isSaving ? (

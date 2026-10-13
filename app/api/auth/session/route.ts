@@ -27,7 +27,7 @@ export async function GET() {
         const users = await getCollection("users")
         const doc = await users.findOne(
           { _id: new ObjectId(session.user.id) },
-          { projection: { name: 1, phone: 1, address: 1, avatar: 1, emailVerified: 1, createdAt: 1 } },
+          { projection: { name: 1, phone: 1, address: 1, avatar: 1, emailVerified: 1, createdAt: 1, dateOfBirth: 1 } },
         )
         if (doc) {
           profile = {
@@ -37,6 +37,7 @@ export async function GET() {
             avatar: doc.avatar || null,
             emailVerified: !!doc.emailVerified,
             createdAt: doc.createdAt || null,
+            dateOfBirth: doc.dateOfBirth || null,
           }
         }
       }

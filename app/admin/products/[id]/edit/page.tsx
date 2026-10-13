@@ -4,7 +4,7 @@ import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { apiFetch } from "@/lib/api-client"
 
-import { useState, useEffect } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Save, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
@@ -30,6 +30,9 @@ interface Product {
   slug?: string
   manufacturer?: string
   manufacturerName?: string
+  manufacturer_name?: string
+  groupName?: string
+  itemCategory?: string
   color?: string
   capacity?: string
   features?: string
@@ -87,14 +90,15 @@ interface Product {
     "Sale UOM"?: string
     EOL?: string
     "In Stock"?: number
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
-export default function EditProduct({ params }: { params: any }) {
+export default function EditProduct({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [product, setProduct] = useState<Product | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
-  const [subCategories, setSubCategories] = useState<any[]>([])
+  const [subCategories, setSubCategories] = useState<Category[]>([])
   const [successMessage, setSuccessMessage] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const lock = useSubmitLock()
@@ -104,31 +108,18 @@ export default function EditProduct({ params }: { params: any }) {
   const [showAmazonData, setShowAmazonData] = useState(false)
   const router = useRouter()
 
-  // Helper to safely resolve params which may be a Promise in newer Next.js versions
-  const resolveParamId = async () => {
-    try {
-      const resolved = await (params as any)
-      return resolved?.id ?? resolved
-    } catch (e) {
-      // params may not be a promise; fallback to direct property
-      return (params as any)?.id ?? params
-    }
-  }
-
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
       setError(null)
 
       try {
-        // Resolve params.id safely (params may be a Promise)
-        const id = await resolveParamId()
         // Fetch product
         const productResponse = await apiFetch(`/api/products/${id}?include_inactive=true`, { cache: 'no-store' })
         if (!productResponse.ok) {
           throw new Error("Failed to fetch product")
         }
-        const productData = await productResponse.json()
+        const productData: Product = await productResponse.json()
 
         // Fix for mismatch: Ensure raw['MRP'] matches actual mrp if present
         if (productData.mrp !== undefined && productData.mrp !== null) {
@@ -186,7 +177,7 @@ export default function EditProduct({ params }: { params: any }) {
 
         // Fetch sub-categories from sub-categories collection
         const subCategoriesResponse = await apiFetch("/api/sub-categories")
-        let subCategoriesList: any[] = []
+        let subCategoriesList: Category[] = []
         if (subCategoriesResponse.ok) {
           const subData = await subCategoriesResponse.json()
           subCategoriesList = Array.isArray(subData) ? subData : []
@@ -195,10 +186,10 @@ export default function EditProduct({ params }: { params: any }) {
         // Also fetch unique sub-categories from products as fallback
         const productsResponse = await apiFetch("/api/products?include_inactive=true&limit=10000")
         if (productsResponse.ok) {
-          const productsData = await productsResponse.json()
+          const productsData: Product[] = await productsResponse.json()
           const uniqueSubCategories = new Set<string>()
 
-          productsData.forEach((p: any) => {
+          productsData.forEach((p) => {
             const normalized = normalizeProductForSchema(p)
             // Collect all possible sub-category sources
             if (p.subCategory) uniqueSubCategories.add(p.subCategory)
@@ -228,7 +219,6 @@ export default function EditProduct({ params }: { params: any }) {
           const storedProducts = localStorage.getItem("products")
           if (storedProducts) {
             const products = JSON.parse(storedProducts)
-            const id = await resolveParamId()
             const foundProduct = products.find((p: Product) => p.id === id)
             if (foundProduct) {
               setProduct(foundProduct)
@@ -253,7 +243,7 @@ export default function EditProduct({ params }: { params: any }) {
     }
 
     fetchData()
-  }, [params])
+  }, [id])
 
   /**
    * Mirrors the classification fields onto the specification sheet.
@@ -263,13 +253,14 @@ export default function EditProduct({ params }: { params: any }) {
    * stays locked afterwards. The product page is the authority for these
    * fields, so it must win over the lock.
    */
-  const syncSpecification = async (payload: any, sku: string) => {
+  const syncSpecification = async (payload: Partial<Product>, sku: string) => {
     if (!sku) return { synced: false, reason: "no SKU" as const }
     try {
       const current = await apiFetch(`/api/products/specifications/${encodeURIComponent(sku)}/complete`, {
         cache: "no-store",
       })
-      if (!current.ok) return { synced: false, reason: "no specification" as const }
+      if (current.status === 404) return { synced: false, reason: "no specification" as const }
+      if (!current.ok) throw new Error("Specification could not be loaded")
       const spec = await current.json()
 
       const res = await apiFetch(`/api/products/specifications/${encodeURIComponent(sku)}`, {
@@ -286,7 +277,8 @@ export default function EditProduct({ params }: { params: any }) {
         },
       })
       return { synced: res.ok, reason: res.ok ? null : ("patch failed" as const), wasLocked: spec?.locked === true }
-    } catch {
+    } catch (error) {
+      console.error("Specification synchronization failed:", error)
       return { synced: false, reason: "error" as const }
     }
   }
@@ -300,11 +292,11 @@ export default function EditProduct({ params }: { params: any }) {
     setError(null)
 
     try {
-      const payload: any = { ...product }
+      const payload: Partial<Product> = { ...product }
 
       // remove identifiers from payload to avoid accidental id updates server-side
       delete payload.id
-      delete payload._id
+      if ("_id" in payload) delete payload._id
 
       if (Array.isArray(payload.images) && payload.images.length > 0) {
         payload.images = payload.images.filter(Boolean).slice(0, 5)
@@ -317,7 +309,6 @@ export default function EditProduct({ params }: { params: any }) {
         payload.images = []
       }
 
-      const id = await resolveParamId()
       const response = await apiFetch(`/api/products/${id}`, {
         method: "PUT",
         headers: {
@@ -333,6 +324,10 @@ export default function EditProduct({ params }: { params: any }) {
 
       const sku = String(product.sku || product.raw?.["itemno"] || "")
       const spec = await syncSpecification(payload, sku)
+      if (spec.reason === "patch failed" || spec.reason === "error") {
+        setError("Product saved, but its specification could not be synchronized. Please retry.")
+        return
+      }
 
       setSuccessMessage(
         spec.synced
@@ -396,7 +391,7 @@ export default function EditProduct({ params }: { params: any }) {
   const productSku = String(product.sku || product.raw?.["itemno"] || "")
   // Older products store a category id here rather than the name.
   const categoryLabel =
-    categories.find((c: any) => c.id === product.category || c._id === product.category)?.name ??
+    categories.find((c) => c.id === product.category)?.name ??
     product.category
 
   return (
@@ -526,7 +521,7 @@ export default function EditProduct({ params }: { params: any }) {
               <input
                 type="number"
                 id="mrp"
-                value={product.raw?.["MRP"] ?? product.mrp ?? ""}
+                value={String(product.raw?.["MRP"] ?? product.mrp ?? "")}
                 onChange={(e) => {
                   const v = e.target.value
                   const mrpValue = v === '' ? undefined : Number.parseFloat(v)
@@ -621,8 +616,8 @@ export default function EditProduct({ params }: { params: any }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Select a sub-category</option>
-                {subCategories.map((sub: any) => (
-                  <option key={sub.id || sub._id || sub.name} value={sub.name}>
+                {subCategories.map((sub) => (
+                  <option key={sub.id || sub.name} value={sub.name}>
                     {sub.name}
                   </option>
                 ))}
