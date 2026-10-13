@@ -231,40 +231,43 @@ export default function BrandGuidelinesPage() {
           <div className={getCardClasses()}>
             <div className="space-y-6 max-w-md">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="brand-example-text" className="block text-sm font-medium text-gray-700 mb-2">
                   Text Input
                 </label>
                 <input
+                  id="brand-example-text"
                   type="text"
                   placeholder="Enter text..."
                   className={getInputClasses()}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="brand-example-email" className="block text-sm font-medium text-gray-700 mb-2">
                   Email Input
                 </label>
                 <input
+                  id="brand-example-email"
                   type="email"
                   placeholder="email@example.com"
                   className={getInputClasses()}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="brand-example-select" className="block text-sm font-medium text-gray-700 mb-2">
                   Select Dropdown
                 </label>
-                <select className={getInputClasses()}>
+                <select id="brand-example-select" className={getInputClasses()}>
                   <option>Option 1</option>
                   <option>Option 2</option>
                   <option>Option 3</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="brand-example-description" className="block text-sm font-medium text-gray-700 mb-2">
                   Textarea
                 </label>
                 <textarea
+                  id="brand-example-description"
                   rows={4}
                   placeholder="Enter description..."
                   className={getInputClasses()}
@@ -324,7 +327,7 @@ export default function BrandGuidelinesPage() {
           <h2 className={getHeadingClasses(2) + " mb-8"}>Usage Examples</h2>
           <div className={getCardClasses()}>
             <h3 className="text-xl font-semibold mb-4">Importing Brand Guidelines</h3>
-            <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
+            <pre tabIndex={0} aria-label="Brand guidelines code example" className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm">
               {`import BrandGuidelines, {
   COLORS,
   getPrimaryButtonClasses,
@@ -371,10 +374,10 @@ export default function BrandGuidelinesPage() {
 
         {/* Do's and Don'ts */}
         <section className="mb-16">
-          <h2 className={getHeadingClasses(2) + " mb-8"}>Do's & Don'ts</h2>
+          <h2 className={getHeadingClasses(2) + " mb-8"}>Do&apos;s & Don&apos;ts</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className={getCardClasses() + " border-l-4 border-green-500"}>
-              <h3 className="text-xl font-semibold mb-4 text-green-700">✅ Do's</h3>
+              <h3 className="text-xl font-semibold mb-4 text-green-700">✅ Do&apos;s</h3>
               <ul className="space-y-2 text-gray-700">
                 <li>✓ Use approved fonts and colors</li>
                 <li>✓ Keep logo consistent</li>
@@ -385,14 +388,14 @@ export default function BrandGuidelinesPage() {
               </ul>
             </div>
             <div className={getCardClasses() + " border-l-4 border-red-500"}>
-              <h3 className="text-xl font-semibold mb-4 text-red-700">❌ Don'ts</h3>
+              <h3 className="text-xl font-semibold mb-4 text-red-700">❌ Don&apos;ts</h3>
               <ul className="space-y-2 text-gray-700">
-                <li>✗ Don't distort the logo</li>
-                <li>✗ Don't use mismatched fonts</li>
-                <li>✗ Don't create cluttered designs</li>
-                <li>✗ Don't use unapproved colors</li>
-                <li>✗ Don't ignore mobile responsiveness</li>
-                <li>✗ Don't use poor quality images</li>
+                <li>✗ Don&apos;t distort the logo</li>
+                <li>✗ Don&apos;t use mismatched fonts</li>
+                <li>✗ Don&apos;t create cluttered designs</li>
+                <li>✗ Don&apos;t use unapproved colors</li>
+                <li>✗ Don&apos;t ignore mobile responsiveness</li>
+                <li>✗ Don&apos;t use poor quality images</li>
               </ul>
             </div>
           </div>

@@ -23,7 +23,7 @@ export async function SiteJsonLd() {
   ])
 
   const org = buildOrganizationJsonLd({ settings, origin })
-  const site = buildWebSiteJsonLd({ origin })
+  const site = buildWebSiteJsonLd({ origin, settings })
   const business = buildLocalBusinessJsonLd({ settings, origin })
 
   // The brand graph: Organization @id, WebSite publisher links back,

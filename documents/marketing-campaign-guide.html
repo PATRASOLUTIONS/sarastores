@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="SARA's implemented campaign types, customer audiences, channels and marketing flows, explained with activation limits.">
+  <title>SARA | Marketing campaign types and customer flows</title>
+  <style>
+    :root { color-scheme: light; --navy: #10244c; --muted: #526078; --blue: #1558bf; --line: #dce4ef; --green: #13653c; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: #f3f6fb; color: var(--navy); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a { color: var(--blue); text-underline-offset: .2em; }
+    a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 3px solid #a9480e; outline-offset: 4px; }
+    .skip { position: absolute; top: -100px; left: 16px; z-index: 5; background: white; padding: 12px; }
+    .skip:focus { top: 16px; }
+    .wrap { width: min(1180px, 100%); margin: auto; }
+    .hero { padding: 58px 24px 44px; background: #10244c; color: white; }
+    .eyebrow { margin: 0 0 14px; font-size: .78rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; color: #ffbe8b; }
+    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.15; letter-spacing: -.04em; max-width: 870px; }
+    .hero p:not(.eyebrow) { color: #dce6fa; max-width: 850px; margin: 20px 0 0; }
+    .meta { display: inline-block; margin-top: 22px; border: 1px solid #596b8e; border-radius: 30px; padding: 6px 12px; font-size: .8rem; }
+    .navigation { background: white; border-bottom: 1px solid var(--line); }
+    .navigation .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 12px 24px; }
+    .navigation a { display: inline-flex; align-items: center; min-height: 44px; font-size: .86rem; font-weight: 650; text-decoration: none; }
+    main { padding: 28px 24px 48px; }
+    section { padding: 28px; margin-bottom: 24px; border: 1px solid var(--line); border-radius: 18px; background: white; scroll-margin-top: 20px; }
+    h2 { margin: 0 0 12px; font-size: clamp(1.35rem, 3vw, 1.8rem); line-height: 1.3; letter-spacing: -.02em; }
+    h3 { margin: 0 0 10px; font-size: 1.05rem; line-height: 1.4; }
+    p { margin: 0 0 14px; }
+    .muted, .small { color: var(--muted); }
+    .small { font-size: .84rem; }
+    code { font: .82em/1.6 ui-monospace, Consolas, monospace; background: #eef3fc; padding: 2px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+    .stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 22px 0; }
+    .stat { padding: 18px 14px; background: #f6f9fe; border: 1px solid var(--line); border-radius: 12px; }
+    .stat strong { display: block; font-size: 2.2rem; line-height: 1.2; color: var(--blue); }
+    .stat span { display: block; margin-top: 7px; font-size: .8rem; }
+    .notice { margin: 18px 0 0; border-left: 4px solid #a9480e; padding: 14px 16px; border-radius: 0 8px 8px 0; background: #fff4e8; color: #66370b; font-size: .9rem; }
+    .good { background: #edf7f0; border-left-color: var(--green); color: var(--green); }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #f8faff; }
+    .card p:last-child { margin-bottom: 0; }
+    .tag { display: inline-block; padding: 3px 9px; margin: 0 0 12px; border-radius: 6px; background: #e4edf9; color: #244c8e; font-size: .74rem; font-weight: 750; }
+    .tag.ready { background: #e0f1e5; color: var(--green); }
+    .tag.caution { background: #fff0df; color: #783d0c; }
+    details { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; background: white; }
+    summary { cursor: pointer; min-height: 48px; padding: 12px 0; font-weight: 700; }
+    .catalogue { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; padding: 4px 0 18px 22px; margin: 0; font-size: .9rem; }
+    .catalogue li { padding: 4px 0; overflow-wrap: anywhere; }
+    .catalogue .tag { margin: 4px 0 0; font-size: .7rem; }
+    .audiences { margin-top: 12px; padding-left: 20px; font-size: .88rem; }
+    .audiences li { margin: 8px 0; }
+    .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; list-style: none; padding: 0; margin: 18px 0; counter-reset: flow; }
+    .flow li { flex: 1 1 155px; padding: 14px; background: #eef3fc; border: 1px solid #d3def0; border-radius: 10px; font-size: .85rem; }
+    .flow li::before { counter-increment: flow; content: counter(flow, decimal-leading-zero); display: block; font-size: .73rem; color: var(--blue); font-weight: 800; margin-bottom: 5px; }
+    .flow strong { display: block; }
+    .operating-flow { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 24px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 18px 0; }
+    table { border-collapse: collapse; width: 100%; min-width: 650px; font-size: .86rem; }
+    caption { text-align: left; padding: 14px; font-weight: 750; }
+    th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-top: 1px solid var(--line); }
+    th { background: #eef3fc; font-size: .8rem; }
+    tbody th { background: #f8faff; font-size: .86rem; width: 22%; }
+    .timeline { list-style: none; padding: 0; margin: 20px 0; }
+    .timeline li { position: relative; margin-left: 12px; border-left: 2px solid #d3def0; padding: 0 0 26px 25px; }
+    .timeline li::before { content: ""; width: 12px; height: 12px; background: var(--blue); border: 3px solid white; border-radius: 50%; position: absolute; left: -7px; top: 6px; box-shadow: 0 0 0 1px #d3def0; }
+    .timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+    .timeline p { margin-bottom: 0; }
+    .checklist { padding-left: 22px; }
+    .checklist li { margin: 12px 0; }
+    .sources { padding-left: 20px; font-size: .82rem; color: var(--muted); }
+    .sources li { margin: 7px 0; }
+    .links { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; }
+    .links a { padding: 8px 0; min-height: 44px; }
+    .screenshot { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .screenshot h3 { font-size: 1.15rem; }
+    figure { min-width: 0; margin: 16px 0 0; }
+    .shot-link { display: block; padding: 8px; background: #eaf0f8; border: 1px solid var(--line); border-radius: 12px; }
+    .shot-link img { display: block; width: 100%; height: auto; border-radius: 6px; background: white; }
+    figcaption { margin-top: 10px; color: var(--muted); font-size: .82rem; line-height: 1.6; }
+    .creative { max-width: 800px; margin-left: auto; margin-right: auto; }
+    footer { padding: 0 24px 32px; text-align: center; font-size: .8rem; color: var(--muted); }
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .hero { padding: 36px 20px; }
+      main { padding: 20px 14px; }
+      section { padding: 20px; }
+      .navigation .wrap { gap: 4px 16px; padding: 10px 20px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat { padding: 14px 12px; }
+      .grid.two, .catalogue { grid-template-columns: 1fr; }
+      .flow { flex-direction: column; }
+      .flow li { flex-basis: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      body { background: white; font-size: 10pt; }
+      .hero { background: white; color: var(--navy); padding: 20px 0; }
+      .hero .eyebrow, .hero p:not(.eyebrow) { color: var(--muted); }
+      .navigation, .skip, footer { display: none; }
+      main { padding: 0; }
+      section { border-radius: 0; break-before: page; }
+      .card, .timeline li, tr, figure { break-inside: avoid; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#overview">Skip to campaign overview</a>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">SARA Electronics / Marketing capability guide</p>
+      <h1>Which campaigns can I run,<br>and how does the customer flow?</h1>
+      <p>A practical explanation of the campaign library, audience targeting, email and
+        WhatsApp paths, and purchase-related reminders implemented in this application.</p>
+      <span class="meta">Verified against source on 13 October 2026 / no messages sent</span>
+    </div>
+  </header>
+  <nav class="navigation" aria-label="Marketing guide sections">
+    <div class="wrap">
+      <a href="#overview">How many?</a><a href="#screenshots">Campaign screenshots</a><a href="#types">Campaign types</a>
+      <a href="#audience">Who to target</a><a href="#channels">Channels</a>
+      <a href="#flows">Setup and send flows</a><a href="#automation">9 reminder types</a>
+      <a href="#example">Customer example</a><a href="#activation">Activation checklist</a>
+    </div>
+  </nav>
+  <main class="wrap">
+    <section id="overview" aria-labelledby="overview-title">
+      <h2 id="overview-title">The short answer: three campaign families, not 54 different delivery systems.</h2>
+      <p>You have <strong>54 ready-made campaign creatives</strong> grouped into lifecycle,
+        festival and promotion. You choose whom to contact using <strong>28 audience filters</strong>.
+        The two outbound campaign channels are <strong>email and WhatsApp</strong>.
+        Separately, three retention engines implement <strong>nine reminder types</strong>.</p>
+      <div class="stats" aria-label="Verified capability counts">
+        <div class="stat"><strong>3</strong><span>Populated campaign families</span></div>
+        <div class="stat"><strong>54</strong><span>Modern campaign templates</span></div>
+        <div class="stat"><strong>28</strong><span>Audience filters in 6 groups</span></div>
+        <div class="stat"><strong>2</strong><span>Outbound campaign channels</span></div>
+        <div class="stat"><strong>9</strong><span>Retention reminder types</span></div>
+      </div>
+      <p class="notice"><strong>Setting up a template does not activate an automatic journey.</strong>
+        Manual email campaigns, WhatsApp planning/sending and scheduled email reminders are
+        separate paths. There is no demonstrated all-in-one multi-step, cross-channel drip
+        builder that automatically runs every template in sequence.</p>
+      <p class="small" style="margin-top:16px">These are code-defined capabilities, not counts of your live
+        customers, stored campaigns or delivered messages. Five separate legacy email starter
+        templates also exist, including a Custom Template; database-saved templates can add more.
+        They are not included in the modern library count of 54. A fourth category name,
+        <code>transactional-adjacent</code>, exists in the type definition but has no catalogue entries.</p>
+    </section>
+
+    <section id="screenshots" aria-labelledby="screenshots-title">
+      <h2 id="screenshots-title">Campaign walkthrough, in screenshots</h2>
+      <p>Follow the four campaign-creation steps, then compare the WhatsApp preview and
+        two customer-facing email creatives. Select a screenshot to open the original
+        at full size.</p>
+      <p class="notice"><strong>Actual component, synthetic preview environment.</strong>
+        The five wizard captures render the application's campaign React component and
+        Tailwind theme independently of the Next.js admin shell. API responses use three
+        fictional opted-in contacts; there is no connection to customer records, SMTP or
+        AskEva. Saving and sending are blocked. The content screenshot uses the component's
+        HTML-source mode; the visual rich-text editor was not exercised. These images
+        illustrate the workflow, not a hosted login, delivery or production-readiness test.</p>
+
+      <div class="screenshot">
+        <span class="tag">Step 1 / Pick Template</span>
+        <h3>Choose the campaign that matches your objective</h3>
+        <p>Start with the ready-made campaign library. Lifecycle, Festival and Promotion
+          filters narrow the creative choices. Select a template to move into editing;
+          selecting one does not send a message.</p>
+        <figure>
+          <a class="shot-link" href="marketing-campaign-assets/01-library-desktop.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/01-library-desktop.png" width="1440" height="1100"
+              alt="Isolated campaign component showing the 54-template library and Lifecycle, Festival and Promotion filters."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>Original 1440px component capture. The modern library is above the
+            legacy email starter cards. This is the campaign wizard, not the separate
+            storefront marketing-content dashboard.</figcaption>
+        </figure>
+      </div>
+
+      <div class="screenshot">
+        <span class="tag">Step 2 / Edit Content</span>
+        <h3>Review the subject, HTML and customer-facing creative</h3>
+        <p>The example selects Super Sunday. The left side contains the template name,
+          personalized subject and editable HTML; the right side shows the rendered
+          email. Verify the advertised cashback, EMI and gifts before using this copy.</p>
+        <figure>
+          <a class="shot-link" href="marketing-campaign-assets/02-editor-desktop.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/02-editor-desktop.png" width="1440" height="1100"
+              alt="Campaign Edit Content step in HTML-source mode beside the Super Sunday live email preview."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>Actual HTML-source editor mode, not a screenshot of the visual rich-text
+            editor. Save Template is visible but was not executed. The creative is a built-in
+            starting point, not evidence that its promotional benefits are configured.</figcaption>
+        </figure>
+      </div>
+
+      <div class="screenshot">
+        <span class="tag">Step 3 / Choose Recipients</span>
+        <h3>Select the audience, channel and exact recipients</h3>
+        <p>Choose Email, select an appropriate segment and inspect the recipient list.
+          Here, three fictional customers are selected. Tier and purchase tags explain
+          how the audience filters relate to the customer.</p>
+        <figure>
+          <a class="shot-link" href="marketing-campaign-assets/03-recipients-desktop.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/03-recipients-desktop.png" width="1440" height="1100"
+              alt="Email recipient-selection step with three selected fictional contacts, segment chips and customer purchase tags."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>Meera Demo, Arjun Demo and Kavya Demo are synthetic fixtures.
+            All displayed emails end in <code>example.invalid</code>, and the phone numbers
+            are test values. Counts, spend and opt-ins are illustrative, not live customer data.</figcaption>
+        </figure>
+      </div>
+
+      <div class="screenshot">
+        <span class="tag">Step 4 / Preview &amp; Send</span>
+        <h3>Inspect the final message and selected audience before confirmation</h3>
+        <p>The final page combines the rendered email with the template, subject,
+          recipient count and segment. This is the decision point: make sure the
+          campaign is accurate before an irreversible send.</p>
+        <figure>
+          <a class="shot-link" href="marketing-campaign-assets/04-final-preview-desktop.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/04-final-preview-desktop.png" width="1440" height="1100"
+              alt="Final email campaign preview and summary for three synthetic recipients, with the Send button visible."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>Pre-send state only. No success screen, campaign-history result or
+            delivered email is implied. The fixture rejected send confirmation, and no
+            request reached the campaign-send endpoint.</figcaption>
+        </figure>
+      </div>
+
+      <div class="screenshot">
+        <span class="tag caution">Separate branch / WhatsApp dry run</span>
+        <h3>Preview a WhatsApp plan without sending</h3>
+        <p>Switch to WhatsApp in the recipient step, select the intended recipients and
+          use Preview (dry run). The panel shows the template name, planned audience,
+          sample message and configuration warnings.</p>
+        <figure>
+          <a class="shot-link" href="marketing-campaign-assets/05-whatsapp-plan-desktop.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/05-whatsapp-plan-desktop.png" width="1440" height="1100"
+              alt="WhatsApp preview panel labelled DRY RUN, with three synthetic recipients and provider-configuration warnings."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>The plan was generated locally using the application's planning
+            function and synthetic recipients. No AskEva request or approval check occurred.
+            Its missing-configuration warnings describe this isolated fixture, not your
+            deployed provider settings. The final wizard Send button remains an email action.</figcaption>
+        </figure>
+      </div>
+
+      <div class="screenshot">
+        <span class="tag">Creative example / Festival</span>
+        <h3>What a Diwali email creative looks like</h3>
+        <p>This is the actual built-in Diwali HTML personalized with the fictional first
+          name Meera. It illustrates the headline, offer message, shopping CTA and footer
+          before you configure and send an appropriate campaign.</p>
+        <figure class="creative">
+          <a class="shot-link" href="marketing-campaign-assets/06-diwali-creative.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/06-diwali-creative.png" width="800" height="1100"
+              alt="Built-in Diwali email creative personalized for Meera, with a Shop the sale button and unsubscribe footer."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>Local browser rendering of the source email HTML, not an email-inbox
+            screenshot or an active sale. The discount and bank-cashback copy must be checked
+            against real offers before use. The unsubscribe token is a nonfunctional fixture.</figcaption>
+        </figure>
+      </div>
+
+      <div class="screenshot">
+        <span class="tag">Creative example / Lifecycle</span>
+        <h3>What the manual cart-abandonment creative looks like</h3>
+        <p>The customer sees a reminder that their cart is waiting and a Complete my order
+          CTA. This is the admin library's cart template; scheduled recovery uses its own
+          reminder message builder and is not automatically this same HTML.</p>
+        <figure class="creative">
+          <a class="shot-link" href="marketing-campaign-assets/07-cart-creative.png" target="_blank" rel="noopener">
+            <img src="marketing-campaign-assets/07-cart-creative.png" width="800" height="1100"
+              alt="Built-in manual cart-abandonment email creative addressed to Meera, with a Complete my order button."
+              loading="lazy" decoding="async">
+          </a>
+          <figcaption>Actual catalogue creative rendered locally, not a triggered reminder
+            or delivered email. Its INR 500 offer text does not create or attach an eligible
+            coupon. Validate the offer, pricing promises and destination before sending.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="types" aria-labelledby="types-title">
+      <h2 id="types-title">1. What kinds of campaigns can I create?</h2>
+      <div class="grid">
+        <div class="card">
+          <span class="tag">13 lifecycle templates</span>
+          <h3>Change the customer's relationship with the store</h3>
+          <p>Welcome first-time buyers, grow a second order, reward loyal/VIP customers,
+            recover shopping intent and reactivate customers who stopped purchasing.</p>
+          <p class="small">Lifecycle is a creative category here. Most of these templates
+            are selected and sent manually; their names do not create event triggers.</p>
+        </div>
+        <div class="card">
+          <span class="tag">28 festival / seasonal templates</span>
+          <h3>Market around an occasion</h3>
+          <p>Diwali, Dhanteras, regional festivals, national holidays, seasonal sales
+            and year-end events each have a starting creative.</p>
+          <p class="small">The occasion calendar helps plan a campaign; it does not
+            automatically schedule the broadcast. Confirm moving festival dates each year.</p>
+        </div>
+        <div class="card">
+          <span class="tag">13 promotion templates</span>
+          <h3>Give the customer a reason to act now</h3>
+          <p>Category upgrades, flash sales, bank offers, EMI, new arrivals, clearance,
+            referrals, store visits, spin-and-win and Super Sunday.</p>
+          <p class="small">A template advertises an offer; it does not create a coupon,
+            bank discount, referral ledger or campaign prize inventory.</p>
+        </div>
+      </div>
+      <details>
+        <summary>See all 13 lifecycle templates</summary>
+        <ol class="catalogue">
+          <li data-template-id="welcome-new-customer" data-category="lifecycle">Welcome / first order</li>
+          <li data-template-id="champion-vip" data-category="lifecycle">Champion / VIP early access</li>
+          <li data-template-id="loyal-thankyou" data-category="lifecycle">Loyal / thank-you reward</li>
+          <li data-template-id="promising-second-order" data-category="lifecycle">Promising / second-order nudge</li>
+          <li data-template-id="at-risk-winback" data-category="lifecycle">At risk / we miss you</li>
+          <li data-template-id="lapsed-reactivation" data-category="lifecycle">Lapsed / reactivation</li>
+          <li data-template-id="lost-last-chance" data-category="lifecycle">Lost / final touch</li>
+          <li data-template-id="abandoned-cart" data-category="lifecycle">Cart abandonment</li>
+          <li data-template-id="wishlist-nudge" data-category="lifecycle">Wishlist / price-drop nudge</li>
+          <li data-template-id="no-purchase-first-order" data-category="lifecycle">Registered, never bought</li>
+          <li data-template-id="tier-upgrade" data-category="lifecycle">Tier upgrade congratulations</li>
+          <li data-template-id="post-purchase-crosssell" data-category="lifecycle">Post-purchase cross-sell</li>
+          <li data-template-id="retention-appliance-push" data-category="lifecycle">Appliance retention push
+            <br><span class="tag ready">WhatsApp name in local approved list</span></li>
+        </ol>
+      </details>
+      <details>
+        <summary>See all 13 promotion templates</summary>
+        <ol class="catalogue">
+          <li data-template-id="cat-tv-upgrade" data-category="promotion">TV-owner upgrade</li>
+          <li data-template-id="cat-cooling-season" data-category="promotion">Cooling-season push</li>
+          <li data-template-id="cat-kitchen-bundle" data-category="promotion">Kitchen bundle</li>
+          <li data-template-id="flash-sale" data-category="promotion">24-hour flash sale</li>
+          <li data-template-id="bank-offer" data-category="promotion">Bank / card offer</li>
+          <li data-template-id="no-cost-emi" data-category="promotion">No-cost EMI push</li>
+          <li data-template-id="installation-offer" data-category="promotion">Free installation offer</li>
+          <li data-template-id="new-arrivals" data-category="promotion">New arrivals</li>
+          <li data-template-id="clearance" data-category="promotion">Clearance / last units</li>
+          <li data-template-id="referral" data-category="promotion">Referral programme</li>
+          <li data-template-id="store-visit" data-category="promotion">Drive to store</li>
+          <li data-template-id="lucky-draw" data-category="promotion">Lucky draw / spin and win</li>
+          <li data-template-id="retention-super-sunday" data-category="promotion">Super Sunday sale
+            <br><span class="tag ready">WhatsApp name in local approved list</span></li>
+        </ol>
+      </details>
+      <details>
+        <summary>See all 28 festival and seasonal templates</summary>
+        <ol class="catalogue">
+          <li data-template-id="festival-diwali" data-category="festival">Diwali</li>
+          <li data-template-id="festival-dhanteras" data-category="festival">Dhanteras</li>
+          <li data-template-id="festival-navratri" data-category="festival">Navratri</li>
+          <li data-template-id="festival-dussehra" data-category="festival">Dussehra</li>
+          <li data-template-id="festival-durga-puja" data-category="festival">Durga Puja</li>
+          <li data-template-id="festival-ganesh-chaturthi" data-category="festival">Ganesh Chaturthi</li>
+          <li data-template-id="festival-onam" data-category="festival">Onam</li>
+          <li data-template-id="festival-holi" data-category="festival">Holi</li>
+          <li data-template-id="festival-raksha-bandhan" data-category="festival">Raksha Bandhan</li>
+          <li data-template-id="festival-eid" data-category="festival">Eid</li>
+          <li data-template-id="festival-pongal-sankranti" data-category="festival">Pongal / Sankranti</li>
+          <li data-template-id="festival-gudi-padwa-ugadi" data-category="festival">Gudi Padwa / Ugadi</li>
+          <li data-template-id="festival-baisakhi" data-category="festival">Baisakhi / Vishu</li>
+          <li data-template-id="festival-akshaya-tritiya" data-category="festival">Akshaya Tritiya</li>
+          <li data-template-id="festival-karwa-chauth" data-category="festival">Karwa Chauth</li>
+          <li data-template-id="festival-bhai-dooj" data-category="festival">Bhai Dooj</li>
+          <li data-template-id="festival-republic-day" data-category="festival">Republic Day</li>
+          <li data-template-id="festival-independence-day" data-category="festival">Independence Day</li>
+          <li data-template-id="festival-childrens-day" data-category="festival">Children's Day</li>
+          <li data-template-id="festival-christmas" data-category="festival">Christmas</li>
+          <li data-template-id="festival-new-year" data-category="festival">New Year</li>
+          <li data-template-id="festival-year-end" data-category="festival">Year-End Sale</li>
+          <li data-template-id="festival-valentines" data-category="festival">Valentine's Day</li>
+          <li data-template-id="festival-summer-sale" data-category="festival">Summer Sale</li>
+          <li data-template-id="festival-monsoon-sale" data-category="festival">Monsoon Sale</li>
+          <li data-template-id="festival-wedding-season" data-category="festival">Wedding Season</li>
+          <li data-template-id="festival-black-friday" data-category="festival">Black Friday</li>
+          <li data-template-id="festival-financial-year-end" data-category="festival">Financial Year-End Clearance</li>
+        </ol>
+      </details>
+      <p class="notice"><strong>Review the creative before sending.</strong> Existing copy contains
+        specific discounts, store counts, VIP perks, referral rewards and timing promises.
+        Those are not proof that the advertised benefit exists or applies to the recipient.
+        Use valid configured offers and accurate business terms; do not send unverified stock
+        urgency or automatically promise every customer a reward.</p>
+    </section>
+
+    <section id="audience" aria-labelledby="audience-title">
+      <h2 id="audience-title">2. Which customers can I market to?</h2>
+      <p>The application tags customers into overlapping groups. One customer can be a
+        loyal buyer, Gold member and TV buyer at the same time. The picker chooses a segment;
+        it is not a demonstrated visual AND/OR rules builder.</p>
+      <div class="grid two">
+        <div class="card">
+          <h3>Lifecycle / RFM: 6</h3>
+          <p class="small">RFM means recency, frequency and monetary value. These are purchase-based
+            classifications, not email-open or website-browsing scores.</p>
+          <ul class="audiences">
+            <li data-segment-key="champion">Champions: recent, high frequency or high spend</li>
+            <li data-segment-key="loyal">Loyal: recent buyers with stronger purchase value</li>
+            <li data-segment-key="promising">Promising: recent buyers with lower value so far</li>
+            <li data-segment-key="at_risk">At risk: last purchase 91-180 days ago</li>
+            <li data-segment-key="lapsed">Lapsed: last purchase 181-365 days ago</li>
+            <li data-segment-key="lost">Lost: over 365 days or no last-order date in the RFM scorer</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Spend tiers: 3</h3>
+          <p class="small">Based on qualifying spend in the profile's rolling 365-day window.</p>
+          <ul class="audiences">
+            <li data-segment-key="tier_platinum">Platinum: INR 100,000 or more</li>
+            <li data-segment-key="tier_gold">Gold: INR 25,000 to below 100,000</li>
+            <li data-segment-key="tier_silver">Silver: below INR 25,000</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Purchase behaviour: 6</h3>
+          <ul class="audiences">
+            <li data-segment-key="new_customer">New customers: first order within the last 30 days</li>
+            <li data-segment-key="one_time">One-time buyers: exactly one order</li>
+            <li data-segment-key="repeat">Repeat buyers: two or more orders</li>
+            <li data-segment-key="frequent">Frequent buyers: five or more orders</li>
+            <li data-segment-key="high_aov">Big basket: average order value at least INR 50,000</li>
+            <li data-segment-key="high_spenders">High spenders: lifetime spend at least INR 10,000</li>
+          </ul>
+          <p class="small">New customer is not exclusive to one-time buyers: a customer
+            can place multiple orders within their first 30 days.</p>
+        </div>
+        <div class="card">
+          <h3>Engagement and shopping intent: 6</h3>
+          <ul class="audiences">
+            <li data-segment-key="all">All customers</li>
+            <li data-segment-key="active">Active: ordered within 30 days</li>
+            <li data-segment-key="dormant">Dormant: no order within 30 days</li>
+            <li data-segment-key="no_purchase">Registered, never bought</li>
+            <li data-segment-key="abandoned_cart">Abandoned cart: currently has a non-empty cart</li>
+            <li data-segment-key="wishlist_active">Wishlist holders: currently has saved products</li>
+          </ul>
+          <p class="small">The manual abandoned-cart audience does not mean four hours have
+            elapsed; the scheduled recovery engine has its own age rules.</p>
+        </div>
+        <div class="card">
+          <h3>Category affinity: 5</h3>
+          <ul class="audiences">
+            <li data-segment-key="cat_television">TV buyers</li>
+            <li data-segment-key="cat_refrigerator">Refrigerator buyers</li>
+            <li data-segment-key="cat_washing_machine">Washing-machine buyers</li>
+            <li data-segment-key="cat_air_conditioner">AC / cooling buyers</li>
+            <li data-segment-key="cat_kitchen">Kitchen-appliance buyers</li>
+          </ul>
+          <p class="small">Derived from purchase category/name signals, not a real-time
+            machine-learning recommendation engine.</p>
+        </div>
+        <div class="card">
+          <h3>Channel consent: 2</h3>
+          <ul class="audiences">
+            <li data-segment-key="email_optin">Email opted in</li>
+            <li data-segment-key="whatsapp_optin">WhatsApp opted in</li>
+          </ul>
+          <p class="small">An email address or phone number alone is not permission to send
+            marketing. The customer must have the relevant stored opt-in.</p>
+        </div>
+      </div>
+      <p class="notice"><strong>Anonymous visitors are not an automatic contact list.</strong>
+        Registered users and past buyers can appear in audience data, but order-only guest
+        recipients currently default to no marketing consent. Imported Excel email addresses
+        are accepted for email sending only when matched to an existing opted-in recipient.
+        Group totals overlap and must not be added together as unique customer counts.</p>
+    </section>
+
+    <section id="channels" aria-labelledby="channels-title">
+      <h2 id="channels-title">3. How can a message reach the customer?</h2>
+      <div class="grid two">
+        <div class="card">
+          <span class="tag ready">Email / admin send flow implemented</span>
+          <h3>Personalized HTML email through SMTP</h3>
+          <p>Choose a built-in or saved template, edit the subject/body, select opted-in
+            recipients and confirm the send. The sender personalizes the name, adds an
+            unsubscribe link and reports sent/failed counts.</p>
+          <p class="small">The sender uses batches of 50 with a 30-second pause between
+            batches. Provider credentials, inbox delivery and serverless execution limits
+            still need release verification.</p>
+        </div>
+        <div class="card">
+          <span class="tag caution">WhatsApp / admin UI currently previews</span>
+          <h3>AskEva approved-template messages</h3>
+          <p>The admin's WhatsApp option builds a dry-run plan. A separate backend send path
+            requires AskEva configuration, <code>WHATSAPP_CAMPAIGNS_ENABLED=true</code> and
+            an explicit <code>confirm: true</code> request.</p>
+          <p class="small">Keep <code>requireConsent: true</code>. The API's consent option
+            is configurable, so do not treat default preview filtering as an immutable
+            guarantee for custom integrations.</p>
+        </div>
+      </div>
+      <p class="notice"><strong>The final admin Send button still sends email.</strong>
+        Selecting WhatsApp in the audience step does not turn that final button into a
+        WhatsApp broadcast. Use the UI for its labelled dry-run plan; do not assume
+        a finished WhatsApp sending wizard exists.</p>
+      <details>
+        <summary>WhatsApp template readiness and batching limits</summary>
+        <p>All 54 modern campaign entries have a WhatsApp counterpart, but only two
+          counterpart names match the source's local approved-template list:</p>
+        <ul>
+          <li>Appliance retention push: <code>the_epic_full_moon_day</code></li>
+          <li>Super Sunday: <code>sara_super_sunday_week4</code></li>
+        </ul>
+        <p>The other 52 catalogue entries do not match that list. This is a source-code
+          inventory, not a fresh provider approval check. Reconfirm the actual approved
+          template, language, parameters and account access before sending.</p>
+        <p>The plan advertises batches of 40 with 20-second delays. The current live API
+          executor loops over messages sequentially without applying those pauses.
+          Do not rely on the preview's timing estimate as enforced throttling.</p>
+      </details>
+      <p class="small" style="margin-top:16px">No equivalent SMS or push campaign sender was
+        found in these marketing paths. A stored SMS consent flag, analytics tags or an
+        advertising banner is not an implemented SMS/push broadcast channel.
+        Email and WhatsApp are separate sends, not automatic fallback channels.</p>
+    </section>
+
+    <section id="flows" aria-labelledby="flows-title">
+      <h2 id="flows-title">4. What happens after I set up a campaign?</h2>
+      <div class="operating-flow" style="margin-top:0;border-top:0;padding-top:0">
+        <span class="tag">Flow A / manual email campaign</span>
+        <h3>Choose creative &rarr; choose customers &rarr; send &rarr; review results</h3>
+        <ol class="flow">
+          <li><strong>Choose template</strong>Open <code>/admin/customer-centric</code>.
+            Pick lifecycle, festival, promotion or a saved email template.</li>
+          <li><strong>Customize</strong>Edit subject/body, destinations and any valid offer.
+            Review the personalized preview.</li>
+          <li><strong>Choose recipients</strong>Select a segment and Email. Inspect the
+            actual opted-in recipients and select the intended customers.</li>
+          <li><strong>Final preview + confirm</strong>Check exact recipient count, creative
+            and links. Sending cannot be recalled.</li>
+          <li><strong>Send + history</strong>SMTP runs in batches. Review processed,
+            sent and failed counts in campaign history.</li>
+        </ol>
+        <p class="small">Backend detail: <code>/api/admin/send-campaign</code> uses explicit
+          recipient IDs and consent. Its <code>segment</code> field is a history label,
+          not an independent server-side audience filter. Do not call it with only a
+          segment name and assume that limits the send. The admin recipient picker loads
+          up to 500 entries; check the selected list, not just the segment's total.</p>
+      </div>
+      <div class="operating-flow">
+        <span class="tag caution">Flow B / WhatsApp plan and separately enabled backend send</span>
+        <ol class="flow">
+          <li><strong>Select campaign + audience</strong>Choose a modern library template,
+            WhatsApp segment and intended recipient IDs.</li>
+          <li><strong>Preview only</strong>The admin asks the API for a plan without
+            <code>confirm</code>. Nothing is sent.</li>
+          <li><strong>Resolve readiness</strong>Check opt-in, valid Indian phone numbers,
+            duplicates, provider approval and configuration.</li>
+          <li><strong>Explicit backend confirmation</strong>A properly configured,
+            authorized integration can request the live send. This is not the UI's email Send button.</li>
+          <li><strong>Interpret acknowledgements</strong>The response counts successful
+            provider requests and failures; it does not prove the customer read the message.</li>
+        </ol>
+      </div>
+      <div class="operating-flow">
+        <span class="tag">Flow C / scheduled email retention</span>
+        <ol class="flow">
+          <li><strong>Customer signal</strong>An owned cart becomes stale, a wishlist product
+            changes, or a purchase reminder becomes due.</li>
+          <li><strong>Scheduled scan</strong>The corresponding guarded cron route runs.
+            The engine checks its own eligibility rules.</li>
+          <li><strong>Consent + suppression</strong>Check the profile's email opt-in,
+            address and applicable caps/history/frequency rules.</li>
+          <li><strong>Email reminder</strong>Send the engine's reminder creative with an
+            unsubscribe link. These are not automatically the admin's edited template.</li>
+          <li><strong>Record outcome</strong>Store reminder state/events or snapshots.
+            Review failures and the retention overview.</li>
+        </ol>
+      </div>
+      <p class="notice"><strong>No guaranteed inbox-to-purchase attribution.</strong> Campaign
+        history exposes email send counts; retention exposes reminder counts. Provider success
+        is not the same as delivery, opening, clicking or buying. Do not report conversions,
+        revenue attribution or an automatic email-to-WhatsApp fallback without separately
+        implementing and validating them.</p>
+    </section>
+
+    <section id="automation" aria-labelledby="automation-title">
+      <h2 id="automation-title">5. The nine implemented reminder types</h2>
+      <p>These are eligibility rules, not promises that each customer receives all nine
+        messages. They run through <strong>three email engines</strong>: cart recovery,
+        wishlist alerts and lifecycle reminders.</p>
+      <div class="table-wrap" role="region" aria-label="Reminder eligibility rules" tabindex="0">
+        <table>
+          <caption>Code-defined reminder rules and customer destinations</caption>
+          <thead><tr><th scope="col">Type / engine</th><th scope="col">When the customer becomes eligible</th><th scope="col">Intent and limits</th></tr></thead>
+          <tbody>
+            <tr data-reminder-kind="abandoned_cart"><th scope="row">1. Abandoned cart<br><span class="small">Cart recovery</span></th>
+              <td>A signed-in customer's non-empty cart has been inactive for more than 4 hours,
+                and is no older than 14 days.</td>
+              <td>Bring them back to the cart. At most two reminders per stored cart reminder
+                state. The second waits at least 44 hours after the first actual send.</td></tr>
+            <tr data-reminder-kind="price_drop"><th scope="row">2. Wishlist price drop<br><span class="small">Wishlist alerts</span></th>
+              <td>A saved product's price drops at least 5% compared with the previous snapshot.</td>
+              <td>Link to that product. The first run establishes a baseline and sends no
+                transition alert for an item without a previous snapshot.</td></tr>
+            <tr data-reminder-kind="back_in_stock"><th scope="row">3. Wishlist restock<br><span class="small">Wishlist alerts</span></th>
+              <td>A saved product changes from out of stock to in stock between snapshots.</td>
+              <td>Invite the customer to buy. One wishlist alert per customer per run;
+                a price drop takes priority when both changes apply to the selected item.</td></tr>
+            <tr data-reminder-kind="review_request"><th scope="row">4. Review request<br><span class="small">Lifecycle</span></th>
+              <td>7-13 days after recorded delivery; older records without delivery dates fall back to purchase date.</td>
+              <td>Ask for feedback. A qualifying order, available customer email, consent and
+                lifecycle suppression checks are required.</td></tr>
+            <tr data-reminder-kind="accessory"><th scope="row">5. Accessory cross-sell<br><span class="small">Lifecycle</span></th>
+              <td>14-20 days after purchase.</td>
+              <td>Suggest complementary accessories. This is a timed reminder, not proof
+                of personalized item-level recommendations or an automatically created offer.</td></tr>
+            <tr data-reminder-kind="warranty_expiry"><th scope="row">6. Warranty notice<br><span class="small">Lifecycle</span></th>
+              <td>Within the last 30 days before the category-derived warranty expiry.</td>
+              <td>Invite a cover/service discussion. The model defaults to 12 months;
+                selected categories use 24. These estimates are not verified manufacturer warranty data.</td></tr>
+            <tr data-reminder-kind="service_due"><th scope="row">7. Service due<br><span class="small">Lifecycle</span></th>
+              <td>Recurring category intervals: AC/purifier 182 days; washing machine/water heater 365 days,
+                with a seven-day eligibility window per cycle.</td>
+              <td>Encourage servicing only for mapped categories. The reminder does not
+                establish that an appointment has been booked.</td></tr>
+            <tr data-reminder-kind="replenishment"><th scope="row">8. Consumable replenishment<br><span class="small">Lifecycle</span></th>
+              <td>Water-purifier cartridge or AC service/filter-clean interval of 182 days,
+                with a seven-day eligibility window.</td>
+              <td>Prompt replenishment or maintenance, subject to the same lifecycle
+                frequency and eligibility checks.</td></tr>
+            <tr data-reminder-kind="winback"><th scope="row">9. Win-back<br><span class="small">Lifecycle</span></th>
+              <td>The profile is in At risk or Lapsed. The reminder key uses a 30-day time bucket.</td>
+              <td>Invite a return purchase. Lost is available for manual campaigns,
+                but is not selected by this automatic win-back engine.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h3>Lifecycle frequency is deliberately selective</h3>
+          <p>At most one eligible reminder per customer per run. Customers with a recent
+            recorded reminder are suppressed for 14 days; duplicate keys are checked over
+            a 60-day history window. A run is capped at 100 sends.</p>
+          <p class="small">A review sent on day 7 can suppress the day 14-20 accessory window.
+            Limited windows and competing rules mean reminders can be skipped, not automatically
+            queued for later. These are not global caps across every manual campaign/channel.</p>
+        </div>
+        <div class="card">
+          <h3>Eligibility time is not the delivery time</h3>
+          <p>The cron configuration is daily. A four-hour-old cart is only processed on the
+            next scheduled scan; this is not an exact four-hour timer. A delayed first send
+            also moves the earliest second send.</p>
+          <p class="small">Cart recovery scans at most 200 candidate carts per invocation;
+            wishlist alerts cap sends at 100. Bounds protect execution time but do not prove
+            every eligible customer will be processed on each run.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="example" aria-labelledby="example-title">
+      <h2 id="example-title">6. Example: how you can market to one customer</h2>
+      <p>Imagine <strong>Meera</strong>, an illustrative customer. This is a planning example,
+        not a live customer record or a claim that these touches run as one automatic sequence.</p>
+      <ol class="timeline">
+        <li><h3>She registers and opts in, but has not purchased</h3>
+          <p><span class="tag">Manual email</span><br>Choose <code>no_purchase</code> and the
+            Registered, never bought template. Use an actual configured first-order offer,
+            not an invented coupon from the creative.</p></li>
+        <li><h3>She saves a television but is not ready to buy</h3>
+          <p><span class="tag">Scheduled wishlist email, if activated</span><br>After a baseline exists,
+            a price fall of at least 5% or a restock can trigger an alert.
+            Alternatively, run a manual wishlist campaign after reviewing its claims.</p></li>
+        <li><h3>She adds it to her cart and leaves</h3>
+          <p><span class="tag">Scheduled cart-recovery email, if activated</span><br>At the next scan,
+            check inactivity, consent and cap. Send a cart reminder; if still eligible, a second
+            touch waits at least 44 hours after the first. Do not continue sending indefinitely.</p></li>
+        <li><h3>She buys</h3>
+          <p><span class="tag">Manual welcome + selected lifecycle reminders</span><br>She qualifies
+            for recent/new-buyer targeting. You can manually send Welcome. Review and accessory
+            reminders have their separate timing and suppression rules; do not promise both.
+            Purchase confirmation itself is a transactional message, not this marketing template.</p></li>
+        <li><h3>A relevant seasonal offer arrives</h3>
+          <p><span class="tag">Manual campaign</span><br>Select TV buyers for an upgrade campaign,
+            or an appropriate festival audience. Choose email, or preview an approved WhatsApp
+            counterpart. There is no automatic fallback if the email fails.</p></li>
+        <li><h3>She purchases again or reaches a higher spend tier</h3>
+          <p><span class="tag">Manual retention / reward campaign</span><br>Target Repeat, Loyal,
+            Gold or Platinum as applicable. Send a thank-you or VIP creative only when its
+            advertised benefits actually exist. A tier-upgrade template is not an automatic trigger.</p></li>
+        <li><h3>She stops buying, or withdraws consent</h3>
+          <p><span class="tag">Win-back or stop</span><br>At risk/Lapsed can become eligible for
+            the email win-back engine. Lost can be targeted manually if appropriate.
+            If she opts out of a channel, do not keep marketing to her on that channel.</p></li>
+      </ol>
+      <p class="notice good"><strong>The useful strategy is relevance, not maximum message volume.</strong>
+        Select the next appropriate touch for the customer's state. Avoid combining a manual
+        broadcast, cart reminder and WhatsApp push simply because all three paths exist.</p>
+    </section>
+
+    <section id="activation" aria-labelledby="activation-title">
+      <h2 id="activation-title">7. What must be configured before this actually runs?</h2>
+      <ol class="checklist">
+        <li><strong>Accurate customer data and consent.</strong> Profiles, order history,
+          segments and channel opt-ins must be populated and current. Registration or
+          a guest purchase is not automatic marketing permission.</li>
+        <li><strong>Valid creative, offer and destination.</strong> Verify discount eligibility,
+          dates, stock, benefits and site origin. Checkout remains authoritative for coupon
+          and pricing rules. An edited admin email is not automatically the retention engine's message.</li>
+        <li><strong>Working email provider.</strong> Configure the application's SMTP host,
+          port, user, password and sender. Test authenticated delivery, unsubscribe and
+          error handling with a controlled audience before any broad send.</li>
+        <li><strong>Working WhatsApp provider when used.</strong> Configure
+          <code>ASKEVA_API_KEY</code> and <code>ASKEVA_API_URL</code>, appropriate sender,
+          current approved templates and explicit send enablement. The existing UI is a preview,
+          not a complete WhatsApp live-send wizard.</li>
+        <li><strong>Deployed and authenticated scheduling.</strong> Source now contains Vercel
+          cron definitions. Confirm that the deployed plan supports them, set the matching
+          <code>CRON_SECRET</code> of at least 16 characters, and verify actual scheduled execution.
+          No hosted jobs were triggered for this guide.</li>
+        <li><strong>Preview the sending engines safely.</strong> Cart, wishlist and lifecycle
+          routes support <code>?dryRun=1</code>. Profile rebuild and segmentation are
+          separate data-changing jobs, not message previews. A dry-run does not certify
+          provider delivery or production throughput.</li>
+        <li><strong>Observe outcomes.</strong> Inspect failures, consent reach, truncation and
+          reminder counts. SMTP/API acceptance is not proof of inbox delivery or read status.
+          Establish measurement and operational ownership before scaling campaigns.</li>
+      </ol>
+      <div class="table-wrap" role="region" aria-label="Configured marketing job schedules" tabindex="0">
+        <table>
+          <caption>Current source cron configuration / daily schedules in UTC</caption>
+          <thead><tr><th scope="col">UTC</th><th scope="col">Job</th><th scope="col">Purpose</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">01:00</th><td><code>/api/cron/rebuild-profiles</code></td><td>Update customer purchase/spend profiles</td></tr>
+            <tr><th scope="row">01:30</th><td><code>/api/cron/segment-customers</code></td><td>Recompute purchase-based RFM segments</td></tr>
+            <tr><th scope="row">03:00</th><td><code>/api/cron/cart-recovery</code></td><td>Send eligible cart reminders</td></tr>
+            <tr><th scope="row">04:30</th><td><code>/api/cron/wishlist-alerts</code></td><td>Detect wishlist transitions and send alerts</td></tr>
+            <tr><th scope="row">05:30</th><td><code>/api/cron/lifecycle-reminders</code></td><td>Plan and send eligible lifecycle reminders</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">A sixth cron entry runs data retention at 02:00 UTC; it is a privacy
+        maintenance job, not another campaign type. These schedules are source configuration,
+        not evidence of successful deployed runs. They do not schedule manual festival broadcasts.</p>
+    </section>
+
+    <section id="sources" aria-labelledby="sources-title">
+      <h2 id="sources-title">Evidence and boundaries</h2>
+      <p>The template and audience counts were computed from the actual exported source
+        catalogues in an isolated, database-disabled evaluation. The flow descriptions
+        follow the current admin UI, handlers and reminder engines. No campaign was created,
+        scheduled, submitted or sent while preparing this page.</p>
+      <p>The seven screenshot assets are original browser captures of the independently
+        rendered campaign component or actual email-template HTML. They use synthetic API
+        fixtures and do not demonstrate admin authentication, backend persistence,
+        visual-editor behavior, actual customer counts or provider delivery.</p>
+      <ul class="sources">
+        <li><code>lib/marketing/campaigns.ts</code> and <code>lib/promoTemplates.ts</code>: modern catalogue and legacy starters</li>
+        <li><code>lib/marketing/segments.ts</code> and <code>lib/customer-profile.ts</code>: audiences, profile data and consent</li>
+        <li><code>app/admin/customer-centric/page.tsx</code>: template/editor/audience/preview/send UI</li>
+        <li><code>app/api/admin/send-campaign/route.ts</code>: email sending, recipient selection and history</li>
+        <li><code>lib/marketing/whatsapp.ts</code> and <code>app/api/admin/marketing/whatsapp/route.ts</code>: WhatsApp plans and backend send path</li>
+        <li><code>lib/retention/cart-recovery.ts</code>, <code>wishlist-alerts.ts</code>, <code>lifecycle.ts</code> and <code>rules.ts</code>: nine reminder types</li>
+        <li><code>lib/retention/segmentation.ts</code>: actual RFM scoring and automatic win-back selection</li>
+        <li><code>vercel.json</code>, <code>lib/cron-auth.ts</code> and <code>app/api/cron/*</code>: source schedules and authentication</li>
+      </ul>
+      <p class="notice"><strong>This is a capability guide, not a live marketing readiness certificate.</strong>
+        It does not verify current provider credentials, approval status, inbox delivery,
+        customer consent quality, live scheduler execution or campaign conversions.
+        It also does not certify referrals, promised VIP benefits, paid advertising,
+        all gamification flows or third-party automation integrations.</p>
+      <div class="links">
+        <a href="customer-journey.html">Customer shopping journey with screenshots</a>
+        <a href="customer-journey-ui-audit.md">Customer UI audit</a>
+        <a href="production-readiness-audit.md">Production-readiness report</a>
+        <a href="#overview">Back to campaign overview</a>
+      </div>
+    </section>
+  </main>
+  <footer>
+    Standalone HTML guide. Open in a browser without a server or internet connection.
+    Expand catalogue sections before printing if you want the complete template lists in your PDF.
+    Keep marketing-campaign-guide.html and its marketing-campaign-assets folder together when sharing.
+  </footer>
+</body>
+</html>

@@ -10,9 +10,22 @@
 // import { ObjectId } from 'mongodb';
 import { sendEmail } from '../email';
 import { emailTemplates } from '../emailTemplates';
+import type { Filter } from 'mongodb';
 
 // Webpack injects this at runtime; it has no ambient type declaration.
-declare const __non_webpack_require__: ((id: string) => any) | undefined;
+declare const __non_webpack_require__: ((id: 'node-cron') => typeof import('node-cron')) | undefined;
+
+interface LegacyCart {
+    userId?: string;
+    updatedAt: Date;
+    items: { name: string; price: number; image: string; quantity: number }[];
+    lastAbandonmentEmailSent?: Date | null;
+    abandonmentEmailCount?: number;
+}
+interface LegacyCartUser {
+    email?: string;
+    firstName?: string;
+}
 
 // Configurable cron schedules for different triggers
 const CRON_SCHEDULE_2_MIN = '*/2 * * * *'; // Runs every 2 minutes
@@ -66,10 +79,10 @@ async function checkAbandonedCarts(checkType: '2-minute-check' | 'hourly-follow-
         const { getCollection } = await import('../db-service');
         const { ObjectId } = await import('mongodb');
 
-        const cartsCollection = await getCollection('carts');
-        const usersCollection = await getCollection('users');
+        const cartsCollection = await getCollection<LegacyCart>('carts');
+        const usersCollection = await getCollection<LegacyCartUser>('users');
 
-        let query: any;
+        let query: Filter<LegacyCart>;
         const currentTime = new Date();
 
         if (checkType === '2-minute-check') {
@@ -130,7 +143,7 @@ async function checkAbandonedCarts(checkType: '2-minute-check' | 'hourly-follow-
 
             // Prepare email data
             // For simplicity, showing first 3 items
-            const itemsToShow = cart.items.slice(0, 3).map((item: any) => ({
+            const itemsToShow = cart.items.slice(0, 3).map((item) => ({
                 name: item.name,
                 price: item.price,
                 image: item.image,

@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import { pageMetadata } from "@/lib/seo-page"
 import Link from "next/link"
 import Image from "next/image"
 import { Clock, Tag } from "lucide-react"
@@ -8,12 +8,12 @@ import { getArticleCategories, listArticles } from "@/lib/articles"
 
 export const revalidate = 900
 
-export const metadata: Metadata = {
-  title: "Buying Guides & Electronics Advice — Sara Electronics",
+export const generateMetadata = pageMetadata({
+  path: "/blog",
+  title: brand => `Buying Guides & Electronics Advice | ${brand}`,
   description:
     "Expert buying guides, comparisons and advice on TVs, refrigerators, washing machines, air conditioners, mobiles and laptops. Pick the right product at the right price.",
-  alternates: { canonical: "/blog" },
-}
+})
 
 export default async function BlogIndexPage({
   searchParams,

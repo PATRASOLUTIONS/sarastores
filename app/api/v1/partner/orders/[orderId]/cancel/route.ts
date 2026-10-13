@@ -3,9 +3,10 @@
  * POST /api/v1/partner/orders/[orderId]/cancel - Cancel an order
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { cancelPartnerOrder } from '@/lib/partner/orders';
+import { PartnerOrderCancelSchema } from '@/lib/validation';
 
 interface RouteParams {
   params: Promise<{ orderId: string }>;
@@ -25,19 +26,19 @@ async function handlePost(req: PartnerAuthRequest, context: RouteParams) {
       );
     }
 
-    // Parse request body for cancellation reason
-    let reason: string | undefined;
+    const text = await req.text();
+    let body: unknown = {};
     try {
-      const body = await req.json();
-      reason = body.reason;
+      if (text.trim()) body = JSON.parse(text);
     } catch {
-      // Body is optional
+      return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
     }
-
-    const result = await cancelPartnerOrder(req.partner.id, orderId, reason);
+    const parsed = PartnerOrderCancelSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ success: false, error: 'Invalid cancellation reason' }, { status: 400 });
+    const result = await cancelPartnerOrder(req.partner.id, orderId, req.apiKey.environment, parsed.data.reason);
 
     if (!result.success) {
-      const status = result.error === 'Order not found' ? 404 : 400;
+      const status = result.status || 400;
       return NextResponse.json(
         { success: false, error: result.error },
         { status }
@@ -61,7 +62,7 @@ async function handlePost(req: PartnerAuthRequest, context: RouteParams) {
 }
 
 // Export wrapped handler
-export const POST = withPartnerAuth(handlePost as any, ['orders:write']);
+export const POST = withPartnerAuth(handlePost, ['orders:write']);
 
 // Handle CORS preflight requests
 export { OPTIONS } from '@/lib/partner/auth';

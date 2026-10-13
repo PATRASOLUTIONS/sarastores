@@ -1,6 +1,7 @@
 import { connectToDatabase } from "@/lib/mongodb"
 import { getProductCommerceAttributes } from "@/lib/product-attributes"
 import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName"
+import type { ProductFeedDocument } from "@/lib/seo-product"
 
 /**
  * Google Merchant Center product feed (RSS 2.0 + the `g:` namespace).
@@ -47,12 +48,12 @@ function tag(name: string, value: string | number | null | undefined): string {
 
 export async function GET() {
   const origin = getOrigin()
-  let products: any[] = []
+  let products: ProductFeedDocument[] = []
 
   try {
     const { db } = await connectToDatabase()
     products = await db
-      .collection("products")
+      .collection<ProductFeedDocument>("products")
       .find(
         { active: true },
         {
@@ -85,9 +86,9 @@ export async function GET() {
       .sort({ updatedAt: -1 })
       .limit(MAX_ITEMS)
       .toArray()
-  } catch {
-    // DB unavailable — emit a valid but empty feed rather than a 500, so
-    // Merchant Center does not flag the feed URL as broken.
+  } catch (error) {
+    console.error("[Merchant feed] Product catalogue unavailable:", error)
+    return new Response("Product feed is temporarily unavailable", { status: 503, headers: { "Cache-Control": "no-store" } })
   }
 
   const items = products
@@ -140,7 +141,7 @@ export async function GET() {
         tag("g:identifier_exists", hasIdentifier ? "yes" : "no") +
         tag("g:product_type", product.category) +
         tag("g:shipping_weight", attributes.weightKg ? `${attributes.weightKg} kg` : null) +
-        (attributes.freeDelivery || product.free_delivery
+        (attributes.freeDelivery
           ? `      <g:shipping>\n        <g:country>IN</g:country>\n        <g:price>0.00 INR</g:price>\n      </g:shipping>\n`
           : "") +
         tag("g:tax_category", attributes.hsnCode) +

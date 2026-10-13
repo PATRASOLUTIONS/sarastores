@@ -11,6 +11,13 @@ export interface WishlistItem {
   image?: string
   description?: string
   category?: string
+  slug?: string
+  sku?: string
+  SKU?: string
+  skuNo?: string
+  discount?: number
+  rating?: number
+  reviews?: number
 }
 
 export function useWishlist() {

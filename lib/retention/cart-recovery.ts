@@ -118,7 +118,7 @@ export async function runCartRecovery(options: { dryRun?: boolean } = {}): Promi
     }
 
     try {
-      const token = await issueUnsubscribeToken(userId)
+      const token = await issueUnsubscribeToken(userId, "email")
       const message = buildReminderMessage("abandoned_cart", {
         customerName: "there",
         productName: String(items[0]?.name ?? "an item"),

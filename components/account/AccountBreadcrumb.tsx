@@ -10,6 +10,9 @@ const LABELS: Record<string, string> = {
   offers: "My Offers",
   notifications: "Notifications",
   settings: "Account Settings",
+  addresses: "My Addresses",
+  membership: "My Membership",
+  support: "Help & Support",
   "instore-purchases": "In-Store Purchases",
 }
 

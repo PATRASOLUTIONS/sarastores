@@ -13,7 +13,8 @@
  */
 
 import { getCollection } from "@/lib/db-service"
-import { COLLECTION_CUSTOMER_PROFILES } from "@/lib/customer-profile"
+import { COLLECTION_CUSTOMER_PROFILES, type CustomerProfile } from "@/lib/customer-profile"
+import type { ObjectId } from "mongodb"
 
 export type SegmentGroup =
   | "lifecycle"
@@ -170,12 +171,24 @@ export function tagRecipient(r: Omit<Recipient, "segments">): string[] {
  * Callers filter by tag rather than re-querying per segment.
  */
 export async function buildAudience(): Promise<Recipient[]> {
+  type AudienceUser = {
+    role?: string; email?: string; name?: string; fullName?: string; phone?: string; mobile?: string
+  }
+  type AudienceOrder = {
+    userId?: string; total?: number | string; createdAt?: Date | string | number | null; status?: string
+    customer?: { email?: string; name?: string; firstName?: string; lastName?: string; phone?: string }
+    items?: Array<{ category?: string | null; subCategory?: string | null; name?: string }>
+  }
+  type AudienceProfile = Partial<Pick<CustomerProfile,
+    "orderCount" | "lifetimeSpend" | "averageOrderValue" | "categoriesBought" | "firstOrderAt" | "lastOrderAt" | "tier" | "consent"
+  >> & { userId: string; segment?: string | null }
+  type ShoppingList = { userId?: string | ObjectId; items?: unknown[] }
   const [usersCol, ordersCol, profilesCol, cartsCol, wishlistsCol] = await Promise.all([
-    getCollection("users"),
-    getCollection("orders"),
-    getCollection(COLLECTION_CUSTOMER_PROFILES),
-    getCollection("carts"),
-    getCollection("wishlists"),
+    getCollection<AudienceUser>("users"),
+    getCollection<AudienceOrder>("orders"),
+    getCollection<AudienceProfile>(COLLECTION_CUSTOMER_PROFILES),
+    getCollection<ShoppingList>("carts"),
+    getCollection<ShoppingList>("wishlists"),
   ])
 
   const [users, profiles, carts, wishlists] = await Promise.all([
@@ -185,12 +198,12 @@ export async function buildAudience(): Promise<Recipient[]> {
     wishlistsCol.find({}, { projection: { userId: 1, items: 1 } }).limit(20000).toArray(),
   ])
 
-  const profileByUser = new Map(profiles.map((p: any) => [String(p.userId), p]))
+  const profileByUser = new Map(profiles.map((p) => [String(p.userId), p]))
   const cartUserIds = new Set(
-    carts.filter((c: any) => Array.isArray(c.items) && c.items.length > 0).map((c: any) => String(c.userId)),
+    carts.filter((c) => Array.isArray(c.items) && c.items.length > 0).map((c) => String(c.userId)),
   )
   const wishlistUserIds = new Set(
-    wishlists.filter((w: any) => Array.isArray(w.items) && w.items.length > 0).map((w: any) => String(w.userId)),
+    wishlists.filter((w) => Array.isArray(w.items) && w.items.length > 0).map((w) => String(w.userId)),
   )
 
   // Guest orders still represent a contactable customer, so they are folded in by email.
@@ -202,7 +215,7 @@ export async function buildAudience(): Promise<Recipient[]> {
   type Agg = { orders: number; spent: number; first: number | null; last: number | null; cats: Set<string>; name: string; phone: string }
   const byEmail = new Map<string, Agg>()
 
-  for (const o of orders as any[]) {
+  for (const o of orders) {
     const email = String(o?.customer?.email || "").trim().toLowerCase()
     if (!email) continue
     const ts = o.createdAt ? new Date(o.createdAt).getTime() : null
@@ -217,7 +230,7 @@ export async function buildAudience(): Promise<Recipient[]> {
       if (existing.first === null || ts < existing.first) existing.first = ts
       if (existing.last === null || ts > existing.last) existing.last = ts
     }
-    for (const it of (o.items ?? []) as any[]) {
+    for (const it of o.items ?? []) {
       for (const signal of [it?.category, it?.subCategory, it?.name]) {
         if (typeof signal === "string" && signal.trim()) existing.cats.add(signal.trim())
       }
@@ -229,10 +242,10 @@ export async function buildAudience(): Promise<Recipient[]> {
   const out: Recipient[] = []
   const seenEmails = new Set<string>()
 
-  for (const u of users as any[]) {
+  for (const u of users) {
     const email = String(u.email || "").trim().toLowerCase()
     const userId = String(u._id)
-    const profile: any = profileByUser.get(userId)
+    const profile = profileByUser.get(userId)
     const agg = email ? byEmail.get(email) : undefined
     if (email) seenEmails.add(email)
 

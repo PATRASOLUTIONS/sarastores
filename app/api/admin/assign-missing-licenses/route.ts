@@ -1,111 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assignMissingLicenses } from '@/scripts/assign-missing-licenses'
-import { checkAdminAuthorization } from '@/lib/auth'
+import { assignMissingLicenses, LicenseRepairDaysSchema, missingLicenseQuery } from '@/scripts/assign-missing-licenses'
+import { requireAdmin } from '@/lib/auth'
+import { getCollection } from '@/lib/db-service'
+import type { OrderDocument } from '@/lib/order-document'
+import { z } from 'zod'
 
-/**
- * POST /api/admin/assign-missing-licenses
- * 
- * Retroactively assign license keys to orders that don't have them
- * 
- * Body (optional):
- * {
- *   daysBack: number  // Default: 30
- * }
- */
+const inputSchema = z.object({ daysBack: LicenseRepairDaysSchema.default(30) }).strict()
+
 export async function POST(request: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
   try {
-    const auth = await checkAdminAuthorization();
-    if (!auth.authorized) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    const text = await request.text()
+    let body: unknown = {}
+    try { if (text.trim()) body = JSON.parse(text) } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-
-    const body = await request.json().catch(() => ({}))
-    const daysBack = body.daysBack || 30
-
-    console.log(`🔑 Starting retroactive license assignment via API`)
-    console.log(`📅 Processing orders from the last ${daysBack} days`)
-
-    // Run the assignment process
-    const stats = await assignMissingLicenses(daysBack)
-
-    // Return results
+    const parsed = inputSchema.safeParse(body)
+    if (!parsed.success) return NextResponse.json({ error: 'daysBack must be an integer between 1 and 3650' }, { status: 400 })
+    const stats = await assignMissingLicenses(parsed.data.daysBack)
     return NextResponse.json({
-      success: true,
-      message: 'License assignment process completed',
-      stats: {
-        totalOrders: stats.totalOrders,
-        ordersProcessed: stats.ordersProcessed,
-        licensesAssigned: stats.licensesAssigned,
-        emailsSent: stats.emailsSent,
-        ordersMarkedDelivered: stats.ordersMarkedDelivered,
-        errorsCount: stats.errors.length,
-        errors: stats.errors
-      }
+      success: stats.errors.length === 0,
+      message: stats.errors.length ? 'License repair completed with errors; review the results before retrying' : 'License repair completed',
+      stats: { ...stats, errorsCount: stats.errors.length },
     })
-
   } catch (error) {
-    console.error('❌ Error in license assignment API:', error)
-    return NextResponse.json(
-      { 
-        success: false,
-        error: 'Failed to assign licenses',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    console.error('[license-repair] API failed:', error)
+    return NextResponse.json({ success: false, error: 'Failed to assign licenses' }, { status: 500 })
   }
 }
 
-/**
- * GET /api/admin/assign-missing-licenses
- * 
- * Check how many orders need license assignment (dry run)
- */
 export async function GET(request: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
   try {
-    const searchParams = request.nextUrl.searchParams
-    const daysBack = parseInt(searchParams.get('daysBack') || '30')
-
-    const { connectDB } = await import('@/lib/db')
-    const db = await connectDB()
-    const ordersCollection = db.collection('orders')
-
-    // Calculate date threshold
-    const dateThreshold = new Date()
-    dateThreshold.setDate(dateThreshold.getDate() - daysBack)
-
-    // Count orders needing licenses
-    const ordersQuery: any = {
-      'items.type': 'software',
-      status: { $in: ['paid', 'confirmed', 'processing'] },
-      $or: [
-        { licenseKey: { $exists: false } },
-        { licenseKey: null },
-        { licenseKey: '' }
-      ],
-      createdAt: { $gte: dateThreshold }
-    }
-
-    const count = await ordersCollection.countDocuments(ordersQuery)
-
+    const parsed = inputSchema.safeParse(Object.fromEntries(request.nextUrl.searchParams))
+    if (!parsed.success) return NextResponse.json({ error: 'daysBack must be an integer between 1 and 3650' }, { status: 400 })
+    const orders = await getCollection<OrderDocument>('orders')
+    const count = await orders.countDocuments(missingLicenseQuery(parsed.data.daysBack))
     return NextResponse.json({
-      success: true,
-      daysBack,
-      ordersNeedingLicenses: count,
-      message: count > 0 
-        ? `${count} order(s) need license assignment` 
-        : 'All orders have licenses assigned'
+      success: true, daysBack: parsed.data.daysBack, ordersNeedingLicenses: count,
+      message: `${count} verified paid order(s) need local software fulfillment`,
     })
-
   } catch (error) {
-    console.error('❌ Error checking orders:', error)
-    return NextResponse.json(
-      { 
-        success: false,
-        error: 'Failed to check orders',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    console.error('[license-repair] Preview failed:', error)
+    return NextResponse.json({ success: false, error: 'Failed to check orders' }, { status: 500 })
   }
 }

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       if (v) url.searchParams.set(key, v)
     }
 
-    const headers: any = {
+    const headers = {
       'x-client-id': clientId,
       'x-client-secret': clientSecret,
     }

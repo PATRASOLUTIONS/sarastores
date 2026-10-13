@@ -22,6 +22,7 @@ export interface SessionPayload {
   role: "admin" | "user" | "vendor" | "superadmin"
   dashboardAccess?: boolean
   allowedPages?: string[]
+  sessionVersion?: number
   /** Expiry, epoch seconds. */
   exp: number
 }
@@ -54,7 +55,7 @@ function getSecret(): string {
  * missing or rotated SESSION_SECRET (so the signature doesn't match) or
  * a token that was issued by an older build with a different secret.
  */
-let logBucket: Record<string, { count: number; lastAt: number }> = {}
+const logBucket: Record<string, { count: number; lastAt: number }> = {}
 function logReject(reason: string, extra: Record<string, unknown> = {}) {
   const now = Date.now()
   const entry = logBucket[reason] || { count: 0, lastAt: 0 }
@@ -70,122 +71,32 @@ function logReject(reason: string, extra: Record<string, unknown> = {}) {
   }
 }
 
-function utf8ToBytes(str: string): Uint8Array {
+function utf8ToBytes(str: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(str)
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
-  // Try the standard Base64 -> Base64URL transformation. We need a path
-  // that works in ALL of: modern browsers, Edge runtime, and Node.
-  //
-  //   1. Prefer `btoa` (browsers, Edge runtime, modern Node).
-  //   2. Otherwise use Node `Buffer` (older server runtimes).
-  //
-  // Critically, do NOT reach for `Buffer` in a path that might run in
-  // the Edge runtime — `Buffer` is undefined there and the require()
-  // would throw synchronously, breaking session verification.
-  if (typeof btoa === "function") {
-    let binary = ""
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
-  }
-
-  if (isEdgeRuntime) {
-    // Edge runtime but no `btoa` — this should never happen on a properly
-    // configured Vercel Edge deployment, but if it does, fail loudly
-    // instead of silently producing a wrong signature.
-    throw new Error(
-      "Neither btoa nor Buffer is available in the Edge runtime. " +
-        "Cannot encode base64url for session signing.",
-    )
-  }
-
-  // Node fallback
-  const base64 = Buffer.from(bytes).toString("base64")
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+  let binary = ""
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
 }
 
 function base64UrlToBytes(b64url: string): Uint8Array {
   const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/")
   const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4)
 
-  // Same pattern as bytesToBase64Url: prefer atob, fall back to Buffer
-  // only outside the Edge runtime.
-  if (typeof atob === "function") {
-    const binary = atob(padded)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    return bytes
-  }
-
-  if (isEdgeRuntime) {
-    throw new Error(
-      "Neither atob nor Buffer is available in the Edge runtime. " +
-        "Cannot decode base64url for session verification.",
-    )
-  }
-
-  const binary = Buffer.from(padded, "base64").toString("binary")
+  const binary = atob(padded)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
   return bytes
 }
 
-/**
- * Runtime detection. On Vercel, middleware runs in the Edge runtime
- * (no Node built-ins), while API routes / Server Components run in the
- * Node runtime. Trying to `require("crypto")` in the Edge runtime
- * throws synchronously, which previously caused `hmac()` to fall through
- * to a throwing branch and made `verifySessionToken` return `null` for
- * every request — logging the user out instantly. We now detect the
- * Edge runtime explicitly and skip the Node fallback there.
- */
-const isEdgeRuntime =
-  typeof (globalThis as { EdgeRuntime?: string }).EdgeRuntime === "string"
-
 async function hmac(data: string): Promise<Uint8Array> {
   const secret = getSecret()
-  // Web Crypto Subtle is available in both Edge runtime and Node 20+.
-  // It is the only safe path for Edge — `require("crypto")` would throw
-  // there because Node built-ins are not bundled.
-  try {
-    if (typeof crypto !== "undefined" && (crypto as any).subtle) {
-      const key = await (crypto as any).subtle.importKey(
-        "raw",
-        utf8ToBytes(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"],
-      )
-      const sig = await (crypto as any).subtle.sign("HMAC", key, utf8ToBytes(data))
-      return new Uint8Array(sig)
-    }
-  } catch (e) {
-    if (isEdgeRuntime) {
-      // Don't silently fall through to Node `require` in Edge — it WILL
-      // throw, and a swallowed throw here is what caused sessions to
-      // fail to verify on production. Surface the error instead.
-      throw new Error(
-        `Web Crypto Subtle HMAC failed in Edge runtime: ${String(e)}. ` +
-          `This usually means the deployment runtime does not support ` +
-          `crypto.subtle. Check your hosting environment.`,
-      )
-    }
-    // Node runtime: fall through to the createHmac fallback.
-  }
-
-  // Node fallback using crypto.createHmac. Only reachable in the Node
-  // runtime; in Edge runtime we either succeeded above or threw.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const nodeCrypto = require("crypto")
-    const h = nodeCrypto.createHmac("sha256", secret)
-    h.update(data)
-    const buf: Buffer = h.digest()
-    return new Uint8Array(buf)
-  } catch (err) {
-    throw new Error("No suitable crypto implementation available for HMAC")
-  }
+  const key = await crypto.subtle.importKey(
+    "raw", utf8ToBytes(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  )
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, utf8ToBytes(data)))
 }
 
 /** Constant-time string comparison. */

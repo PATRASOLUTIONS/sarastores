@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react"
 import Loader from "@/components/Loader"
+import { catalogCategoryListResponseSchema } from "@/lib/catalog-list-response"
+import { catalogProductListResponseSchema } from "@/utils/catalog"
 
 interface Category {
   id: string
@@ -51,14 +53,15 @@ export default function CategorySection() {
           throw new Error("Failed to fetch categories")
         }
 
-        const categoriesData = await categoriesResponse.json()
-        const productsData = productsResponse.ok ? await productsResponse.json() : []
+        if (!productsResponse.ok) throw new Error("Failed to fetch category product counts")
+        const categoriesData = catalogCategoryListResponseSchema.parse(await categoriesResponse.json())
+        const productsData = catalogProductListResponseSchema.parse(await productsResponse.json())
 
         const categoriesWithCounts = categoriesData
           .filter((cat: Category) => cat.isEnabled !== false) // Filter only enabled categories
           .map((cat: Category) => ({
             ...cat,
-            count: productsData.filter((p: any) => p.category === cat.id).length,
+            count: productsData.filter(p => p.category === cat.id).length,
           }))
           .filter((cat: Category) => (cat.count || 0) > 0)
 

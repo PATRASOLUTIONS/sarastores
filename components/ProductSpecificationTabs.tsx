@@ -4,16 +4,19 @@ import React, { JSX, useState } from "react"
 import { useAuth } from "../contexts/AuthContext"
 import useSWR from "swr"
 import ProductReviewsSection from "./ProductReviewsSection"
+import { manufacturerImageSource, productImageUrls } from "@/lib/product-images"
+import { fetchProductSpecification } from "@/lib/product-specification-response"
+import toast from "react-hot-toast"
 
 // Helper to recursively render JSON with syntax highlighting and collapsible sections
-function JSONViewer({ data }: { data: any }): JSX.Element {
+function JSONViewer({ data }: { data: unknown }): JSX.Element {
   const [expanded, setExpanded] = useState<{ [key: string]: boolean }>({})
 
   const toggleExpand = (key: string) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const renderValue = (value: any, depth: number = 0): JSX.Element => {
+  const renderValue = (value: unknown, depth: number = 0): JSX.Element => {
     const indent = depth * 16
 
     if (value === null) {
@@ -58,7 +61,8 @@ function JSONViewer({ data }: { data: any }): JSX.Element {
       )
     }
     if (typeof value === "object") {
-      const keys = Object.keys(value)
+      const entries: [string, unknown][] = Object.entries(value)
+      const keys = entries.map(([key]) => key)
       if (keys.length === 0) return <span className="text-gray-600">{"{}"}</span>
       const key = `obj-${depth}-${Math.random()}`
       const isExp = expanded[key]
@@ -73,11 +77,11 @@ function JSONViewer({ data }: { data: any }): JSX.Element {
           <span className="text-gray-600">{"{}"}</span>
           {isExp && (
             <div>
-              {keys.map((k, idx) => (
+              {entries.map(([k, item], idx) => (
                 <div key={k} style={{ marginLeft: `${indent + 16}px` }}>
                   <span className="text-blue-700 font-semibold">&quot;{k}&quot;</span>
                   <span className="text-gray-600">: </span>
-                  {renderValue(value[k], depth + 1)}
+                  {renderValue(item, depth + 1)}
                   {idx < keys.length - 1 && <span className="text-gray-600">,</span>}
                 </div>
               ))}
@@ -100,12 +104,14 @@ function JSONViewer({ data }: { data: any }): JSX.Element {
 }
 
 interface ProductSpecificationTabsProps {
-  technicalDetails?: Record<string, any> | null
+  section?: "specs" | "manufacturer"
+  technicalDetails?: Record<string, unknown> | null
   fromManufacturer?: string | null
   specificationImages?: string[] | null
+  fallbackImages?: string[]
   productDescription?: string
   sku?: string
-  reviews?: any[] | null
+  reviews?: React.ComponentProps<typeof ProductReviewsSection>["seedReviews"]
   /** Identity the embedded reviews panel needs to render and post. */
   productId?: string
   productName?: string
@@ -118,119 +124,12 @@ interface ProductSpecificationTabsProps {
   mrp?: number | null
 }
 
-function extractManufacturerImages(
-  technicalDetails?: Record<string, any> | null,
-  specificationImages?: string[] | null,
-): { images: string[]; dataUrl: string | null } {
-  // Priority 1: use provided specificationImages prop
-  if (Array.isArray(specificationImages) && specificationImages.length > 0) {
-    return { images: specificationImages, dataUrl: null }
-  }
-
-  const td = technicalDetails || {}
-  const candidateKeys = [
-    "manufacturer_image_urls",
-    "from_manufacturer_image_urls",
-    "image_urls",
-    "images",
-    "manufacturer_images",
-    "URL",
-    "Url",
-    "url",
-  ]
-
-  // Arrays directly in technical_details
-  for (const key of candidateKeys) {
-    const v = (td as any)[key]
-    if (Array.isArray(v) && v.length > 0) {
-      const urls = v.filter((u: any) => typeof u === "string" && u.startsWith("http"))
-      if (urls.length > 0) return { images: urls, dataUrl: null }
-    }
-  }
-
-  // Strings in technical_details: use regex to pull urls from any string field that contains http
-  for (const key of candidateKeys) {
-    const v = (td as any)[key]
-    if (typeof v === "string" && v.includes("http")) {
-      const urls = (v.match(/https?:\/\/[^\s",]+/g) || []).filter((s) => s.startsWith("http"))
-      if (urls.length > 0) return { images: urls, dataUrl: null }
-    }
-  }
-
-  // Single URL in technical_details that should be fetched (expects JSON of image URLs)
-  const singleUrlKeys = [
-    "manufacturer_images_url",
-    "from_manufacturer_images_url",
-    "spec_images_url",
-    "images_url",
-    "manufacturer_images_json",
-  ]
-  for (const key of singleUrlKeys) {
-    const v = (td as any)[key]
-    if (typeof v === "string" && v.startsWith("http")) {
-      return { images: [], dataUrl: v }
-    }
-  }
-
-  return { images: [], dataUrl: null }
-}
-
-function normalizeFetchedImages(data: unknown): string[] {
-  if (!data) return []
-  // If it's already an array of URLs
-  if (Array.isArray(data)) {
-    return data.filter((u) => typeof u === "string" && u.startsWith("http"))
-  }
-  // If it's an object like { images: [...] }
-  if (typeof data === "object" && data !== null && "images" in (data as any)) {
-    const arr = (data as any).images
-    if (Array.isArray(arr)) {
-      return arr.filter((u: any) => typeof u === "string" && u.startsWith("http"))
-    }
-  }
-  // If it's a CSV string of URLs
-  if (typeof data === "string") {
-    if (data.includes(",")) {
-      return data
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.startsWith("http"))
-    }
-    // If it's a single URL string, treat as one image
-    if (data.startsWith("http")) return [data]
-  }
-  return []
-}
-
-// Helper to extract image URLs from a returned technical_details object (e.g., in product_specifications)
-function extractUrlsFromTechnicalDetailsObj(technicalDetails?: Record<string, any> | null): string[] {
-  if (!technicalDetails) return []
-  const keys = ["URL", "Url", "url", "From Manufacturer URL", "Manufacturer URL"]
-  for (const key of keys) {
-    const v = (technicalDetails as any)[key]
-    if (Array.isArray(v)) {
-      const urls = v.filter((u: any) => typeof u === "string" && u.startsWith("http"))
-      if (urls.length) return urls
-    }
-    if (typeof v === "string" && v.includes("http")) {
-      const urls = (v.match(/https?:\/\/[^\s",]+/g) || []).filter((s) => s.startsWith("http"))
-      if (urls.length) return urls
-    }
-  }
-  // Fallback: scan all string values for http(s) URLs
-  for (const [, value] of Object.entries(technicalDetails)) {
-    if (typeof value === "string" && value.includes("http")) {
-      const urls = (value.match(/https?:\/\/[^\s",]+/g) || []).filter((s) => s.startsWith("http"))
-      if (urls.length) return urls
-    }
-  }
-  return []
-}
-
 export default function ProductSpecificationTabs({
+  section,
   technicalDetails,
   fromManufacturer,
   specificationImages,
+  fallbackImages,
   productDescription,
   sku,
   reviews,
@@ -248,7 +147,7 @@ export default function ProductSpecificationTabs({
 
   // Build tabs array conditionally - only show Reviews if reviews exist
   const baseTabs = [
-    { id: "manufacturer", label: "FROM THE MANUFACTURER" },
+    { id: "manufacturer", label: "PRODUCT IMAGES" },
     { id: "overview", label: "OVERVIEW" },
     { id: "specs", label: "DETAILS & SPECS" },
     { id: "included", label: "WHAT'S INCLUDED" },
@@ -264,14 +163,18 @@ export default function ProductSpecificationTabs({
     tabs = [...tabs, { id: "admin", label: "ADMIN: API DATA" }]
   }
 
-  const [activeTab, setActiveTab] = useState(tabs[0].id)
+  const [selectedTab, setActiveTab] = useState<string>(section || "specs")
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
+  const [imageAttempts, setImageAttempts] = useState<Record<string, number>>({})
+  const activeTab = section && selectedTab !== "admin" ? section : selectedTab
 
-  const { images: extractedImages, dataUrl } = extractManufacturerImages(technicalDetails, specificationImages)
+  const { images: extractedImages, dataUrl } = manufacturerImageSource(technicalDetails, specificationImages, fromManufacturer)
 
   const shouldFetch = !extractedImages.length && !!dataUrl
-  const fetcher = (url: string) =>
+  const fetcher = (url: string): Promise<unknown> =>
     fetch(url, { cache: "no-store" })
       .then(async (res) => {
+        if (!res.ok) throw new Error("Product images could not be loaded")
         const text = await res.text()
         try {
           return JSON.parse(text)
@@ -279,32 +182,25 @@ export default function ProductSpecificationTabs({
           return text
         }
       })
-      .catch(() => null)
+      .catch(error => { console.error("[Product details] Images failed:", error); throw error })
 
-  const { data: fetched, error: fetchError, isLoading: isFetching } = useSWR(shouldFetch ? dataUrl : null, fetcher)
+  const { data: fetched, error: fetchError, isLoading: isFetching, mutate: retryImages } = useSWR(shouldFetch ? dataUrl : null, fetcher, { shouldRetryOnError: false })
 
   // If no images from props/technical_details, fetch product_specifications by SKU and extract technical_details.URL
-  const shouldFetchBySku = !extractedImages.length && !dataUrl && !!sku
+  const shouldFetchBySku = !!sku && ((!extractedImages.length && !dataUrl) || !technicalDetails)
   const {
     data: fetchedBySku,
     error: skuFetchError,
     isLoading: isSkuFetching,
-  } = useSWR(shouldFetchBySku ? `/api/products/specifications/${encodeURIComponent(sku!)}` : null, (url: string) =>
-    fetch(url, { cache: "no-store" })
-      .then((r) => r.json())
-      .catch(() => null),
-  )
+    mutate: retrySpecs,
+  } = useSWR(shouldFetchBySku ? `/api/products/specifications/${encodeURIComponent(sku!)}` : null, fetchProductSpecification)
 
   // Always fetch full SKU data for admins to view in admin tab
   const {
     data: adminFetchedBySku,
     error: adminSkuFetchError,
     isLoading: adminIsSkuFetching,
-  } = useSWR(isAdmin && sku ? `/api/products/specifications/${encodeURIComponent(sku)}` : null, (url: string) =>
-    fetch(url, { cache: "no-store" })
-      .then((r) => r.json())
-      .catch(() => null),
-  )
+  } = useSWR(isAdmin && sku ? `/api/products/specifications/${encodeURIComponent(sku)}` : null, fetchProductSpecification)
 
   // Fetch COMPLETE JSON response from product_specifications collection for admins
   const {
@@ -319,25 +215,30 @@ export default function ProductSpecificationTabs({
 
   // Use adminFetchedBySku for display if available, otherwise use fetchedBySku
   const displayFetchedBySku = adminFetchedBySku || fetchedBySku
+  async function copyAdminText(value: string | undefined) {
+    if (value === undefined) {
+      toast.error("No data is available to copy.")
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success("Copied to clipboard.")
+    } catch (error) {
+      console.error("[Product details] Clipboard write failed", error)
+      toast.error("The text could not be copied. Select and copy it manually.")
+    }
+  }
 
   // Prefer extracted images; if none, use dataUrl fetch; if still none, try SKU fetch technical_details.URL
-  let manufacturerImages = extractedImages.length > 0 ? extractedImages : normalizeFetchedImages(fetched)
+  let manufacturerImages = extractedImages.length > 0 ? extractedImages : productImageUrls(fetched)
 
   if ((!manufacturerImages || manufacturerImages.length === 0) && fetchedBySku) {
-    const td =
-      (fetchedBySku as any)?.technical_details ||
-      (fetchedBySku as any)?.data?.technical_details ||
-      (Array.isArray(fetchedBySku) ? (fetchedBySku as any)[0]?.technical_details : undefined)
-    const urlsFromTd = extractUrlsFromTechnicalDetailsObj(td)
-    if (urlsFromTd.length > 0) {
-      manufacturerImages = urlsFromTd
-    } else {
+    const source = manufacturerImageSource(fetchedBySku.technical_details, fetchedBySku.specification_images, fetchedBySku.from_manufacturer)
+    manufacturerImages = source.images
+    if (!manufacturerImages.length) {
       // Also normalize common shapes like { images: [...] }
-      const maybeImages =
-        (fetchedBySku as any)?.images ||
-        (fetchedBySku as any)?.data?.images ||
-        (Array.isArray(fetchedBySku) ? (fetchedBySku as any)[0]?.images : undefined)
-      const normalized = normalizeFetchedImages(maybeImages)
+      const maybeImages = fetchedBySku.images || fetchedBySku.data?.images
+      const normalized = productImageUrls(maybeImages)
       if (normalized.length > 0) {
         manufacturerImages = normalized
       }
@@ -347,24 +248,26 @@ export default function ProductSpecificationTabs({
   // Show loading/error if either fetch is pending/errored
   const anyLoading = (isFetching && !manufacturerImages?.length) || (isSkuFetching && !manufacturerImages?.length)
   const anyError = fetchError || skuFetchError
+  if (!manufacturerImages.length && !anyLoading && !anyError) manufacturerImages = productImageUrls(fallbackImages)
 
   // Prepare admin-only rows (ASIN from technical details and SKU prop)
-  const adminRows: Array<[string, any]> = []
+  const adminRows: Array<[string, unknown]> = []
   if (isAdmin) {
     if (sku) adminRows.push(["SKU", sku])
     if (technicalDetails) {
       const asinKey = Object.keys(technicalDetails).find((k) =>
         k.replace(/[\s_]/g, "").toLowerCase() === "asin",
       )
-      const asinValue = asinKey ? (technicalDetails as any)[asinKey] : undefined
+      const asinValue = asinKey ? technicalDetails[asinKey] : undefined
       if (asinValue) adminRows.push(["ASIN", asinValue])
     }
   }
 
-  const specEntries: Array<[string, any]> = technicalDetails
+  const resolvedDetails = technicalDetails || displayFetchedBySku?.technical_details
+  const specEntries: Array<[string, unknown]> = resolvedDetails
     ? [
       ...adminRows,
-      ...Object.entries(technicalDetails).filter(([key]) => {
+      ...Object.entries(resolvedDetails).filter(([key]) => {
         const normalized = key.replace(/[\s_]/g, "").toLowerCase();
         return (
           normalized !== "url" &&
@@ -379,18 +282,18 @@ export default function ProductSpecificationTabs({
           normalized !== "datefirstavailable" &&
           normalized !== "Included Components" &&
           normalized !== "includedcomponents" &&
-          normalized !== "Special Feature" &&
-          normalized !== "Special Features"
+          !normalized.includes("image") &&
+          normalized !== "manufacturerimagesurl"
         );
       }),
     ]
     : []
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+    <div className={section ? "min-w-0" : "bg-white rounded-lg shadow-md overflow-hidden mb-8"}>
       {/* Tab Headers */}
-      <div className="flex flex-wrap md:flex-nowrap gap-2 border-b overflow-x-auto snap-x">
-        {tabs.map((tab) => (
+      {(!section || isAdmin) && <div className="flex flex-wrap md:flex-nowrap gap-2 border-b overflow-x-auto snap-x">
+        {(section ? [{ id: section, label: section === "specs" ? "Specifications" : "Product Images" }, { id: "admin", label: "ADMIN: API DATA" }] : tabs).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -402,30 +305,40 @@ export default function ProductSpecificationTabs({
             {tab.label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* Tab Content */}
-      <div className="p-6">
+      <div className={section ? "py-2" : "p-6"}>
         {/* FROM THE MANUFACTURER */}
         {activeTab === "manufacturer" && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">From the Manufacturer</h2>
+            <h2 className="text-xl font-bold mb-4">Product Images</h2>
             {manufacturerImages && manufacturerImages.length > 0 ? (
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="mt-4 grid grid-cols-1 gap-4">
                 {manufacturerImages.map((image, idx) => (
-                  <img
-                    key={idx}
-                    src={
-                      image || "/placeholder.svg?height=400&width=600&query=product%20specification%20image"
-                    }
-                    alt={`Product specification ${idx + 1}`}
-                    className="w-full h-auto rounded-lg border border-gray-200 hover:shadow-lg transition-shadow"
-                  />
+                  <div key={image}>
+                    {failedImages[image] ? <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+                      Product image {idx + 1} could not be loaded. <button type="button" className="text-[#1560bd] underline" onClick={() => {
+                        setFailedImages(previous => ({ ...previous, [image]: false }))
+                        setImageAttempts(previous => ({ ...previous, [image]: (previous[image] || 0) + 1 }))
+                      }}>Retry image {idx + 1}</button>
+                    </p> : <img
+                      key={imageAttempts[image] || 0}
+                      src={image}
+                      alt={`${productName || "Product"} features and details, image ${idx + 1}`}
+                      loading="lazy"
+                      onError={() => {
+                        console.error("[Product images] Image could not be loaded", idx + 1)
+                        setFailedImages(previous => ({ ...previous, [image]: true }))
+                      }}
+                      className="mx-auto max-w-full h-auto rounded-lg border border-gray-200 hover:shadow-lg transition-shadow"
+                    />}
+                  </div>
                 ))}
               </div>
-            ) : (
+            ) : anyLoading ? <p role="status">Loading product images...</p> : anyError ? <p role="alert">Product images could not be loaded. <button type="button" className="text-[#1560bd] underline" onClick={() => { void retryImages(); void retrySpecs() }}>Retry images</button></p> : (
               <div className="mt-4 text-center text-gray-400">
-                <p>No specification images available.</p>
+                <p>No additional product images available.</p>
               </div>
             )}
           </div>
@@ -482,24 +395,24 @@ export default function ProductSpecificationTabs({
         {activeTab === "specs" && (
           <div>
             <h2 className="text-2xl font-bold mb-4">Technical Specifications</h2>
-            {technicalDetails && Object.keys(technicalDetails).length > 0 ? (
+            {specEntries.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
                   <tbody className="bg-white divide-y divide-gray-200">
                     {specEntries.map(([key, value], idx) => (
                       <tr key={idx} className={idx % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-                        <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm font-semibold text-gray-900 w-1/3 align-top">
+                        <th scope="row" className="px-3 py-3 md:px-6 md:py-4 text-left text-xs md:text-sm font-semibold text-gray-900 w-1/3 align-top">
                           {String(key).replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                        </td>
+                        </th>
                         <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-gray-700 align-top break-words">
-                          {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                          {Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
+            ) : isSkuFetching ? <p role="status">Loading specifications...</p> : skuFetchError ? <p role="alert">Specifications could not be loaded. <button type="button" className="text-[#1560bd] underline" onClick={() => void retrySpecs()}>Retry specifications</button></p> : (
               <div className="bg-gray-50 rounded-lg p-8 text-center">
                 <p className="text-gray-500">No technical specifications available for this product.</p>
               </div>
@@ -510,7 +423,7 @@ export default function ProductSpecificationTabs({
         {/* WHAT'S INCLUDED */}
         {activeTab === "included" && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">What's Included</h2>
+            <h2 className="text-2xl font-bold mb-4">What&apos;s Included</h2>
             {/* Priority 1: Use includedComponents prop */}
             {includedComponents && includedComponents.length > 0 ? (
               <div className="bg-gray-50 rounded-lg p-6">
@@ -537,7 +450,7 @@ export default function ProductSpecificationTabs({
                 </div>
               ) : (
                 <div className="bg-gray-50 rounded-lg p-8 text-center">
-                  <p className="text-gray-500">No information available about what's included with this product.</p>
+                  <p className="text-gray-500">No information available about what&apos;s included with this product.</p>
                 </div>
               )}
           </div>
@@ -574,39 +487,38 @@ export default function ProductSpecificationTabs({
             ) : displayFetchedBySku ? (
               <div className="space-y-6">
                 {/* Source URL Highlight */}
-                {(displayFetchedBySku as any).source_url && (
+                {(displayFetchedBySku).source_url && (
                   <div className="bg-red-100 border-2 border-red-500 rounded-lg p-4">
                     <p className="text-sm font-bold text-red-700 mb-2">PRODUCT SOURCE URL</p>
                     <a
-                      href={(displayFetchedBySku as any).source_url}
+                      href={(displayFetchedBySku).source_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-red-600 hover:text-red-800 hover:underline break-all text-base font-semibold"
                     >
-                      {(displayFetchedBySku as any).source_url}
+                      {(displayFetchedBySku).source_url}
                     </a>
                   </div>
                 )}
 
                 {/* Source Information */}
-                {((displayFetchedBySku as any).source || (displayFetchedBySku as any).source_url) && (
+                {((displayFetchedBySku).source || (displayFetchedBySku).source_url) && (
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
                     <h3 className="text-lg font-bold mb-4 text-orange-900">Source Information</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(displayFetchedBySku as any).source && (
+                      {(displayFetchedBySku).source && (
                         <a
                           href="#"
                           onClick={(e) => {
                             e.preventDefault()
-                            navigator.clipboard.writeText((displayFetchedBySku as any).source)
-                            alert("Source copied to clipboard!")
+                            void copyAdminText(displayFetchedBySku.source)
                           }}
                           className="rounded-lg border-2 border-orange-300 overflow-hidden hover:shadow-lg hover:border-orange-500 transition-all bg-white p-4 cursor-pointer group"
                         >
                           <div className="flex flex-col h-full justify-between">
                             <div>
                               <p className="text-xs font-bold text-orange-600 mb-2 uppercase tracking-wider">Source</p>
-                              <p className="text-sm text-orange-900 font-medium break-words group-hover:text-orange-700">{(displayFetchedBySku as any).source}</p>
+                              <p className="text-sm text-orange-900 font-medium break-words group-hover:text-orange-700">{(displayFetchedBySku).source}</p>
                             </div>
                             <div className="mt-3 text-xs text-orange-500 flex items-center gap-1">
                               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -618,23 +530,27 @@ export default function ProductSpecificationTabs({
                           </div>
                         </a>
                       )}
-                      {(displayFetchedBySku as any).source_url && (
+                      {(displayFetchedBySku).source_url && (
                         <a
-                          href={(displayFetchedBySku as any).source_url}
+                          href={(displayFetchedBySku).source_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => {
                             e.preventDefault()
-                            navigator.clipboard.writeText((displayFetchedBySku as any).source_url)
-                            alert("Source URL copied to clipboard!")
-                            window.open((displayFetchedBySku as any).source_url, '_blank')
+                            const sourceUrl = displayFetchedBySku.source_url
+                            if (!sourceUrl) {
+                              toast.error("No source URL is available.")
+                              return
+                            }
+                            window.open(sourceUrl, '_blank', 'noopener,noreferrer')
+                            void copyAdminText(sourceUrl)
                           }}
                           className="rounded-lg border-2 border-orange-300 overflow-hidden hover:shadow-lg hover:border-orange-500 transition-all bg-white p-4 cursor-pointer group"
                         >
                           <div className="flex flex-col h-full justify-between">
                             <div>
                               <p className="text-xs font-bold text-orange-600 mb-2 uppercase tracking-wider">Source URL</p>
-                              <p className="text-sm text-orange-600 font-medium break-words group-hover:text-orange-800 line-clamp-2">{(displayFetchedBySku as any).source_url}</p>
+                              <p className="text-sm text-orange-600 font-medium break-words group-hover:text-orange-800 line-clamp-2">{(displayFetchedBySku).source_url}</p>
                             </div>
                             <div className="mt-3 flex items-center gap-2">
                               <span className="text-xs text-orange-500 flex items-center gap-1">
@@ -662,28 +578,28 @@ export default function ProductSpecificationTabs({
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
                   <h3 className="text-lg font-bold mb-4 text-blue-900">Basic Information</h3>
                   <div className="space-y-3">
-                    {(displayFetchedBySku as any)._id && (
+                    {Boolean(displayFetchedBySku._id) && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-blue-700 w-32">Database ID:</span>
-                        <span className="text-blue-900">{JSON.stringify((displayFetchedBySku as any)._id)}</span>
+                        <span className="text-blue-900">{JSON.stringify((displayFetchedBySku)._id)}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).sku && (
+                    {(displayFetchedBySku).sku && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-blue-700 w-32">SKU:</span>
-                        <span className="text-blue-900">{(displayFetchedBySku as any).sku}</span>
+                        <span className="text-blue-900">{(displayFetchedBySku).sku}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).asin && (
+                    {(displayFetchedBySku).asin && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-blue-700 w-32">ASIN:</span>
-                        <span className="text-blue-900">{(displayFetchedBySku as any).asin}</span>
+                        <span className="text-blue-900">{(displayFetchedBySku).asin}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).product_id && (
+                    {Boolean(displayFetchedBySku.product_id) && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-blue-700 w-32">Product ID:</span>
-                        <span className="text-blue-900">{JSON.stringify((displayFetchedBySku as any).product_id)}</span>
+                        <span className="text-blue-900">{JSON.stringify((displayFetchedBySku).product_id)}</span>
                       </div>
                     )}
                   </div>
@@ -693,71 +609,71 @@ export default function ProductSpecificationTabs({
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6">
                   <h3 className="text-lg font-bold mb-4 text-indigo-900">Product Details</h3>
                   <div className="space-y-3">
-                    {(displayFetchedBySku as any).name && (
+                    {(displayFetchedBySku).name && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Name:</span>
-                        <span className="text-indigo-900">{(displayFetchedBySku as any).name}</span>
+                        <span className="text-indigo-900">{(displayFetchedBySku).name}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).description && (
+                    {(displayFetchedBySku).description && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Description:</span>
-                        <span className="text-indigo-900">{(displayFetchedBySku as any).description}</span>
+                        <span className="text-indigo-900">{(displayFetchedBySku).description}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).price && (
+                    {(displayFetchedBySku).price && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Price:</span>
-                        <span className="text-indigo-900">₹{(displayFetchedBySku as any).price}</span>
+                        <span className="text-indigo-900">₹{(displayFetchedBySku).price}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).printedprice && (
+                    {(displayFetchedBySku).printedprice && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Printed Price:</span>
-                        <span className="text-indigo-900">{(displayFetchedBySku as any).printedprice}</span>
+                        <span className="text-indigo-900">{(displayFetchedBySku).printedprice}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).mrp && (
+                    {(displayFetchedBySku).mrp && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">MRP:</span>
-                        <span className="text-indigo-900">₹{(displayFetchedBySku as any).mrp}</span>
+                        <span className="text-indigo-900">₹{(displayFetchedBySku).mrp}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).printedmrp && (
+                    {(displayFetchedBySku).printedmrp && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Printed MRP:</span>
-                        <span className="text-indigo-900">{(displayFetchedBySku as any).printedmrp}</span>
+                        <span className="text-indigo-900">{(displayFetchedBySku).printedmrp}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).source && (
+                    {(displayFetchedBySku).source && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Source:</span>
-                        <span className="text-indigo-900">{(displayFetchedBySku as any).source}</span>
+                        <span className="text-indigo-900">{(displayFetchedBySku).source}</span>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).source_url && (
+                    {(displayFetchedBySku).source_url && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Source URL:</span>
-                        <a href={(displayFetchedBySku as any).source_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline break-all">
-                          {(displayFetchedBySku as any).source_url}
+                        <a href={(displayFetchedBySku).source_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline break-all">
+                          {(displayFetchedBySku).source_url}
                         </a>
                       </div>
                     )}
-                    {(displayFetchedBySku as any).updatedAt && (
+                    {(displayFetchedBySku).updatedAt && (
                       <div className="flex gap-4">
                         <span className="font-semibold text-indigo-700 w-32">Updated At:</span>
-                        <span className="text-indigo-900">{new Date((displayFetchedBySku as any).updatedAt?.$date || (displayFetchedBySku as any).updatedAt).toLocaleString()}</span>
+                        <span className="text-indigo-900">{new Date(typeof displayFetchedBySku.updatedAt === "object" ? displayFetchedBySku.updatedAt.$date : displayFetchedBySku.updatedAt).toLocaleString()}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Bullet Points */}
-                {(displayFetchedBySku as any).bullet_points && Array.isArray((displayFetchedBySku as any).bullet_points) && (displayFetchedBySku as any).bullet_points.length > 0 && (
+                {(displayFetchedBySku).bullet_points && Array.isArray((displayFetchedBySku).bullet_points) && (displayFetchedBySku).bullet_points.length > 0 && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-                    <h3 className="text-lg font-bold mb-3 text-green-900">Bullet Points ({(displayFetchedBySku as any).bullet_points.length})</h3>
+                    <h3 className="text-lg font-bold mb-3 text-green-900">Bullet Points ({(displayFetchedBySku).bullet_points.length})</h3>
                     <ul className="space-y-2">
-                      {(displayFetchedBySku as any).bullet_points.map((point: string, idx: number) => (
+                      {(displayFetchedBySku).bullet_points.map((point: string, idx: number) => (
                         <li key={idx} className="text-sm text-green-900 flex gap-3">
                           <span className="font-bold text-green-700 flex-shrink-0">{idx + 1}.</span>
                           <span>{point}</span>
@@ -768,11 +684,11 @@ export default function ProductSpecificationTabs({
                 )}
 
                 {/* Technical Details */}
-                {(displayFetchedBySku as any).technical_details && typeof (displayFetchedBySku as any).technical_details === "object" && (
+                {(displayFetchedBySku).technical_details && typeof (displayFetchedBySku).technical_details === "object" && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-6">
                     <h3 className="text-lg font-bold mb-4 text-slate-900">Technical Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries((displayFetchedBySku as any).technical_details).map(([key, value]: [string, any], idx: number) => (
+                      {Object.entries((displayFetchedBySku).technical_details).map(([key, value]: [string, unknown], idx: number) => (
                         <div key={idx} className="border-l-4 border-slate-400 pl-3 py-2">
                           <p className="text-xs font-semibold text-slate-700 uppercase">{key}</p>
                           <p className="text-sm text-slate-900 mt-1">
@@ -785,11 +701,11 @@ export default function ProductSpecificationTabs({
                 )}
 
                 {/* Specification Images */}
-                {(displayFetchedBySku as any).specification_images && Array.isArray((displayFetchedBySku as any).specification_images) && (displayFetchedBySku as any).specification_images.length > 0 && (
+                {(displayFetchedBySku).specification_images && Array.isArray((displayFetchedBySku).specification_images) && (displayFetchedBySku).specification_images.length > 0 && (
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-                    <h3 className="text-lg font-bold mb-4 text-purple-900">Specification Images ({(displayFetchedBySku as any).specification_images.length})</h3>
+                    <h3 className="text-lg font-bold mb-4 text-purple-900">Specification Images ({(displayFetchedBySku).specification_images.length})</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {(displayFetchedBySku as any).specification_images.map((img: string, idx: number) => (
+                      {(displayFetchedBySku).specification_images.map((img: string, idx: number) => (
                         <a
                           key={idx}
                           href={img}
@@ -810,7 +726,7 @@ export default function ProductSpecificationTabs({
                 )}
 
                 {/* Reviews */}
-                {(displayFetchedBySku as any).reviews && Array.isArray((displayFetchedBySku as any).reviews) && (displayFetchedBySku as any).reviews.filter((r: any) => {
+                {(displayFetchedBySku).reviews && Array.isArray((displayFetchedBySku).reviews) && (displayFetchedBySku).reviews.filter((r) => {
                   let ratingNum = 5;
                   if (r.rating) {
                     const match = r.rating.toString().match(/(\d+\.?\d*)/);
@@ -819,7 +735,7 @@ export default function ProductSpecificationTabs({
                   return ratingNum > 2.0;
                 }).length > 0 && (
                     <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
-                      <h3 className="text-lg font-bold mb-4 text-orange-900">Reviews ({(displayFetchedBySku as any).reviews.filter((r: any) => {
+                      <h3 className="text-lg font-bold mb-4 text-orange-900">Reviews ({(displayFetchedBySku).reviews.filter((r) => {
                         let ratingNum = 5;
                         if (r.rating) {
                           const match = r.rating.toString().match(/(\d+\.?\d*)/);
@@ -828,14 +744,14 @@ export default function ProductSpecificationTabs({
                         return ratingNum > 2.0;
                       }).length})</h3>
                       <div className="space-y-4">
-                        {(displayFetchedBySku as any).reviews.filter((review: any) => {
+                        {(displayFetchedBySku).reviews.filter((review) => {
                           let ratingNum = 5;
                           if (review.rating) {
                             const match = review.rating.toString().match(/(\d+\.?\d*)/);
                             if (match) ratingNum = parseFloat(match[1]);
                           }
                           return ratingNum > 2.0;
-                        }).map((review: any, idx: number) => (
+                        }).map((review, idx: number) => (
                           <div key={idx} className="bg-white rounded-lg p-4 border-l-4 border-orange-300">
                             <div className="flex justify-between items-start mb-2 flex-wrap gap-2">
                               <p className="font-semibold text-orange-900 flex-1">{review.title}</p>
@@ -844,7 +760,7 @@ export default function ProductSpecificationTabs({
                             <p className="text-sm text-gray-700 mb-3">{review.content}</p>
                             <p className="text-xs text-gray-500 flex gap-2">
                               <span className="font-semibold">By:</span>
-                              <span>{review.author || "Anonymous"}</span>
+                              <span>{(typeof review.author === "string" ? review.author : review.author?.name) || "Anonymous"}</span>
                               {review.date && (
                                 <>
                                   <span>•</span>
@@ -878,11 +794,11 @@ export default function ProductSpecificationTabs({
                   )}
 
                 {/* Additional Info */}
-                {(displayFetchedBySku as any).additional_info && typeof (displayFetchedBySku as any).additional_info === "object" && Object.keys((displayFetchedBySku as any).additional_info).length > 0 && (
+                {(displayFetchedBySku).additional_info && typeof (displayFetchedBySku).additional_info === "object" && Object.keys((displayFetchedBySku).additional_info).length > 0 && (
                   <div className="bg-teal-50 border border-teal-200 rounded-lg p-6">
                     <h3 className="text-lg font-bold mb-4 text-teal-900">Additional Information</h3>
                     <div className="space-y-3">
-                      {Object.entries((displayFetchedBySku as any).additional_info).map(([key, value]: [string, any], idx: number) => (
+                      {Object.entries((displayFetchedBySku).additional_info).map(([key, value]: [string, unknown], idx: number) => (
                         <div key={idx} className="flex gap-4">
                           <span className="font-semibold text-teal-700 w-32">{key}:</span>
                           <span className="text-teal-900">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span>
@@ -893,11 +809,11 @@ export default function ProductSpecificationTabs({
                 )}
 
                 {/* From Manufacturer */}
-                {(displayFetchedBySku as any).from_manufacturer && typeof (displayFetchedBySku as any).from_manufacturer === "string" && (displayFetchedBySku as any).from_manufacturer.length > 0 && (
+                {(displayFetchedBySku).from_manufacturer && typeof (displayFetchedBySku).from_manufacturer === "string" && (displayFetchedBySku).from_manufacturer.length > 0 && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
                     <h3 className="text-lg font-bold mb-3 text-yellow-900">From Manufacturer</h3>
                     <div className="text-sm text-yellow-900 max-h-96 overflow-y-auto">
-                      <pre className="whitespace-pre-wrap break-words text-xs">{(displayFetchedBySku as any).from_manufacturer.substring(0, 500)}...</pre>
+                      <pre className="whitespace-pre-wrap break-words text-xs">{(displayFetchedBySku).from_manufacturer.substring(0, 500)}...</pre>
                     </div>
                   </div>
                 )}
@@ -912,8 +828,7 @@ export default function ProductSpecificationTabs({
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(JSON.stringify(completeJsonResponse, null, 2))
-                        alert("Complete JSON copied to clipboard!")
+                        void copyAdminText(JSON.stringify(completeJsonResponse, null, 2))
                       }}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-semibold"
                     >

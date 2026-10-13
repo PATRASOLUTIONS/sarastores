@@ -50,7 +50,7 @@ async function handleGet(req: PartnerAuthRequest, context: RouteParams) {
 }
 
 // Export wrapped handler
-export const GET = withPartnerAuth(handleGet as any, ['orders:read']);
+export const GET = withPartnerAuth(handleGet, ['orders:read']);
 
 // Handle CORS preflight requests
 export { OPTIONS } from '@/lib/partner/auth';

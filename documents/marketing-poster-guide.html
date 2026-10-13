@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SARA Marketing &amp; Posters - Pages, Creation and Display Guide</title>
+  <style>
+    :root { color-scheme: light; --navy: #0f2557; --blue: #1553a3; --ink: #1e293b; --muted: #475569; --line: #dbe3ee; --paper: #f4f7fb; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.65 "Segoe UI", Arial, sans-serif; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 3px solid #b45309; outline-offset: 4px; }
+    .skip { position: absolute; left: 12px; top: -100px; padding: 8px 14px; background: white; z-index: 2; }
+    .skip:focus { top: 12px; }
+    header { padding: 48px max(20px, calc((100vw - 1160px) / 2)); background: linear-gradient(120deg, #0f2557, #164e91); color: white; }
+    header p { max-width: 850px; color: #e2edff; }
+    h1 { margin: 10px 0; max-width: 950px; font-size: clamp(29px, 4vw, 46px); line-height: 1.2; }
+    h2 { color: var(--navy); font-size: clamp(23px, 3vw, 29px); line-height: 1.3; margin: 0 0 16px; }
+    h3 { color: var(--navy); line-height: 1.4; margin-top: 0; }
+    p { margin: 10px 0 16px; }
+    .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+    .badges { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+    .badges span { padding: 5px 13px; border: 1px solid #91b4e0; border-radius: 20px; font-size: 13px; }
+    main { max-width: 1200px; margin: auto; padding: 24px 20px 50px; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; background: white; padding: 16px; border: 1px solid var(--line); border-radius: 14px; }
+    nav a { display: inline-block; padding: 7px 11px; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 7px; background: #eef4fd; }
+    section { background: white; border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 3vw, 30px); margin-top: 24px; scroll-margin-top: 18px; }
+    .notice { border-left: 5px solid #b45309; background: #fff7ed; padding: 15px 18px; color: #713b0b; border-radius: 7px; margin: 18px 0; }
+    .info { border-left-color: var(--blue); background: #eff6ff; color: #173b6b; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .card { min-width: 0; border: 1px solid var(--line); padding: 20px; border-radius: 12px; background: #fbfdff; }
+    .card p:last-child { margin-bottom: 0; }
+    .route { display: block; font: 13px/1.7 Consolas, monospace; color: #173b6b; overflow-wrap: anywhere; margin: 8px 0; }
+    code { font: .87em/1.5 Consolas, monospace; background: #edf2f8; color: #12345e; padding: 2px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+    .table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+    table { border-collapse: collapse; width: 100%; min-width: 780px; font-size: 14px; }
+    th, td { text-align: left; vertical-align: top; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+    th { background: #eef4fc; color: #12345e; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td:first-child { width: 24%; }
+    .small { font-size: 13px; color: var(--muted); }
+    ol, ul { padding-left: 24px; }
+    li { margin: 8px 0; }
+    figure { min-width: 0; margin: 20px 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: white; }
+    figure a { display: block; }
+    figure img { display: block; width: 100%; height: auto; background: #f8fafc; }
+    figcaption { padding: 13px 16px; font-size: 14px; color: var(--muted); }
+    figcaption strong { color: var(--navy); }
+    .gallery figure { margin: 0; }
+    .flow { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; list-style: none; padding: 0; counter-reset: flow; }
+    .flow li { background: #edf4ff; padding: 12px 16px; border-radius: 9px; font-size: 14px; counter-increment: flow; }
+    .flow li::before { content: counter(flow) ". "; font-weight: 700; color: var(--navy); }
+    .wireframe { background: #f4f7fb; padding: 18px; border: 1px solid var(--line); border-radius: 10px; }
+    .zone { background: white; border: 1px dashed #7b95b8; border-radius: 6px; padding: 12px; text-align: center; font-size: 14px; margin-bottom: 10px; }
+    .zones { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+    .zone.blue { background: #eaf2ff; }
+    .zone:last-child { margin-bottom: 0; }
+    details { border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-top: 14px; }
+    summary { cursor: pointer; color: var(--navy); font-weight: 600; }
+    footer { max-width: 1200px; margin: 0 auto; padding: 0 20px 32px; font-size: 13px; color: var(--muted); }
+    @media (max-width: 700px) {
+      header { padding: 30px 20px; }
+      main { padding: 16px 12px 30px; }
+      .grid, .zones { grid-template-columns: 1fr; }
+      nav { padding: 10px; }
+      section { margin-top: 18px; }
+      .card { padding: 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      body { background: white; font-size: 11pt; }
+      header { background: white; color: #0f2557; padding: 16px; }
+      header p { color: #334155; }
+      .badges, nav, .skip { display: none; }
+      main { padding: 0; }
+      section { break-inside: auto; box-shadow: none; }
+      figure, .card { break-inside: avoid; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; font-size: 9pt; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to guide</a>
+  <header>
+    <div class="eyebrow">SARA Electronics / practical marketing handbook</div>
+    <h1>Marketing campaigns &amp; posters:<br>where to set them, how to create them, where they display</h1>
+    <p>A source-verified guide to admin pages, poster formats, publishing steps and customer-facing placements, illustrated with actual application screenshots.</p>
+    <div class="badges"><span>13 screenshots</span><span>11 selectable banner placements</span><span>20 built-in vector posters</span><span>54 message campaigns</span><span>Verified 13 October 2026</span></div>
+  </header>
+  <main id="main">
+    <nav aria-label="Guide sections">
+      <a href="#choose">Choose the right page</a><a href="#placements">Display locations</a><a href="#banner">Create a storefront banner</a>
+      <a href="#vector">Create a vector poster</a><a href="#artwork">Design &amp; upload</a><a href="#landing">Campaign landing page</a>
+      <a href="#messages">Email &amp; WhatsApp</a><a href="#example">Complete campaign example</a><a href="#checks">Publish checklist</a><a href="#evidence">Screenshot notes</a>
+    </nav>
+
+    <section id="choose">
+      <h2>1. Which admin page should I use?</h2>
+      <p><strong>For a poster on the current homepage, start at <code>/admin/listing-banners</code>.</strong> For a campaign sent to customers, use <code>/admin/customer-centric</code>. To create a destination with a banner and selected products, use <code>/admin/campaign-pages</code>.</p>
+      <div class="notice"><strong>A poster is not a discount or a customer message.</strong> Banner artwork changes presentation. Coupons change eligible checkout pricing. Email and WhatsApp campaigns contact selected customers. A landing page gives your poster a destination. Set up each required part separately.</div>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Admin page and campaign purpose table">
+        <table>
+          <thead><tr><th>Admin page / menu</th><th>What you can set</th><th>Where it is used / important limit</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Marketing Dashboard</strong><code class="route">/admin/marketing</code></td><td>Copy, images, links, section visibility and supported order. Eight tabs: Homepage, Products &amp; Offers, Product Details, Cart, Brands, About SARA, Header and Footer.</td><td>The corresponding storefront sections. Also links to specialist tools. Prices, stock, reviews and bank eligibility remain in their authoritative data sources.</td></tr>
+            <tr><td><strong>Banners &amp; Promos</strong><code class="route">/admin/listing-banners</code></td><td>Uploaded artwork, title, subtitle, CTA, background colours, placement, scope, active state and order.</td><td>Current home, <code>/products</code>, product details, <code>/brands</code> and cart. Use the exact placement map below.</td></tr>
+            <tr><td><strong>Hero Posters &amp; Slides</strong><code class="route">/admin/posters</code></td><td>20 vector templates, custom vector poster builder, poster links/featured item and uploaded hero slides.</td><td>Older <code>HeroSection</code> carousel on category, sub-category, software and complaints pages. <strong>Not the current homepage carousel.</strong></td></tr>
+            <tr><td><strong>Custom Pages</strong><code class="route">/admin/campaign-pages</code></td><td>Campaign name, URL slug, hero banner, selected products and active state.</td><td><code>/campaign/&lt;slug&gt;</code>. A page does not automatically add itself to homepage banners or send a message.</td></tr>
+            <tr><td><strong>Campaigns &amp; Email</strong><code class="route">/admin/customer-centric</code></td><td>54 ready-made lifecycle/festival/promotion campaigns, editable message HTML, audience filters and recipients.</td><td>Email inboxes after explicit sending. WhatsApp has a dry-run plan in this UI; do not treat the preview as delivery.</td></tr>
+            <tr><td><strong>Email Templates</strong><code class="route">/admin/customer-centric/templates</code></td><td>Reusable campaign message templates.</td><td>Used by campaign composition. Saving a template is not sending it or enabling automation.</td></tr>
+            <tr><td><strong>Coupons &amp; Offers</strong><code class="route">/admin/promotions</code></td><td>Coupon code/name, discount type/value, eligibility, validity dates, limits and active state. The current page is a <strong>coupon manager</strong>.</td><td>Eligible cart/checkout pricing. It does not create banner artwork or automatically create a merchandising shelf on <code>/offers</code>.</td></tr>
+            <tr><td><strong>Theme &amp; Festivals</strong><code class="route">/admin/theme</code></td><td>Festival preset, colours/effects, announcement text/link and start/end window.</td><td>Theme-aware storefront areas and the festival announcement. Its date window controls the theme, not every banner, coupon or email.</td></tr>
+            <tr><td><strong>Spin Campaigns / Lucky Draw</strong><code class="route">/admin/spin-wheel/campaigns</code><code class="route">/admin/lucky-draw</code></td><td>Separate prize-campaign setup and draw management.</td><td>The dedicated participation journeys. Not a substitute for poster placement or message sending; configure and test the participation link separately.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figure><a href="marketing-poster-assets/01-marketing-controls.png"><img src="marketing-poster-assets/01-marketing-controls.png" alt="Marketing Dashboard with eight page tabs and editable service-benefit fields" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 1 - Marketing Dashboard.</strong> Earlier local admin capture showing the page tabs and section controls. Screenshot copy is illustrative, not proof of current commercial promises. Click any screenshot to open it full size.</figcaption></figure>
+      <details><summary>Existing tools that should not be mistaken for current homepage controls</summary>
+        <p><code>/admin/advertisements</code> and <code>/admin/product-advertisements</code> have image/link/active/order forms. However, their older display components are not rendered by the current homepage or current <code>/products</code> page. The category advertisement component is present only in commented JSX. A saved advertisement is therefore <strong>not evidence of display on these pages</strong>.</p>
+        <p><code>/admin/home-components</code> stores additional category/manual product sections for older home components. The current homepage uses <code>SaraLanding</code>, not that older configurable section pipeline. Use the Marketing Dashboard for its supported current sections.</p>
+        <p>The separate <code>/offers</code> page reads live merchandising records from <code>/api/offers</code> for Today's Deals, Mega Sale, Clearance and Store Exclusive shelves. The coupon form at <code>/admin/promotions</code> writes coupons, not those records. Do not assume its menu label connects the two.</p>
+      </details>
+    </section>
+
+    <section id="placements">
+      <h2>2. Poster types &amp; exact display locations</h2>
+      <p>The Banners &amp; Promos selector offers <strong>11 placements</strong>. Ten have consumers in current storefront code; <code>pdp-offer</code> is selectable and previewable but has no current storefront consumer. These are placement types, not 11 different discount engines.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="All eleven banner placements and their current display behavior">
+        <table>
+          <thead><tr><th>Placement / admin label</th><th>Customer-facing page</th><th>Current display behavior</th></tr></thead>
+          <tbody>
+            <tr data-placement="home-hero"><td><code>home-hero</code><br>Home - main poster carousel</td><td><code>/</code> / large top hero</td><td>Enabled main posters rotate in order, approximately every 7 seconds. Rotation pauses on hover/focus and is disabled for reduced-motion users. No enabled main banner means no main hero panel.</td></tr>
+            <tr data-placement="home-duo"><td><code>home-duo</code><br>Home - side / sub banners</td><td><code>/</code> / beside the main hero on wider screens</td><td>First two enabled side banners, by order. Their layout stacks on smaller screens.</td></tr>
+            <tr data-placement="home-card"><td><code>home-card</code><br>Home - below-deals banners</td><td><code>/</code> / promotion cards after Today's Deals</td><td>Shares a combined list with <code>home-strip</code> and <code>home-statement</code>. Only the first three combined, ordered records display.</td></tr>
+            <tr data-placement="home-strip"><td><code>home-strip</code><br>Home - full-width strip</td><td><code>/</code> / same promotion-card area</td><td>Despite the selector label, the current homepage renders this as a promotion card in the combined first-three list, not a dedicated full-width strip.</td></tr>
+            <tr data-placement="home-statement"><td><code>home-statement</code><br>Home - closing statement band</td><td><code>/</code> / same promotion-card area</td><td>Despite the label, the current homepage renders this in the combined first-three list, not a separate closing band.</td></tr>
+            <tr data-placement="hero"><td><code>hero</code><br>Listing page - hero</td><td><code>/products</code> / top offers hero</td><td>First enabled matching banner. With no matching banner, a default offers hero remains if the Marketing Dashboard hero section is enabled.</td></tr>
+            <tr data-placement="promo"><td><code>promo</code><br>Listing page - promo tile</td><td><code>/products</code> / featured promotion row</td><td>Up to three configured banners. Missing positions use fallback cards from Marketing Dashboard &gt; Products &amp; Offers &gt; Featured promotion cards.</td></tr>
+            <tr data-placement="pdp-rail"><td><code>pdp-rail</code><br>Product page - side rail card</td><td><code>/product/&lt;slug&gt;</code> / brand/service rail</td><td>Up to three cards; scope is matched against the product's manufacturer/brand. The Product Details rail visibility control must also be enabled.</td></tr>
+            <tr data-placement="pdp-offer"><td><code>pdp-offer</code><br>Product page - offer card</td><td><strong>Not currently connected</strong></td><td>The admin accepts it and shows a generic preview, but no current storefront <code>useBanners("pdp-offer")</code> consumer was found. Do not use it expecting display.</td></tr>
+            <tr data-placement="brands-hero"><td><code>brands-hero</code><br>Brands page - hero</td><td><code>/brands</code> / directory hero</td><td>First enabled banner replaces the default brand hero. This does not imply that the individual <code>/brands/&lt;slug&gt;</code> page uses it.</td></tr>
+            <tr data-placement="cart-promo"><td><code>cart-promo</code><br>Cart - promotional banner</td><td><code>/cart</code> / promotional area</td><td>First enabled banner by order. Turning all cart banners off hides this promotional area. Check both empty and populated cart states.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="notice info"><strong>Scope is an exact contextual match, not a customer segment.</strong> On <code>/products</code>, the first selected sub-category name wins; otherwise the first selected category name is used. Matching is case-insensitive and trims spaces. On product rails, use the brand/manufacturer name. If scoped matches exist they replace the unscoped list; otherwise blank-scope banners are used. Home, brands directory and cart have no scope context, so leave scope blank there.</div>
+      <div class="grid">
+        <div class="wireframe" aria-label="Illustrative homepage placement diagram">
+          <h3>Homepage placement map</h3>
+          <div class="zone">Header / campaign link / festival announcement</div>
+          <div class="zones"><div class="zone blue">Main carousel<br><code>home-hero</code></div><div class="zone blue">Two side banners<br><code>home-duo</code></div></div>
+          <div class="zone">Benefits &gt; Categories &gt; Today's Deals</div>
+          <div class="zone blue">Up to three combined promo cards<br><code>home-card</code> + <code>home-strip</code> + <code>home-statement</code></div>
+          <div class="zone">Top Brands &gt; Store finder &gt; Footer</div>
+          <p class="small">Diagram only. Actual mobile layout stacks these areas; section visibility/order can affect the arrangement.</p>
+        </div>
+        <div class="card">
+          <h3>Do not confuse these destinations</h3>
+          <p><code>/products</code> is the listing controlled by the <strong>Products &amp; Offers</strong> tab and listing banners. The separate <code>/offers</code> hub uses offer shelves. A banner CTA can link to either, but placing a banner on one does not place it on the other.</p>
+          <p>Category/sub-category pages still use the older vector/uploaded hero system. A scoped listing banner is for a filter on <code>/products</code>, not automatically the dedicated category route.</p>
+        </div>
+      </div>
+      <div class="grid gallery">
+        <figure><a href="marketing-poster-assets/07-home-display.png"><img src="marketing-poster-assets/07-home-display.png" alt="Earlier storefront capture showing a large main carousel and two smaller side banners" width="1024" height="336" loading="lazy"></a><figcaption><strong>Screenshot 7 - Main and side poster display.</strong> Earlier local storefront reference. Prices, product claims and store figures shown are not validated current offers.</figcaption></figure>
+        <figure><a href="marketing-poster-assets/08-promo-display.png"><img src="marketing-poster-assets/08-promo-display.png" alt="Earlier storefront capture showing three promotional cards followed by brand shortcuts" width="1024" height="276" loading="lazy"></a><figcaption><strong>Screenshot 8 - Below-deals promotional display.</strong> Earlier reference for the three-card layout; exchange values, EMI terms and other artwork claims must be checked independently.</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="banner">
+      <h2>3. How to create a poster for the current homepage</h2>
+      <p><strong>Use Banners &amp; Promos, not the older Hero Posters page.</strong> This is the simplest route for artwork created in Canva, Figma, Photoshop or another design tool.</p>
+      <ol>
+        <li>Sign in with an authorized admin account. Open <code>/admin/listing-banners</code>.</li>
+        <li>In <strong>New banner</strong>, choose a connected placement, for example <strong>Home - main poster carousel</strong>. Leave Scope blank for home.</li>
+        <li>Write a short <strong>Title</strong> and <strong>Subtitle</strong>. Where available, set the handwritten note. Enter bullet points separated by commas; the form retains up to six, while the main hero displays up to four.</li>
+        <li>Set <strong>Button text</strong> and <strong>Button link</strong>, for example <code>Explore Diwali</code> and <code>/campaign/diwali-collection</code>. Create and verify the destination first.</li>
+        <li>Upload the artwork or enter an existing image URL. Choose gradient colours and, for a light background, enable <strong>Dark text</strong>. Inspect the live preview.</li>
+        <li>Set <strong>Order</strong>. Smaller numbers display first. <strong>New banners start off.</strong> To keep a draft, leave <strong>On - visible on storefront</strong> unticked and click <strong>Add banner</strong>.</li>
+        <li>After approval, switch the saved banner <strong>On</strong>, or edit it, tick On and click <strong>Save changes</strong>. Check that the relevant Marketing Dashboard section is also visible.</li>
+        <li>Open the actual customer page on desktop and mobile, wait for the banner refresh or reload, and test its CTA. A generic admin preview is not a guarantee of the exact page layout.</li>
+      </ol>
+      <figure><a href="marketing-poster-assets/02-banner-manager.png"><img src="marketing-poster-assets/02-banner-manager.png" alt="Banners and Promos admin form with placement, scope, title, subtitle, button link, artwork and live preview" width="1280" height="900" loading="lazy"></a><figcaption><strong>Screenshot 2 - Banner creation fields and preview.</strong> Earlier local admin capture. The retained test-action toast is historical, not a deletion performed while creating this guide. Current source adds product, brands and cart placements beyond this older description.</figcaption></figure>
+      <div class="notice info"><strong>Publishing and removal:</strong> an uploaded image alone does not publish a banner. Save the banner record and enable it. To end a campaign, switch its records Off; deleting is permanent. Banner forms do not expose start/end scheduling. Marketing content and banner data use refresh intervals, so do not assume all open customer tabs update instantly.</div>
+    </section>
+
+    <section id="vector">
+      <h2>4. Vector poster types &amp; built-in creation</h2>
+      <p>Open <code>/admin/posters</code>. The library has <strong>20 built-in SVG posters in five groups</strong>, four per group, plus custom posters you create.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Vector poster groups and built-in examples">
+        <table>
+          <thead><tr><th>Type</th><th>Built-in examples</th><th>Typical marketing purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Festival</td><td>Ganesh Chaturthi, Diwali, Holi, Navratri</td><td>Seasonal event awareness and links to curated collections.</td></tr>
+            <tr><td>Category</td><td>Television, air conditioner, refrigerator, washing machine</td><td>Direct attention to a product category.</td></tr>
+            <tr><td>Offer</td><td>No-cost EMI, free delivery, free installation, clearance</td><td>Promote only terms the business can actually honour; labels do not configure those benefits.</td></tr>
+            <tr><td>Trust</td><td>Stores in Karnataka, authorised dealer, installation, after-sales</td><td>Explain validated service and brand credentials.</td></tr>
+            <tr><td>Seasonal</td><td>Summer cooling, monsoon indoors, wedding season, New Year</td><td>Match a collection to customer needs at that time.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="notice"><strong>Built-in copy is not automatically safe to publish.</strong> Some templates contain fixed store counts, maximum discounts, "free" benefits, warranty durations or "lowest price" claims. Validate every claim against live stock/pricing and approved terms. If the built-in wording is unsuitable, create a custom poster with accurate copy rather than publishing it unchanged.</div>
+      <div class="grid gallery">
+        <figure><a href="marketing-poster-assets/03-poster-library.png"><img src="marketing-poster-assets/03-poster-library.png" alt="Actual Hero Posters library with festival vector artwork, no selected posters and publish controls" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 3 - Vector library.</strong> Actual component, independently rendered with fixture APIs; all posters disabled. The page's "homepage" wording is older than the current homepage wiring. This guide's placement map is authoritative for the inspected source.</figcaption></figure>
+        <figure><a href="marketing-poster-assets/04-poster-builder.png"><img src="marketing-poster-assets/04-poster-builder.png" alt="Actual custom poster builder with a synthetic Diwali Collection headline, supporting text and colour controls" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 4 - Create your own poster.</strong> Actual form and its actual SVG preview. Synthetic Diwali artwork was edited in memory only; Save poster and Publish selection were not used.</figcaption></figure>
+      </div>
+      <h3>Create a custom vector poster</h3>
+      <ol>
+        <li>Click <strong>Create your own</strong>. Enter the small label, headline, second headline line, supporting line and button text.</li>
+        <li>Choose a group. This is library organisation, not a targeting or scheduling rule.</li>
+        <li>Optionally add a photo: PNG, JPG or WebP, no larger than the form's 5 MB limit.</li>
+        <li>Choose one of five patterns: <strong>Rays, Dots, Grid, Waves or Arcs</strong>. Choose one of six colour presets or fine-tune From, Via, To, Accent and Ink.</li>
+        <li>Inspect the actual SVG preview and click <strong>Save poster</strong>. This creates the artwork; it is not yet selected for display.</li>
+        <li>In its library card, set <strong>Link to a page</strong> using a site-relative path. Optionally choose a product, category or sub-category under <strong>Show on this poster</strong>, then choose the item.</li>
+        <li>Tick the poster and click <strong>Publish selection</strong>. Validate on a page that renders the older <code>HeroSection</code>, such as a real category page. It does not replace the current home main carousel.</li>
+      </ol>
+      <p><strong>Existing template:</strong> skip creation; choose its destination/optional featured item, tick it, then Publish selection. The catalogue selection UI is not a general drag-to-reorder tool.</p>
+      <h3>Upload a completed photo/banner instead</h3>
+      <ol>
+        <li>On the same page, go to <strong>Uploaded hero slides</strong> and click <strong>Upload slide</strong>.</li>
+        <li>Choose a PNG/JPG/WebP photo, recommended <strong>1920 x 600</strong>, within 5 MB. Add optional title/subtitle and CTA/link.</li>
+        <li>Click <strong>Add uploaded slide</strong>. Use the visibility control and up/down arrows for enabled state and carousel order.</li>
+        <li>In the older hero, selected vector posters take precedence over uploaded slides. To use uploaded slides, clear the vector selection and publish it. The older hero also retains its own campaign/fallback slide behaviour.</li>
+      </ol>
+      <figure><a href="marketing-poster-assets/05-uploaded-slide.png"><img src="marketing-poster-assets/05-uploaded-slide.png" alt="Actual uploaded hero slide panel with choose banner photo, title, subtitle, CTA and add slide button" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 5 - Uploaded slide creation.</strong> Isolated actual component. No file was uploaded or saved. Artwork shown below the panel is built-in catalogue copy, not an approved live offer.</figcaption></figure>
+    </section>
+
+    <section id="artwork">
+      <h2>5. How to design poster artwork</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Design outside the application</h3>
+          <ol>
+            <li>Decide the objective and destination before designing: collection awareness, category browsing, coupon promotion or a store enquiry.</li>
+            <li>Use your own or licensed product photos and brand assets. Build an appropriate canvas in your design tool.</li>
+            <li>Keep one focal product/collection, a short headline and one CTA. Include eligibility/expiry wording where needed.</li>
+            <li>Export artwork, upload it through the connected admin form and preview its crop at both narrow and wide widths.</li>
+          </ol>
+          <p>For Banners &amp; Promos, the app renders title, subtitle and CTA separately from the image. A clean product image often works better than baking the same text/button into the image twice.</p>
+        </div>
+        <div class="card">
+          <h3>Dimensions &amp; limits</h3>
+          <p><strong>Vector poster:</strong> generated SVG is 1920 x 600 (16:5). The SVG creator is an artwork builder, not a full multi-layer design editor.</p>
+          <p><strong>Uploaded older hero slide:</strong> form recommends 1920 x 600; PNG/JPG/WebP, up to 5 MB.</p>
+          <p><strong>Landing-page banner:</strong> form recommends 1920 x 400; client accepts images up to 5 MB.</p>
+          <p><strong>Banners &amp; Promos:</strong> no single fixed canvas size fits all placements. Its upload endpoint limits each file to 15 MB. As a design recommendation, use compressed WebP/JPG, keep important content away from edges and aim well below the upload limit.</p>
+        </div>
+      </div>
+      <div class="notice info"><strong>Suggested safe example:</strong> label "DIWALI COLLECTION"; headline "Light up your home"; supporting text "Explore TVs and appliances. Product prices and terms apply."; CTA "Explore collection"; destination <code>/campaign/diwali-collection</code>. This describes a collection without inventing a discount, delivery promise or bank entitlement.</div>
+    </section>
+
+    <section id="landing">
+      <h2>6. Create the campaign destination page</h2>
+      <p>Use <code>/admin/campaign-pages</code> when your poster should open a dedicated collection rather than a general catalogue.</p>
+      <ol>
+        <li>Click <strong>Create Campaign</strong>. Enter a campaign name, for example <strong>Diwali Collection</strong>.</li>
+        <li>Review the auto-generated <strong>URL Slug</strong>, for example <code>diwali-collection</code>. Its destination is <code>/campaign/diwali-collection</code>.</li>
+        <li>Upload the hero banner, recommended 1920 x 400. Select the curated products using the search and selection controls.</li>
+        <li>Review <strong>Campaign Active status</strong>; it starts checked in a new form. Untick it if you want an inactive saved page. Save with <strong>Create Campaign</strong> or <strong>Update Campaign</strong>.</li>
+        <li>Verify the public URL. Only active campaigns are returned publicly; missing or inactive ones return a not-found state. The page shows its hero and featured-product grid; with no products it shows a Coming Soon state.</li>
+        <li>Set your storefront banner's button link to this URL. Separately add the full website URL to your customer message.</li>
+      </ol>
+      <figure><a href="marketing-poster-assets/06-campaign-page.png"><img src="marketing-poster-assets/06-campaign-page.png" alt="Actual Create Campaign dialog showing campaign name, generated URL slug, hero banner upload, active status and curated products" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 6 - Landing-page creation.</strong> Actual component with a synthetic, unsaved campaign. The product catalogue fixture is intentionally empty; this is not a failure to load a real catalogue.</figcaption></figure>
+      <p class="small">The landing-page form has no start/end scheduling controls. Active state is separate from a theme's scheduled dates. Products and commercial terms still need validation; artwork does not alter the authoritative cart price.</p>
+    </section>
+
+    <section id="messages">
+      <h2>7. Send the campaign to customers</h2>
+      <p>Storefront posters are seen by visitors. Customer campaigns reach a selected audience. The message library currently contains <strong>54 campaigns: 13 lifecycle, 28 festival and 13 promotion</strong>, with <strong>28 audience filters</strong>. These counts are independent of the 20 vector posters.</p>
+      <ol class="flow" aria-label="Customer campaign workflow"><li>Choose campaign</li><li>Edit message</li><li>Select opted-in recipients</li><li>Review final preview</li><li>Explicit send or dry-run</li></ol>
+      <div class="grid gallery">
+        <figure><a href="marketing-poster-assets/09-campaign-library.png"><img src="marketing-poster-assets/09-campaign-library.png" alt="Actual customer campaign library showing lifecycle, festival and promotion templates" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 9 - Message campaign library.</strong> Actual campaign component with synthetic API fixtures, not a live recipient database.</figcaption></figure>
+        <figure><a href="marketing-poster-assets/10-email-editor.png"><img src="marketing-poster-assets/10-email-editor.png" alt="Actual campaign HTML source editor and live email preview" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 10 - Message creation.</strong> Actual HTML-source editing mode and live preview. The visual rich-text editor was not exercised in this isolated capture.</figcaption></figure>
+      </div>
+      <h3>Email</h3>
+      <ol>
+        <li>Open <code>/admin/customer-centric</code> and choose a template matching your objective.</li>
+        <li>Review the subject and message HTML. Add your landing-page URL using the <strong>real public website origin</strong>, not a relative path that an email client cannot resolve. Use absolute, publicly accessible image URLs; this guide's local screenshot paths are not email assets.</li>
+        <li>Click <strong>Choose Recipients</strong>, apply the relevant audience filters and select eligible, opted-in recipients. Check the actual count; segments are filters, not a promise that every registered customer has consent.</li>
+        <li>Click <strong>Preview &amp; Send</strong>. Review the final email and recipients. Only use the final send action after authorized test delivery, commercial approval and consent checks.</li>
+      </ol>
+      <div class="grid gallery">
+        <figure><a href="marketing-poster-assets/11-recipients.png"><img src="marketing-poster-assets/11-recipients.png" alt="Actual recipient selection screen with three synthetic opted-in contacts and audience filters" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 11 - Audience and recipients.</strong> Demo names and <code>example.invalid</code> addresses only. No real customer identities or messages.</figcaption></figure>
+        <figure><a href="marketing-poster-assets/12-whatsapp-preview.png"><img src="marketing-poster-assets/12-whatsapp-preview.png" alt="Actual WhatsApp campaign plan labelled dry run with nothing sent" width="1440" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 12 - WhatsApp planning.</strong> Actual dry-run UI with a locally generated plan and synthetic contacts. Preview is not delivery.</figcaption></figure>
+      </div>
+      <h3>WhatsApp &amp; automated reminders</h3>
+      <p>Select the WhatsApp channel and use <strong>Preview (dry run)</strong> to inspect its plan. There is a separate backend send path; this UI screenshot does not prove that a provider is configured, approved or delivering messages.</p>
+      <p>Abandoned-cart, wishlist, repeat-purchase and win-back templates can support retention marketing, but a saved template does not create an automated journey. Scheduled execution, eligibility, consent and provider delivery must be configured and verified separately.</p>
+      <figure><a href="marketing-poster-assets/13-diwali-email.png"><img src="marketing-poster-assets/13-diwali-email.png" alt="Built-in Diwali email creative personalized with a synthetic first name and a preview disclaimer" width="800" height="1100" loading="lazy"></a><figcaption><strong>Screenshot 13 - Email creative, not a website poster.</strong> Actual built-in Diwali HTML personalized for a synthetic recipient. Discount and benefit copy is illustrative and unverified; the preview was never sent.</figcaption></figure>
+      <p>For all campaign types, audiences and retention flows, see the existing <a href="marketing-campaign-guide.html">Marketing Campaign Types &amp; Customer Flows guide</a>.</p>
+    </section>
+
+    <section id="example">
+      <h2>8. Worked example: a Diwali collection campaign</h2>
+      <p><strong>Objective:</strong> help visitors and eligible existing customers discover a curated TV/appliance collection. This example deliberately avoids an invented percentage discount.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Complete Diwali campaign setup sequence">
+        <table>
+          <thead><tr><th>Step / page</th><th>What to create</th><th>What to verify</th></tr></thead>
+          <tbody>
+            <tr><td>1. Campaign Pages</td><td>Active <code>diwali-collection</code> with approved 1920 x 400 artwork and selected products.</td><td>Public destination resolves, selected products appear, stock/prices are correct.</td></tr>
+            <tr><td>2. Banners &amp; Promos</td><td><code>home-hero</code>, blank scope, title "Light up your home", CTA "Explore collection", link <code>/campaign/diwali-collection</code>.</td><td>Enabled and within the right section; current home carousel displays it and CTA works.</td></tr>
+            <tr><td>3. Optional listing promotion</td><td><code>promo</code> with blank scope for a general tile, or the exact active category/sub-category name for a targeted one.</td><td>On <code>/products</code>, test the correct filter and unfiltered fallback. Do not expect the dedicated category route to use it.</td></tr>
+            <tr><td>4. Optional theme</td><td>Approved Diwali theme/announcement pointing to the same destination, with its own start/end window.</td><td>Announcement link, contrast, mobile layout and outside-window default theme.</td></tr>
+            <tr><td>5. Campaigns &amp; Email</td><td>Adapt the Diwali template; use accurate collection copy, absolute public URLs and eligible opted-in recipients.</td><td>Authorized test email, final audience and consent. WhatsApp preview remains a dry run.</td></tr>
+            <tr><td>6. Only if a real coupon is approved</td><td>Create the coupon separately at <code>/admin/promotions</code>. Then update poster/message wording to match its exact eligibility, value, limits and validity.</td><td>Server-priced checkout accepts/rejects it correctly. Showing a coupon code on a poster is not implementation.</td></tr>
+            <tr><td>7. End the campaign</td><td>Turn off its banners and landing page, stop any separately configured sends, and deactivate/expire any coupon.</td><td>No stale public CTA, unwanted scheduled sends or still-valid discount. Theme expiry alone does not do all of this.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="checks">
+      <h2>9. Before you publish</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Display &amp; artwork</h3>
+          <ul>
+            <li>Correct connected placement, correct contextual scope, correct order and active state.</li>
+            <li>Marketing Dashboard parent section is visible; image loads and text is readable.</li>
+            <li>Desktop and mobile crop, CTA destination, keyboard access and sufficient contrast checked.</li>
+            <li>Verify first-two/first-three limits; turning something on does not guarantee it makes the visible cut.</li>
+            <li>Inspect the actual storefront, not only the generic admin preview.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Commercial &amp; customer safety</h3>
+          <ul>
+            <li>Approved prices, stock, discounts, expiry, warranty, delivery and EMI terms.</li>
+            <li>No unsupported "free", "lowest", maximum saving or store-count claims.</li>
+            <li>Channel-specific consent, working unsubscribe and authorized test delivery.</li>
+            <li>Real provider credentials and scheduled execution verified before claiming delivery/automation.</li>
+            <li>Named owner for publishing, ending the campaign and handling customer enquiries.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="notice"><strong>This guide does not change the production verdict.</strong> Screenshots and source inspection establish controls and intended wiring, not hosted provider delivery or launch readiness. See the <a href="production-readiness-audit.md">production-readiness audit</a> and <a href="customer-journey-ui-audit.md">customer-journey audit</a> for the remaining release gates.</div>
+    </section>
+
+    <section id="evidence">
+      <h2>10. Screenshot provenance &amp; sharing</h2>
+      <p><strong>New captures (3-6):</strong> actual poster/slide and campaign-page React components rendered independently with synthetic API responses. No admin authentication shell, database or provider ran. Custom artwork and the campaign name were edited in memory. Uploads, saves and sends were blocked.</p>
+      <p><strong>Earlier captures (1-2, 7-8):</strong> retained local admin/storefront references. They illustrate controls and display layout; legacy wording, commercial values and a test-action toast are not current operational evidence.</p>
+      <p><strong>Message captures (9-13):</strong> the actual campaign component and built-in creative HTML with synthetic recipients. The editor capture uses HTML-source mode. The WhatsApp plan is a dry run. No message was sent.</p>
+      <p><strong>Source anchors:</strong> <code>app/admin/marketing/page.tsx</code>, <code>lib/marketing-content.ts</code>, <code>app/admin/listing-banners/page.tsx</code>, <code>hooks/useBanners.ts</code>, <code>components/home/SaraLanding.tsx</code>, <code>components/home/landing/LandingHero.tsx</code>, <code>components/home/landing/HomepageSections.tsx</code>, <code>app/admin/posters/page.tsx</code>, <code>lib/posters.ts</code>, <code>components/admin/HeroSlidesManager.tsx</code>, <code>components/HeroSection.tsx</code>, <code>app/products/page.tsx</code>, <code>app/product/[slug]/page.tsx</code>, <code>app/brands/BrandsClient.tsx</code>, <code>components/cart/CartContents.tsx</code>, <code>app/campaign/[slug]/page.tsx</code> and the corresponding admin campaign/coupon/theme pages. Source paths here are labels, not offline hyperlinks.</p>
+      <p><strong>Open offline:</strong> double-click <code>documents\marketing-poster-guide.html</code> in your browser. No scripts, external fonts or remote images are required. When sharing, keep <code>marketing-poster-assets</code> alongside the HTML. Include the linked guides/reports separately if you want their links to remain available.</p>
+    </section>
+  </main>
+  <footer>Prepared for SARA Electronics. Source verified on 13 October 2026. Illustrations are not authorization to publish offers, contact customers or deploy.</footer>
+</body>
+</html>

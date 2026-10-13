@@ -4,7 +4,7 @@
  * Core partner management operations
  */
 
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Filter, type WithId } from 'mongodb';
 import { getCollection } from '@/lib/db-service';
 import { 
   Partner, 
@@ -13,6 +13,7 @@ import {
   PartnerDocument,
   Address,
   BusinessType,
+  PartnerFilterParams,
   PARTNER_COMMISSION_RATES 
 } from './types';
 import { generatePartnerAPIKey, updateAPIKeyTier } from './api-keys';
@@ -52,7 +53,7 @@ export async function createPartner(input: CreatePartnerInput): Promise<{
   partner: Partner;
   apiKey: string;
 }> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
   // Check if email already exists
   const existing = await collection.findOne({ email: input.email.toLowerCase() });
@@ -66,7 +67,7 @@ export async function createPartner(input: CreatePartnerInput): Promise<{
   
   // Determine tier and commission rate
   const tier = input.tier || 'starter';
-  const commissionRate = input.commissionRate || PARTNER_COMMISSION_RATES[tier];
+  const commissionRate = input.commissionRate ?? PARTNER_COMMISSION_RATES[tier];
   
   const partner: Partner = {
     id: partnerId,
@@ -113,15 +114,10 @@ export async function createPartner(input: CreatePartnerInput): Promise<{
  * Get partner by ID
  */
 export async function getPartnerById(partnerId: string): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
-  let partner = null;
-  
-  try {
-    partner = await collection.findOne({ _id: new ObjectId(partnerId) });
-  } catch (e) {
-    partner = await collection.findOne({ id: partnerId });
-  }
+  const native = ObjectId.isValid(partnerId) ? await collection.findOne({ _id: new ObjectId(partnerId) }) : null;
+  const partner = native ?? await collection.findOne({ id: partnerId });
   
   if (!partner) {
     return null;
@@ -134,7 +130,7 @@ export async function getPartnerById(partnerId: string): Promise<Partner | null>
  * Get partner by email
  */
 export async function getPartnerByEmail(email: string): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   const partner = await collection.findOne({ email: email.toLowerCase() });
   
   if (!partner) {
@@ -147,17 +143,10 @@ export async function getPartnerByEmail(email: string): Promise<Partner | null> 
 /**
  * List all partners with filters
  */
-export async function listPartners(options?: {
-  status?: PartnerStatus;
-  tier?: PartnerTier;
-  verified?: boolean;
-  search?: string;
-  page?: number;
-  limit?: number;
-}): Promise<{ partners: Partner[]; total: number }> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+export async function listPartners(options?: PartnerFilterParams & { verified?: boolean }): Promise<{ partners: Partner[]; total: number }> {
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
-  const filter: any = {};
+  const filter: Filter<Partner> = {};
   
   if (options?.status) {
     filter.status = options.status;
@@ -172,10 +161,11 @@ export async function listPartners(options?: {
   }
   
   if (options?.search) {
+    const search = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     filter.$or = [
-      { name: { $regex: options.search, $options: 'i' } },
-      { email: { $regex: options.search, $options: 'i' } },
-      { 'businessDetails.gstin': { $regex: options.search, $options: 'i' } },
+      { name: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { 'businessDetails.gstin': { $regex: search, $options: 'i' } },
     ];
   }
   
@@ -186,7 +176,7 @@ export async function listPartners(options?: {
   const [partners, total] = await Promise.all([
     collection
       .find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ [options?.sortBy ?? 'createdAt']: options?.sortOrder === 'asc' ? 1 : -1 })
       .skip(skip)
       .limit(limit)
       .toArray(),
@@ -206,7 +196,7 @@ export async function updatePartner(
   partnerId: string,
   updates: Partial<Pick<Partner, 'name' | 'phone' | 'website' | 'businessDetails' | 'contactPerson' | 'commissionRate'>>
 ): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
   const result = await collection.findOneAndUpdate(
     { _id: new ObjectId(partnerId) },
@@ -234,9 +224,9 @@ export async function updatePartnerStatus(
   status: PartnerStatus,
   adminId?: string
 ): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
-  const updateData: any = {
+  const updateData: Partial<Partner> = {
     status,
     updatedAt: new Date(),
   };
@@ -281,7 +271,7 @@ export async function updatePartnerTier(
   tier: PartnerTier,
   customCommissionRate?: number
 ): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
   const commissionRate = customCommissionRate || PARTNER_COMMISSION_RATES[tier];
   
@@ -314,7 +304,7 @@ export async function addPartnerDocument(
   partnerId: string,
   document: Omit<PartnerDocument, 'uploadedAt'>
 ): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
   const doc: PartnerDocument = {
     ...document,
@@ -322,11 +312,11 @@ export async function addPartnerDocument(
   };
   
   const result = await collection.findOneAndUpdate(
-    { _id: new ObjectId(partnerId) } as any,
+    { _id: new ObjectId(partnerId) },
     { 
       $push: { documents: doc },
       $set: { updatedAt: new Date() }
-    } as any,
+    },
     { returnDocument: 'after' }
   );
   
@@ -345,7 +335,7 @@ export async function verifyPartnerDocument(
   documentType: string,
   adminId: string
 ): Promise<Partner | null> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
   const result = await collection.findOneAndUpdate(
     { _id: new ObjectId(partnerId), 'documents.type': documentType },
@@ -377,7 +367,7 @@ export async function getPartnerStats(): Promise<{
   suspended: number;
   byTier: Record<PartnerTier, number>;
 }> {
-  const collection = await getCollection(PARTNERS_COLLECTION);
+  const collection = await getCollection<Partner>(PARTNERS_COLLECTION);
   
   const [total, active, pending, suspended, tierCounts] = await Promise.all([
     collection.countDocuments({}),
@@ -408,7 +398,7 @@ export async function getPartnerStats(): Promise<{
 /**
  * Normalize partner document from database
  */
-function normalizePartner(doc: any): Partner {
+function normalizePartner(doc: WithId<Partner>): Partner {
   return {
     id: doc._id.toString(),
     name: doc.name,

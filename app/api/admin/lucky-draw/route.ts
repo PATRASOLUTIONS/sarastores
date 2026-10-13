@@ -6,6 +6,9 @@ import {
   newDrawToken,
   newId,
   normalisePrizes,
+  type LuckyDrawCampaign,
+  type LuckyDrawParticipant,
+  type LuckyDrawWinner,
 } from "@/lib/lucky-draw"
 import { z } from "zod"
 
@@ -28,14 +31,14 @@ export async function GET() {
   if (!guard.ok) return guard.response
 
   try {
-    const campaigns = await getCollection(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
-    const participants = await getCollection(LUCKY_DRAW_COLLECTIONS.PARTICIPANTS)
-    const winners = await getCollection(LUCKY_DRAW_COLLECTIONS.WINNERS)
+    const campaigns = await getCollection<LuckyDrawCampaign>(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
+    const participants = await getCollection<LuckyDrawParticipant>(LUCKY_DRAW_COLLECTIONS.PARTICIPANTS)
+    const winners = await getCollection<LuckyDrawWinner>(LUCKY_DRAW_COLLECTIONS.WINNERS)
 
     const docs = await campaigns.find({}).sort({ createdAt: -1 }).toArray()
 
     const enriched = await Promise.all(
-      docs.map(async (c: any) => ({
+      docs.map(async (c) => ({
         ...c,
         id: c._id,
         participantCount: await participants.countDocuments({ campaignId: c._id }),
@@ -68,10 +71,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "At least one valid prize is required" }, { status: 400 })
     }
 
-    const campaigns = await getCollection(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
+    const campaigns = await getCollection<LuckyDrawCampaign>(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
     const now = new Date()
     const doc = {
-      _id: newId() as any,
+      _id: newId(),
       name: parsed.data.name.trim(),
       store: parsed.data.store.trim(),
       storeId: parsed.data.storeId ?? null,

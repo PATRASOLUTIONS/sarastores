@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, type SpinParticipant, type SpinCoupon, type SpinPrize, type SpinVisitStats, type SpinParticipantStats } from "@/lib/spin-wheel-campaigns"
 import { requireAdmin } from "@/lib/auth"
 import * as XLSX from "xlsx"
 
 function formatISTDateTime(value: unknown): string {
   if (!value) return ""
 
-  const date = value instanceof Date ? value : new Date(value as any)
+  if (!(value instanceof Date) && typeof value !== "string" && typeof value !== "number") return ""
+  const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ""
 
   return date.toLocaleString("en-IN", {
@@ -22,10 +23,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const campaignSlug = searchParams.get("campaignId") || "default"
 
-    const participantsCol = await getCampaignCollection(campaignSlug, "participants")
-    const couponsCol = await getCampaignCollection(campaignSlug, "coupons")
+    const participantsCol = await getCampaignCollection<SpinParticipant>(campaignSlug, "participants")
+    const couponsCol = await getCampaignCollection<SpinCoupon>(campaignSlug, "coupons")
     const visitsCol = await getCampaignCollection(campaignSlug, "visits")
-    const inventoryCol = await getCampaignCollection(campaignSlug, "inventory")
+    const inventoryCol = await getCampaignCollection<SpinPrize>(campaignSlug, "inventory")
 
     // Participants data
     const participants = await participantsCol
@@ -40,12 +41,12 @@ export async function GET(request: NextRequest) {
       .toArray()
 
     // Store data
-    const storeVisits = await visitsCol.aggregate([
+    const storeVisits = await visitsCol.aggregate<SpinVisitStats>([
       { $group: { _id: "$store", visits: { $sum: 1 } } },
       { $sort: { visits: -1 } }
     ]).toArray()
 
-    const storeParticipants = await participantsCol.aggregate([
+    const storeParticipants = await participantsCol.aggregate<SpinParticipantStats>([
       {
         $group: {
           _id: "$store",
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
     const inventory = await inventoryCol.find().toArray()
 
     // Prepare data for sheets
-    const participantsData = participants.map((p: any) => ({
+    const participantsData = participants.map((p) => ({
       Name: p.name || "",
       Phone: p.phone || "",
       Email: p.email || "",
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       "Spin Date": formatISTDateTime(p.spinDate)
     }))
 
-    const couponsData = coupons.map((c: any) => ({
+    const couponsData = coupons.map((c) => ({
       "Coupon Code": c.couponCode || "",
       Prize: c.prize || "",
       "Participant Name": c.participantName || "",
@@ -98,13 +99,13 @@ export async function GET(request: NextRequest) {
     }))
 
     // Build stores data
-    const participantMap: Record<string, any> = {}
-    storeParticipants.forEach((s: any) => { participantMap[s._id] = s })
-    const visitMap: Record<string, number> = {}
-    storeVisits.forEach((s: any) => { visitMap[s._id] = s.visits })
+    const participantMap: Record<string, SpinParticipantStats> = Object.create(null)
+    storeParticipants.forEach((s) => { participantMap[s._id] = s })
+    const visitMap: Record<string, number> = Object.create(null)
+    storeVisits.forEach((s) => { visitMap[s._id] = s.visits })
     const allStores = new Set([
-      ...storeVisits.map((s: any) => s._id),
-      ...storeParticipants.map((s: any) => s._id)
+      ...storeVisits.map((s) => s._id),
+      ...storeParticipants.map((s) => s._id)
     ])
 
     const storesData = Array.from(allStores).map(store => {
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const prizeSummaryData = inventory.map((item: any) => ({
+    const prizeSummaryData = inventory.map((item) => ({
       Prize: item.prizeName || "",
       Total: item.total || 0,
       Distributed: item.distributed || 0,

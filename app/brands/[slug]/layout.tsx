@@ -1,103 +1,32 @@
-import { Metadata } from 'next'
-import { connectToDatabase } from '@/lib/mongodb'
-import { getOriginFromHeaders } from '@/lib/seo-metadata'
-import { BrandJsonLdServer } from './BrandJsonLdServer'
-
-async function getSettings() {
-  try {
-    const { db } = await connectToDatabase()
-    return await db.collection('settings').findOne({})
-  } catch {
-    return null
-  }
-}
-
-async function getBrand(slug: string) {
-  try {
-    const { db } = await connectToDatabase()
-    // Records use `enabled`, `isEnabled` or `active` depending on when they were created.
-    return await db.collection('brands').findOne({
-      slug,
-      enabled: { $ne: false },
-      isEnabled: { $ne: false },
-      active: { $ne: false },
-    })
-  } catch {
-    return null
-  }
-}
+import type { Metadata } from "next"
+import type { ReactNode } from "react"
+import { notFound } from "next/navigation"
+import { getSeoBrand as getBrand } from "@/lib/seo-brand"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
+import { BrandJsonLdServer } from "./BrandJsonLdServer"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
-  const origin = await getOriginFromHeaders()
-
-  try {
-    const [brand, settings] = await Promise.all([getBrand(slug), getSettings()])
-
-    if (!brand) {
-      return {
-        title: 'Brand Not Found',
-        description: 'The requested brand page could not be found.',
-      }
-    }
-
-    const companyName = settings?.companyName || settings?.siteName || 'Sara Electronics'
-    const title = `${brand.name} Products | ${companyName}`
-    const description = brand.description || brand.tagline || `Shop ${brand.name} products online at best prices. Genuine products with warranty.`
-    const pageUrl = `${origin}/brands/${slug}`
-
-    // Brand logo as OG image
-    const imageUrl = brand.logo
-      ? (brand.logo.startsWith('http') ? brand.logo : `${origin}${brand.logo.startsWith('/') ? '' : '/'}${brand.logo}`)
-      : (brand.banners?.[0]?.url || `${origin}/og-image.jpg`)
-
-    return {
-      title,
-      description,
-      metadataBase: new URL(origin),
-      alternates: {
-        canonical: pageUrl,
-        languages: {
-          "en-IN": pageUrl,
-          "x-default": pageUrl,
-        },
-      },
-      openGraph: {
-        title: `${brand.name} Products`,
-        description,
-        url: pageUrl,
-        siteName: companyName,
-        images: [{ url: imageUrl, width: 1200, height: 630, alt: `${brand.name} - ${companyName}` }],
-        locale: 'en_IN',
-        type: 'website',
-      },
-      twitter: {
-        card: 'summary_large_image',
-        title: `${brand.name} Products`,
-        description,
-        images: [imageUrl],
-      },
-      robots: { index: true, follow: true, 'max-image-preview': 'large' },
-    }
-  } catch {
-    return { title: 'Brand', description: 'Shop brand products online.' }
-  }
+  const [origin, settings, brand] = await Promise.all([
+    getOriginFromHeaders(), getSiteSettings(), getBrand(slug),
+  ])
+  if (!brand) notFound()
+  const companyName = getCompanyName(settings)
+  return buildPageMetadata({
+    title: `${brand.name} Products | ${companyName}`,
+    description: brand.description || brand.heroContent?.description || brand.tagline ||
+      `Explore ${brand.name} electronics and appliances at ${companyName}. Browse product details, prices and availability.`,
+    pageUrl: `${origin}/brands/${encodeURIComponent(brand.slug)}`,
+    origin, companyName, imageUrl: brand.banners?.[0]?.url || brand.logo,
+    noIndex: brand.landingPageEnabled === false,
+  })
 }
 
-export default async function BrandSlugLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode
-  params: Promise<{ slug: string }>
+export default async function BrandLayout({ children, params }: {
+  children: ReactNode; params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const origin = await getOriginFromHeaders()
-
-  return (
-    <>
-      <BrandJsonLdServer slug={slug} origin={origin} />
-      {children}
-    </>
-  )
+  const brand = await getBrand(slug)
+  if (!brand) notFound()
+  return <><BrandJsonLdServer slug={brand.slug} origin={await getOriginFromHeaders()} />{children}</>
 }

@@ -89,7 +89,7 @@ export default function ForgotPasswordPage() {
               Forgot Password?
             </h1>
             <p className="text-center text-gray-600 mb-8">
-              No worries! Enter your email and we'll send you reset instructions.
+              No worries! Enter your email and we&apos;ll send you reset instructions.
             </p>
 
             {/* Success Message */}

@@ -21,7 +21,7 @@ export async function GET() {
     // Extract unique sub-category values
     const subCategorySet = new Set<string>()
     
-    products.forEach((product: any) => {
+    products.forEach((product) => {
       // Check sub-category field (can be subCategory or sub-category)
       const subCat = product.subCategory || product["sub-category"] || product.subcategory
       if (subCat && typeof subCat === 'string') {
@@ -79,7 +79,7 @@ export async function POST() {
     // Extract unique sub-category values
     const subCategorySet = new Set<string>()
     
-    products.forEach((product: any) => {
+    products.forEach((product) => {
       // Check sub-category field (can be subCategory or sub-category)
       const subCat = product.subCategory || product["sub-category"] || product.subcategory
       if (subCat && typeof subCat === 'string') {
@@ -94,7 +94,7 @@ export async function POST() {
 
     // Get existing sub-categories to avoid duplicates
     const existingSubCategories = await getAll(COLLECTIONS.SUB_CATEGORIES)
-    const existingNames = new Set(existingSubCategories.map((sub: any) => sub.name.toLowerCase()))
+    const existingNames = new Set(existingSubCategories.map((sub) => sub.name.toLowerCase()))
 
     // Create new sub-categories
     let createdCount = 0

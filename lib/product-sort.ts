@@ -16,12 +16,23 @@ export const PRODUCT_SORT_OPTIONS: { value: ProductSortKey; label: string }[] = 
   { value: "rating", label: "Customer Rating" },
 ]
 
+export interface ProductSortInput {
+  price?: unknown
+  mrp?: unknown
+  originalPrice?: unknown
+  raw?: Record<string, unknown> | null
+  createdAt?: string | number | Date | null
+  updatedAt?: string | number | Date | null
+  rating?: unknown
+  reviews?: number | readonly unknown[] | { average?: unknown } | null
+}
+
 function toNumber(value: unknown): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function getMrp(product: any): number {
+function getMrp(product: ProductSortInput): number {
   const raw = product?.raw ?? {}
   return toNumber(
     product?.mrp ?? product?.originalPrice ?? raw?.MRP ?? raw?.mrp ?? raw?.["M.R.P"],
@@ -29,38 +40,38 @@ function getMrp(product: any): number {
 }
 
 /** Discount percentage off MRP; 0 when there is no usable MRP. */
-export function getDiscountPercent(product: any): number {
+export function getDiscountPercent(product: ProductSortInput): number {
   const price = toNumber(product?.price)
   const mrp = getMrp(product)
   if (!mrp || !price || mrp <= price) return 0
   return ((mrp - price) / mrp) * 100
 }
 
-function getTimestamp(product: any): number {
+function getTimestamp(product: ProductSortInput): number {
   const value = product?.createdAt ?? product?.updatedAt
   if (!value) return 0
   const time = new Date(value).getTime()
   return Number.isFinite(time) ? time : 0
 }
 
-function getRating(product: any): number {
+function getRating(product: ProductSortInput): number {
   if (typeof product?.rating === "number") return product.rating
   const reviews = product?.reviews
-  if (reviews && !Array.isArray(reviews) && typeof reviews.average === "number") return reviews.average
+  if (reviews && typeof reviews === "object" && "average" in reviews && typeof reviews.average === "number") return reviews.average
   return 0
 }
 
 /** Returns a new array; the input is never mutated. */
-export function sortProducts<T>(products: T[], sortBy: ProductSortKey): T[] {
+export function sortProducts<T extends ProductSortInput>(products: T[], sortBy: ProductSortKey): T[] {
   if (sortBy === "relevance") return products
 
   const sorted = [...products]
 
   switch (sortBy) {
     case "price-asc":
-      return sorted.sort((a, b) => toNumber((a as any).price) - toNumber((b as any).price))
+      return sorted.sort((a, b) => toNumber(a.price) - toNumber(b.price))
     case "price-desc":
-      return sorted.sort((a, b) => toNumber((b as any).price) - toNumber((a as any).price))
+      return sorted.sort((a, b) => toNumber(b.price) - toNumber(a.price))
     case "discount":
       return sorted.sort((a, b) => getDiscountPercent(b) - getDiscountPercent(a))
     case "newest":

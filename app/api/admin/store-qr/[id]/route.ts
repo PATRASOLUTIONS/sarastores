@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
-import QRCode from "qrcode"
 import { requireAdmin } from "@/lib/auth"
+import { UpdateStoreQrSchema } from "@/lib/validation"
+import { normalizeStoreQr, trackedStoreQrImage } from "@/lib/store-qr"
+import type { StoreQrDocument } from "@/lib/store-qr"
+import { getOriginFromHeaders } from "@/lib/seo-metadata"
 
 const COLLECTION = "store_qr_codes"
 
@@ -24,7 +27,7 @@ export async function GET(
       )
     }
 
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<StoreQrDocument>(COLLECTION)
     const qr = await collection.findOne({ _id: new ObjectId(id) })
 
     if (!qr) {
@@ -36,21 +39,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      qrCode: {
-        id: qr._id.toString(),
-        storeId: qr.storeId || "",
-        storeName: qr.storeName || "",
-        type: qr.type || "google_maps",
-        label: qr.label || "",
-        targetUrl: qr.targetUrl || "",
-        qrDataUrl: qr.qrDataUrl || "",
-        scanCount: qr.scanCount || 0,
-        lastScannedAt: qr.lastScannedAt || null,
-        scanHistory: qr.scanHistory || [],
-        isActive: qr.isActive !== false,
-        createdAt: qr.createdAt,
-        updatedAt: qr.updatedAt,
-      },
+      qrCode: normalizeStoreQr(qr),
     })
   } catch (error) {
     console.error("Error fetching QR code:", error)
@@ -71,7 +60,8 @@ export async function PUT(
 
   try {
     const { id } = await params
-    const body = await request.json()
+    const parsed = UpdateStoreQrSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
 
     if (!ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -80,7 +70,7 @@ export async function PUT(
       )
     }
 
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<StoreQrDocument>(COLLECTION)
     const existing = await collection.findOne({ _id: new ObjectId(id) })
 
     if (!existing) {
@@ -90,27 +80,16 @@ export async function PUT(
       )
     }
 
-    const updateData: Record<string, any> = { updatedAt: new Date() }
-
-    if (body.targetUrl !== undefined) {
-      updateData.targetUrl = body.targetUrl
-      // Regenerate QR if URL changed
-      if (body.targetUrl !== existing.targetUrl) {
-        updateData.qrDataUrl = await QRCode.toDataURL(body.targetUrl, {
-          width: 400,
-          margin: 2,
-          color: { dark: "#000000", light: "#FFFFFF" },
-        })
-      }
+    const updateData = {
+      ...parsed.data, updatedAt: new Date(),
+      qrDataUrl: await trackedStoreQrImage(id, await getOriginFromHeaders()),
     }
-    if (body.label !== undefined) updateData.label = body.label
-    if (body.isActive !== undefined) updateData.isActive = Boolean(body.isActive)
-    if (body.storeName !== undefined) updateData.storeName = body.storeName
-
-    await collection.updateOne({ _id: new ObjectId(id) }, { $set: updateData })
+    const result = await collection.updateOne({ _id: new ObjectId(id) }, { $set: updateData })
+    if (!result.matchedCount) return NextResponse.json({ success: false, message: "QR code was removed during update" }, { status: 409 })
 
     return NextResponse.json({ success: true, message: "QR code updated successfully" })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
     console.error("Error updating QR code:", error)
     return NextResponse.json(
       { success: false, message: "Failed to update QR code" },

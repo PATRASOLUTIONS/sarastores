@@ -1,47 +1,19 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCollection, createObjectId } from "@/lib/db-service"
 import { requireAdmin } from "@/lib/auth"
+import { handleApiError } from "@/lib/api-error"
+import { manageQueuedExternalOrder, FulfillmentError } from "@/lib/external-fulfillment"
 
 export const dynamic = "force-dynamic"
 
-/** Marks a queued fulfilment entry cancelled so the worker stops retrying it. */
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function POST(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
-
   try {
     const { id } = await context.params
-    const collection = await getCollection("external_orders")
-
-    let doc: any = null
-    try {
-      doc = await collection.findOne({ _id: createObjectId(id) })
-    } catch {
-      doc = null
-    }
-    if (!doc) doc = await collection.findOne({ _id: id as any })
-    if (!doc) return NextResponse.json({ error: "External order not found" }, { status: 404 })
-
-    if (doc.status === "placed") {
-      return NextResponse.json({ error: "Already placed with the provider — cannot cancel" }, { status: 409 })
-    }
-    if (doc.status === "cancelled") {
-      return NextResponse.json({ success: true, message: "Already cancelled" })
-    }
-
-    await collection.updateOne(
-      { _id: doc._id },
-      { $set: { status: "cancelled", cancelledAt: new Date(), cancelledBy: guard.userId, updatedAt: new Date() } },
-    )
-
-    const updated = await collection.findOne({ _id: doc._id })
-    return NextResponse.json({
-      success: true,
-      message: "External order cancelled",
-      item: { ...updated, id: updated?._id?.toString?.() },
-    })
+    const result = await manageQueuedExternalOrder(id, "cancel", guard.userId)
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
-    console.error("[admin/external-orders][cancel]", error)
-    return NextResponse.json({ error: "Cancel failed" }, { status: 500 })
+    if (error instanceof FulfillmentError) return NextResponse.json({ error: error.message }, { status: error.status })
+    return handleApiError(error, "External fulfillment cancellation failed")
   }
 }

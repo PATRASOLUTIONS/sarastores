@@ -1,3 +1,5 @@
+import type { ObjectId } from 'mongodb'
+
 export interface SoftwareProduct {
   _id?: string
   name: string
@@ -49,6 +51,7 @@ export interface LicenseKey {
     orderId: string
     orderNumber: string
   }
+
   assignedAt?: Date
   expiresAt?: Date
   activatedAt?: Date
@@ -56,6 +59,32 @@ export interface LicenseKey {
   revokedReason?: string
   createdAt: Date
   updatedAt: Date
+}
+
+export interface StoredLicenseKey {
+  _id: ObjectId | string
+  softwareId: ObjectId | string
+  softwareName?: string
+  key: string
+  status: LicenseKey['status']
+  validityYears?: number
+  validityDays?: number | string
+  validity?: number | string
+  maxDevices?: number
+  usedDevices?: number
+  orderId?: string
+  email?: string
+  assignedTo?: {
+    customerId?: string
+    customerEmail?: string | null
+    customerName?: string | null
+    orderId?: string
+    orderNumber?: string | null
+  } | null
+  assignedAt?: Date | string | null
+  expiresAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
 }
 
 export interface SoftwareOrder {

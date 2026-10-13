@@ -31,7 +31,7 @@ function PasswordStrength({ password }: { password: string }) {
 
   const labels = ["Weak", "Fair", "Good", "Strong"]
   const colors = ["bg-red-500", "bg-orange-500", "bg-amber-500", "bg-green-500"]
-  const textColors = ["text-red-500", "text-orange-500", "text-amber-500", "text-green-500"]
+  const textColors = ["text-red-700", "text-orange-700", "text-amber-700", "text-green-700"]
 
   return (
     <div className="mt-2">
@@ -478,7 +478,7 @@ function RegisterForm() {
                         ) : (
                           <X className="h-3.5 w-3.5 text-gray-300" />
                         )}
-                        <span className={`text-xs ${check.met ? 'text-green-600' : 'text-brand-text-tertiary'}`}>
+                        <span className={`text-xs ${check.met ? 'text-green-700' : 'text-brand-text-secondary'}`}>
                           {check.label}
                         </span>
                       </div>
@@ -557,7 +557,7 @@ function RegisterForm() {
                     <Link href="/terms-and-conditions" className="font-medium text-[#1560BD] hover:underline">Terms and Conditions</Link>
                   </span>
                 </label>
-                {errors.agreeToTerms && <p className="text-sm text-red-500">{errors.agreeToTerms}</p>}
+                {errors.agreeToTerms && <p className="text-sm text-red-600">{errors.agreeToTerms}</p>}
 
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -573,7 +573,7 @@ function RegisterForm() {
                     {" "}and consent to my data being processed to run my account and orders
                   </span>
                 </label>
-                {errors.agreePrivacyNotice && <p className="text-sm text-red-500">{errors.agreePrivacyNotice}</p>}
+                {errors.agreePrivacyNotice && <p className="text-sm text-red-600">{errors.agreePrivacyNotice}</p>}
               </div>
 
               {/*

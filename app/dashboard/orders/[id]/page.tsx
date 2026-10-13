@@ -47,7 +47,7 @@ interface Order {
     address?: string
   }
   paymentMethod?: string
-  paymentDetails?: any
+  paymentDetails?: unknown
   trackingNumber?: string
 }
 
@@ -182,7 +182,7 @@ export default function OrderDetailsPage() {
       <div className="bg-white rounded-lg shadow-md p-6 text-center">
         <h2 className="text-xl font-semibold mb-2">Order Not Found</h2>
         <p className="text-gray-600 mb-4">
-          The order you're looking for doesn't exist or you don't have permission to view it.
+          The order you&apos;re looking for doesn&apos;t exist or you don&apos;t have permission to view it.
         </p>
         <Link href="/dashboard/orders">
           <button className="px-4 py-2 bg-maroon-800 text-white rounded-md hover:bg-maroon-900 transition-colors">

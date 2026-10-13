@@ -134,7 +134,7 @@ export default function AdminDashboardPage() {
       // ~200 KB parser, fetched only when someone actually clicks export.
       const XLSX = await import("xlsx")
       const wb = XLSX.utils.book_new()
-      const add = (rows: any[], name: string, widths: number[]) => {
+      const add = (rows: Array<Record<string, string | number | null>>, name: string, widths: number[]) => {
         if (rows.length === 0) return
         const ws = XLSX.utils.json_to_sheet(rows)
         ws["!cols"] = widths.map((wch) => ({ wch }))
@@ -420,7 +420,7 @@ export default function AdminDashboardPage() {
                         width={70}
                       />
                       <Tooltip
-                        formatter={(v: any, name: any) => [
+                        formatter={(v, name) => [
                           inr(Number(v)),
                           name === "revenue" ? "Realised" : "Booked",
                         ]}
@@ -470,7 +470,7 @@ export default function AdminDashboardPage() {
                             <Cell key={i} fill={PIE_COLOURS[i % PIE_COLOURS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(v: any) => inr(Number(v))} />
+                        <Tooltip formatter={v => inr(Number(v))} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>

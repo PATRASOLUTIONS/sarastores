@@ -90,7 +90,7 @@ export default function TestimonialSection() {
         >
           <h2 className="text-3xl font-bold mb-4">What Our Customers Say</h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Don't just take our word for it. Here's what our satisfied customers have to say about their shopping
+            Don&apos;t just take our word for it. Here&apos;s what our satisfied customers have to say about their shopping
             experience.
           </p>
         </div>
@@ -121,7 +121,7 @@ export default function TestimonialSection() {
                     <p className="text-gray-600 text-sm">{testimonial.role}</p>
                   </div>
                 </div>
-                <p className="text-gray-700 italic mb-6">"{testimonial.quote}"</p>
+                <p className="text-gray-700 italic mb-6">&quot;{testimonial.quote}&quot;</p>
                 <div className="flex text-yellow-400">
                   {[...Array(5)].map((_, i) => (
                     <Star key={i} className="h-5 w-5 fill-current" />
@@ -156,7 +156,7 @@ export default function TestimonialSection() {
                         <p className="text-gray-600 text-xs">{testimonial.role}</p>
                       </div>
                     </div>
-                    <p className="text-gray-700 italic text-sm mb-4">"{testimonial.quote}"</p>
+                    <p className="text-gray-700 italic text-sm mb-4">&quot;{testimonial.quote}&quot;</p>
                     <div className="flex text-yellow-400">
                       {[...Array(5)].map((_, i) => (
                         <Star key={i} className="h-4 w-4 fill-current" />

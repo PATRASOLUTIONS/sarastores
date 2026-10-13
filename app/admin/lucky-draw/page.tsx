@@ -6,7 +6,8 @@ import {
   Gift, Plus, Trash2, Upload, Link2, Copy, Play, Pause, CheckCircle2,
   Users, Trophy, RefreshCw, Store, Loader2, ExternalLink, Download,
 } from "lucide-react"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetch, apiFetchJson } from "@/lib/api-client"
+import { drawStoreListSchema, winnerNotificationLabel } from "@/lib/lucky-draw-client"
 
 type Prize = { name: string; icon: string; quantity: number | string }
 type Campaign = {
@@ -31,6 +32,8 @@ type Winner = {
   prizeIcon: string
   drawnAt: string
   emailSent?: boolean
+  emailDeliveryStatus?: "sending" | "sent" | "failed" | "uncertain"
+  emailError?: string | null
 }
 
 const STATUS_STYLES: Record<Campaign["status"], string> = {
@@ -76,12 +79,11 @@ export default function AdminLuckyDrawPage() {
 
   const loadStores = useCallback(async () => {
     try {
-      const res = await apiFetch("/api/admin/store-locations")
-      const data = await res.json()
-      const list = (data.stores || data || []).filter((s: any) => s.isActive !== false)
-      setStores(list.map((s: any) => ({ id: s.id || s._id, shopName: s.shopName })))
-    } catch {
-      // store list is optional — a free-text store name still works
+      const list = await apiFetchJson("/api/admin/store-locations", undefined, value => drawStoreListSchema.parse(value))
+      setStores(list.map(store => ({ id: store.id, shopName: store.shopName })))
+    } catch (error) {
+      console.error("[lucky-draw] store selector could not be loaded", error)
+      toast.error("Store list unavailable. Enter the store name manually.")
     }
   }, [])
 
@@ -218,10 +220,10 @@ export default function AdminLuckyDrawPage() {
 
   const exportWinners = () => {
     if (!detail?.winners.length) return
-    const header = "Name,Phone,Email,Prize,Drawn At,Email Sent"
+    const header = "Name,Phone,Email,Prize,Drawn At,Email Status"
     const rows = detail.winners.map((w) =>
       [w.participantName, w.participantPhone, w.participantEmail, w.prize,
-        new Date(w.drawnAt).toLocaleString(), w.emailSent ? "yes" : "no"]
+        new Date(w.drawnAt).toLocaleString(), winnerNotificationLabel(w)]
         .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","),
     )
     const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" })
@@ -485,7 +487,7 @@ export default function AdminLuckyDrawPage() {
                     />
                     <label className="flex items-center gap-2 text-xs text-gray-600 mt-2">
                       <input type="checkbox" checked={replaceList} onChange={(e) => setReplaceList(e.target.checked)} />
-                      Replace the existing list
+                      Replace eligible participants (previous winners are retained)
                     </label>
                     <button
                       onClick={uploadParticipants}
@@ -526,8 +528,8 @@ export default function AdminLuckyDrawPage() {
                           </div>
                           <div className="flex items-center justify-between gap-2 mt-1 text-gray-500">
                             <span>{w.participantEmail || w.participantPhone || "—"}</span>
-                            <span className={w.emailSent ? "text-green-600" : "text-amber-600"}>
-                              {w.emailSent ? "email sent" : "no email"}
+                            <span className={w.emailSent ? "text-green-600" : "text-amber-600"} title={w.emailError || undefined}>
+                              {winnerNotificationLabel(w)}
                             </span>
                           </div>
                         </div>

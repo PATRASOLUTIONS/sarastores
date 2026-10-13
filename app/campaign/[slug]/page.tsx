@@ -6,39 +6,51 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import { Loader2 } from "lucide-react"
+import Link from "next/link"
+import { publicCampaignPageResponseSchema, type PublicCampaignPage } from "@/lib/campaign-page"
 
 export default function CampaignPage() {
   const params = useParams()
-  const slug = params?.slug as string
+  const slug = typeof params?.slug === "string" ? params.slug : undefined
   
-  const [campaign, setCampaign] = useState<any>(null)
+  const [campaign, setCampaign] = useState<PublicCampaignPage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [missing, setMissing] = useState(false)
 
   useEffect(() => {
     if (!slug) return
+    const controller = new AbortController()
+    setLoading(true)
+    setCampaign(null)
+    setError(null)
+    setMissing(false)
     
     async function fetchCampaign() {
       try {
         const res = await fetch(`/api/campaign-pages/${slug}`, {
           // Disable caching to assure real-time stock/price data is retrieved
           cache: "no-store", 
+          signal: controller.signal,
         })
         const data = await res.json()
         
-        if (data.success && data.campaign) {
-          setCampaign(data.campaign)
-        } else {
-          setError(data.error || "Campaign not found")
+        if (res.status === 404) {
+          if (!controller.signal.aborted) { setMissing(true); setError("Campaign not found") }
+          return
         }
+        const parsed = publicCampaignPageResponseSchema.safeParse(data)
+        if (!res.ok || !parsed.success) throw new Error("Invalid campaign response")
+        if (!controller.signal.aborted) setCampaign(parsed.data.campaign)
       } catch (err) {
-        setError("Failed to load campaign page.")
+        if (!controller.signal.aborted) setError("Failed to load campaign page. Please refresh to retry.")
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     
     fetchCampaign()
+    return () => controller.abort()
   }, [slug])
 
   if (loading) {
@@ -58,12 +70,12 @@ export default function CampaignPage() {
       <div className="min-h-screen bg-slate-50 flex flex-col">
         <Header />
         <div className="flex-1 flex flex-col items-center justify-center py-20 px-4 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
-          <h2 className="text-2xl font-semibold text-gray-700 mb-2">Campaign Not Found</h2>
-          <p className="text-gray-500 mb-8 max-w-md">The promotional page you are looking for does not exist or has expired.</p>
-          <a href="/" className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">{missing ? "404" : "Unable to Load Campaign"}</h1>
+          <h2 className="text-2xl font-semibold text-gray-700 mb-2">{missing ? "Campaign Not Found" : "Please Try Again"}</h2>
+          <p role="alert" className="text-gray-500 mb-8 max-w-md">{missing ? "The promotional page you are looking for does not exist or has expired." : error}</p>
+          <Link href="/" className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">
             Return to Homepage
-          </a>
+          </Link>
         </div>
         <Footer />
       </div>
@@ -75,6 +87,7 @@ export default function CampaignPage() {
       <Header />
       
       <main className="flex-1 w-full relative">
+        {campaign.banner && <h1 className="sr-only">{campaign.name}</h1>}
         {/* Full-width Hero Banner */}
         {campaign.banner && (
            <div className="w-full relative overflow-hidden bg-gray-100 flex items-center justify-center min-h-[160px] md:min-h-[300px] border-b border-gray-100 shadow-sm">
@@ -102,8 +115,8 @@ export default function CampaignPage() {
 
           {campaign.products && campaign.products.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
-              {campaign.products.map((product: any) => (
-                <CategoryProductCard key={product._id || product.id} product={product} />
+              {campaign.products.map((product) => (
+                <CategoryProductCard key={product.id} product={product} />
               ))}
             </div>
           ) : (

@@ -193,7 +193,7 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
                 New {newKeyData.environment === 'live' ? 'Live' : 'Test'} API Key Generated
               </h4>
               <p className="text-sm text-yellow-700 mt-1">
-                Copy this key now! For security reasons, it won't be shown again.
+                Copy this key now! For security reasons, it won&apos;t be shown again.
               </p>
               <div className="flex items-center gap-2 bg-white p-4 rounded-lg border border-yellow-300 mt-4">
                 <code className="flex-1 break-all font-mono text-sm">{newKeyData.key}</code>
@@ -209,7 +209,7 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
                 onClick={() => setNewKeyData(null)}
                 className="mt-4 text-sm text-yellow-700 hover:underline"
               >
-                I've copied the key, dismiss this message
+                I&apos;ve copied the key, dismiss this message
               </button>
             </div>
           </div>

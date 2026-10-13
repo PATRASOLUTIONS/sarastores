@@ -44,7 +44,8 @@ export async function getActiveTheme(): Promise<Theme> {
     const theme = normalizeTheme(doc.theme)
     cached = { theme, at: Date.now() }
     return isThemeActive(theme) ? theme : DEFAULT_THEME
-  } catch {
+  } catch (error) {
+    console.error("[theme] Active theme could not be loaded; using the base theme", error)
     return DEFAULT_THEME
   }
 }

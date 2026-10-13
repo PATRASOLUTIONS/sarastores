@@ -1,0 +1,23 @@
+.overview { background: linear-gradient(120deg, #f2f7ff, #f8fbff); color: #070f37; border-radius: 3px; position: static; }
+.overview > div:first-child { background: transparent; border: 0; border-radius: 0; padding: 22px 14px; }
+.overview > div:first-child > div { gap: 14px; }
+.overview > div:first-child span { height: 58px; width: 58px; background: #a4b4d2; color: #fff; }
+.overview > div:first-child span > svg { width: 34px; height: 34px; }
+.overview > div:first-child p { font-family: Arial, Helvetica, sans-serif; color: #070f37; font-size: 12px; }
+.overview > div:first-child a { font-size: 10px; color: #0054f0; }
+.avatar { height: 58px; width: 58px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: #e2eeff; }
+.overview nav { margin-top: 0; }
+.overview nav ul { border: 0; background: transparent; padding: 0; border-radius: 0; }
+.overview nav a, .overview nav li > button { border-radius: 0; padding: 13px 16px; font-size: 12px; color: #070f37; }
+.overview nav li > button { display: flex; align-items: center; gap: 12px; width: 100%; }
+.overview nav li > button > small { flex-shrink: 0; font-size: 8px; }
+.overview nav a[aria-current] { background: #e2eeff; color: #0054f0; }
+.overview nav li > button:disabled { cursor: not-allowed; color: #7c879b; }
+.overview > div:nth-last-child(2) { margin-top: 10px; border-radius: 0; padding: 18px 14px; }
+.overview > div:nth-last-child(2) > svg { height: 40px; width: 40px; }
+.overview > div:nth-last-child(2) p { font-family: Arial, Helvetica, sans-serif; }
+.overview > div:nth-last-child(2) p:first-of-type { font-size: 18px; color: #070f37; }
+.overview > div:nth-last-child(2) p:nth-of-type(2) { font-size: 12px; }
+.overview > div:nth-last-child(2) a { background: transparent; border: 1px solid #6d94ff; border-radius: 3px; font-size: 11px; padding: 9px; box-shadow: none; color: #0054f0; }
+.overview > div:last-child { display: none; }
+@media (max-width: 1023px) { .overview > div:first-child { padding: 14px; } .overview nav a, .overview nav li > button { padding: 11px 14px; } }

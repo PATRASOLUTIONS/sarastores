@@ -7,15 +7,9 @@ import Footer from "@/components/Footer"
 import StoreActions from "./StoreActions"
 import { buildStoreJsonLd, getAllStoreLocations, getStore } from "@/lib/store-locations"
 import { safeJsonLd } from "@/lib/jsonld-safe"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
 
 export const revalidate = 3600
-
-function getOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  )
-}
 
 export async function generateStaticParams() {
   const stores = await getAllStoreLocations()
@@ -29,13 +23,16 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { city, store: storeSlug } = await params
   const store = await getStore(city, storeSlug)
-  if (!store) return { title: "Store not found" }
+  if (!store) notFound()
 
-  return {
-    title: `${store.name} — Sara Electronics ${store.city}`,
-    description: `Visit ${store.name} in ${store.city}. ${store.address} Open ${store.hours}. Mobiles, TVs, refrigerators, washing machines and appliances with easy EMI.`,
-    alternates: { canonical: `/stores/${store.citySlug}/${store.slug}` },
-  }
+  const [origin, settings] = await Promise.all([getOriginFromHeaders(), getSiteSettings()])
+  const companyName = getCompanyName(settings)
+  return buildPageMetadata({
+    title: `${store.name}, ${store.city} | ${companyName}`,
+    description: `Visit ${store.name} in ${store.city}. ${store.address} Opening hours: ${store.hours}. Get directions and contact the showroom.`,
+    pageUrl: `${origin}/stores/${store.citySlug}/${store.slug}`,
+    origin, companyName, imageUrl: store.image,
+  })
 }
 
 export default async function StoreDetailPage({
@@ -48,7 +45,7 @@ export default async function StoreDetailPage({
 
   if (!store) notFound()
 
-  const jsonLd = buildStoreJsonLd(store, getOrigin())
+  const jsonLd = buildStoreJsonLd(store, await getOriginFromHeaders())
   const directionsUrl =
     store.mapUrl ||
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${store.name} ${store.address}`)}`

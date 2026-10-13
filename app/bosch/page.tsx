@@ -7,6 +7,7 @@ import CategoryProductCard from "@/components/CategoryProductCard"
 import Link from "next/link"
 import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, Star, Wrench, Settings, CheckCircle } from "lucide-react"
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import { brandProductListResponseSchema, type BrandProduct } from "@/lib/brand-landing-response"
 
 // Bosch promotional banner images - Real images from Bosch brand
 const boschBannerImages = [
@@ -70,25 +71,8 @@ const boschLifestyleImages = [
     },
 ]
 
-interface Product {
-    id: string
-    name: string
-    description?: string
-    price: number
-    image: string
-    stock?: number
-    category?: string
-    rating?: number
-    reviews?: number
-    discount?: number
-    originalPrice?: number
-    specification_images?: string
-    sku?: string
-    technical_details?: Record<string, any>
-}
-
 export default function BoschBrandPage() {
-    const [products, setProducts] = useState<Product[]>([])
+    const [products, setProducts] = useState<BrandProduct[]>([])
     const [loading, setLoading] = useState(true)
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isVisible, setIsVisible] = useState(false)
@@ -128,16 +112,16 @@ export default function BoschBrandPage() {
             try {
                 const response = await fetch("/api/products")
                 if (response.ok) {
-                    const data = await response.json()
+                    const data = brandProductListResponseSchema.parse(await response.json())
                     // Filter products by Bosch manufacturer
-                    const boschProducts = data.filter((p: any) => {
+                    const boschProducts = data.filter((p) => {
                         const manufacturer = normalizeProductForSchema(p).manufacturerName || p.manufacturer || ""
                         return manufacturer.toLowerCase().includes("bosch")
                     })
                     setProducts(boschProducts.slice(0, 12)) // Show up to 12 products
 
                     // Extract unique subcategories from Bosch products
-                    const boschSubCategories = new Set(boschProducts.map((p: any) =>
+                    const boschSubCategories = new Set(boschProducts.map((p) =>
                         (p.subCategory || p.description || "").trim()
                     ))
 
@@ -148,6 +132,8 @@ export default function BoschBrandPage() {
                         )
                     )
                     setAvailableCategories(validCategories)
+                } else {
+                    throw new Error("Failed to load Bosch products")
                 }
             } catch (error) {
                 console.error("Error fetching Bosch products:", error)
@@ -212,7 +198,7 @@ export default function BoschBrandPage() {
                             </div>
 
                             <p className="text-lg md:text-xl text-white/90 mb-6 max-w-xl">
-                                Experience German engineering excellence. Discover Bosch's innovative technology in power tools, home appliances, and professional equipment.
+                                Experience German engineering excellence. Discover Bosch&apos;s innovative technology in power tools, home appliances, and professional equipment.
                             </p>
 
                             <div className="flex flex-wrap gap-4">
@@ -396,7 +382,7 @@ export default function BoschBrandPage() {
             <section ref={productsRef} className="py-16 md:py-20 bg-white">
                 <div className="container mx-auto px-4">
                     <div className="text-center mb-12">
-                        <span className="inline-block px-4 py-2 bg-red-50 text-red-600 rounded-full text-sm font-semibold mb-4">
+                        <span className="inline-block px-4 py-2 bg-red-50 text-red-700 rounded-full text-sm font-semibold mb-4">
                             Featured Products
                         </span>
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -441,7 +427,7 @@ export default function BoschBrandPage() {
                                 Bosch Products Coming Soon
                             </h3>
                             <p className="text-gray-500 mb-6">
-                                We're adding Bosch products to our collection. Check back soon!
+                                We&apos;re adding Bosch products to our collection. Check back soon!
                             </p>
                             <Link
                                 href="/products"

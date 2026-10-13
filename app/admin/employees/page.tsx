@@ -25,6 +25,17 @@ import * as XLSX from "xlsx"
 import { apiFetch } from "@/lib/api-client"
 import { ADMIN_MENU_PATHS } from "@/components/AdminSidebar"
 import type { Employee } from "@/types/employee"
+import { EmployeeCreationResponseSchema, EmployeeListResponseSchema } from "@/lib/validation"
+import { z } from "zod"
+
+const employeeSalesSchema = z.array(z.object({
+  id: z.string(),
+  orderId: z.string().nullish(),
+  createdAt: z.string().optional(),
+  date: z.string().optional(),
+  total: z.number().finite().nonnegative(),
+  status: z.string(),
+}).refine(value => Number.isFinite(Date.parse(value.createdAt || value.date || "")), "Invalid order date"))
 
 interface StoreLocation {
   id: string
@@ -78,7 +89,8 @@ export default function AdminEmployeesPage() {
   const [form, setForm] = useState<EmployeeForm>(EMPTY_FORM)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [salesEmployee, setSalesEmployee] = useState<Employee | null>(null)
-  const [salesOrders, setSalesOrders] = useState<Record<string, any>[]>([])
+  const [salesOrders, setSalesOrders] = useState<z.infer<typeof employeeSalesSchema>>([])
+  const [temporaryLogins, setTemporaryLogins] = useState<Array<{ email: string; password: string }>>([])
   const [salesLoading, setSalesLoading] = useState(false)
 
   const load = async () => {
@@ -93,7 +105,7 @@ export default function AdminEmployeesPage() {
         storesResponse.json(),
       ])
       if (!employeesResponse.ok) throw new Error(employeeData?.error || "Could not load staff")
-      setEmployees(Array.isArray(employeeData) ? employeeData : [])
+      setEmployees(EmployeeListResponseSchema.parse(employeeData))
       setStores(storesResponse.ok && Array.isArray(storeData?.stores) ? storeData.stores : [])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load staff")
@@ -151,13 +163,20 @@ export default function AdminEmployeesPage() {
     if (!lock.acquire()) return
     setSaving(true)
     try {
-      const id = editing !== "new" && editing?._id
+      const id = editing !== "new" && editing?.id
       const response = await apiFetch(id ? `/api/employees/${id}` : "/api/employees", {
         method: id ? "PUT" : "POST",
         json: form,
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result?.error || "Could not save staff member")
+      if (!id) {
+        const created = EmployeeCreationResponseSchema.parse(result)
+        const password = created.temporaryPassword
+        if (password) {
+          setTemporaryLogins(current => [...current, { email: form.email, password }])
+        }
+      }
       toast.success(id ? "Staff access updated" : "Staff member created")
       setEditing(null)
       setForm({ ...EMPTY_FORM, allowedPages: [], storeIds: [] })
@@ -171,9 +190,9 @@ export default function AdminEmployeesPage() {
   }
 
   const remove = async (employee: Employee) => {
-    if (!employee._id || !confirm(`Delete ${employee.name} and their staff login?`)) return
+    if (!employee.id || !confirm(`Delete ${employee.name} and disable their staff login?`)) return
     try {
-      const response = await apiFetch(`/api/employees/${employee._id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/employees/${employee.id}`, { method: "DELETE" })
       if (!response.ok) throw new Error()
       toast.success("Staff member deleted")
       await load()
@@ -217,7 +236,7 @@ export default function AdminEmployeesPage() {
       const response = await apiFetch(`/api/orders?employeeId=${encodeURIComponent(employee.employeeId)}&limit=200`)
       const data = await response.json()
       if (!response.ok) throw new Error(data?.error)
-      setSalesOrders(Array.isArray(data) ? data : [])
+      setSalesOrders(employeeSalesSchema.parse(data))
     } catch {
       setSalesOrders([])
       toast.error("Could not load employee sales")
@@ -240,32 +259,41 @@ export default function AdminEmployeesPage() {
     if (!file) return
     const toastId = toast.loading("Importing staff...")
     try {
+      if (file.size > 10 * 1024 * 1024) throw new Error("Staff spreadsheet exceeds 10 MB")
       const workbook = XLSX.read(await file.arrayBuffer())
-      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]])
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!sheet) throw new Error("Staff spreadsheet has no worksheet")
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
+      if (!rows.length || rows.length > 500) throw new Error("Import between 1 and 500 staff members at a time")
       let success = 0
       let failed = 0
       for (const row of rows) {
         const emailKey = Object.keys(row).find((key) => key.toLowerCase().includes("email"))
-        const email = emailKey ? row[emailKey] : ""
+        const email = emailKey ? String(row[emailKey] ?? "").trim() : ""
         if (!email) continue
         const response = await apiFetch("/api/employees", {
           method: "POST",
           json: {
             ...EMPTY_FORM,
-            name: row.Name || row.name || email.split("@")[0],
+            name: String(row.Name || row.name || email.split("@")[0]),
             email,
-            employeeId: row["Employee ID"] || row.employeeId || `SM${Math.floor(100000 + Math.random() * 900000)}`,
+            employeeId: String(row["Employee ID"] || row.employeeId || `SM${crypto.randomUUID().slice(0, 8)}`),
             department: "Store Operations",
           },
         })
-        if (response.ok) success += 1
-        else failed += 1
+        if (response.ok) {
+          const created = EmployeeCreationResponseSchema.parse(await response.json())
+          const password = created.temporaryPassword
+          if (password) setTemporaryLogins(current => [...current, { email, password }])
+          success += 1
+        } else failed += 1
       }
-      toast.success(`${success} imported, ${failed} failed`, { id: toastId })
+      if (failed) toast.error(`${success} imported, ${failed} failed`, { id: toastId })
+      else toast.success(`${success} imported`, { id: toastId })
       setBulkOpen(false)
       await load()
-    } catch {
-      toast.error("Could not process that spreadsheet", { id: toastId })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not process that spreadsheet", { id: toastId })
     } finally {
       event.target.value = ""
     }
@@ -299,6 +327,17 @@ export default function AdminEmployeesPage() {
         </div>
       </header>
 
+      {temporaryLogins.length > 0 && (
+        <section aria-label="New staff credentials" className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4">
+          <h2 className="font-bold text-amber-950">Save these temporary logins securely</h2>
+          <p className="text-sm text-amber-900">Passwords are randomly generated and shown only in this session. Share them securely and ask staff to change them. Existing accounts keep their current password.</p>
+          <div className="max-h-60 space-y-2 overflow-auto">
+            {temporaryLogins.map(login => <div key={login.email} className="flex flex-wrap gap-3 text-sm"><span>{login.email}</span><code className="break-all">{login.password}</code></div>)}
+          </div>
+          <button type="button" onClick={() => setTemporaryLogins([])} className="rounded border border-amber-500 px-3 py-2 text-sm font-semibold">I have saved the credentials; clear them</button>
+        </section>
+      )}
+
       <section className="grid gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-3">
         <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Total staff</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.length}</p></div>
         <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Dashboard users</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.filter((employee) => employee.dashboardAccess).length}</p></div>
@@ -313,7 +352,7 @@ export default function AdminEmployeesPage() {
       <section className="overflow-hidden border-y border-gray-200 bg-white">
         <div className="hidden grid-cols-[minmax(230px,1.2fr)_minmax(180px,1fr)_minmax(230px,1.1fr)_130px] gap-4 bg-gray-50 px-4 py-2 text-xs font-bold uppercase text-gray-500 md:grid"><span>Staff member</span><span>Assignment</span><span>Access</span><span className="text-right">Actions</span></div>
         {loading ? <div className="flex h-52 items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="h-5 w-5 animate-spin" /> Loading staff...</div> : filtered.length === 0 ? <div className="py-16 text-center text-sm text-gray-500">No staff members match these filters.</div> : filtered.map((employee) => (
-          <div key={employee._id} className="grid gap-3 border-t border-gray-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(230px,1.2fr)_minmax(180px,1fr)_minmax(230px,1.1fr)_130px] md:items-center md:gap-4">
+          <div key={employee.id} className="grid gap-3 border-t border-gray-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(230px,1.2fr)_minmax(180px,1fr)_minmax(230px,1.1fr)_130px] md:items-center md:gap-4">
             <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gray-900 text-sm font-bold text-white">{employee.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-950">{employee.name}</p><p className="truncate text-xs text-gray-500">{employee.email} · {employee.employeeId}</p></div></div>
             <div><p className="text-sm font-medium text-gray-800">{employee.department || "Unassigned"}</p><p className="text-xs text-gray-500">{employee.role || "Staff"}</p></div>
             <div className="flex flex-wrap gap-1.5"><span className={`rounded px-2 py-1 text-xs font-semibold ${employee.dashboardAccess ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"}`}>{employee.dashboardAccess ? `${employee.allowedPages?.length || 0} pages` : "No dashboard"}</span><span className="rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{storeLabel(employee)}</span><span className={`rounded px-2 py-1 text-xs font-semibold ${employee.status === "active" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{employee.status}</span></div>
@@ -329,7 +368,7 @@ export default function AdminEmployeesPage() {
             <div className="grid lg:grid-cols-[360px_minmax(0,1fr)]">
               <div className="space-y-5 border-b border-gray-200 p-5 lg:border-b-0 lg:border-r">
                 <section><h3 className="flex items-center gap-2 text-sm font-bold text-gray-900"><UserRound className="h-4 w-4" /> Identity</h3><div className="mt-3 grid gap-3"><label className="text-xs font-semibold text-gray-600">Employee ID *<input value={form.employeeId} onChange={(event) => setForm({ ...form, employeeId: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><label className="text-xs font-semibold text-gray-600">Full name *<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><label className="text-xs font-semibold text-gray-600">Login email *<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold text-gray-600">Department<input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><label className="text-xs font-semibold text-gray-600">Job title<input value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label></div><label className="text-xs font-semibold text-gray-600">Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as EmployeeForm["status"] })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal"><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div></section>
-                {editing === "new" && <div className="rounded-md border border-blue-200 bg-blue-50 p-3"><p className="flex items-center gap-2 text-xs font-bold text-blue-900"><KeyRound className="h-4 w-4" /> Temporary login</p><p className="mt-1 text-xs text-blue-800">Initial password: <strong>{form.employeeId || "EMPLOYEE_ID"}@12345</strong>. Send it securely and ask staff to change it.</p></div>}
+                {editing === "new" && <div className="rounded-md border border-blue-200 bg-blue-50 p-3"><p className="flex items-center gap-2 text-xs font-bold text-blue-900"><KeyRound className="h-4 w-4" /> Temporary login</p><p className="mt-1 text-xs text-blue-800">A random initial password will be shown after creation for a new login. Existing accounts keep their password.</p></div>}
               </div>
 
               <div className="space-y-6 p-5">
@@ -347,7 +386,7 @@ export default function AdminEmployeesPage() {
         </div>
       )}
 
-      {salesEmployee && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-label="Employee sales"><div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-md bg-white shadow-2xl"><div className="flex items-center justify-between border-b px-5 py-4"><div><h2 className="font-bold text-gray-950">Sales by {salesEmployee.name}</h2><p className="text-xs text-gray-500">{salesEmployee.employeeId}</p></div><button type="button" title="Close" onClick={() => { setSalesEmployee(null); setSalesOrders([]) }}><X className="h-5 w-5" /></button></div>{salesLoading ? <div className="flex h-48 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> : salesOrders.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No sales found.</p> : <div className="divide-y">{salesOrders.map((order) => <div key={String(order.id)} className="grid grid-cols-[1fr_auto] gap-3 px-5 py-3"><div><p className="text-sm font-semibold">{String(order.orderId || order.id)}</p><p className="text-xs text-gray-500">{new Date(order.createdAt || order.date).toLocaleString()}</p></div><div className="text-right"><p className="text-sm font-bold">₹{Number(order.total || 0).toLocaleString("en-IN")}</p><p className="text-xs capitalize text-gray-500">{String(order.status || "pending")}</p></div></div>)}</div>}</div></div>}
+      {salesEmployee && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-label="Employee sales"><div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-md bg-white shadow-2xl"><div className="flex items-center justify-between border-b px-5 py-4"><div><h2 className="font-bold text-gray-950">Sales by {salesEmployee.name}</h2><p className="text-xs text-gray-500">{salesEmployee.employeeId}</p></div><button type="button" title="Close" onClick={() => { setSalesEmployee(null); setSalesOrders([]) }}><X className="h-5 w-5" /></button></div>{salesLoading ? <div className="flex h-48 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> : salesOrders.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No sales found.</p> : <div className="divide-y">{salesOrders.map((order) => <div key={String(order.id)} className="grid grid-cols-[1fr_auto] gap-3 px-5 py-3"><div><p className="text-sm font-semibold">{String(order.orderId || order.id)}</p><p className="text-xs text-gray-500">{new Date(order.createdAt || order.date || "").toLocaleString()}</p></div><div className="text-right"><p className="text-sm font-bold">₹{Number(order.total || 0).toLocaleString("en-IN")}</p><p className="text-xs capitalize text-gray-500">{String(order.status || "pending")}</p></div></div>)}</div>}</div></div>}
 
       {bulkOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-label="Bulk import staff"><div className="w-full max-w-lg rounded-md bg-white shadow-2xl"><div className="flex items-center justify-between border-b px-5 py-4"><h2 className="font-bold text-gray-950">Bulk import staff</h2><button type="button" title="Close" onClick={() => setBulkOpen(false)}><X className="h-5 w-5" /></button></div><div className="space-y-3 p-5"><button type="button" onClick={downloadTemplate} className="flex w-full items-center gap-3 rounded-md border border-gray-200 p-4 text-left hover:bg-gray-50"><FileSpreadsheet className="h-5 w-5 text-blue-700" /><span className="flex-1"><span className="block text-sm font-semibold">Download spreadsheet template</span><span className="block text-xs text-gray-500">Name, email and employee ID columns</span></span><Download className="h-4 w-4" /></button><label className="flex cursor-pointer items-center gap-3 rounded-md border-2 border-dashed border-gray-300 p-5 hover:border-gray-500"><Upload className="h-5 w-5" /><span className="flex-1 text-sm font-semibold">Choose completed Excel file</span><ChevronRight className="h-4 w-4" /><input type="file" accept=".xlsx,.xls" onChange={bulkUpload} className="hidden" /></label><p className="text-xs text-gray-500">Imported staff start with no dashboard or store access. Assign permissions after import.</p></div></div></div>}
     </div>

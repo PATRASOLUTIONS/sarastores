@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
-const _cache: Map<string, { ts: number; data: any }> = new Map()
+const _cache: Map<string, { ts: number; data: unknown }> = new Map()
 
 export async function GET(request: Request) {
   const guard = await requireAdmin()
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     }
 
     const upstream = `${baseUrl.replace(/\/$/, '')}/v1/delivery-partners/${dpId}/wallet/balance`
-    const headers: any = {
+    const headers = {
       'x-client-id': clientId,
       'x-client-secret': clientSecret,
     }

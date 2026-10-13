@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import toast from "react-hot-toast"
@@ -12,7 +12,6 @@ import {
   ChevronRight,
   CreditCard,
   Heart,
-  Loader2,
   MapPin,
   RefreshCw,
   ShieldCheck,
@@ -22,27 +21,36 @@ import {
 } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
+import ProductLoading from "@/components/product/ProductLoading"
 import ProductSpecificationTabs from "@/components/ProductSpecificationTabs"
-import { FeatureTiles, OfferCards, RailCards, ReviewSummary, Stars } from "@/components/product/PdpBlocks"
+import { FeatureTiles, RailCards, Stars } from "@/components/product/PdpBlocks"
+import ProductReviewsSection from "@/components/ProductReviewsSection"
+import RazorpayOffers from "@/components/product/RazorpayOffers"
+import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
+import { applicableOffers, isEmiOffer } from "@/lib/razorpay-offers"
 import { useBanners } from "@/hooks/useBanners"
 import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useSettingsData } from "@/hooks/useSettingsData"
+import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName"
+import { productSuggestions, catalogProductResponseSchema, type CatalogProduct } from "@/utils/catalog"
+import { productSpecificationResponseSchema } from "@/lib/product-specification-response"
+import { productDetailResponseSchema, type ProductDetailResponse } from "@/lib/product-card-response"
+import { z } from "zod"
 import {
   calculateDiscount,
-  emiPerMonth,
-  emiTenure,
   getEffectiveMRP,
-  getRatingInfo,
   titleCaseLabel,
 } from "@/lib/product-display"
 
-type Product = Record<string, any>
+type Product = ProductDetailResponse
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "specifications", label: "Specifications" },
+  { id: "product-images", label: "Product Images" },
   { id: "in-the-box", label: "In the Box" },
   { id: "offers", label: "Offers" },
   { id: "emi", label: "EMI Options" },
@@ -51,8 +59,8 @@ const TABS = [
 ]
 
 const TRUST = [
-  { icon: RefreshCw, label: "7 Days Replacement" },
-  { icon: ShieldCheck, label: "1 Year Warranty" },
+  { icon: RefreshCw, label: "Returns Policy" },
+  { icon: ShieldCheck, label: "Brand Warranty" },
   { icon: BadgeCheck, label: "100% Genuine" },
   { icon: CreditCard, label: "Secure Payment" },
 ]
@@ -60,31 +68,25 @@ const TRUST = [
 const FAQS = [
   {
     q: "Is this product covered by the manufacturer warranty?",
-    a: "Yes. We are a brand-authorised dealer, so every unit carries the complete manufacturer warranty and is serviced through authorised service centres. Your SARA invoice is the proof of purchase.",
+    a: "Warranty coverage and duration depend on the product and manufacturer. Check the Specifications tab and retain your SARA invoice. Contact us if warranty details have not been supplied.",
   },
   {
     q: "Do you install it for me?",
-    a: "Standard installation and a working demonstration are included at no extra cost on eligible products. We call you after delivery to agree a slot that suits you.",
+    a: "Installation availability, charges and scheduling depend on the product and manufacturer. Contact SARA before ordering if you need installation assistance.",
   },
   {
     q: "Can I pay in instalments?",
-    a: "Yes. No-cost EMI is available on eligible orders across major credit and debit cards, with cardless options for customers without a card. Plans are shown at checkout before you pay.",
+    a: "Available EMI offers are supplied by Razorpay. Your bank confirms eligible cards, tenure, interest and processing fees at checkout before you pay.",
   },
   {
     q: "What if it arrives damaged?",
-    a: "Report it within 48 hours of delivery with a photograph and we will replace or refund it. Do not accept a package that arrives visibly tampered with.",
+    a: "Contact SARA promptly with your order number and photographs. Returns and replacements follow our cancellation and returns policy. Do not accept a package that arrives visibly tampered with.",
   },
   {
     q: "Can I collect it from a store instead?",
     a: "Yes. Reserve online and collect from your nearest SARA store — there are stores across Karnataka, listed on our store locator.",
   },
 ]
-
-function deliveryDate(offsetDays: number) {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetDays)
-  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })
-}
 
 /** Bullet-style feature lines rescued from whatever copy the catalogue actually has. */
 function deriveFeatures(product: Product): string[] {
@@ -107,7 +109,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
   const go = (step: number) => setActive((i) => (i + step + list.length) % list.length)
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
+    <div className="bg-white">
       <div className="flex gap-3">
         <div className="hidden w-[58px] flex-shrink-0 flex-col gap-2 sm:flex">
           {list.slice(0, 6).map((src, i) => (
@@ -128,7 +130,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
         </div>
 
         <div className="relative flex-1">
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded bg-white p-4">
+          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-[#dce6f4] bg-white p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={list[active]}
@@ -163,7 +165,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2 sm:hidden">
+      <div className="mt-3 flex gap-2 overflow-x-auto sm:hidden">
         {list.slice(0, 6).map((src, i) => (
           <button
             key={`m-${src}-${i}`}
@@ -184,6 +186,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
 }
 
 export default function ProductDetailPage() {
+  const marketing = useMarketingContent("product")
   const params = useParams<{ slug: string }>()
   const slug = String(params?.slug || "")
   const router = useRouter()
@@ -193,11 +196,23 @@ export default function ProductDetailPage() {
   const { data: settings } = useSettingsData()
 
   const [product, setProduct] = useState<Product | null>(null)
-  const [catalogue, setCatalogue] = useState<Product[]>([])
+  const [catalogue, setCatalogue] = useState<CatalogProduct[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true)
+  const [suggestionsError, setSuggestionsError] = useState("")
+  const [suggestionsAttempt, setSuggestionsAttempt] = useState(0)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [loadError, setLoadError] = useState("")
+  const [attempt, setAttempt] = useState(0)
+  const [specsError, setSpecsError] = useState("")
   const [adding, setAdding] = useState<"cart" | "buy" | null>(null)
   const [tab, setTab] = useState("overview")
+  const [reviewStats, setReviewStats] = useState<{ rating: number; count: number } | null>(null)
+  const updateReviewStats = useCallback((next: { rating: number; count: number }) => {
+    setReviewStats(previous => previous?.rating === next.rating && previous.count === next.count ? previous : next)
+  }, [])
+  const bankOffers = useRazorpayOffers()
+  const liveOffers = applicableOffers(bankOffers.offers, Number(product?.price) || 0)
 
   useEffect(() => {
     if (!slug) return
@@ -205,31 +220,77 @@ export default function ProductDetailPage() {
 
     const load = async () => {
       setLoading(true)
+      setNotFound(false)
+      setLoadError("")
+      setSpecsError("")
+      setTab("overview")
+      setReviewStats(null)
       try {
         const res = await fetch(`/api/products/${encodeURIComponent(slug)}`)
-        if (!res.ok) throw new Error("not found")
-        const data = await res.json()
-        if (!cancelled) setProduct(data)
-      } catch {
-        if (!cancelled) setNotFound(true)
+        if (res.status === 404) { if (!cancelled) setNotFound(true); return }
+        if (!res.ok) throw new Error("Product could not be loaded")
+        const data = catalogProductResponseSchema.parse(await res.json())
+        if (data.sku) {
+          const specResponse = await fetch(`/api/products/specifications/${encodeURIComponent(data.sku)}`)
+          if (specResponse.ok) {
+            const specs = productSpecificationResponseSchema.parse(await specResponse.json())
+            for (const key of ["technical_details", "from_manufacturer", "specification_images", "reviews", "overview", "included_components", "features"]) {
+              if (specs[key] != null && (!Array.isArray(specs[key]) || specs[key].length)) data[key] = specs[key]
+            }
+            if (!data.mrp && specs.mrp) data.mrp = Number(specs.mrp)
+          } else if (specResponse.status !== 404 && !cancelled) {
+            console.error("[Product] Specifications failed:", specResponse.status)
+            setSpecsError("Some product details could not be loaded.")
+          }
+        }
+        if (!cancelled) setProduct(productDetailResponseSchema.parse(data))
+      } catch (error) {
+        console.error("[Product] Loading failed:", error)
+        if (!cancelled) setLoadError("Product information could not be loaded. Please retry.")
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
 
     load()
-    fetch("/api/products?fields=card")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => !cancelled && Array.isArray(d) && setCatalogue(d))
-      .catch(() => {})
 
     return () => {
       cancelled = true
     }
-  }, [slug])
+  }, [slug, attempt])
 
-  const offers = useBanners("pdp-offer", product?.manufacturerName || product?.brand)
-  const railCards = useBanners("pdp-rail", product?.manufacturerName || product?.brand)
+  useEffect(() => {
+    const controller = new AbortController()
+    const loadSuggestions = async () => {
+      setSuggestionsLoading(true)
+      setSuggestionsError("")
+      setCatalogue([])
+      try {
+        const products: CatalogProduct[] = []
+        const pageSize = 500
+        for (let skip = 0; ; skip += pageSize) {
+          const response = await fetch(`/api/products?fields=card&limit=${pageSize}&skip=${skip}`, { signal: controller.signal })
+          if (!response.ok) throw new Error("Product suggestions could not be loaded")
+          const page = z.array(catalogProductResponseSchema).parse(await response.json())
+          products.push(...page)
+          if (page.length < pageSize) break
+        }
+        if (!controller.signal.aborted) setCatalogue(products)
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.error("[Product] Suggestions failed:", error)
+          setSuggestionsError("Product suggestions could not be loaded.")
+        }
+      } finally {
+        if (!controller.signal.aborted) setSuggestionsLoading(false)
+      }
+    }
+    void loadSuggestions()
+    return () => controller.abort()
+  }, [slug, suggestionsAttempt])
+
+  const configuredRailCards = useBanners("pdp-rail", product?.manufacturerName || product?.brand || undefined)
+  const railCards = marketing.enabled("rail") ? configuredRailCards : []
 
   const images = useMemo(() => {
     if (!product) return []
@@ -239,33 +300,15 @@ export default function ProductDetailPage() {
 
   const features = useMemo(() => (product ? deriveFeatures(product) : []), [product])
 
-  const companions = useMemo(() => {
-    if (!product) return []
-    const sub = String(product.subCategory || "").toLowerCase()
-    return catalogue
-      .filter(
-        (p) =>
-          p.id !== product.id &&
-          p.image &&
-          Number(p.price) > 0 &&
-          Number(p.price) < Number(product.price) &&
-          String(p.subCategory || "").toLowerCase() === sub,
-      )
-      .slice(0, 6)
-  }, [catalogue, product])
+  const companions = useMemo(() => product ? productSuggestions(product, catalogue) : [], [catalogue, product])
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <Header />
-        <main className="section-container flex flex-grow items-center justify-center py-24">
-          <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
-        </main>
-        <Footer />
-      </div>
-    )
+    return <ProductLoading />
   }
 
+  if (loadError) return <div className="flex min-h-screen flex-col"><Header /><main className="section-container flex-grow py-16">
+    <p role="alert">{loadError} <button type="button" className="text-[#1560bd] underline" onClick={() => setAttempt(value => value + 1)}>Retry product</button></p>
+  </main><Footer /></div>
   if (notFound || !product) {
     return (
       <div className="flex min-h-screen flex-col">
@@ -287,12 +330,17 @@ export default function ProductDetailPage() {
 
   const name = cleanProductName(product.name)
   const brand = String(product.manufacturerName || product.brand || "")
-  const mrp = getEffectiveMRP(product)
+  const hasMrp = Number(product.mrp || product.originalPrice || product.raw?.MRP || product.raw?.mrp) > 0
+  const mrp = hasMrp ? getEffectiveMRP(product) : Number(product.price)
   const discount = calculateDiscount(mrp, product.price)
-  const rating = getRatingInfo(product)
+  const recordedReviews = Array.isArray(product.reviews) ? product.reviews : []
+  const reviewSummary = product.reviews && typeof product.reviews === "object" && !Array.isArray(product.reviews) ? product.reviews : undefined
+  const reviewRating = recordedReviews.map((review) => Number.parseFloat(String(review.rating))).filter((value) => value >= 1 && value <= 5)
+  const recordedRating = { rating: Number(product.rating || reviewSummary?.average) || (reviewRating.length ? reviewRating.reduce((sum: number, value: number) => sum + value, 0) / reviewRating.length : 0),
+    count: Number(product.reviewsCount || reviewSummary?.count) || recordedReviews.length }
+  const rating = reviewStats || recordedRating
   const inStock = typeof product.stock === "number" ? product.stock > 0 : product.inStock !== false
   const wishlisted = isInWishlist(String(product.id))
-  const pincode = settings?.storePincode || "560001"
   const freeShippingThreshold = Number(settings?.freeShippingThreshold ?? 10000)
   const freeDelivery = Number(product.price) >= freeShippingThreshold
 
@@ -300,15 +348,17 @@ export default function ProductDetailPage() {
     if (adding) return
     setAdding(buyNow ? "buy" : "cart")
     try {
-      await addToCart({
+      const added = await addToCart({
         id: String(product.id),
         name: product.name,
         price: product.price,
         image: images[0] || "/placeholder.svg",
         quantity: 1,
+        stock: product.stock,
         color: null,
         size: null,
       })
+      if (!added) return
       if (buyNow) {
         router.push("/checkout")
       } else {
@@ -320,11 +370,12 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-white" data-product-detail>
       <Header />
 
       <main className="flex-grow">
         <div className="section-container space-y-5 py-4">
+          <MarketingStatus page="product" />
           <nav className="flex flex-wrap items-center gap-1.5 text-[12px] text-gray-500" aria-label="Breadcrumb">
             <Link href="/" className="hover:text-[#1560BD]">
               Home
@@ -364,12 +415,12 @@ export default function ProductDetailPage() {
           </nav>
 
           {/* ── Hero ─────────────────────────────────────────────── */}
-          <div className="grid gap-5 lg:grid-cols-12">
-            <div className="lg:col-span-5">
-              <Gallery images={images} name={name} />
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,.85fr)_minmax(0,.9fr)]">
+            <div className="min-w-0">
+              <Gallery key={slug} images={images} name={name} />
             </div>
 
-            <div className="lg:col-span-4">
+            <div className="min-w-0">
               {brand && (
                 <Link
                   href={`/products?brand=${encodeURIComponent(brand)}`}
@@ -388,14 +439,14 @@ export default function ProductDetailPage() {
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="flex items-center gap-1.5">
                   <Stars rating={rating.rating} />
-                  <span className="text-[13px] font-semibold text-gray-800">{rating.rating.toFixed(1)}</span>
+                  <span className="text-[13px] font-semibold text-gray-800">{rating.count > 0 ? rating.rating.toFixed(1) : "No reviews yet"}</span>
                   <span className="text-[12px] text-gray-500">
                     ({rating.count >= 1000 ? `${(rating.count / 1000).toFixed(1)}K` : rating.count} reviews)
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[#0F8A3C]">
+                <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[#007a38]">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Brand Authorised
+                  Genuine Product
                 </span>
               </div>
 
@@ -418,7 +469,7 @@ export default function ProductDetailPage() {
                 </span>
                 {discount > 0 && (
                   <>
-                    <span className="text-sm text-gray-400 line-through">₹{mrp.toLocaleString("en-IN")}</span>
+                    <span className="text-sm text-gray-600 line-through">₹{mrp.toLocaleString("en-IN")}</span>
                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
                       {discount}% off
                     </span>
@@ -427,15 +478,15 @@ export default function ProductDetailPage() {
               </div>
               <p className="mt-1 text-[12px] text-gray-500">Inclusive of all taxes</p>
 
-              {Number(product.price) >= 5000 && (
-                <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+              {liveOffers.some(isEmiOffer) && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#1560BD]" />
                   <span className="text-[13px] font-medium text-gray-800">
-                    EMI from ₹{emiPerMonth(product.price).toLocaleString("en-IN")}/month
+                    EMI offers available
                   </span>
-                  <Link href="/emi" className="text-[12px] font-semibold text-[#1560BD] hover:underline">
+                  <button type="button" onClick={() => { setTab("emi"); document.getElementById("product-details-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" }) }} className="text-[12px] font-semibold text-[#1560BD] hover:underline">
                     View EMI options →
-                  </Link>
+                  </button>
                 </div>
               )}
 
@@ -455,7 +506,7 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Buy box */}
-            <div className="lg:col-span-3">
+            <div className="min-w-0">
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white lg:sticky lg:top-24">
                 <div
                   className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold ${
@@ -470,10 +521,7 @@ export default function ProductDetailPage() {
                   <div className="flex items-start gap-2 text-[12px]">
                     <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
                     <span className="text-gray-600">
-                      Deliver to Bengaluru - {pincode}{" "}
-                      <Link href="/store-locator" className="font-semibold text-[#1560BD] hover:underline">
-                        Change
-                      </Link>
+                      Choose your delivery address at checkout
                     </span>
                   </div>
 
@@ -481,21 +529,21 @@ export default function ProductDetailPage() {
                     <Truck className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
                     <div>
                       <p className="text-[12px] font-semibold text-gray-800">
-                        {freeDelivery ? "FREE" : "Standard"} Delivery by {deliveryDate(3)}
+                        {freeDelivery ? "FREE" : "Standard"} Delivery
                       </p>
-                      <p className="text-[11px] text-gray-500">Order today for the earliest slot</p>
+                      <p className="text-[11px] text-gray-500">Delivery date and address confirmed at checkout</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-2">
+                  {marketing.enabled("pickup") && <div className="flex items-start gap-2">
                     <Store className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
                     <div>
-                      <p className="text-[12px] font-semibold text-gray-800">Available for Store Pickup</p>
-                      <Link href="/store-locator" className="text-[11px] font-semibold text-[#1560BD] hover:underline">
-                        View Stores →
+                      <p className="text-[12px] font-semibold text-gray-800">{marketing.text("pickup", "title")}</p>
+                      <Link href={marketing.text("pickup", "ctaLink")} className="text-[11px] font-semibold text-[#1560BD] hover:underline">
+                        {marketing.text("pickup", "ctaText")} →
                       </Link>
                     </div>
-                  </div>
+                  </div>}
 
                   <div className="flex gap-2 pt-1">
                     <button
@@ -526,29 +574,30 @@ export default function ProductDetailPage() {
                     {adding === "buy" ? "Taking you to checkout…" : "Buy Now"}
                   </button>
 
-                  <ul className="grid grid-cols-2 gap-x-2 gap-y-3 border-t border-gray-100 pt-3.5">
-                    {TRUST.map(({ icon: Icon, label }) => (
+                  {marketing.enabled("trust") && <ul className="grid grid-cols-4 gap-x-2 gap-y-3 border-t border-gray-100 pt-3.5">
+                    {TRUST.map(({ icon: Icon, label }, index) => (
                       <li key={label} className="flex flex-col items-center gap-1 text-center">
-                        <Icon className="h-4 w-4 text-gray-400" strokeWidth={1.75} />
-                        <span className="text-[10px] leading-tight text-gray-600">{label}</span>
+                        <Icon className="h-4 w-4 text-[#1560BD]" strokeWidth={1.75} />
+                        <span className="text-[10px] leading-tight text-[#1560BD]">{marketing.text("trust", `item${index + 1}Title`, label)}</span>
                       </li>
                     ))}
-                  </ul>
+                  </ul>}
                 </div>
               </div>
             </div>
           </div>
 
-          <OfferCards offers={offers} />
+          <RazorpayOffers offers={liveOffers} loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} mode="rail" onSelect={id => { setTab(id); document.getElementById("product-details-tabs")?.scrollIntoView({ behavior: "smooth" }) }} />
 
           {/* ── Tabs ─────────────────────────────────────────────── */}
-          <div className="rounded-lg border border-gray-200 bg-white">
-            <div className="flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {TABS.map(({ id, label }) => (
+          <div id="product-details-tabs" className="min-w-0 scroll-mt-4 bg-white">
+            <div className="flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Product details">
+              {TABS.filter(item => item.id !== "faqs" || marketing.enabled("faqs")).map(({ id, label }) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setTab(id)}
+                  role="tab" aria-selected={tab === id} aria-controls={`product-panel-${id}`} id={`product-tab-${id}`}
                   className={`whitespace-nowrap border-b-2 px-4 py-3 text-[13px] font-semibold transition-colors ${
                     tab === id
                       ? "border-[#1560BD] text-[#1560BD]"
@@ -561,9 +610,10 @@ export default function ProductDetailPage() {
               ))}
             </div>
 
-            <div className="p-5">
+            <div className="py-5" role="tabpanel" id={`product-panel-${tab}`} aria-labelledby={`product-tab-${tab}`}>
+              {specsError && <p role="alert" className="mb-4 text-sm text-amber-800">{specsError} <button type="button" className="underline" onClick={() => setAttempt(value => value + 1)}>Retry product details</button></p>}
               {tab === "overview" && (
-                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,280px)]">
+                <div className={`grid gap-5 ${railCards.length ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,240px)]" : ""}`}>
                   <div>
                     <h2 className="font-heading text-lg font-bold text-gray-900">{name}</h2>
                     <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-gray-600">
@@ -581,19 +631,24 @@ export default function ProductDetailPage() {
                       </div>
                     )}
 
-                    {companions.length > 0 && (
-                      <div className="mt-8">
-                        <h3 className="font-heading text-base font-bold text-gray-900">Frequently Bought Together</h3>
+                      {marketing.enabled("suggestions") && <section className="mt-8" aria-label="Product suggestions">
+                        <h3 className="font-heading text-base font-bold text-gray-900">{marketing.text("suggestions", "title")}</h3>
+                        <p className="mt-1 text-xs text-gray-500">{marketing.text("suggestions", "description")}</p>
+                        {marketing.text("suggestions", "description") !== "Suggested products from our catalog, not based on purchase history." &&
+                          <p className="mt-1 text-xs text-gray-500">Suggested products from our catalog, not based on purchase history.</p>}
+                        {suggestionsLoading ? <p role="status" className="mt-4 text-sm text-gray-500">Loading product suggestions...</p> :
+                          suggestionsError ? <p role="alert" className="mt-4 text-sm text-amber-800">{suggestionsError} <button type="button" className="text-[#1560BD] underline" onClick={() => setSuggestionsAttempt(value => value + 1)}>Retry suggestions</button></p> :
+                          !companions.length ? <p className="mt-4 text-sm text-gray-500">No related products are currently available.</p> : (
                         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                           {companions.map((c) => (
-                            <Link
+                            <article
                               key={c.id}
-                              href={`/product/${c.slug || c.id}`}
                               className="group rounded-lg border border-gray-200 p-2 text-center transition-shadow hover:shadow-md"
                             >
+                              <Link href={`/product/${c.slug || c.id}`}>
                               <span className="flex h-16 items-center justify-center overflow-hidden rounded bg-gray-50">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={c.image} alt="" aria-hidden className="h-full w-full object-contain p-1" />
+                                <img src={c.image} alt={cleanProductName(c.name)} className="h-full w-full object-contain p-1" loading="lazy" />
                               </span>
                               <p className="mt-1.5 line-clamp-2 text-[11px] leading-tight text-gray-700">
                                 {cleanProductName(c.name)}
@@ -601,22 +656,29 @@ export default function ProductDetailPage() {
                               <p className="mt-1 text-[11px] font-bold text-gray-900">
                                 ₹{Number(c.price).toLocaleString("en-IN")}
                               </p>
-                            </Link>
+                              </Link><button type="button" className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd]" onClick={async () => {
+                                const added = await addToCart({ id: String(c.id), name: c.name, price: c.price, image: c.image, quantity: 1, color: null, size: null, stock: c.stock })
+                                if (added) toast.success(`${cleanProductName(c.name)} added to cart`)
+                              }}>Add</button>
+                            </article>
                           ))}
                         </div>
-                      </div>
-                    )}
+                        )}
+                      </section>}
                   </div>
 
                   <RailCards cards={railCards} />
                 </div>
               )}
 
-              {tab === "specifications" && (
+              {(tab === "specifications" || tab === "product-images") && (
                 <ProductSpecificationTabs
+                  key={`${product.id}-${tab}`}
+                  section={tab === "specifications" ? "specs" : "manufacturer"}
                   technicalDetails={product.technical_details}
                   fromManufacturer={product.from_manufacturer}
                   specificationImages={product.specification_images}
+                  fallbackImages={images}
                   productDescription={product.description}
                   sku={product.sku}
                   productId={product.id}
@@ -631,21 +693,20 @@ export default function ProductDetailPage() {
 
               {tab === "in-the-box" && (
                 <ul className="space-y-2 text-[13px] text-gray-700">
-                  {(Array.isArray(product.included_components) && product.included_components.length > 0
-                    ? product.included_components
-                    : ["Main unit", "User manual", "Warranty card", "Standard accessories as supplied by the brand"]
-                  ).map((item: string) => (
+                  {(Array.isArray(product.included_components) ? product.included_components :
+                    String(product.technical_details?.["Included Components"] || "").split(",").filter(Boolean)).map((item: string) => (
                     <li key={item} className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-[#0F8A3C]" />
                       {item}
                     </li>
                   ))}
+                  {!product.included_components?.length && !product.technical_details?.["Included Components"] && <li>Box contents have not been provided by the manufacturer.</li>}
                 </ul>
               )}
 
               {tab === "offers" && (
                 <div className="space-y-4">
-                  <OfferCards offers={offers} />
+                  <RazorpayOffers offers={liveOffers} loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} />
                   <p className="text-[13px] text-gray-600">
                     The exact discount that applies to your order is shown at checkout before payment. See all{" "}
                     <Link href="/offers" className="font-semibold text-[#1560BD] hover:underline">
@@ -657,37 +718,19 @@ export default function ProductDetailPage() {
               )}
 
               {tab === "emi" && (
-                <div className="space-y-3 text-[13px] text-gray-700">
-                  <p>
-                    No-cost EMI on this product runs up to {emiTenure(product.price)} months, from{" "}
-                    <strong>₹{emiPerMonth(product.price).toLocaleString("en-IN")}/month</strong> on eligible cards.
-                  </p>
-                  <ul className="list-disc space-y-1.5 pl-5 text-gray-600">
-                    <li>Available on major credit cards and selected debit cards.</li>
-                    <li>Cardless finance available through our partner lenders, subject to approval.</li>
-                    <li>Eligibility, tenure and rate are set by your bank, not by SARA.</li>
-                  </ul>
-                  <Link href="/emi" className="inline-block font-semibold text-[#1560BD] hover:underline">
-                    Full EMI terms →
-                  </Link>
-                </div>
+                <RazorpayOffers offers={liveOffers} loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} mode="emi" />
               )}
 
               {tab === "reviews" && (
-                <div className="space-y-8">
-                  <ReviewSummary average={rating.rating} count={rating.count} distribution={[68, 22, 7, 2, 1]} />
-                  <p className="text-[13px] text-gray-500">
-                    Verified reviews from SARA customers appear here as orders are delivered.
-                  </p>
-                </div>
+                <ProductReviewsSection embedded productId={String(product.id)} productName={name} productImage={images[0]} seedReviews={recordedReviews} average={recordedRating.count ? recordedRating.rating : undefined} count={recordedRating.count} onStatsChange={updateReviewStats} />
               )}
 
-              {tab === "faqs" && (
+              {tab === "faqs" && marketing.enabled("faqs") && (
                 <dl className="divide-y divide-gray-100">
-                  {FAQS.map(({ q, a }) => (
+                  {FAQS.map(({ q, a }, index) => (
                     <div key={q} className="py-4 first:pt-0 last:pb-0">
-                      <dt className="text-[13px] font-bold text-gray-900">{q}</dt>
-                      <dd className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{a}</dd>
+                      <dt className="text-[13px] font-bold text-gray-900">{marketing.text("faqs", `item${index + 1}Title`, q)}</dt>
+                      <dd className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{marketing.text("faqs", `item${index + 1}Detail`, a)}</dd>
                     </div>
                   ))}
                 </dl>

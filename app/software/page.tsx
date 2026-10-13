@@ -12,6 +12,8 @@ import Footer from '@/components/Footer'
 import BrandMarquee from '@/components/BrandMarquee'
 import SubCategoriesMarquee from '@/components/SubCategoriesMarquee'
 import HeroSection from '@/components/HeroSection'
+import type { IntegrationProduct, IntegrationProductList, IntegrationVariant } from '@/types/integration'
+import type { CartItem } from '@/contexts/CartContext'
 
 interface SoftwareProduct {
   _id: string
@@ -43,7 +45,15 @@ interface SoftwareProduct {
   }
   status: string
   totalKeysAvailable: number
+  isKGen?: boolean
+  provider?: string
+  kgenRaw?: IntegrationProduct
+  kgenVariants?: IntegrationVariant[]
+  kgenProductId?: string | null
+  kgenVariantId?: string | null
 }
+
+const LICENSE_OPTIONS = [1, 2, 3, 4, 5] as const
 
 export default function SoftwarePage() {
   const [products, setProducts] = useState<SoftwareProduct[]>([])
@@ -51,7 +61,7 @@ export default function SoftwarePage() {
   const [selectedProduct, setSelectedProduct] = useState<SoftwareProduct | null>(null)
   const [packSize, setPackSize] = useState<1 | 2 | 3 | 4 | 5>(1)
   const [validityYears, setValidityYears] = useState<1 | 2 | 3 | 4 | 5>(1)
-  const [selectedIntegrationVariant, setSelectedIntegrationVariant] = useState<any | null>(null)
+  const [selectedIntegrationVariant, setSelectedIntegrationVariant] = useState<IntegrationVariant | null>(null)
 
   // Filter states
   const [showFilters, setShowFilters] = useState(false)
@@ -107,8 +117,8 @@ export default function SoftwarePage() {
 
   // When an integration (KGen) product is selected, pre-select its first variant for the integration modal
   useEffect(() => {
-    if (selectedProduct && (selectedProduct as any).isKGen) {
-      const variants = (selectedProduct as any).kgenVariants || []
+    if (selectedProduct?.isKGen) {
+      const variants = selectedProduct.kgenVariants || []
       setSelectedIntegrationVariant(variants.length > 0 ? variants[0] : null)
     } else {
       setSelectedIntegrationVariant(null)
@@ -122,7 +132,7 @@ export default function SoftwarePage() {
       const response = await fetch('/api/software?status=active')
       const data = await response.json().catch(() => null)
       if (data && data.success) internalProducts = data.products || []
-      else if (Array.isArray(data)) internalProducts = data as any
+      else if (Array.isArray(data)) internalProducts = data
     } catch (error) {
       console.error('Error fetching internal software list:', error)
       // continue; we still want to try loading external products
@@ -133,22 +143,23 @@ export default function SoftwarePage() {
     try {
       const kres = await fetch('/api/integrations/exlr8/products?limit=50')
       if (kres.ok) {
-        const kdata = await kres.json().catch(() => null)
+        const kdata: IntegrationProduct[] | IntegrationProductList = await kres.json()
         // normalize list shapes
-        let klist: any[] = []
+        let klist: IntegrationProduct[] = []
         if (Array.isArray(kdata)) klist = kdata
         else if (Array.isArray(kdata.data)) klist = kdata.data
         else if (Array.isArray(kdata.products)) klist = kdata.products
         else if (Array.isArray(kdata.items)) klist = kdata.items
 
-        mappedKGen = klist.map((it: any) => {
-          const id = it.productID || it.productId || it.id || String(it._id) || ''
+        mappedKGen = klist.map((it) => {
+          const id = it.productID || it.productId || it.id || it._id
+          if (!id) throw new Error("Integration product is missing its identifier")
           const name = it.productDisplayName || it.productName || it.productDisplayName || ('KGen Product ' + id)
           const image = Array.isArray(it.attachments) && it.attachments.length > 0 ? it.attachments[0] : '/placeholder.png'
           const categories = Array.isArray(it.categories) ? it.categories : []
           const categoryName = categories[0]?.categoryName || 'KGen'
           const variants = Array.isArray(it.variants) ? it.variants : []
-          const totalStock = variants.reduce((s: number, v: any) => s + (Number(v.stock) || 0), 0)
+          const totalStock = variants.reduce((s, v) => s + (Number(v.stock) || 0), 0)
 
           // Map variant pricing into pack1 (primary price) and keep full variant list in kgenVariants
           const primaryPrice = Number(variants[0]?.price ?? variants[0]?.mrp ?? 0)
@@ -171,7 +182,7 @@ export default function SoftwarePage() {
             provider: 'exlr8',
             kgenRaw: it,
             kgenVariants: variants,
-          } as any
+          }
         })
       } else {
         console.warn('KGen products proxy returned non-ok status', kres.status)
@@ -341,7 +352,7 @@ export default function SoftwarePage() {
     })
   }, [products, searchTerm, selectedCategories, priceRange, selectedPackSizes, selectedValidityYears, availablePackSizes, availableValidityYears])
 
-  const addToCart = (product: SoftwareProduct, variant?: any) => {
+  const addToCart = async (product: SoftwareProduct, variant?: IntegrationVariant | null) => {
     if (!user) {
       toast.error('Please login to add items to cart')
       if (typeof window !== 'undefined') {
@@ -350,14 +361,20 @@ export default function SoftwarePage() {
       return
     }
     // Support KGen integration items which provide variants.
-    let cartItem: any
-    if ((product as any).isKGen) {
+    let cartItem: CartItem
+    if (product.isKGen) {
       if (!variant) {
         toast.error('Please select a variant for this product')
         return
       }
+      const variantId = variant.variantID || variant.id
+      const productId = product.kgenRaw?.productID || product.kgenRaw?.productId || product.kgenRaw?.id || product.kgenRaw?._id
+      if (!variantId || !productId) {
+        toast.error("This integration product is missing its purchase identifiers")
+        return
+      }
       cartItem = {
-        id: `${product._id}::${variant.variantID}`,
+        id: `${product._id}::${variantId}`,
         name: `${product.name} - ${variant.variantDisplayName || variant.variantName}`,
         image: product.image,
         packSize: 1,
@@ -368,9 +385,11 @@ export default function SoftwarePage() {
         quantity: 1,
         type: 'software' as const,
         source: 'kgen',
-        provider: (product as any).provider || 'exlr8',
-        kgenProductId: (product as any).kgenRaw?.productID || null,
-        kgenVariantId: variant.variantID,
+        provider: product.provider || 'exlr8',
+        kgenProductId: productId,
+        kgenVariantId: variantId,
+        color: null,
+        size: null,
       }
     } else {
       const price = calculatePrice(product)
@@ -392,10 +411,10 @@ export default function SoftwarePage() {
 
     try {
       // Get existing cart
-      const existingCart = JSON.parse(localStorage.getItem(`cart_${user.id}`) || '[]')
+      const existingCart: CartItem[] = JSON.parse(localStorage.getItem(`cart_${user.id}`) || '[]')
       
       // Check if item already exists in cart
-      const existingItemIndex = existingCart.findIndex((item: any) => item.id === cartItem.id)
+      const existingItemIndex = existingCart.findIndex((item) => item.id === cartItem.id)
       if (existingItemIndex >= 0) {
         // Update quantity if item exists
         existingCart[existingItemIndex].quantity += 1
@@ -404,6 +423,9 @@ export default function SoftwarePage() {
         existingCart.push(cartItem)
       }
       
+      const { cartLimitError } = await import("@/lib/cart-limits")
+      const limitError = cartLimitError(existingCart)
+      if (limitError) { toast.error(limitError); return }
       // Save to localStorage
       localStorage.setItem(`cart_${user.id}`, JSON.stringify(existingCart))
       
@@ -424,9 +446,9 @@ export default function SoftwarePage() {
 
   const handleSelectProduct = (product: SoftwareProduct) => {
     // When selecting a KGen/exlr8 product, attach kgen ids to the selectedProduct
-    if ((product as any).isKGen) {
-      const kgenProductId = (product as any).kgenRaw?.productID || (product as any).kgenRaw?.productId || null
-      const variants = (product as any).kgenVariants || []
+    if (product.isKGen) {
+      const kgenProductId = product.kgenRaw?.productID || product.kgenRaw?.productId || null
+      const variants = product.kgenVariants || []
       const firstVariant = variants.length > 0 ? variants[0] : null
       const kgenVariantId = firstVariant ? (firstVariant.variantID || firstVariant.id || null) : null
 
@@ -434,7 +456,7 @@ export default function SoftwarePage() {
       setSelectedIntegrationVariant(firstVariant)
 
       // Store enhanced product object so downstream flows (modals, add-to-cart) can read kgen ids directly
-      setSelectedProduct({ ...(product as any), kgenProductId, kgenVariantId } as any)
+      setSelectedProduct({ ...product, kgenProductId, kgenVariantId })
       return
     }
 
@@ -558,6 +580,8 @@ export default function SoftwarePage() {
                     <h3 className="text-sm font-medium text-gray-700">Price Range</h3>
                     <button
                       onClick={() => toggleFilter('price')}
+                      aria-label="Toggle price range filters"
+                      aria-expanded={openFilters.price}
                       className="p-1 hover:bg-gray-100 rounded-md"
                     >
                       <ChevronDown
@@ -592,8 +616,9 @@ export default function SoftwarePage() {
 
                       <div className="flex justify-between items-center gap-4 mt-2">
                         <div className="flex-1">
-                          <label className="text-xs text-gray-500">Min Price</label>
+                          <label htmlFor="software-min-price" className="text-xs text-gray-500">Min Price</label>
                           <input
+                            id="software-min-price"
                             type="number"
                             value={priceRange[0]}
                             onChange={(e) => setPriceRange([Number(e.target.value), priceRange[1]])}
@@ -603,8 +628,9 @@ export default function SoftwarePage() {
                           />
                         </div>
                         <div className="flex-1">
-                          <label className="text-xs text-gray-500">Max Price</label>
+                          <label htmlFor="software-max-price" className="text-xs text-gray-500">Max Price</label>
                           <input
+                            id="software-max-price"
                             type="number"
                             value={priceRange[1]}
                             onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value)])}
@@ -624,6 +650,8 @@ export default function SoftwarePage() {
                     <h3 className="text-sm font-medium text-gray-700">Categories</h3>
                     <button
                       onClick={() => toggleFilter('categories')}
+                      aria-label="Toggle category filters"
+                      aria-expanded={openFilters.categories}
                       className="p-1 hover:bg-gray-100 rounded-md"
                     >
                       <ChevronDown className={`h-4 w-4 transition-transform ${openFilters.categories ? '' : '-rotate-90'}`} />
@@ -661,6 +689,8 @@ export default function SoftwarePage() {
                     <h3 className="text-sm font-medium text-gray-700">License Packs</h3>
                     <button
                       onClick={() => toggleFilter('packSizes')}
+                      aria-label="Toggle license pack filters"
+                      aria-expanded={openFilters.packSizes}
                       className="p-1 hover:bg-gray-100 rounded-md"
                     >
                       <ChevronDown className={`h-4 w-4 transition-transform ${openFilters.packSizes ? '' : '-rotate-90'}`} />
@@ -688,6 +718,8 @@ export default function SoftwarePage() {
                     <h3 className="text-sm font-medium text-gray-700">Validity Period</h3>
                     <button
                       onClick={() => toggleFilter('validityYears')}
+                      aria-label="Toggle validity period filters"
+                      aria-expanded={openFilters.validityYears}
                       className="p-1 hover:bg-gray-100 rounded-md"
                     >
                       <ChevronDown className={`h-4 w-4 transition-transform ${openFilters.validityYears ? '' : '-rotate-90'}`} />
@@ -823,16 +855,16 @@ export default function SoftwarePage() {
               </div>
 
               {/* Integration product modal */}
-              {(selectedProduct as any).isKGen ? (
+              {selectedProduct.isKGen ? (
                 <div>
                   <div className="mb-4">
-                    <img src={(selectedProduct as any).image} alt={selectedProduct.name} className="w-full h-48 object-cover rounded" />
+                    <img src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-48 object-cover rounded" />
                   </div>
 
                   <div className="mb-4">
                     <h3 className="font-semibold">Variants</h3>
                     <div className="mt-2 grid gap-3">
-                      {((selectedProduct as any).kgenVariants || []).map((v: any) => (
+                      {(selectedProduct.kgenVariants || []).map((v) => (
                         <label key={v.variantID} className={`p-3 border rounded flex items-center justify-between cursor-pointer ${selectedIntegrationVariant?.variantID === v.variantID ? 'border-brand-primary bg-brand-primary-subtle' : 'border-gray-200'}`}>
                           <div>
                             <div className="font-semibold">{v.variantDisplayName || v.variantName}</div>
@@ -847,7 +879,7 @@ export default function SoftwarePage() {
                           />
                         </label>
                       ))}
-                      {((selectedProduct as any).kgenVariants || []).length === 0 && (
+                      {(selectedProduct.kgenVariants || []).length === 0 && (
                         <div className="text-sm text-gray-600">No variants available.</div>
                       )}
                     </div>
@@ -855,12 +887,12 @@ export default function SoftwarePage() {
 
                   <div className="mb-4 bg-gray-50 rounded-lg p-4">
                     <h3 className="font-semibold">Redemption Instructions</h3>
-                    <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{(selectedProduct as any).kgenRaw?.redemptionInstructions || 'Follow instructions provided by the partner.'}</p>
+                    <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{selectedProduct.kgenRaw?.redemptionInstructions || 'Follow instructions provided by the partner.'}</p>
                   </div>
 
                   <div className="mb-4 bg-white rounded-lg p-4 border">
                     <h3 className="font-semibold">Terms & Conditions</h3>
-                    <p className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{(selectedProduct as any).kgenRaw?.termsAndConditions || ''}</p>
+                    <p className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{selectedProduct.kgenRaw?.termsAndConditions || ''}</p>
                   </div>
 
                   <div className="flex gap-3">
@@ -882,11 +914,11 @@ export default function SoftwarePage() {
                   <div className="mb-6">
                     <label className="block text-sm font-semibold mb-3">Number of Licenses</label>
                     <div className="grid grid-cols-5 gap-3">
-                      {[1, 2, 3, 4, 5].map((size) => {
+                      {LICENSE_OPTIONS.map((size) => {
                         const packPrice = selectedProduct.pricing[`pack${size}` as keyof typeof selectedProduct.pricing]
                         if (!packPrice || packPrice <= 0) return null
                         return (
-                          <button key={size} onClick={() => setPackSize(size as any)} className={`py-3 px-4 rounded-lg border-2 font-semibold transition-colors ${packSize === size ? 'border-brand-primary bg-brand-primary-subtle text-brand-primary' : 'border-gray-200 hover:border-gray-300'}`}>{size}</button>
+                          <button key={size} onClick={() => setPackSize(size)} className={`py-3 px-4 rounded-lg border-2 font-semibold transition-colors ${packSize === size ? 'border-brand-primary bg-brand-primary-subtle text-brand-primary' : 'border-gray-200 hover:border-gray-300'}`}>{size}</button>
                         )
                       })}
                     </div>
@@ -896,13 +928,13 @@ export default function SoftwarePage() {
                   <div className="mb-6">
                     <label className="block text-sm font-semibold mb-3">Validity Period</label>
                     <div className="grid grid-cols-5 gap-3">
-                      {[1, 2, 3, 4, 5].map((years) => {
+                      {LICENSE_OPTIONS.map((years) => {
                         const validityKey = years === 1 ? 'oneYear' : years === 2 ? 'twoYear' : years === 3 ? 'threeYear' : years === 4 ? 'fourYear' : 'fiveYear'
                         const validityPrice = selectedProduct.validityPeriods[validityKey as keyof typeof selectedProduct.validityPeriods]
                         if (validityPrice === undefined || validityPrice === null) return null
                         if (years !== 1 && validityPrice <= 0) return null
                         return (
-                          <button key={years} onClick={() => setValidityYears(years as any)} className={`py-3 px-4 rounded-lg border-2 font-semibold transition-colors ${validityYears === years ? 'border-green-600 bg-green-50 text-green-600' : 'border-gray-200 hover:border-gray-300'}`}>{years}Y</button>
+                          <button key={years} onClick={() => setValidityYears(years)} className={`py-3 px-4 rounded-lg border-2 font-semibold transition-colors ${validityYears === years ? 'border-green-600 bg-green-50 text-green-600' : 'border-gray-200 hover:border-gray-300'}`}>{years}Y</button>
                         )
                       })}
                     </div>
@@ -917,7 +949,7 @@ export default function SoftwarePage() {
 
                   {/* Features */}
                   <div className="mb-6">
-                    <h3 className="font-semibold mb-3">What's Included:</h3>
+                    <h3 className="font-semibold mb-3">What&apos;s Included:</h3>
                     <ul className="space-y-2">
                       {selectedProduct.features.map((feature, idx) => (
                         <li key={idx} className="flex items-start gap-2"><Check className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" /> <span className="text-gray-700">{feature}</span></li>

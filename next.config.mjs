@@ -1,18 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Next spawns one static-generation worker per CPU by default, which exhausts
   // memory on smaller build machines. Override with NEXT_BUILD_CPUS if needed.
   experimental: {
     cpus: Number(process.env.NEXT_BUILD_CPUS) || 2,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-
   // Image Optimization
   images: {
     unoptimized: false,
@@ -47,6 +41,7 @@ const nextConfig = {
       { protocol: "https", hostname: "**.paiinternational.in" },
       { protocol: "https", hostname: "**.vijaysales.com" },
       { protocol: "https", hostname: "www.lg.com" },
+      { protocol: "https", hostname: "electronicparadise.in", pathname: "/cdn/shop/**" },
     ],
     minimumCacheTTL: 60 * 60 * 24 * 30,
   },
@@ -72,7 +67,7 @@ const nextConfig = {
       "font-src 'self' data: https://fonts.gstatic.com",
       // Marketing tags beacon over fetch/XHR, not just <img>. Omitting a host here
       // fails silently in production only — dev has no CSP, so it looks fine locally.
-      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://*.razorpay.com https://api.razorpay.com https://lux.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.facebook.com https://*.facebook.net https://*.clarity.ms https://c.bing.com https://*.shiprocket.in https://vercel.live",
+      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://*.razorpay.com https://api.razorpay.com https://lux.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.facebook.com https://*.facebook.net https://*.clarity.ms https://c.bing.com https://*.shiprocket.in https://vercel.live https://nominatim.openstreetmap.org https://api.postalpincode.in",
       "frame-src 'self' https://*.razorpay.com https://api.razorpay.com https://*.youtube.com https://*.google.com https://*.googletagmanager.com",
       "frame-ancestors 'self'",
       "form-action 'self'",

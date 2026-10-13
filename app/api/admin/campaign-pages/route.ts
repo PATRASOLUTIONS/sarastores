@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { getCollection, normalizeId } from "@/lib/db-service";
 import { requireAdmin } from "@/lib/auth";
+import { CreateCampaignPageSchema, type CampaignPageDocument } from "@/lib/campaign-page";
+import { MongoServerError } from "mongodb";
 
 export async function GET() {
   const guard = await requireAdmin();
   if (!guard.ok) return guard.response;
 
   try {
-    const { db } = await connectToDatabase();
-    const campaigns = await db.collection("campaign_pages").find({}).sort({ _id: -1 }).toArray();
-    return NextResponse.json({ success: true, campaigns });
+    const collection = await getCollection<CampaignPageDocument>("campaign_pages");
+    const campaigns = await collection.find({}).sort({ _id: -1 }).toArray();
+    return NextResponse.json({ success: true, campaigns: campaigns.map(normalizeId) });
   } catch (error) {
     console.error("Failed to fetch campaigns", error);
     return NextResponse.json({ success: false, error: "Failed to fetch campaigns" }, { status: 500 });
@@ -21,33 +23,30 @@ export async function POST(req: Request) {
   if (!guard.ok) return guard.response;
 
   try {
-    const { db } = await connectToDatabase();
-    const data = await req.json();
-    
-    // basic validation
-    if (!data.name || !data.slug) {
-      return NextResponse.json({ success: false, error: "Name and Slug are required" }, { status: 400 });
+    let body: unknown;
+    try { body = await req.json(); } catch {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
     }
-
-    // Check slug uniqueness
-    const slug = data.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    const existing = await db.collection("campaign_pages").findOne({ slug });
+    const parsed = CreateCampaignPageSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ success: false, error: "Invalid campaign details" }, { status: 400 });
+    const collection = await getCollection<Omit<CampaignPageDocument, "_id">>("campaign_pages");
+    const existing = await collection.findOne({ slug: parsed.data.slug });
     if (existing) {
-      return NextResponse.json({ success: false, error: `A campaign with the slug '${slug}' already exists` }, { status: 400 });
+      return NextResponse.json({ success: false, error: "A campaign with this slug already exists" }, { status: 409 });
     }
 
     const newCampaign = {
-      name: data.name,
-      slug: slug,
-      banner: data.banner || "",
-      productIds: data.productIds || [],
-      isActive: data.isActive ?? true,
+      ...parsed.data,
       createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    const result = await db.collection("campaign_pages").insertOne(newCampaign);
-    return NextResponse.json({ success: true, campaign: { ...newCampaign, _id: result.insertedId } });
+    const result = await collection.insertOne(newCampaign);
+    return NextResponse.json({ success: true, campaign: normalizeId({ ...newCampaign, _id: result.insertedId }) });
   } catch (error) {
+    if (error instanceof MongoServerError && error.code === 11000) return NextResponse.json(
+      { success: false, error: "A campaign with this slug already exists" }, { status: 409 }
+    );
     console.error("Failed to create campaign", error);
     return NextResponse.json({ success: false, error: "Failed to create campaign" }, { status: 500 });
   }

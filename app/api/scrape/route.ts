@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       sourceLabel: SCRAPER_LABELS[source],
       product,
     })
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof ScraperError) {
       return NextResponse.json(
         { success: false, error: error.message, hint: error.hint },
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     }
     console.error("[scrape] failed:", error)
     return NextResponse.json(
-      { success: false, error: error?.message || "Scrape failed" },
+      { success: false, error: "Scrape failed" },
       { status: 500 },
     )
   }

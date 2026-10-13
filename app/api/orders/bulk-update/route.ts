@@ -3,11 +3,17 @@ import { getCollection, createObjectId, normalizeId } from "@/lib/db-service"
 import { getEmailTemplate, getEmailSubject, getEmailTemplateId } from "@/lib/emailTemplates"
 import { sendEmail } from "@/lib/email"
 import { requireAdmin } from "@/lib/auth"
+import { bulkOrderUpdateRequestSchema, type BulkOrderRow } from "@/lib/bulk-order-update"
+import type { EmailData } from "@/lib/emailTemplates"
 
-type BulkRow = {
-  orderId: string
+interface BulkOrderDocument {
   status: string
   trackingNumber?: string
+  updatedAt?: Date
+  timeline?: { date: string; status: string; description: string }[]
+  customer?: { email?: string; name?: string; address?: string }
+  total: number
+  items: NonNullable<EmailData["orderDetails"]>["items"]
 }
 
 export async function POST(request: NextRequest) {
@@ -15,15 +21,17 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const { rows } = await request.json()
+    const parsed = bulkOrderUpdateRequestSchema.safeParse(await request.json())
 
-    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    if (!parsed.success) {
       return NextResponse.json({ error: "Invalid rows data" }, { status: 400 })
     }
 
-    const collection = await getCollection("orders")
-    const success: BulkRow[] = []
-    const failed: { row: BulkRow; error: string }[] = []
+    const { rows } = parsed.data
+    const collection = await getCollection<BulkOrderDocument>("orders")
+    const success: BulkOrderRow[] = []
+    const failed: { row: BulkOrderRow; error: string }[] = []
+    const notifications = { sent: 0, failed: 0, skipped: 0 }
 
     for (const row of rows) {
       try {
@@ -57,7 +65,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Prepare update data
-        const updateData: any = {
+        const updateData: Pick<BulkOrderDocument, "status" | "updatedAt" | "trackingNumber" | "timeline"> = {
           status: status.toLowerCase(),
           updatedAt: new Date(),
         }
@@ -91,6 +99,7 @@ export async function POST(request: NextRequest) {
 
         // Get updated order for email
         const updatedOrder = await collection.findOne({ _id: objectId })
+        if (!updatedOrder) throw new Error("Updated order could not be reloaded")
         const normalizedOrder = normalizeId(updatedOrder)
 
         // Send email notification
@@ -100,7 +109,7 @@ export async function POST(request: NextRequest) {
             
             const emailData = {
               orderNumber: normalizedOrder.id,
-              customerName: normalizedOrder.customer.name,
+              customerName: normalizedOrder.customer.name || "Customer",
               status: status.toLowerCase(),
               trackingNumber,
               orderDetails: {
@@ -115,10 +124,14 @@ export async function POST(request: NextRequest) {
               html: getEmailTemplate(emailTemplateId, emailData),
             })
             if (!emailResult.success) throw new Error("Email provider rejected the notification")
+            notifications.sent++
           } catch (emailError) {
+            notifications.failed++
             console.error(`Failed to send email for order ${orderId}:`, emailError)
             // Don't fail the update if email fails
           }
+        } else {
+          notifications.skipped++
         }
 
         success.push(row)
@@ -132,6 +145,7 @@ export async function POST(request: NextRequest) {
       success,
       failed,
       message: `Processed ${success.length} orders successfully, ${failed.length} failed`,
+      notifications,
     })
   } catch (error) {
     console.error("Bulk update error:", error)

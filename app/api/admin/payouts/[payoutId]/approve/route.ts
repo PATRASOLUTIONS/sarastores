@@ -1,20 +1,26 @@
 /**
  * Admin Payout Approve API
  * 
- * POST /api/admin/payouts/[payoutId]/approve - Approve and process payout
+ * POST /api/admin/payouts/[payoutId]/approve - Approve a payout (no bank transfer)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { checkAdminAuthorization } from '@/lib/auth';
-import { approvePayout } from '@/lib/partner/wallet';
+import { approvePayout, PayoutStateConflictError } from '@/lib/partner/wallet';
 import { getCollection } from '@/lib/db-service';
+import type { Payout } from '@/lib/partner/types';
+import { z } from 'zod';
 
 const PAYOUTS_COLLECTION = 'partner_payouts';
+const approvalSchema = z.object({
+  transactionId: z.string().trim().min(1).max(200).optional(),
+  notes: z.string().trim().max(2000).optional(),
+}).strict();
 
 /**
  * POST /api/admin/payouts/[payoutId]/approve
- * Approve and process payout
+ * Approval does not initiate or confirm a bank transfer.
  */
 export async function POST(
   request: NextRequest,
@@ -31,26 +37,25 @@ export async function POST(
   try {
     const { payoutId } = await params;
     
-    // Parse optional transaction details
-    let transactionId: string | undefined;
-    let notes: string | undefined;
-    
+    const text = await request.text();
+    let body: unknown = {};
     try {
-      const body = await request.json();
-      transactionId = body.transactionId;
-      notes = body.notes;
-    } catch (e) {
-      // No body provided
+      if (text.trim()) body = JSON.parse(text);
+    } catch {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_INPUT', message: 'Invalid JSON body' } }, { status: 400 }
+      );
     }
-    
-    // Find payout
-    const collection = await getCollection(PAYOUTS_COLLECTION);
-    let payout;
-    try {
-      payout = await collection.findOne({ _id: new ObjectId(payoutId) });
-    } catch (e) {
-      payout = await collection.findOne({ id: payoutId });
+    const parsed = approvalSchema.safeParse(body);
+    if (!parsed.success || !payoutId || payoutId.length > 100) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_INPUT', message: 'Invalid payout approval details' } }, { status: 400 }
+      );
     }
+    const collection = await getCollection<Payout>(PAYOUTS_COLLECTION);
+    const payout = (ObjectId.isValid(payoutId)
+      ? await collection.findOne({ _id: new ObjectId(payoutId) }) : null)
+      ?? await collection.findOne({ id: payoutId });
     
     if (!payout) {
       return NextResponse.json(
@@ -59,39 +64,25 @@ export async function POST(
       );
     }
     
-    // Approve payout
+    if (!authCheck.userId) throw new Error('Authenticated operator identity is missing');
     const result = await approvePayout(
-      payout._id?.toString() || payout.id,
-      authCheck.userId!
+      payout._id.toString(),
+      authCheck.userId,
+      parsed.data
     );
-    
-    if (!result) {
-      return NextResponse.json(
-        { success: false, error: { code: 'APPROVAL_FAILED', message: 'Failed to approve payout' } },
-        { status: 400 }
-      );
-    }
-    
-    // Update notes and transactionId if provided
-    if (notes || transactionId) {
-      const updateData: any = { updatedAt: new Date() };
-      if (notes) updateData.adminNotes = notes;
-      if (transactionId) updateData.transactionId = transactionId;
-      await collection.updateOne(
-        { _id: payout._id },
-        { $set: updateData }
-      );
-    }
     
     return NextResponse.json({
       success: true,
       data: {
-        payoutId: payout._id?.toString() || payout.id,
-        status: 'approved',
-        message: 'Payout approved and processed successfully',
+        payoutId: result.id,
+        status: result.status,
+        message: 'Payout approved. No bank transfer has been initiated or confirmed.',
       },
     });
   } catch (error) {
+    if (error instanceof PayoutStateConflictError) return NextResponse.json(
+      { success: false, error: { code: 'CONFLICT', message: 'Payout is no longer pending approval' } }, { status: 409 }
+    );
     console.error('[Admin Payout Approve] Error:', error);
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to approve payout' } },

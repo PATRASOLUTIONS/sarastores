@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
 
     for (const prize of availablePrizes) {
       const unusedCoupons = couponCountMap[prize.prizeName] || 0
-      let weight = unusedCoupons * (prize.weightMultiplier || 1)
+      const weight = unusedCoupons * (prize.weightMultiplier || 1)
       weightedPool.push({ prizeName: prize.prizeName, weight })
     }
 
@@ -221,7 +221,8 @@ export async function POST(request: NextRequest) {
 
     if (!isBetterLuck && couponCode) {
       try {
-        await sendSpinWheelEmail(participant.email, participant.name, selectedPrize, couponCode)
+        const emailResult = await sendSpinWheelEmail(participant.email, participant.name, selectedPrize, couponCode)
+        if (!emailResult.success) console.error("[SPIN_WHEEL] Winner email delivery failed")
       } catch (err: unknown) {
         console.error(`[SPIN_WHEEL] Email failed for participant ${participantId}:`, err instanceof Error ? err.message : String(err))
       }
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest) {
       try {
         const whatsappResult = await sendWhatsAppWinNotification(participant.phone, participant.name, selectedPrize, couponCode, participant.senderNumber)
         if (whatsappResult.success === false) {
-          console.error(`[SPIN_WHEEL] WhatsApp API returned success=false:`, whatsappResult.error || whatsappResult.data)
+          console.error(`[SPIN_WHEEL] WhatsApp API returned success=false:`, whatsappResult.error)
         }
       } catch (err: unknown) {
         console.error(`[SPIN_WHEEL] WhatsApp failed for participant ${participantId}:`, err instanceof Error ? err.message : String(err))

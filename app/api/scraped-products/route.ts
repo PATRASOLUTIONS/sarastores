@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
-import { connectDB } from "@/lib/db"
+import { getCollection, normalizeId } from "@/lib/db-service"
+import { ObjectId } from "mongodb"
+import { handleApiError } from "@/lib/api-error"
 
 // GET - Fetch all products that have been scraped from Amazon
 // GET - Fetch all products that have been scraped from Amazon
 export async function GET(request: Request) {
+    const guard = await requireAdmin()
+    if (!guard.ok) return guard.response
     try {
         const { searchParams } = new URL(request.url)
         const id = searchParams.get("id")
-        const db = await connectDB()
-        const productsCollection = db.collection("products")
+        if (id && !ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid product ID" }, { status: 400 })
+        const productsCollection = await getCollection("products")
 
         // If ID provided, return single full product (scraped data)
         if (id) {
             const product = await productsCollection.findOne({
-                _id: new (await import("mongodb")).ObjectId(id)
+                _id: new ObjectId(id)
             })
 
             if (!product) {
@@ -24,7 +28,7 @@ export async function GET(request: Request) {
                 )
             }
 
-            return NextResponse.json(product)
+            return NextResponse.json(normalizeId(product))
         }
 
         // Find products that have Amazon data (source = amazon-scraper OR has asin field)
@@ -65,15 +69,11 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             success: true,
-            products: scrapedProducts,
+            products: scrapedProducts.map(normalizeId),
             count: scrapedProducts.length,
         })
-    } catch (error: any) {
-        console.error("Error fetching scraped products:", error)
-        return NextResponse.json(
-            { success: false, error: error.message || "Failed to fetch scraped products" },
-            { status: 500 }
-        )
+    } catch (error) {
+        return handleApiError(error, "Failed to fetch scraped products")
     }
 }
 
@@ -94,11 +94,11 @@ export async function DELETE(request: Request) {
             )
         }
 
-        const db = await connectDB()
-        const productsCollection = db.collection("products")
+        if (productId && !ObjectId.isValid(productId)) return NextResponse.json({ error: "Invalid product ID" }, { status: 400 })
+        const productsCollection = await getCollection("products")
 
         const query = productId
-            ? { _id: new (await import("mongodb")).ObjectId(productId) }
+            ? { _id: new ObjectId(productId) }
             : { itemno: itemno }
 
         // Clear Amazon-related fields
@@ -136,7 +136,7 @@ export async function DELETE(request: Request) {
             },
         })
 
-        if (result.modifiedCount === 0) {
+        if (result.matchedCount === 0) {
             return NextResponse.json(
                 { success: false, error: "Product not found" },
                 { status: 404 }
@@ -147,11 +147,7 @@ export async function DELETE(request: Request) {
             success: true,
             message: "Amazon data removed from product",
         })
-    } catch (error: any) {
-        console.error("Error removing Amazon data:", error)
-        return NextResponse.json(
-            { success: false, error: error.message || "Failed to remove Amazon data" },
-            { status: 500 }
-        )
+    } catch (error) {
+        return handleApiError(error, "Failed to remove Amazon data")
     }
 }

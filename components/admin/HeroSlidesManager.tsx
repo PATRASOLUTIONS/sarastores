@@ -3,18 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import { ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Loader2, Trash2, Upload, X } from "lucide-react"
 import { toast } from "react-hot-toast"
-import { apiFetch } from "@/lib/api-client"
-
-interface HeroSlide {
-  id: string
-  title: string
-  subtitle: string
-  image: string
-  cta: string
-  link: string
-  active: boolean
-  order?: number
-}
+import { apiFetch, apiFetchJson } from "@/lib/api-client"
+import { heroSlideFieldsSchema, heroSlideListSchema, heroSlideSaveSchema, type HeroSlide } from "@/lib/hero-slides"
 
 const NEW_SLIDE: Omit<HeroSlide, "id"> = {
   title: "",
@@ -34,10 +24,8 @@ export default function HeroSlidesManager() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadSlides = async () => {
-    const response = await apiFetch("/api/hero-slides")
-    if (!response.ok) throw new Error("Could not load uploaded slides")
-    const data = await response.json()
-    setSlides(Array.isArray(data) ? data : [])
+    const data = await apiFetchJson("/api/hero-slides", undefined, value => heroSlideListSchema.parse(value))
+    setSlides(data)
   }
 
   useEffect(() => {
@@ -60,7 +48,8 @@ export default function HeroSlidesManager() {
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        setDraft((current) => current ? { ...current, image: reader.result as string } : current)
+        const image = reader.result
+        setDraft((current) => current ? { ...current, image } : current)
       }
     }
     reader.onerror = () => toast.error("Could not read that photo")
@@ -75,9 +64,7 @@ export default function HeroSlidesManager() {
 
     setSaving(true)
     try {
-      const response = await apiFetch("/api/hero-slides", { method: "POST", json: draft })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result?.error)
+      await apiFetchJson("/api/hero-slides", { method: "POST", json: draft }, value => heroSlideSaveSchema.parse(value))
       await loadSlides()
       setDraft(null)
       toast.success("Uploaded slide added")
@@ -89,11 +76,11 @@ export default function HeroSlidesManager() {
   }
 
   const updateSlide = async (slide: HeroSlide, patch: Partial<HeroSlide>) => {
-    const response = await apiFetch("/api/hero-slides", {
+    const response = await apiFetchJson("/api/hero-slides", {
       method: "PUT",
-      json: { ...slide, ...patch, id: slide.id },
-    })
-    if (!response.ok) throw new Error("Could not update slide")
+      json: { ...heroSlideFieldsSchema.partial().parse({ ...slide, ...patch }), id: slide.id },
+    }, value => heroSlideSaveSchema.parse(value))
+    if (response.slide.id !== slide.id) throw new Error("Updated slide ID did not match the request")
   }
 
   const moveSlide = async (index: number, offset: -1 | 1) => {
@@ -114,7 +101,7 @@ export default function HeroSlidesManager() {
       ])
       toast.success("Slide order updated")
     } catch {
-      setSlides(slides)
+      await loadSlides().catch(() => toast.error("Could not reload slide order"))
       toast.error("Could not update slide order")
     } finally {
       setMovingId(null)

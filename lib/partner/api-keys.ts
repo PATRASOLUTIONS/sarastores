@@ -303,7 +303,7 @@ export function hasPermission(
   
   for (const permission of apiKey.permissions) {
     if (permission.resource === '*' || permission.resource === resource) {
-      if (permission.actions.includes(action as any)) {
+      if (permission.actions.some(allowedAction => allowedAction === action)) {
         return true;
       }
     }

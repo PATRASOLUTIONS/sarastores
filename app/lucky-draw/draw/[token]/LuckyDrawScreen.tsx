@@ -5,49 +5,15 @@ import { motion, AnimatePresence, useAnimationControls } from "framer-motion"
 import confetti from "canvas-confetti"
 import { Users, Gift, Trophy, Mail, AlertCircle, RotateCcw } from "lucide-react"
 import GiftBox from "./GiftBox"
-
-type Prize = { name: string; icon: string; quantity: number }
-type DrawState = {
-  campaign: { name: string; store: string; status: string; prizes: Prize[] }
-  stats: { totalParticipants: number; remainingParticipants: number; prizesLeft: number }
-  shuffleNames: string[]
-  winners: { name: string; phone: string; prize: string; prizeIcon: string; drawnAt: string }[]
-}
-type DrawResult = {
-  winnerId: string
-  winner: { name: string; phone: string; email: string }
-  prize: { name: string; icon: string }
-  stats: { remainingParticipants: number; prizesLeft: number }
-}
+import { drawStateSchema, drawResultSchema, drawNotificationSchema, requestDrawJson, type DrawState, type DrawResult } from "@/lib/lucky-draw-client"
 
 type Stage = "idle" | "shaking-customer" | "customer-revealed" | "shaking-prize" | "complete"
 
 const SHAKE_MS = 1700
 const SETTLE_MS = 400
-const REQUEST_TIMEOUT_MS = 12000
 const BRAND = ["#e8262a", "#f5c451", "#ffffff", "#ff8a3d"]
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-/** Never let a hung request leave the box shaking forever. */
-async function postJson(url: string, body?: unknown) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      signal: controller.signal,
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    })
-    return { ok: res.ok, data: await res.json().catch(() => ({})) }
-  } catch (e) {
-    const aborted = e instanceof DOMException && e.name === "AbortError"
-    return { ok: false, data: { error: aborted ? "The draw timed out. Please try again." : "Network error" } }
-  } finally {
-    clearTimeout(timer)
-  }
-}
 
 export default function LuckyDrawScreen({ token }: { token: string }) {
   const [state, setState] = useState<DrawState | null>(null)
@@ -58,13 +24,14 @@ export default function LuckyDrawScreen({ token }: { token: string }) {
   const [ticker, setTicker] = useState("")
   const box = useAnimationControls()
   const tickerTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const drawRequestId = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/lucky-draw/${token}`, { cache: "no-store" })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Draw not found")
-      setState(data)
+      const response = await requestDrawJson(`/api/lucky-draw/${token}`, value => drawStateSchema.parse(value), undefined, "GET")
+      if (!response.ok) throw new Error(response.error)
+      setState(response.data)
+      setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Draw not found")
     }
@@ -128,25 +95,26 @@ export default function LuckyDrawScreen({ token }: { token: string }) {
     setError(null)
     setEmailStatus(null)
     setStage("shaking-customer")
+    drawRequestId.current ??= crypto.randomUUID()
     startTicker(state.shuffleNames.length ? state.shuffleNames : ["…"])
 
     const [res] = await Promise.all([
-      postJson(`/api/lucky-draw/${token}/draw`),
+      requestDrawJson(`/api/lucky-draw/${token}/draw`, value => drawResultSchema.parse(value), { requestId: drawRequestId.current }),
       runShake(),
     ])
 
     stopTicker()
 
     if (!res.ok) {
-      setError((res.data as any)?.error || "Draw failed")
+      setError(res.error)
       setStage("idle")
       setTicker("")
       box.start({ rotate: 0, x: 0, y: 0, scale: 1 })
       return
     }
 
-    setResult(res.data as DrawResult)
-    setTicker((res.data as DrawResult).winner.name)
+    setResult(res.data)
+    setTicker(res.data.winner.name)
     setStage("customer-revealed")
     burst(110, 80)
   }
@@ -157,10 +125,10 @@ export default function LuckyDrawScreen({ token }: { token: string }) {
     startTicker(state?.campaign.prizes.map((p) => `${p.icon}  ${p.name}`) ?? ["🎁"])
 
     // Fired, not awaited: SMTP latency must never hold up the animation.
-    postJson(`/api/lucky-draw/${token}/notify`, { winnerId: result.winnerId }).then((notify) => {
+    requestDrawJson(`/api/lucky-draw/${token}/notify`, value => drawNotificationSchema.parse(value), { winnerId: result.winnerId }).then((notify) => {
       setEmailStatus({
-        sent: !!(notify.data as any)?.emailSent,
-        error: (notify.data as any)?.emailError ?? (notify.ok ? null : "Email could not be sent"),
+        sent: notify.ok && notify.data.emailSent,
+        error: notify.ok ? notify.data.emailError : notify.error,
       })
     })
 
@@ -176,6 +144,7 @@ export default function LuckyDrawScreen({ token }: { token: string }) {
     setEmailStatus(null)
     setTicker("")
     setStage("idle")
+    drawRequestId.current = null
     box.start({ rotate: 0, x: 0, y: 0, scale: 1 })
     load()
   }

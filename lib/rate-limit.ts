@@ -1,12 +1,12 @@
 /**
  * Rate Limiting Utilities
  * 
- * In-memory rate limiting for API endpoints with sliding window algorithm.
- * For production with multiple instances, replace with Redis-based solution.
+ * Shared fixed-window rate limiting, backed by MongoDB or configured Upstash.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store';
+import { handleApiError, RateLimitUnavailableError } from '@/lib/api-error';
 
 // Types
 interface RateLimitConfig {
@@ -26,7 +26,7 @@ interface RateLimitResult {
   retryAfter?: number;
 }
 
-// Counting lives in lib/rate-limit-store (Upstash-backed when configured).
+// Counting lives in lib/rate-limit-store; production never falls back to memory.
 // The module-scoped Map that used to sit here reset on every cold start, and
 // its cleanup setInterval kept a timer alive for the life of the instance.
 
@@ -117,8 +117,8 @@ function getClientIdentifier(request: NextRequest): string {
 /**
  * Check rate limit for a request.
  *
- * Counting is delegated to lib/rate-limit-store, which uses Upstash when
- * configured. The previous module-scoped Map reset on every serverless cold
+ * Counting is delegated to shared MongoDB or configured Upstash.
+ * The previous module-scoped Map reset on every serverless cold
  * start, so the effective limit was `limit x instances` — no real protection.
  */
 export async function checkRateLimit(
@@ -153,7 +153,13 @@ export function withRateLimit(
   config: RateLimitConfig = RATE_LIMITS.API
 ) {
   return async (request: NextRequest): Promise<NextResponse> => {
-    const result = await checkRateLimit(request, config);
+    let result: RateLimitResult;
+    try {
+      result = await checkRateLimit(request, config);
+    } catch (error) {
+      if (error instanceof RateLimitUnavailableError) return handleApiError(error);
+      throw error;
+    }
     
     // Add rate limit headers to all responses
     const rateLimitHeaders = {
@@ -260,7 +266,7 @@ export const rateLimiters = {
   strict: createRateLimiter(RATE_LIMITS.STRICT),
 };
 
-export default {
+const rateLimitUtilities = {
   checkRateLimit,
   withRateLimit,
   rateLimitByUser,
@@ -270,3 +276,4 @@ export default {
   rateLimiters,
   RATE_LIMITS,
 };
+export default rateLimitUtilities;

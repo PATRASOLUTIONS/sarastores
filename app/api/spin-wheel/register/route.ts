@@ -106,9 +106,9 @@ export async function POST(request: NextRequest) {
       participantId: result.insertedId.toString(),
       message: "Registration successful! You can now spin the wheel."
     })
-  } catch (error: any) {
+  } catch (error) {
     // Handle MongoDB duplicate key error
-    if (error.code === 11000) {
+    if (error !== null && typeof error === "object" && "code" in error && error.code === 11000) {
       return NextResponse.json(
         {
           error: "duplicate",

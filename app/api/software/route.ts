@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     
-    const filter: any = {}
+    const filter: { status?: string } = {}
     if (status) {
       filter.status = status
     }

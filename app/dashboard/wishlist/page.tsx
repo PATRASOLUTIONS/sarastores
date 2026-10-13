@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Heart, ShoppingCart, Trash2, ExternalLink, Star } from "lucide-react"
 import { useProductSpecImages } from "@/hooks/useProductSpecImages"
-import { useWishlist } from "@/hooks/useWishlist"
+import { useWishlist, type WishlistItem } from "@/hooks/useWishlist"
 import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
@@ -28,17 +28,17 @@ export default function WishlistPage() {
     }
   }
 
-  const handleAddToCart = (product: any) => {
-    addToCart({
+  const handleAddToCart = async (product: WishlistItem) => {
+    const added = await addToCart({
       id: product.id,
       name: product.name,
       price: product.price,
-      image: product.image,
+      image: product.image || "/placeholder.svg",
       quantity: 1,
       color: null,
       size: null,
     })
-    toast.success(`${product.name} added to cart`)
+    if (added) toast.success(`${product.name} added to cart`)
   }
 
   if (isLoading) {
@@ -71,7 +71,7 @@ export default function WishlistPage() {
               <Heart className="h-12 w-12 text-gray-400" />
             </div>
             <h3 className="text-xl font-semibold mb-2">Your wishlist is empty</h3>
-            <p className="text-gray-600 mb-6">Save items you like to your wishlist and they'll appear here.</p>
+            <p className="text-gray-600 mb-6">Save items you like to your wishlist and they&apos;ll appear here.</p>
             <Link href="/products">
               <button className="px-6 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-primary-hover transition-colors active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-primary/40">
                 Explore Products
@@ -102,7 +102,7 @@ function WishlistCard({
   onRemove,
   onAddToCart,
 }: {
-  product: any
+  product: WishlistItem
   removingIds: Set<string>
   onRemove: () => void
   onAddToCart: () => void
@@ -187,7 +187,7 @@ function WishlistCard({
                 <Star
                   key={i}
                   className={`h-4 w-4 ${
-                    i < Math.round(product.rating) ? "fill-amber-400 text-amber-400" : "text-gray-300 dark:text-gray-600"
+                    i < Math.round(product.rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-gray-300 dark:text-gray-600"
                   }`}
                 />
               ))}

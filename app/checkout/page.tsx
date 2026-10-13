@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Header from "@/components/Header"
@@ -10,15 +10,24 @@ import { useAuth } from "@/contexts/AuthContext"
 import { analytics, toAnalyticsItem } from "@/lib/analytics"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { cleanProductName } from "@/utils/cleanProductName"
-import PaymentGateway from "@/components/PaymentGateway"
+import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/PaymentGateway"
 import InStorePurchase from "@/components/InStorePurchase"
 import FulfilmentSelector, {
   type FulfilmentMethod,
   type PickupStore,
 } from "@/components/FulfilmentSelector"
 import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
-import TrustStrip from "@/components/account/TrustStrip"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
+import { cartLimitError } from "@/lib/cart-limits"
+import { apiFetch, apiFetchJson } from "@/lib/api-client"
+import { CouponQuoteSchema } from "@/lib/coupon-validation"
+import { z } from "zod"
+import styles from "./checkout.module.css"
+import CartProductImage from "@/components/CartProductImage"
+import { CHECKOUT_CITIES, checkoutCity } from "@/lib/checkout-region"
+import { SavedDeliveryAddressSchema, PincodeRestrictionsResponseSchema, type SavedDeliveryAddress } from "@/lib/validation"
+import OrderSuccess from "@/components/OrderSuccess"
+import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-confirmation"
 import {
   ArrowLeft,
   ArrowRight,
@@ -32,23 +41,38 @@ import {
   Phone,
   Mail,
   Trash2,
+  Smartphone, Landmark, Wallet, Store, Home, Pencil, Headphones, Tag,
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 
-interface CheckoutStep {
-  id: number
-  title: string
-  description: string
-}
-
-const steps: CheckoutStep[] = [
-  { id: 1, title: "Customer Details", description: "Enter your personal information" },
-  { id: 2, title: "Payment", description: "Choose your payment method" },
+const CHECKOUT_TRACKER = ["Address", "Delivery", "Payment", "Review & Place Order"]
+const PAYMENT_OPTIONS = [
+  { id: "upi", label: "UPI (Google Pay, PhonePe, Paytm etc.)", icon: Smartphone },
+  { id: "card", label: "Credit / Debit Card", icon: CreditCard },
+  { id: "netbanking", label: "Net Banking", icon: Landmark },
+  { id: "emi", label: "EMI (subject to bank eligibility)", icon: CreditCard },
+  { id: "wallet", label: "Wallets", icon: Wallet },
+  { id: "cash-on-delivery", label: "COD (Cash on Delivery)", icon: Package },
+  { id: "instore", label: "In-store Purchase", icon: Store },
 ]
 
-// Four labels for the visual tracker; steps 1–2 belong to the details screen,
-// 3–4 to the payment screen.
-const CHECKOUT_TRACKER = ["Address", "Delivery", "Payment", "Review & Place Order"]
+const EMPTY_CUSTOMER = {
+  firstName: "", lastName: "", email: "", phone: "", address: "",
+  city: "", state: "Karnataka", pincode: "", country: "India", employeeId: "",
+}
+const accountProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  phone: z.string().nullish(),
+  address: z.object({
+    street: z.string().nullish(),
+    city: z.string().nullish(),
+    state: z.string().nullish(),
+    zip: z.string().nullish(),
+    country: z.string().nullish(),
+  }).nullish(),
+})
 
 /** Deriving the ex-GST subtotal divides by 1.18, so raw toLocaleString leaks 3 decimals. */
 const money = (value: number) =>
@@ -57,35 +81,81 @@ const money = (value: number) =>
     : value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function CheckoutPage() {
-  const { cart, clearCart, removeFromCart, isLoading: cartLoading } = useCart()
+  const { cart, clearCart, removeFromCart, refreshItemPrices, isLoading: cartLoading } = useCart()
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
 
-  const [currentStep, setCurrentStep] = useState(1)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [paymentPending, setPaymentPending] = useState(false)
   const [itemToRemove, setItemToRemove] = useState<{ id: string; name: string } | null>(null)
   const orderLock = useSubmitLock()
   const couponLock = useSubmitLock()
   const [orderPlaced, setOrderPlaced] = useState(false)
   const [orderId, setOrderId] = useState("")
-  const [placedOrder, setPlacedOrder] = useState<any>(null)
+  const [placedOrder, setPlacedOrder] = useState<OrderConfirmation | null>(null)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
 
   // Form data
-  const [customerData, setCustomerData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    address: "",
-    city: "",
-    state: "",
-    pincode: "",
-    country: "India",
-    employeeId: "",
-  })
+  const [customerData, setCustomerData] = useState(EMPTY_CUSTOMER)
+  const editedCustomerFields = useRef(new Set<string>())
+  const accountId = user?.id
+  const previousAccountId = useRef(accountId)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileError, setProfileError] = useState("")
+  const [profileAttempt, setProfileAttempt] = useState(0)
+  const [editingAddress, setEditingAddress] = useState(true)
+  const [addressNotice, setAddressNotice] = useState("")
+  const [savedAddresses, setSavedAddresses] = useState<SavedDeliveryAddress[]>([])
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const [addressType, setAddressType] = useState<SavedDeliveryAddress["type"]>("home")
+  const [addressesLoading, setAddressesLoading] = useState(false)
+  const [addressesError, setAddressesError] = useState("")
+  const [addressesAttempt, setAddressesAttempt] = useState(0)
+  const [addressSaving, setAddressSaving] = useState(false)
+  const addressMutation = useRef(false)
+  const currentAccountId = useRef(accountId)
+  currentAccountId.current = accountId
+  const [catalogue, setCatalogue] = useState<Record<string, { price: number; mrp?: number | null; stock?: number }>>({})
+  const [catalogueLoading, setCatalogueLoading] = useState(false)
+  const [catalogueError, setCatalogueError] = useState("")
+  const [catalogueAttempt, setCatalogueAttempt] = useState(0)
+  const catalogueIds = JSON.stringify(cart.filter(item => item.type !== "software").map(item => item.id).sort())
+  useEffect(() => {
+    const ids: string[] = JSON.parse(catalogueIds)
+    if (!ids.length) { setCatalogue({}); setCatalogueError(""); setCatalogueLoading(false); return }
+    const controller = new AbortController()
+    const load = async () => {
+      setCatalogueLoading(true)
+      setCatalogueError("")
+      try {
+        const response = await fetch("/api/products/bulk", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, compare: true }), signal: controller.signal })
+        if (!response.ok) throw new Error("Product prices and stock could not be refreshed.")
+        const parsed = z.array(z.object({ id: z.string(), price: z.number().finite(), mrp: z.number().finite().nullish(),
+          stock: z.number().finite().optional() })).safeParse(await response.json())
+        if (!parsed.success) throw new Error("Invalid product prices or stock received. Please retry.")
+        const products = parsed.data
+        if (controller.signal.aborted) return
+        if (ids.some(id => !products.some(product => product.id === id && product.price > 0))) {
+          throw new Error("Some products are no longer available. Update your cart before paying.")
+        }
+        setCatalogue(Object.fromEntries(products.map(product => [product.id, product])))
+        refreshItemPrices(Object.fromEntries(products.map(product => [product.id, product.price])),
+          Object.fromEntries(products.filter(product => product.stock !== undefined).map(product => [product.id, product.stock!])))
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Checkout] Catalogue refresh failed:", error)
+        setCatalogueError(error instanceof Error ? error.message : "Product information is temporarily unavailable.")
+      } finally {
+        if (!controller.signal.aborted) setCatalogueLoading(false)
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [catalogueIds, catalogueAttempt, refreshItemPrices])
 
   const [paymentMethod, setPaymentMethod] = useState("online")
+  const [paymentOption, setPaymentOption] = useState("upi")
 
   // Click & Pick: home delivery or collection from a SARA store.
   const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
@@ -100,15 +170,10 @@ export default function CheckoutPage() {
   const [redeemPoints, setRedeemPoints] = useState(0)
   const [loyaltyDiscount, setLoyaltyDiscount] = useState(0)
 
-  // India states and cities data
-  const [states, setStates] = useState<string[]>([])
-  const [cities, setCities] = useState<string[]>([])
-  const [loadingCities, setLoadingCities] = useState(false)
-
   // Shipping settings from database
   const [shippingFee, setShippingFee] = useState(99)
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(1000)
-  const { data: settingsData, isLoading: isLoadingSettings } = useSettingsData()
+  const { data: settingsData, error: settingsError, isLoading: isLoadingSettings } = useSettingsData()
 
   // Update local state when settings data is loaded
   useEffect(() => {
@@ -127,6 +192,14 @@ export default function CheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string } | null>(null)
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
+  const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [item.id, item.quantity, item.price])])
+  const couponContextRef = useRef(couponContext)
+  useEffect(() => {
+    if (couponContextRef.current === couponContext) return
+    couponContextRef.current = couponContext
+    setAppliedCoupon(null)
+    setCouponDiscount(0)
+  }, [couponContext])
 
   // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
   const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross } = cart.reduce((acc, item) => {
@@ -176,62 +249,101 @@ export default function CheckoutPage() {
 
   // Indicative only — /api/orders recomputes and debits the points.
   const payableTotal = Math.max(0, total - loyaltyDiscount)
+  const productDiscount = cart.reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
+  const totalMrp = preCouponTotal + productDiscount
+  const unavailableItem = cart.find((item) => item.type !== "software" &&
+    typeof item.stock === "number" && item.stock < item.quantity)
+  const cartError = cartLimitError(cart) || (unavailableItem
+    ? `${unavailableItem.name} is unavailable in the requested quantity. Reduce its quantity or remove it before placing an order.`
+    : null)
 
 
-  // Fetch Indian states on mount
   useEffect(() => {
-    const fetchStates = async () => {
-      try {
-        const response = await fetch("/api/india/states")
-        const data = await response.json()
-        setStates(data.states || [])
-      } catch (error) {
-        console.error("Error fetching states:", error)
-        toast.error("Failed to load states")
-      }
+    if (previousAccountId.current && previousAccountId.current !== accountId) {
+      editedCustomerFields.current.clear()
+      setCustomerData(EMPTY_CUSTOMER)
+      setEditingAddress(true)
     }
-    fetchStates()
-  }, [])
+    previousAccountId.current = accountId
+    setProfileError("")
+    setAddressNotice("")
+    if (!accountId) {
+      setProfileLoading(false)
+      return
+    }
 
-  // Fetch cities when state changes
-  useEffect(() => {
-    const fetchCities = async () => {
-      if (!customerData.state) {
-        setCities([])
-        return
-      }
-
-      setLoadingCities(true)
+    const controller = new AbortController()
+    const loadProfile = async () => {
+      setProfileLoading(true)
       try {
-        const response = await fetch(`/api/india/cities?state=${encodeURIComponent(customerData.state)}`)
-        const data = await response.json()
-        setCities(data.cities || [])
+        const response = await apiFetch(`/api/users/${encodeURIComponent(accountId)}`, { signal: controller.signal })
+        if (!response.ok) throw new Error("Your saved account details could not be loaded.")
+        const result = accountProfileSchema.safeParse(await response.json())
+        if (!result.success || result.data.id !== accountId) throw new Error("Invalid account details received.")
+        if (controller.signal.aborted) return
+        const profile = result.data
+        const city = checkoutCity(profile.address?.city || "")
+        const supportedAddress = !profile.address?.state || profile.address.state.trim().toLowerCase() === "karnataka"
+        if (profile.address?.street && (!supportedAddress || !city) && editedCustomerFields.current.size === 0) {
+          setAddressNotice("Your saved address is outside our current delivery area. Please enter an address in Bangalore or Mysore, Karnataka, or choose store pickup.")
+        }
+        const [firstName = "", ...lastName] = profile.name.trim().split(/\s+/)
+        const savedDetails = {
+          firstName, lastName: lastName.join(" "), email: profile.email, phone: profile.phone || "",
+          address: supportedAddress && city ? profile.address?.street || "" : "", city,
+          state: "Karnataka", pincode: supportedAddress && city ? profile.address?.zip || "" : "",
+          country: "India",
+        }
+        setCustomerData((previous) => ({
+          ...previous,
+          ...Object.fromEntries(Object.entries(savedDetails).filter(([field]) => !editedCustomerFields.current.has(field))),
+        }))
+        if (supportedAddress && city && profile.address?.street && profile.address?.zip &&
+          editedCustomerFields.current.size === 0) setEditingAddress(false)
       } catch (error) {
-        console.error("Error fetching cities:", error)
-        toast.error("Failed to load cities")
+        if (controller.signal.aborted) return
+        console.error("[Checkout] Account autofill failed:", error)
+        setProfileError("Your saved account details could not be loaded. Retry or enter your details below.")
       } finally {
-        setLoadingCities(false)
+        if (!controller.signal.aborted) setProfileLoading(false)
       }
     }
-    fetchCities()
-  }, [customerData.state])
+    void loadProfile()
+    return () => controller.abort()
+  }, [accountId, profileAttempt])
 
   useEffect(() => {
-    // Populate customer data from user profile
-    if (user) {
-      setCustomerData((prev) => ({
-        ...prev,
-        firstName: user.name?.split(" ")[0] || "",
-        lastName: user.name?.split(" ").slice(1).join(" ") || "",
-        email: user.email || "",
-        phone: user.phone || "",
-        address: user.address?.street || "",
-        city: user.address?.city || "",
-        state: user.address?.state || "",
-        pincode: user.address?.zip || "",
-      }))
+    setSavedAddresses([])
+    setSelectedAddressId(null)
+    setAddressesError("")
+    setAddressSaving(false)
+    addressMutation.current = false
+    if (!accountId) { setAddressesLoading(false); return }
+    const controller = new AbortController()
+    const loadAddresses = async () => {
+      setAddressesLoading(true)
+      try {
+        const response = await apiFetch("/api/account/addresses", { signal: controller.signal })
+        if (!response.ok) throw new Error("Your saved delivery addresses could not be loaded.")
+        const result = z.object({ addresses: z.array(SavedDeliveryAddressSchema.extend({ id: z.string() })) })
+          .safeParse(await response.json())
+        if (!result.success) throw new Error("Invalid saved addresses received.")
+        if (controller.signal.aborted) return
+        setSavedAddresses(result.data.addresses)
+        if (result.data.addresses[0] && editedCustomerFields.current.size === 0) {
+          selectAddress(result.data.addresses[0])
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Checkout] Saved addresses failed:", error)
+        setAddressesError("Saved delivery addresses could not be loaded. Retry or enter an address below.")
+      } finally {
+        if (!controller.signal.aborted) setAddressesLoading(false)
+      }
     }
-  }, [user])
+    void loadAddresses()
+    return () => controller.abort()
+  }, [accountId, addressesAttempt])
 
   // Close the remove-item dialog on Escape.
   useEffect(() => {
@@ -260,10 +372,99 @@ export default function CheckoutPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
+    editedCustomerFields.current.add(name)
+    if (name === "state") editedCustomerFields.current.add("city")
     setCustomerData((prev) => ({
       ...prev,
       [name]: value,
     }))
+  }
+  const startNewAddress = () => {
+    for (const field of ["address", "city", "pincode"]) editedCustomerFields.current.add(field)
+    setCustomerData(previous => ({ ...previous, address: "", city: "", pincode: "", state: "Karnataka" }))
+    setEditingAddress(true)
+    setAddressNotice("")
+    setSelectedAddressId(null)
+    setAddressType("home")
+  }
+
+  const selectAddress = (address: SavedDeliveryAddress) => {
+    const { id, type, ...details } = address
+    for (const field of Object.keys(details)) editedCustomerFields.current.add(field)
+    setCustomerData(previous => ({ ...previous, ...details }))
+    setSelectedAddressId(id)
+    setAddressType(type)
+    setEditingAddress(false)
+    setAddressNotice("")
+  }
+
+  const useEnteredAddress = () => {
+    const result = SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType })
+    if (!result.success) { toast.error(result.error.issues[0].message); return }
+    setCustomerData(previous => ({ ...previous, ...result.data }))
+    setSelectedAddressId(null)
+    setEditingAddress(false)
+  }
+
+  const saveAddress = async () => {
+    if (!accountId || addressMutation.current) return
+    const result = SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType })
+    if (!result.success) { toast.error(result.error.issues[0].message); return }
+    const owner = accountId
+    addressMutation.current = true
+    setAddressSaving(true)
+    try {
+      const response = await apiFetch(selectedAddressId ? `/api/account/addresses/${encodeURIComponent(selectedAddressId)}` : "/api/account/addresses", {
+        method: selectedAddressId ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.data),
+      })
+      const data: unknown = await response.json()
+      if (!response.ok) {
+        const error = z.object({ error: z.string() }).safeParse(data)
+        throw new Error(error.success ? error.data.error : "Address could not be saved.")
+      }
+      const saved = z.object({ address: SavedDeliveryAddressSchema.extend({ id: z.string() }) }).parse(data).address
+      if (currentAccountId.current !== owner) return
+      setSavedAddresses(previous => [saved, ...previous.filter(address => address.id !== saved.id)])
+      selectAddress(saved)
+      toast.success("Delivery address saved to your account")
+    } catch (error) {
+      if (currentAccountId.current !== owner) return
+      console.error("[Checkout] Address save failed:", error)
+      toast.error(error instanceof Error ? error.message : "Address could not be saved.")
+    } finally {
+      if (currentAccountId.current === owner) {
+        addressMutation.current = false
+        setAddressSaving(false)
+      }
+    }
+  }
+
+  const removeAddress = async (id: string) => {
+    if (!accountId || addressMutation.current) return
+    const owner = accountId
+    addressMutation.current = true
+    setAddressSaving(true)
+    try {
+      const response = await apiFetch(`/api/account/addresses/${encodeURIComponent(id)}`, { method: "DELETE" })
+      if (!response.ok) throw new Error("Address could not be removed. Please retry.")
+      if (currentAccountId.current !== owner) return
+      setSavedAddresses(previous => previous.filter(address => address.id !== id))
+      if (selectedAddressId === id) {
+        setSelectedAddressId(null)
+        setEditingAddress(true)
+      }
+      toast.success("Saved address removed")
+    } catch (error) {
+      if (currentAccountId.current !== owner) return
+      console.error("[Checkout] Address removal failed:", error)
+      toast.error(error instanceof Error ? error.message : "Address could not be removed.")
+    } finally {
+      if (currentAccountId.current === owner) {
+        addressMutation.current = false
+        setAddressSaving(false)
+      }
+    }
   }
 
   const validateStep1 = async () => {
@@ -275,10 +476,11 @@ export default function CheckoutPage() {
     }
 
     const required = isPickup
-      ? ["firstName", "lastName", "email", "phone"]
-      : ["firstName", "lastName", "email", "phone", "address", "city", "state", "pincode"]
+      ? ["firstName", "email", "phone"]
+      : ["firstName", "email", "phone", "address", "city", "state", "pincode"]
     for (const field of required) {
-      if (!customerData[field as keyof typeof customerData]) {
+      if (!customerData[field as keyof typeof customerData].trim()) {
+        setEditingAddress(true)
         toast.error(`Please fill in ${field.replace(/([A-Z])/g, " $1").toLowerCase()}`)
         return false
       }
@@ -305,6 +507,10 @@ export default function CheckoutPage() {
 
     // Pincode and serviceability only matter when we are delivering.
     if (isPickup) return true
+    if (customerData.state !== "Karnataka" || !CHECKOUT_CITIES.includes(customerData.city)) {
+      toast.error("Delivery is currently available only in Bangalore and Mysore, Karnataka.")
+      return false
+    }
 
     // Validate pincode
     const pincodeRegex = /^[0-9]{6}$/
@@ -316,15 +522,16 @@ export default function CheckoutPage() {
     // Check pincode restrictions
     try {
       const res = await fetch("/api/blocked-pincodes")
-      const data = await res.json()
+      if (!res.ok) throw new Error("Delivery verification failed")
+      const data = PincodeRestrictionsResponseSchema.parse(await res.json())
       const mode = data.mode || "blocked"
 
       // Extract pincode strings from objects
       const blockedPincodesArray = Array.isArray(data.blockedPincodes)
-        ? data.blockedPincodes.map((entry: any) => typeof entry === 'string' ? entry : entry.pincode)
+        ? data.blockedPincodes.map((entry) => typeof entry === 'string' ? entry : entry.pincode)
         : []
       const allowedPincodesArray = Array.isArray(data.allowedPincodes)
-        ? data.allowedPincodes.map((entry: any) => typeof entry === 'string' ? entry : entry.pincode)
+        ? data.allowedPincodes.map((entry) => typeof entry === 'string' ? entry : entry.pincode)
         : []
 
       if (mode === "blocked") {
@@ -363,17 +570,25 @@ export default function CheckoutPage() {
     return true
   }
 
-  const handleNextStep = async () => {
-    if (currentStep === 1) {
-      const valid = await validateStep1()
-      if (!valid) return
-      analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
+  const validateCheckout = async () => {
+    if (addressesLoading || profileLoading || addressMutation.current) {
+      toast.error("Please wait for your account addresses to finish loading or saving.")
+      return false
     }
-    setCurrentStep((prev) => Math.min(prev + 1, 2))
-  }
-
-  const handlePrevStep = () => {
-    setCurrentStep((prev) => Math.max(prev - 1, 1))
+    if (cartError) { toast.error(cartError); return false }
+    if (cart.length === 0) { toast.error("Your cart is empty"); return false }
+    if (catalogueLoading || catalogueError) {
+      toast.error(catalogueError || "Product prices and stock are still loading. Please try again.")
+      return false
+    }
+    if (applyingCoupon) { toast.error("Please wait for your coupon to be checked."); return false }
+    if (hasHardware && !isPickup && (isLoadingSettings || settingsError || !settingsData)) {
+      toast.error("Delivery charges could not be confirmed. Please refresh and try again.")
+      return false
+    }
+    if (!await validateStep1()) return false
+    analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
+    return true
   }
 
   // Apply coupon handler
@@ -384,47 +599,30 @@ export default function CheckoutPage() {
     try {
       const payload = {
         code: couponCode.trim(),
-        cart: cart.map((i) => ({ id: i.id, quantity: i.quantity, price: i.price })),
-        userId: user?.id,
+        cart: cart.map((i) => ({ id: i.id, quantity: i.quantity })),
       }
-      const res = await fetch("/api/coupons/validate", {
+      const data = await apiFetchJson("/api/coupons/validate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setAppliedCoupon(null)
-        setCouponDiscount(0)
-        return toast.error(data.error || "Invalid coupon")
-      }
+        json: payload,
+        signal: AbortSignal.timeout(12_000),
+      }, value => CouponQuoteSchema.parse(value))
+      if (couponContextRef.current !== couponContext) throw new Error("Your cart changed. Apply the coupon again.")
       setAppliedCoupon({ code: data.code, name: data.name })
-      setCouponDiscount(Number(data.discount) || 0)
+      setCouponDiscount(data.discount)
       toast.success(`Applied ${data.code}`)
     } catch (e) {
+      setAppliedCoupon(null)
+      setCouponDiscount(0)
       console.error("ByteWise Testing Point apply coupon error:", e)
-      toast.error("Failed to apply coupon")
+      toast.error(e instanceof Error ? e.message : "Failed to apply coupon")
     } finally {
       couponLock.release()
       setApplyingCoupon(false)
     }
   }
 
-  // Redeem coupon after placing order successfully
-  const redeemAppliedCoupon = async () => {
-    if (!appliedCoupon) return
-    try {
-      await fetch("/api/coupons/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: appliedCoupon.code, userId: user?.id }),
-      })
-    } catch (e) {
-      console.error("ByteWise Testing Point redeem coupon error:", e)
-    }
-  }
-
-  const handlePlaceOrder = async (paymentDetails?: any) => {
+  const handlePlaceOrder = async (paymentDetails?: CheckoutPaymentDetails) => {
+    if (cartError) { toast.error(cartError); return }
     // Hard guard: a duplicate call here would create a second order.
     if (!orderLock.acquire()) return
     setIsProcessing(true)
@@ -441,10 +639,10 @@ export default function CheckoutPage() {
           image: item.image,
           type: item.type,
           // Preserve integration metadata (KGen / exlr8)
-          provider: (item as any).provider || null,
-          source: (item as any).source || null,
-          kgenProductId: (item as any).kgenProductId || null,
-          kgenVariantId: (item as any).kgenVariantId || null,
+          provider: item.provider || null,
+          source: item.source || null,
+          kgenProductId: item.kgenProductId || null,
+          kgenVariantId: item.kgenVariantId || null,
           // Include software-specific details
           ...(item.type === 'software' && {
             maxDevices: item.maxDevices,
@@ -469,8 +667,8 @@ export default function CheckoutPage() {
           name: `${customerData.firstName} ${customerData.lastName}`,
           street: isPickup ? pickupStore?.address || "" : customerData.address,
           city: isPickup ? pickupStore?.city || "" : customerData.city,
-          state: customerData.state,
-          zip: customerData.pincode,
+          state: isPickup ? pickupStore?.state || "Karnataka" : customerData.state,
+          zip: isPickup ? pickupStore?.pincode || "" : customerData.pincode,
           country: customerData.country,
         },
         fulfilment: {
@@ -497,12 +695,15 @@ export default function CheckoutPage() {
           ...(paymentMethod === "instore" && {
             employeeId: paymentDetails?.employeeId,
             verifiedEmail: paymentDetails?.verifiedEmail,
-            verifiedAt: new Date().toISOString()
+            verifiedAt: new Date().toISOString(),
+            approvalId: paymentDetails?.approvalId,
+            approvalToken: paymentDetails?.approvalToken,
           }),
           ...(paymentMethod === "online" && {
             paymentId: paymentDetails?.paymentId,
             orderId: paymentDetails?.orderId,
-            transactionId: paymentDetails?.razorpay_payment_id,
+            transactionId: paymentDetails?.transactionId,
+            checkoutToken: paymentDetails?.checkoutToken,
           }),
         },
         subtotal,
@@ -532,7 +733,11 @@ export default function CheckoutPage() {
       if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Order response:", result)
 
       if (result.success) {
-        const newOrderId = result.orderId || `ORD${Date.now()}`
+        const newOrderId = result.orderId
+        if (typeof newOrderId !== "string" || !newOrderId) throw new Error("Order created but its reference is unavailable. Please contact support before paying again.")
+        const confirmation = OrderConfirmationSchema.safeParse(result.order)
+        if (confirmation.success) setPlacedOrder(confirmation.data)
+        else console.error("[Checkout] Created order returned incomplete confirmation details:", confirmation.error)
         setOrderId(newOrderId)
         setOrderPlaced(true)
 
@@ -556,97 +761,26 @@ export default function CheckoutPage() {
           items: cart.map((i) => toAnalyticsItem(i)),
         })
 
-        // Redeem coupon after successful order
-        if (appliedCoupon) {
-          await redeemAppliedCoupon()
-          if (process.env.NODE_ENV === "development") {
-            console.log("ByteWise Testing Point Coupon redeemed:", appliedCoupon.code)
-          }
-        }
-
-        // Fetch the placed order from the database to get the real total
-        try {
-          const orderRes = await fetch(
-            token ? `/api/orders/${newOrderId}?token=${encodeURIComponent(token)}` : `/api/orders/${newOrderId}`,
-          )
-          if (orderRes.ok) {
-            const orderJson = await orderRes.json()
-            setPlacedOrder(orderJson)
-          } else {
-            setPlacedOrder(null)
-          }
-        } catch (fetchOrderErr) {
-          setPlacedOrder(null)
-        }
-
-        // If the order contains integration items, group them by provider and call provider-specific place-order endpoints.
-        try {
-          const integrationGroups: Record<string, any[]> = {}
-          for (const it of cart) {
-            const itemAny = it as any
-            const provider = itemAny.provider || (itemAny.source === 'kgen' ? 'exlr8' : null)
-            if (!provider) continue
-            integrationGroups[provider] = integrationGroups[provider] || []
-            integrationGroups[provider].push(itemAny)
-          }
-
-          const providerKeys = Object.keys(integrationGroups)
-          if (providerKeys.length > 0) {
-            if (process.env.NODE_ENV === 'development') console.log('ByteWise Testing Point placing integration orders for providers:', providerKeys)
-
-            const results = await Promise.all(providerKeys.map(async (provider) => {
-              try {
-                const res = await fetch(`/api/integrations/${encodeURIComponent(provider)}/place-order`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ orderId: newOrderId, userId: user?.id, items: integrationGroups[provider] })
-                })
-                const data = await res.json()
-                return { provider, ok: res.ok, data }
-              } catch (e) {
-                return { provider, ok: false, error: e }
-              }
-            }))
-
-            // Summarize results for the user
-            const queued = results.filter(r => r.data && (r.data.queued || r.data.queueId))
-            const placed = results.filter(r => r.data && r.data.placed)
-            const failed = results.filter(r => !r.ok || (r.data && r.data.error))
-
-            if (queued.length > 0) {
-              toast.success(`Order placed. ${queued.length} provider(s) queued for processing.`)
-            } else if (placed.length > 0 && failed.length === 0) {
-              toast.success('Order placed and integration items were forwarded to providers successfully.')
-            } else if (failed.length > 0) {
-              toast.success('Order placed but some integration items will be processed later. Check your orders page.')
-            } else {
-              toast.success('Order placed successfully!')
-            }
-          } else {
-            toast.success('Order placed successfully!')
-          }
-        } catch (queueErr) {
-          console.error('Failed to call provider place-order endpoints:', queueErr)
-          toast.success('Order placed successfully!')
-        }
+        toast.success('Order placed successfully!')
 
         if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Clearing cart after successful order")
         clearCart()
+        router.replace(`/thank-you?orderId=${encodeURIComponent(newOrderId)}${token ? `&token=${encodeURIComponent(token)}` : ""}`)
       } else {
         throw new Error(result.error || "Failed to place order")
       }
     } catch (error) {
       console.error("ByteWise Testing Point Error placing order:", error)
-      toast.error("Failed to place order. Please try again.")
+      toast.error(error instanceof Error ? error.message : "Failed to place order. Please try again.")
     } finally {
       orderLock.release()
       setIsProcessing(false)
     }
   }
 
-  const handlePaymentSuccess = (paymentDetails: any) => {
+  const handlePaymentSuccess = (paymentDetails: CheckoutPaymentDetails) => {
     // Directly place order on payment success without showing confirmation
-    handlePlaceOrder(paymentDetails)
+    return handlePlaceOrder(paymentDetails)
   }
 
   if (cartLoading) {
@@ -674,7 +808,7 @@ export default function CheckoutPage() {
           <div className="flex flex-col items-center bg-white p-8 rounded-lg shadow-md">
             <span className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1560BD] mb-4"></span>
             <h2 className="text-xl font-semibold mb-2">Processing the order</h2>
-            <p className="text-gray-600">We're verifying your in-store purchase and finalizing the order. This may take a few moments.</p>
+            <p className="text-gray-600">We&apos;re verifying your in-store purchase and finalizing the order. This may take a few moments.</p>
           </div>
         </main>
         <Footer />
@@ -686,106 +820,12 @@ export default function CheckoutPage() {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
-        <main className="flex-grow bg-gray-50 py-12">
-          <div className="container mx-auto px-4 max-w-2xl">
-            <div className="bg-white rounded-lg shadow-md p-8 text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="h-12 w-12 text-green-600" />
-              </div>
-
-              <h1 className="text-3xl font-bold text-green-600 mb-4">Order Confirmed!</h1>
-              <p className="text-gray-600 mb-6">
-                Thank you for your purchase. Your order has been successfully placed and is being processed.
-              </p>
-
-              <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="text-left">
-                    <span className="font-semibold text-gray-700">Order ID:</span>
-                    <p className="text-blue-600 font-mono mt-1">{orderId}</p>
-                  </div>
-                  <div className="text-left">
-                    <span className="font-semibold text-gray-700">Total Amount:</span>
-                    <p className="text-xl font-bold text-green-600 mt-1">₹{money(placedOrder?.total ?? total)}</p>
-                  </div>
-                  <div className="text-left">
-                    <span className="font-semibold text-gray-700">Payment Method:</span>
-                    <p className="mt-1">{placedOrder?.paymentMethod ? placedOrder.paymentMethod.charAt(0).toUpperCase() + placedOrder.paymentMethod.slice(1) : "Online Payment"}</p>
-                  </div>
-                  <div className="text-left">
-                    <span className="font-semibold text-gray-700">Delivery Address:</span>
-                    <p className="mt-1">
-                      <strong>Consumer Name :-</strong> {placedOrder?.shippingAddress?.name || `${customerData.firstName} ${customerData.lastName}`}
-                      <br />
-                      <strong>Address :-</strong> {placedOrder?.shippingAddress?.street || customerData.address}, {placedOrder?.shippingAddress?.city || customerData.city}, {placedOrder?.shippingAddress?.state || customerData.state}, {placedOrder?.shippingAddress?.zip || customerData.pincode}
-                      <br />
-                      <strong>Country :-</strong> {placedOrder?.shippingAddress?.country || customerData.country}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <div className="flex flex-col items-center p-4 bg-blue-50 rounded-lg">
-                  <Package className="h-8 w-8 text-blue-600 mb-2" />
-                  <h3 className="font-semibold text-sm">Order Processing</h3>
-                  <p className="text-xs text-gray-600 text-center">Your order is being prepared</p>
-                </div>
-                <div className="flex flex-col items-center p-4 bg-yellow-50 rounded-lg">
-                  <Truck className="h-8 w-8 text-yellow-600 mb-2" />
-                  <h3 className="font-semibold text-sm">Shipping</h3>
-                  <p className="text-xs text-gray-600 text-center">Expected delivery in 7 - 8 days</p>
-                </div>
-                <div className="flex flex-col items-center p-4 bg-green-50 rounded-lg">
-                  <Shield className="h-8 w-8 text-green-600 mb-2" />
-                  <h3 className="font-semibold text-sm">Secure Payment</h3>
-                  <p className="text-xs text-gray-600 text-center">Your payment is protected</p>
-                </div>
-              </div>
-
-              {guestAccessToken && (
-                <div className="mb-8 rounded-lg border border-blue-100 bg-blue-50 p-5 text-left">
-                  <h3 className="font-semibold text-gray-900">Save your order link</h3>
-                  <p className="mt-1 text-sm text-gray-700">
-                    You checked out as a guest. This private link is the only way to reopen this
-                    order without an account — we&apos;ve also emailed it to{" "}
-                    <span className="font-medium">{customerData.email}</span>.
-                  </p>
-                  <Link
-                    href={`/order/${orderId}?token=${encodeURIComponent(guestAccessToken)}`}
-                    className="mt-3 inline-block break-all rounded-md bg-white px-3 py-2 font-mono text-xs text-blue-700 ring-1 ring-blue-200 hover:underline"
-                  >
-                    /order/{orderId}
-                  </Link>
-                  <p className="mt-3 text-sm text-gray-700">
-                    Want your full order history?{" "}
-                    <Link
-                      href={`/register?email=${encodeURIComponent(customerData.email)}`}
-                      className="font-semibold text-blue-700 hover:underline"
-                    >
-                      Create an account
-                    </Link>{" "}
-                    with the same email address.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => router.push("/dashboard/orders")}
-                  className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Track Your Order
-                </button>
-                <button
-                  onClick={() => router.push("/")}
-                  className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Continue Shopping
-                </button>
-              </div>
-            </div>
-          </div>
+        <main className="flex-grow bg-white">
+          {placedOrder ? <OrderSuccess order={placedOrder} guestToken={guestAccessToken} /> :
+            <div className="section-container py-16 text-center"><h1 className="text-xl font-semibold">Your order has been placed</h1>
+              <p className="mt-3">Loading details for {orderId}...</p>
+              <Link className="mt-4 inline-block text-blue-700 underline" href={`/thank-you?orderId=${encodeURIComponent(orderId)}${guestAccessToken ? `&token=${encodeURIComponent(guestAccessToken)}` : ""}`}>View your order details</Link>
+            </div>}
         </main>
         <Footer />
       </div>
@@ -793,11 +833,12 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F7F9FC]">
+    <div className={`flex min-h-screen flex-col bg-white ${styles.checkout}`}>
       <Header />
       <main className="flex-grow">
-        <div className="section-container space-y-5 py-5">
-          <nav className="flex items-center gap-2 text-[12px] text-gray-500" aria-label="Breadcrumb">
+        {cartError && <p role="alert" className="mx-auto max-w-6xl rounded bg-red-50 p-4 text-sm text-red-700">{cartError} <Link href="/cart" className="underline">Update cart</Link></p>}
+        <div className={`section-container ${styles.container}`}>
+          <nav className="sr-only" aria-label="Breadcrumb">
             <Link href="/" className="hover:text-[#1560BD]">
               Home
             </Link>
@@ -809,33 +850,19 @@ export default function CheckoutPage() {
             <span className="font-medium text-gray-700">Checkout</span>
           </nav>
 
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className={styles.pageHeading}>
             <div>
               <h1 className="font-heading text-[24px] font-bold text-[#0F2557]">Checkout</h1>
               <p className="mt-0.5 text-[13px] text-slate-600">
-                Almost there! Complete your order in a few simple steps.
+                Almost there! Review your details and pay on this page.
               </p>
             </div>
-            <ol className="flex flex-wrap items-center gap-2 text-[11px]">
+            <ol className={styles.tracker} aria-label="Checkout progress">
               {CHECKOUT_TRACKER.map((label, index) => {
-                const done = index <= (currentStep === 1 ? 1 : 3)
+                const done = index === 0
                 return (
-                  <li key={label} className="flex items-center gap-2">
-                    {index > 0 && <span className="h-px w-5 bg-gray-300" aria-hidden />}
-                    <span
-                      className={`flex items-center gap-1.5 ${
-                        done ? "font-semibold text-[#1560BD]" : "text-gray-400"
-                      }`}
-                    >
-                      <span
-                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                          done ? "bg-[#1560BD] text-white" : "bg-gray-200 text-gray-500"
-                        }`}
-                      >
-                        {index + 1}
-                      </span>
-                      {label}
-                    </span>
+                  <li key={label} aria-current={done ? "step" : undefined}>
+                    <span>{index + 1}</span><strong>{label}</strong>
                   </li>
                 )
               })}
@@ -843,17 +870,58 @@ export default function CheckoutPage() {
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <fieldset disabled={paymentPending || isProcessing || addressSaving} className={styles.layout}>
+            <legend className="sr-only">Checkout details and payment</legend>
             {/* Customer Details - Left side */}
-            <div className="space-y-5">
-              {currentStep === 1 && (
-                <div className="rounded-xl border border-gray-200 bg-white p-5">
-                  <h2 className="mb-5 flex items-center gap-2 font-heading text-[16px] font-bold text-[#0F2557]">
+            <div className={styles.detailsColumn}>
+              {(
+                <section className={styles.panel} aria-labelledby="delivery-address-heading">
+                  <h2 id="delivery-address-heading" className={styles.sectionTitle}>
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1560BD] text-[11px] font-bold text-white">
                       1
                     </span>
                     Delivery Address
+                    {!editingAddress && <button type="button" className="ml-auto text-xs font-medium text-[#0054F0]" onClick={startNewAddress}>+ Add New Address</button>}
                   </h2>
+                  <p className={styles.sectionHint}>{user ? "Choose a saved address or save a new one for future checkouts." : "Enter your delivery details below."}</p>
+                  {profileLoading && <p role="status" className="mb-4 text-sm text-gray-600">Loading your saved account details...</p>}
+                  {profileError && <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    {profileError} <button type="button" className="font-semibold underline" onClick={() => setProfileAttempt((attempt) => attempt + 1)}>Retry account details</button>
+                  </div>}
+                  {addressNotice && <p role="alert" className="mb-4 text-sm text-amber-800">{addressNotice}</p>}
+                  {addressesLoading && <p role="status" className="mb-3 text-sm text-gray-600">Loading saved delivery addresses...</p>}
+                  {addressesError && <p role="alert" className="mb-3 text-sm text-red-700">{addressesError} <button type="button" className="underline" onClick={() => setAddressesAttempt(value => value + 1)}>Retry saved addresses</button></p>}
+                  {savedAddresses.length > 0 && <div className={styles.addressGrid} role="group" aria-label="Saved delivery addresses">
+                    {savedAddresses.map(address => <div key={address.id} className={`${styles.savedAddress} ${selectedAddressId !== address.id || editingAddress ? styles.unselectedAddress : ""}`}>
+                      <button type="button" className={styles.addressChoice} aria-pressed={selectedAddressId === address.id && !editingAddress}
+                        aria-label={`Deliver to ${address.type} address: ${address.address}`} onClick={() => selectAddress(address)}>
+                        <span className={styles.selectedDot} aria-hidden="true" /><Home size={15} />
+                        <span><strong>{address.type === "work" ? "Work" : address.type === "other" ? "Other" : "Home"} address</strong>
+                          <span>{address.firstName} {address.lastName}</span><span>{address.address}</span>
+                          <span>{address.city} - {address.pincode}, {address.state}</span><span>Mobile: {address.phone}</span>
+                        </span>
+                      </button>
+                      <div className={styles.addressActions}>
+                        <button type="button" onClick={() => { selectAddress(address); setEditingAddress(true) }}>Edit</button>
+                        <button type="button" onClick={() => void removeAddress(address.id)} disabled={addressSaving}>Remove</button>
+                      </div>
+                    </div>)}
+                    <button type="button" className={styles.newAddressCard} onClick={startNewAddress}><span>+</span><strong>Add a delivery address</strong><small>Save it to your account for next time.</small></button>
+                  </div>}
+                  {!editingAddress && !selectedAddressId && <>
+                    <div className={styles.addressGrid}>
+                      <div className={styles.savedAddress}>
+                        <span className={styles.selectedDot} aria-hidden="true" /><Home size={15} />
+                        <div><strong>Delivery address</strong><p>{customerData.firstName} {customerData.lastName}</p>
+                          <p>{customerData.address}</p><p>{customerData.city} - {customerData.pincode}, {customerData.state}</p>
+                          <p>Mobile: {customerData.phone}</p>
+                        </div>
+                        <button type="button" onClick={() => setEditingAddress(true)}>Edit</button>
+                      </div>
+                      <button type="button" className={styles.newAddressCard} onClick={startNewAddress}><span>+</span><strong>Add a delivery address</strong><small>Keep your contact details and enter another address.</small></button>
+                    </div>
+                    <p className={styles.accountContact}><Mail size={12} />Order updates will be sent to {customerData.email}</p>
+                  </>}
 
                   {!user && (
                     <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -889,6 +957,14 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
+                  <fieldset hidden={!editingAddress} disabled={addressSaving}>
+                  {user && !isPickup && <label className="mb-4 block text-sm font-medium text-gray-700">
+                    Address label
+                    <select aria-label="Address label" value={addressType} onChange={event => setAddressType(event.target.value as SavedDeliveryAddress["type"])}
+                      className="ml-3 rounded-md border border-gray-300 px-3 py-2">
+                      <option value="home">Home</option><option value="work">Work</option><option value="other">Other</option>
+                    </select>
+                  </label>}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
@@ -906,7 +982,7 @@ export default function CheckoutPage() {
                     </div>
                     <div>
                       <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-                        Last Name *
+                        Last Name
                       </label>
                       <input
                         type="text"
@@ -915,7 +991,6 @@ export default function CheckoutPage() {
                         value={customerData.lastName}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
-                        required
                       />
                     </div>
                   </div>
@@ -953,13 +1028,6 @@ export default function CheckoutPage() {
                       />
                     </div>
                   </div>
-
-                  <FulfilmentSelector
-                    method={fulfilmentMethod}
-                    onMethodChange={setFulfilmentMethod}
-                    selectedStore={pickupStore}
-                    onStoreChange={setPickupStore}
-                  />
 
                   {!isPickup && (
                   <div className="mt-6">
@@ -1002,11 +1070,7 @@ export default function CheckoutPage() {
                             required
                           >
                             <option value="">Select State</option>
-                            {states.map((state) => (
-                              <option key={state} value={state}>
-                                {state}
-                              </option>
-                            ))}
+                            <option value="Karnataka">Karnataka</option>
                           </select>
                         </div>
                         <div>
@@ -1018,19 +1082,14 @@ export default function CheckoutPage() {
                             name="city"
                             value={customerData.city}
                             onChange={handleInputChange}
-                            disabled={!customerData.state || loadingCities}
+                            disabled={!customerData.state}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD] disabled:bg-gray-100 disabled:cursor-not-allowed"
                             required
                           >
                             <option value="">
-                              {loadingCities ? "Loading cities..." : customerData.state ? "Select City" : "Select state first"}
+                              Select City
                             </option>
-                            {/* A saved city may not match the reference list (e.g. "Bengaluru"
-                                vs "Bangalore"); keep it selectable instead of silently blanking it. */}
-                            {customerData.city && !cities.includes(customerData.city) && (
-                              <option value={customerData.city}>{customerData.city}</option>
-                            )}
-                            {cities.map((city) => (
+                            {CHECKOUT_CITIES.map((city) => (
                               <option key={city} value={city}>
                                 {city}
                               </option>
@@ -1056,101 +1115,84 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                   )}
-                </div>
+                  {!isPickup && <div className={styles.addressFormActions}>
+                    {user && <button type="button" onClick={() => void saveAddress()} disabled={addressSaving || addressesLoading}>
+                      {addressSaving ? "Saving address..." : selectedAddressId ? "Save address changes" : "Save delivery address"}
+                    </button>}
+                    <button type="button" onClick={useEnteredAddress}>{user ? "Use without saving" : "Use this address"}</button>
+                    {selectedAddressId && <button type="button" onClick={() => {
+                      const original = savedAddresses.find(address => address.id === selectedAddressId)
+                      if (original) selectAddress(original)
+                    }}>Cancel edit</button>}
+                    {!user && <small>Sign in to save addresses for future checkouts.</small>}
+                  </div>}
+                  </fieldset>
+                </section>
               )}
 
-              {/* Step 2: Payment Method */}
-              {currentStep === 2 && (
-                <div className="rounded-xl border border-gray-200 bg-white p-5">
-                  <h2 className="mb-5 flex items-center gap-2 font-heading text-[16px] font-bold text-[#0F2557]">
+              <section className={styles.panel} aria-labelledby="delivery-options-heading">
+                <h2 id="delivery-options-heading" className={styles.sectionTitle}><span>2</span>Delivery Options</h2>
+                <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
+                <FulfilmentSelector method={fulfilmentMethod} onMethodChange={setFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
+                  deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
+                  <div className={styles.deliveryNotice}><Truck size={34} /><div>
+                    <small>{isPickup ? "Store pickup" : "Home delivery service area"}</small>
+                    <strong>{isPickup ? pickupStore?.name || "Choose a SARA store" : "Bangalore & Mysore"}</strong>
+                    <p>{isPickup ? "We'll let you know when your order is ready." : "Delivery timing confirmed after your order."}</p>
+                  </div><ul><li><CheckCircle size={13} />Pincode checked before payment</li><li><CheckCircle size={13} />Secure online payments</li><li><CheckCircle size={13} />Pickup confirmed after your order</li></ul></div>
+                </FulfilmentSelector>
+              </section>
+
+              {(
+                <section className={styles.panel} aria-labelledby="payment-method-heading">
+                  <h2 id="payment-method-heading" className={styles.sectionTitle}>
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1560BD] text-[11px] font-bold text-white">
                       3
                     </span>
                     Payment Method
                   </h2>
-                  <div className="space-y-4">
-                    <div className="border rounded-lg p-4">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="online"
-                          checked={paymentMethod === "online"}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="mr-3"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium">Online Payment</div>
-                          <div className="text-sm text-gray-600">Pay securely using UPI, Cards, or Net Banking</div>
-                        </div>
-                        <div className="text-2xl">💳</div>
-                      </label>
-                    </div>
-
-                    <div className="border rounded-lg p-4">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="instore"
-                          checked={paymentMethod === "instore"}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="mr-3"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium">In-store Purchase</div>
-                          <div className="text-sm text-gray-600">Verify with employee ID and email</div>
-                        </div>
-                        <div className="text-2xl">🏪</div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Payment Gateway Integration */}
-                  {paymentMethod === "online" && (
-                    <div className="mt-6 p-4 border rounded-lg bg-gray-50">
-                      <PaymentGateway
-                        paymentMethod={paymentMethod}
-                        amount={payableTotal}
-                        orderDetails={{
-                          customer: customerData,
-                          items: cart,
-                          coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
-                          redeemPoints,
-                          total: payableTotal,
-                        }}
-                        onSuccess={handlePaymentSuccess}
-                        onCancel={() => {
-                          if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Payment cancelled")
-                          toast.error("Payment cancelled")
-                        }}
-                      />
-                    </div>
-                  )}
+                  <p className={styles.sectionHint}>Choose a payment method. Online options are confirmed by Razorpay.</p>
+                  <div className={styles.paymentOptions}>{PAYMENT_OPTIONS.map(({ id, label, icon: Icon }) => (
+                    <label key={id} className={paymentOption === id ? styles.selectedPayment : undefined}>
+                      <input type="radio" name="paymentMethod" value={id} checked={paymentOption === id} onChange={() => {
+                        setPaymentOption(id)
+                        setPaymentMethod(id === "instore" || id === "cash-on-delivery" ? id : "online")
+                      }} /><Icon size={20} /><span>{label}</span>
+                    </label>
+                  ))}</div>
 
                   {/* In-store Purchase Verification */}
                   {paymentMethod === "instore" && (
                     <div className="mt-6">
                       <InStorePurchase
+                        beforeVerify={validateCheckout}
+                        checkout={{
+                          items: cart,
+                          couponCode: appliedCoupon?.code || null,
+                          redeemPoints,
+                          fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id },
+                        }}
                         onVerified={(verifiedData) => {
-                          handlePlaceOrder({
+                          return handlePlaceOrder({
                             method: "instore",
                             status: "completed",
                             employeeId: verifiedData.employeeId,
                             verifiedEmail: verifiedData.email,
+                            approvalId: verifiedData.approvalId,
+                            approvalToken: verifiedData.approvalToken,
                           })
                         }}
                       />
                     </div>
                   )}
-                </div>
+                </section>
               )}
             </div>
 
             {/* Order Summary - Right side */}
-            <div className="space-y-4 lg:sticky lg:top-4">
-              <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <div className="mb-4 flex items-center justify-between">
+            <aside className={`space-y-4 ${styles.summaryColumn}`}>
+              <div className={styles.summary}>
+                <div className={styles.summaryHeader}>
                   <h2 className="font-heading text-[15px] font-bold text-[#0F2557]">
                     Order Summary ({cart.length} {cart.length === 1 ? "item" : "items"})
                   </h2>
@@ -1160,16 +1202,12 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Cart Items */}
-                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                <div className={styles.summaryItems}>
                   {cart.map((item) => (
-                    <div key={item.id} className="flex items-start gap-3 py-3 border-b">
-                      <img
-                        src={item.image || "/placeholder.png"}
-                        alt={cleanProductName(item.name)}
-                        className="w-12 h-12 object-cover rounded flex-shrink-0"
-                      />
+                    <div key={item.id} className={styles.summaryRow}>
+                      <div className={styles.summaryImage}><CartProductImage src={item.image} name={cleanProductName(item.name)} /></div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{cleanProductName(item.name)}</p>
+                        <p className={styles.productName}>{cleanProductName(item.name)}</p>
                         <p className="text-xs text-gray-500 mb-1">Qty: {item.quantity}</p>
                         {item.type === 'software' && (
                           <div className="text-xs text-gray-600 space-y-0.5">
@@ -1198,7 +1236,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Coupon input */}
-                <div className="mb-4 p-3 border rounded-lg bg-gray-50">
+                <div id="checkout-coupon" className="mb-4 scroll-mt-48 p-3 border rounded-lg bg-gray-50">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Have a Coupon Code?</label>
                   {!appliedCoupon ? (
                     <div className="flex gap-2">
@@ -1257,8 +1295,15 @@ export default function CheckoutPage() {
                   )}
                 </div>
 
+                {catalogueLoading && <p role="status" className="text-xs text-gray-600">Refreshing prices and stock...</p>}
+                {catalogueError && <p role="alert" className="text-xs text-red-700">{catalogueError} <button type="button" className="underline" onClick={() => setCatalogueAttempt(attempt => attempt + 1)}>Retry product details</button> <Link href="/cart" className="underline">Edit cart</Link></p>}
                 {/* Pricing Breakdown */}
-                <div className="space-y-2 border-t pt-4">
+                <div className={styles.priceDetails}>
+                  <h3 className="mb-3 font-semibold text-sm">Price Details</h3>
+                  <div className="flex justify-between text-sm"><span className="text-gray-600">Total MRP</span><span>₹{money(totalMrp)}</span></div>
+                  <div className="flex justify-between text-sm text-green-700"><span>Product Discount</span><span>− ₹{money(productDiscount)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-gray-600">Delivery Charges</span><span className={shipping === 0 ? "text-green-700" : ""}>{hasHardware && !isPickup && (isLoadingSettings || settingsError || !settingsData) ? "Confirming..." : shipping > 0 ? `₹${money(shipping)}` : "FREE"}</span></div>
+                  <details className="text-xs text-gray-600"><summary className="cursor-pointer">GST breakdown (included in prices)</summary>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal (excl. GST)</span>
                     <span>₹{money(subtotal)}</span>
@@ -1275,12 +1320,7 @@ export default function CheckoutPage() {
                       <span>₹{money(hardwareGST)}</span>
                     </div>
                   )}
-                  {shipping > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Shipping</span>
-                      <span>₹{money(shipping)}</span>
-                    </div>
-                  )}
+                  </details>
                   {couponDiscount > 0 && (
                     <div className="flex justify-between text-sm text-green-600">
                       <span>Coupon Discount</span>
@@ -1294,9 +1334,11 @@ export default function CheckoutPage() {
                     </div>
                   )}
                   <div className="flex justify-between text-lg font-bold border-t pt-2">
-                    <span>Total</span>
+                    <span>Total Amount</span>
                     <span>₹{money(payableTotal)}</span>
                   </div>
+                  <p className="mt-1 text-xs text-gray-500">Inclusive of all taxes. Final prices are confirmed server-side.</p>
+                  {productDiscount + couponDiscount > 0 && <p className={styles.savings}><Tag size={17} />You are saving ₹{money(productDiscount + couponDiscount)} on this order.</p>}
                 </div>
 
                 {user && (
@@ -1309,6 +1351,19 @@ export default function CheckoutPage() {
                     }}
                   />
                 )}
+                {paymentMethod !== "instore" ? <PaymentGateway
+                  key={paymentMethod}
+                  compact
+                  paymentMethod={paymentMethod}
+                  preferredMethod={paymentMethod === "online" ? paymentOption : undefined}
+                  onProcessingChange={setPaymentPending}
+                  amount={payableTotal}
+                  beforePayment={validateCheckout}
+                  orderDetails={{ customer: customerData, items: cart, coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
+                    redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id }, total: payableTotal }}
+                  onSuccess={handlePaymentSuccess}
+                  onCancel={() => toast.error("Payment cancelled")}
+                /> : <a href="#payment-method-heading" className={styles.primaryButton}>Verify in-store purchase <ArrowRight size={16} /></a>}
 
                 {/* Free Shipping Progress */}
                 {hasHardware && shipping > 0 && (
@@ -1318,69 +1373,39 @@ export default function CheckoutPage() {
                     </p>
                   </div>
                 )}
-              </div>
-
-              <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <p className="flex items-center gap-2 font-heading text-[14px] font-bold text-[#0F2557]">
-                  <Shield className="h-4 w-4 text-green-600" strokeWidth={2} />
-                  100% Secure Payments
-                </p>
-                <p className="mt-1.5 text-[11px] leading-snug text-slate-600">
-                  Transactions are encrypted and processed through Razorpay. SARA never stores your card details.
-                </p>
-                <ul className="mt-3 flex flex-wrap gap-2">
+              <div className={styles.securePayment}>
+                <div className={styles.secureIntro}><Shield size={40} /><div><strong>Secure Payments</strong>
+                  <p>Processed through Razorpay. SARA does not store your card details.</p>
+                </div></div>
+                <ul className={styles.paymentBrands}>
                   {["Razorpay", "UPI", "VISA", "Mastercard", "RuPay"].map((label) => (
                     <li
                       key={label}
-                      className="rounded border border-gray-200 px-2 py-1 text-[10px] font-semibold text-slate-600"
+                      className={styles.paymentBrand}
                     >
-                      {label}
+                      {label === "Mastercard" ? <span className={styles.mastercard} role="img" aria-label="Mastercard"><i /><i /></span> : label}
                     </li>
                   ))}
                 </ul>
               </div>
-
-              <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <p className="font-heading text-[14px] font-bold text-[#0F2557]">Need Help?</p>
-                <p className="mt-1.5 text-[11px] leading-snug text-slate-600">
-                  Call <span className="font-semibold text-[#0F2557]">{settingsData?.storePhone || "1800 123 7272"}</span>{" "}
-                  (Toll Free) or reach our team from the contact page.
-                </p>
-                <Link
-                  href="/contact"
-                  className="mt-3 inline-block text-[12px] font-semibold text-[#1560BD] hover:underline"
-                >
-                  Contact Support
-                </Link>
               </div>
-            </div>
-          </div>
 
-          {/* Navigation Buttons */}
-          <div className="flex justify-between">
-            {currentStep > 1 && (
-              <button
-                onClick={handlePrevStep}
-                className="rounded-lg border border-gray-300 px-6 py-2.5 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                disabled={isProcessing}
-              >
-                <ArrowLeft className="inline h-4 w-4 mr-2" />
-                Back
-              </button>
-            )}
-            {currentStep === 1 && (
-              <button
-                onClick={handleNextStep}
-                className="ml-auto rounded-lg bg-[#FF6A2C] px-8 py-3 text-[14px] font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-50"
-                disabled={isProcessing}
-              >
-                Proceed to Payment
-                <ArrowRight className="inline h-4 w-4 ml-2" />
-              </button>
-            )}
-          </div>
+              <div className={styles.help}><Headphones size={36} /><div><strong>Need Help?</strong>
+                {settingsData?.storePhone && <p>Call <a href={`tel:${settingsData.storePhone}`}>{settingsData.storePhone}</a></p>}
+                <Link href="/contact">Contact our support team <ArrowRight size={12} /></Link>
+              </div></div>
+            </aside>
+          </fieldset>
 
-          <TrustStrip />
+          <div className={styles.benefits}>
+            {[
+              { icon: Store, title: "SARA Stores", detail: "Find your nearest store", href: "/store-locator" },
+              { icon: Shield, title: "Genuine Products", detail: "Trusted brands", href: "/warranty" },
+              { icon: CreditCard, title: "EMI Options", detail: "Subject to eligibility", href: "/emi" },
+              { icon: Truck, title: "Delivery & Pickup", detail: "Choose what suits you", href: "#delivery-options-heading" },
+              { icon: Headphones, title: "Expert Support", detail: "We're here to help", href: "/contact" },
+            ].map(({ icon: Icon, title, detail, href }) => <Link key={title} href={href}><Icon size={28} /><span><strong>{title}</strong><small>{detail}</small></span></Link>)}
+          </div>
         </div>
       </main>
 

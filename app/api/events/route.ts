@@ -39,4 +39,4 @@ export const POST = withRateLimit(async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 })
   }
-} as any, { windowMs: 60 * 1000, maxRequests: 120, message: "Too many events." })
+}, { windowMs: 60 * 1000, maxRequests: 120, message: "Too many events." })

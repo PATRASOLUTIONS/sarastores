@@ -1,38 +1,22 @@
 import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import * as XLSX from "xlsx"
+import { requireAdmin } from "@/lib/auth"
+import { LeadQuerySchema, buildLeadFilter } from "@/lib/lead-query"
 
 // GET - Export leads as Excel
 export async function GET(req: Request) {
+    const guard = await requireAdmin()
+    if (!guard.ok) return guard.response
     try {
         const { searchParams } = new URL(req.url)
-        const status = searchParams.get("status")
-        const category = searchParams.get("category")
-        const source = searchParams.get("source")
-        const search = searchParams.get("search")
-        const startDate = searchParams.get("startDate")
-        const endDate = searchParams.get("endDate")
-        const sort = searchParams.get("sort") || "latest"
+        const parsed = LeadQuerySchema.safeParse(Object.fromEntries(searchParams))
+        if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid lead filters" }, { status: 400 })
+        const { sort } = parsed.data
 
         const { db } = await connectToDatabase()
 
-        // Build filter (same as leads GET)
-        const filter: any = {}
-        if (status && status !== "all") filter.status = status
-        if (category && category !== "all") filter.category = category
-        if (source && source !== "all") filter.source = source
-        if (search) {
-            filter.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { phone: { $regex: search, $options: "i" } },
-                { email: { $regex: search, $options: "i" } },
-            ]
-        }
-        if (startDate || endDate) {
-            filter.createdAt = {}
-            if (startDate) filter.createdAt.$gte = new Date(startDate)
-            if (endDate) filter.createdAt.$lte = new Date(endDate + "T23:59:59.999Z")
-        }
+        const filter = buildLeadFilter(parsed.data)
 
         const sortOrder = sort === "oldest" ? 1 : -1
 
@@ -87,6 +71,7 @@ export async function GET(req: Request) {
             headers: {
                 "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "Content-Disposition": `attachment; filename="leads_export_${new Date().toISOString().slice(0, 10)}.xlsx"`,
+                "Cache-Control": "no-store",
             },
         })
     } catch (error) {

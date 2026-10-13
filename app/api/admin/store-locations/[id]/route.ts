@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
+import { UpdateStoreLocationSchema } from "@/lib/validation"
+import type { StoredStoreLocation } from "@/lib/store-locations"
 
 const COLLECTION = "store_locations"
 
@@ -23,7 +25,7 @@ export async function GET(
       }, { status: 400 })
     }
 
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<StoredStoreLocation>(COLLECTION)
     const store = await collection.findOne({ _id: new ObjectId(id) })
 
     if (!store) {
@@ -68,7 +70,8 @@ export async function PUT(
 
   try {
     const { id } = await params
-    const body = await request.json()
+    const parsed = UpdateStoreLocationSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ 
@@ -77,18 +80,7 @@ export async function PUT(
       }, { status: 400 })
     }
 
-    const { 
-      shopName, 
-      locationDescription, 
-      googleMapLocation, 
-      mobileNo, 
-      shopTiming, 
-      shopImage, 
-      emailId,
-      isActive 
-    } = body
-
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<StoredStoreLocation>(COLLECTION)
     const existingStore = await collection.findOne({ _id: new ObjectId(id) })
 
     if (!existingStore) {
@@ -98,29 +90,19 @@ export async function PUT(
       }, { status: 404 })
     }
 
-    const updateData: Record<string, any> = {
-      updatedAt: new Date()
-    }
-
-    if (shopName !== undefined) updateData.shopName = shopName.trim()
-    if (locationDescription !== undefined) updateData.locationDescription = locationDescription.trim()
-    if (googleMapLocation !== undefined) updateData.googleMapLocation = googleMapLocation.trim()
-    if (mobileNo !== undefined) updateData.mobileNo = mobileNo.trim()
-    if (shopTiming !== undefined) updateData.shopTiming = shopTiming.trim()
-    if (shopImage !== undefined) updateData.shopImage = shopImage.trim()
-    if (emailId !== undefined) updateData.emailId = emailId.trim()
-    if (isActive !== undefined) updateData.isActive = Boolean(isActive)
-
-    await collection.updateOne(
+    const updateData = { ...parsed.data, updatedAt: new Date() }
+    const result = await collection.updateOne(
       { _id: new ObjectId(id) },
       { $set: updateData }
     )
+    if (!result.matchedCount) return NextResponse.json({ success: false, message: "Store was removed during update" }, { status: 409 })
 
     return NextResponse.json({ 
       success: true, 
       message: "Store updated successfully" 
     })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
     console.error("Error updating store:", error)
     return NextResponse.json({ 
       success: false, 

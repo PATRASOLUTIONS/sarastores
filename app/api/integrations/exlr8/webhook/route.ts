@@ -1,97 +1,100 @@
-import { NextResponse } from "next/server"
-import { getCollection, createObjectId } from "@/lib/db-service"
-import crypto from "crypto"
+import { NextResponse } from 'next/server';
+import { ObjectId, type Filter } from 'mongodb';
+import crypto from 'crypto';
+import { getCollection } from '@/lib/db-service';
+import { connectToDatabase } from '@/lib/mongodb';
+import { ExternalOrderWebhookSchema } from '@/lib/validation';
+import { FulfillmentError, type ExternalFulfillmentRecord } from '@/lib/external-fulfillment';
 
-// Webhook receiver for eXlr8/KGen to reconcile external order status
+interface WebhookOrder {
+  orderId?: string;
+  updatedAt?: Date;
+  timeline?: Array<{ date: string; status: string; description: string }>;
+  externalFulfillment?: { status: string; updatedAt: Date; lastWebhookStatus?: string };
+}
+
 export async function POST(request: Request) {
+  const secret = process.env.EXLR8_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('[eXlr8 Webhook] Shared secret is not configured');
+    return NextResponse.json({ error: 'Webhook is not configured' }, { status: 503 });
+  }
+  const incoming = Buffer.from(request.headers.get('x-webhook-secret') || '');
+  const expected = Buffer.from(secret);
+  if (incoming.length !== expected.length || !crypto.timingSafeEqual(incoming, expected)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  let body: unknown;
   try {
-    const body = await request.json()
-
-    // Verify a shared secret — required, never optional
-    const expectedSecret = process.env.EXLR8_WEBHOOK_SECRET
-    if (!expectedSecret) {
-      console.error('EXLR8_WEBHOOK_SECRET is not configured')
-      return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
-    }
-    const incomingSecret = (request.headers.get('x-webhook-secret') || '')
-    const incomingBuffer = Buffer.from(incomingSecret)
-    const expectedBuffer = Buffer.from(expectedSecret)
-    if (incomingBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(incomingBuffer, expectedBuffer)) {
-      console.warn('Webhook secret mismatch')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { queueId, externalOrderId, orderId, status, message, payload } = body || {}
-
-    if (!orderId && !queueId && !externalOrderId) {
-      return NextResponse.json({ error: 'Missing identifiers (orderId | queueId | externalOrderId)' }, { status: 400 })
-    }
-
-  const externalCollection: any = await getCollection('external_orders')
-  const ordersCollection: any = await getCollection('orders')
-
-    // Try to find the external queue doc
-    let extFilter: any = {}
-    if (queueId) extFilter._id = createObjectId(queueId)
-    else if (externalOrderId) extFilter.externalOrderId = externalOrderId
-    else if (orderId) extFilter.orderId = orderId
-
-    const extDoc = await externalCollection.findOne(extFilter)
-
-    if (extDoc) {
-      const updateFields: any = {
-        status: status || 'updated',
-        response: { message: message || null, payload: payload || null },
-        updatedAt: new Date(),
-      }
-      await externalCollection.updateOne({ _id: extDoc._id }, { $set: updateFields, $inc: { attempts: 1 } })
-
-      // Update main order accordingly
-      if (extDoc.orderId) {
-        const newOrderStatus = status === 'fulfilled' ? 'confirmed' : (status === 'failed' ? 'failed' : 'processing')
-        await ordersCollection.updateOne(
-          { _id: createObjectId(extDoc.orderId) },
-          {
-            $set: { updatedAt: new Date(), status: newOrderStatus },
-            $push: {
-              timeline: {
-                $each: [ {
-                  date: new Date().toISOString(),
-                  status: `External: ${status}`,
-                  description: message || `External provider status: ${status}`,
-                } ],
-              },
-            },
-          }
-        )
-      }
-
-      return NextResponse.json({ success: true })
-    }
-
-    // If no ext doc found but orderId provided, attach a generic timeline update
-    if (orderId) {
-      await ordersCollection.updateOne(
-        { _id: createObjectId(orderId) },
-        {
-          $set: { updatedAt: new Date() },
-          $push: {
-            timeline: {
-              $each: [ {
-                date: new Date().toISOString(),
-                status: `ExternalWebhook: ${status || 'update'}`,
-                description: message || 'External webhook received',
-              } ],
-            },
-          },
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  const parsed = ExternalOrderWebhookSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+  const input = parsed.data;
+  const hash = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  try {
+    const external = await getCollection<ExternalFulfillmentRecord>('external_orders');
+    const orders = await getCollection<WebhookOrder>('orders');
+    const filter: Filter<ExternalFulfillmentRecord> = input.queueId
+      ? { $or: [
+        { _id: input.queueId }, { queueId: input.queueId },
+        ...(ObjectId.isValid(input.queueId) ? [{ _id: new ObjectId(input.queueId) }] : []),
+      ] }
+      : input.externalOrderId ? { $or: [
+        { externalOrderId: input.externalOrderId },
+        { 'response.data.orderID': input.externalOrderId }, { 'response.data.orderId': input.externalOrderId },
+      ] } : { orderId: input.orderId };
+    const { client } = await connectToDatabase();
+    const session = client.startSession();
+    try {
+      const result = await session.withTransaction(async () => {
+        const matches = await external.find(filter, { session }).limit(2).toArray();
+        if (matches.length > 1) throw new FulfillmentError('Ambiguous fulfillment reference; supply a unique queueId or externalOrderId', 409);
+        const record = matches[0];
+        if (!record?.orderId || (record.provider && !['exlr8', 'kgen'].includes(record.provider)) ||
+            (input.orderId && input.orderId !== record.orderId) ||
+            (input.externalOrderId && record.externalOrderId && input.externalOrderId !== record.externalOrderId)) {
+          throw new FulfillmentError('No matching external fulfillment record', 404);
         }
-      )
-      return NextResponse.json({ success: true, note: 'Order timeline updated' })
+        const order = await orders.findOne(ObjectId.isValid(record.orderId)
+          ? { $or: [{ _id: new ObjectId(record.orderId) }, { orderId: record.orderId }] }
+          : { orderId: record.orderId }, { session });
+        if (!order) throw new FulfillmentError('Linked order not found; reconciliation is required', 409);
+        if (record.lastWebhookHash === hash) return { success: true, duplicate: true };
+        if (record.status && ['fulfilled', 'delivered', 'completed', 'cancelled'].includes(record.status) && record.status !== input.status) {
+          return { success: true, ignored: true, note: 'Terminal fulfillment state preserved' };
+        }
+        const now = new Date();
+        const updated = await external.updateOne({ _id: record._id }, {
+          $set: {
+            status: input.status, webhookResponse: { message: input.message || null, payload: input.payload ?? null },
+            ...(input.externalOrderId ? { externalOrderId: input.externalOrderId } : {}),
+            lastWebhookHash: hash, updatedAt: now,
+          },
+          $inc: { webhookAttempts: 1 },
+        }, { session });
+        if (updated.matchedCount !== 1) throw new FulfillmentError('External fulfillment record changed; retry callback', 409);
+        // A unit/provider callback is not proof of whole-order payment or delivery.
+        const linked = await orders.updateOne({ _id: order._id }, {
+          $set: { updatedAt: now, ...(order.externalFulfillment ? {
+            'externalFulfillment.lastWebhookStatus': input.status,
+            'externalFulfillment.updatedAt': now,
+          } : {}) },
+          $push: { timeline: { date: now.toISOString(), status: `External: ${input.status}`, description: input.message || `External provider status: ${input.status}` } },
+        }, { session });
+        if (linked.matchedCount !== 1) throw new FulfillmentError('Linked order changed; reconciliation is required', 409);
+        return { success: true };
+      });
+      if (!result) throw new Error('Webhook transaction did not commit');
+      return NextResponse.json(result);
+    } finally {
+      await session.endSession();
     }
-
-    return NextResponse.json({ error: 'No matching external queue or order found' }, { status: 404 })
   } catch (error) {
-    console.error('Webhook handling error:', error)
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
+    if (error instanceof FulfillmentError) return NextResponse.json({ error: error.message }, { status: error.status });
+    console.error('[eXlr8 Webhook] Processing failed:', error instanceof Error ? error.message : 'Unexpected database failure');
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }

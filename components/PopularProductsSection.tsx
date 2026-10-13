@@ -3,6 +3,13 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { ShoppingCart, TrendingUp, Eye } from "lucide-react"
+import { productCardResponseSchema } from "@/lib/product-card-response"
+import { z } from "zod"
+
+const popularProductsSchema = z.array(productCardResponseSchema.extend({
+  description: z.string(),
+  sales: z.number().finite().nonnegative(),
+}))
 
 // Default popular products if none are found in localStorage
 const defaultPopularProducts = [
@@ -35,14 +42,14 @@ const defaultPopularProducts = [
 export default function PopularProductsSection() {
   const [isVisible, setIsVisible] = useState(false)
   const sectionRef = useRef<HTMLDivElement>(null)
-  const [popularProducts, setPopularProducts] = useState(defaultPopularProducts)
+  const [popularProducts, setPopularProducts] = useState<z.infer<typeof popularProductsSchema>>(defaultPopularProducts)
 
   useEffect(() => {
     // Load popular products from localStorage if available
     try {
       const storedPopularProducts = localStorage.getItem("popularProducts")
       if (storedPopularProducts) {
-        setPopularProducts(JSON.parse(storedPopularProducts))
+        setPopularProducts(popularProductsSchema.parse(JSON.parse(storedPopularProducts)))
       }
     } catch (error) {
       console.error("Error loading popular products:", error)
@@ -75,7 +82,7 @@ export default function PopularProductsSection() {
         >
           <h2 className="text-3xl font-bold mb-4">Most Demanded Products</h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Our customers can't get enough of these top-selling items. See what everyone's talking about!
+            Our customers can&apos;t get enough of these top-selling items. See what everyone&apos;s talking about!
           </p>
         </div>
 
@@ -106,7 +113,7 @@ export default function PopularProductsSection() {
 
                 {/* Quick actions */}
                 <div className="absolute bottom-4 left-4 right-4 flex gap-2 transform translate-y-10 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                  <Link href={`/product/${(product as any).slug || product.id}`} className="flex-1">
+                  <Link href={`/product/${product.slug || product.id}`} className="flex-1">
                     <button className="w-full bg-white text-maroon-800 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-gray-100 transition-colors">
                       <Eye className="h-4 w-4 mr-2" />
                       Quick View

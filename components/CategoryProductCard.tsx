@@ -7,42 +7,26 @@ import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Heart, Star, Shield } from "lucide-react"
-import { useCompare } from "@/hooks/useCompare"
+import CompareProductButton from "@/components/CompareProductButton"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCart } from "@/hooks/useCart"
 import { toast } from "react-hot-toast"
 import { formatPrice } from "@/utils/formatPrice"
+import { getCatalogMRP } from "@/lib/product-display"
+import { productImageUrls } from "@/lib/product-images"
+import type { ProductCardResponse } from "@/lib/product-card-response"
+import { z } from "zod"
 import { EmiFromBadge } from "@/components/EmiCalculator"
 import { motion } from 'framer-motion'
 
-interface Product {
-  id: string
-  slug?: string
-  name: string
-  description?: string
-  price: number
-  image: string
-  stock?: number
-  category?: string
-  rating?: number
-  reviews?: number
-  discount?: number
-  originalPrice?: number
-  specification_images?: string
-  sku?: string
-  technical_details?: Record<string, any>
-  trusted?: boolean
-  mrp?: number
-}
-
-function extractUrlsFromTechnicalDetailsObj(technicalDetails?: Record<string, any> | null): string[] {
+function extractUrlsFromTechnicalDetailsObj(technicalDetails?: Record<string, unknown> | null): string[] {
   if (!technicalDetails) return []
   const keys = ["URL", "Url", "url", "From Manufacturer URL", "Manufacturer URL"]
   for (const key of keys) {
-    const v = (technicalDetails as any)[key]
+    const v = technicalDetails[key]
     if (Array.isArray(v)) {
-      const urls = v.filter((u: any) => typeof u === "string" && u.startsWith("http"))
+      const urls = v.filter((u): u is string => typeof u === "string" && u.startsWith("http"))
       if (urls.length) return urls
     }
     if (typeof v === "string" && v.includes("http")) {
@@ -59,61 +43,30 @@ function extractUrlsFromTechnicalDetailsObj(technicalDetails?: Record<string, an
   return []
 }
 
-function extractTitleFromTechnicalDetailsObj(technicalDetails?: Record<string, any> | null): string | undefined {
-  if (!technicalDetails) return undefined
-  const titleKeys = ["Title", "Product Title", "title", "Product Name", "Name", "name"]
-  for (const key of titleKeys) {
-    const v = (technicalDetails as any)[key]
-    if (!v) continue
-    if (typeof v === "string" && v.trim()) return v.trim()
-    if (Array.isArray(v)) {
-      const first = v.find((s) => typeof s === "string" && s.trim())
-      if (first) return String(first).trim()
-    }
-  }
-  return undefined
-}
-
 function extractSpecTitle(input?: unknown): string | undefined {
   if (!input) return undefined
   if (typeof input === "string" && input.trim()) return input.trim()
   if (Array.isArray(input)) {
-    const first = (input as unknown[]).find((s) => typeof s === "string" && String(s).trim())
+    const first = input.find((s) => typeof s === "string" && s.trim())
     if (first) return String(first).trim()
   }
   return undefined
 }
 
 interface CategoryProductCardProps {
-  product: Product
+  product: ProductCardResponse
 }
 
+const wishlistResponseSchema = z.object({ items: z.array(z.object({ id: z.string() })) })
+
 export default function CategoryProductCard({ product }: CategoryProductCardProps) {
-  // Resolve a stable product id (support `id` and Mongo `_id` shapes)
-  const resolveProductId = (p: any) => {
-    if (!p) return ""
-    if (p.id) return String(p.id)
-    if (p._id) {
-      // handle ObjectId, nested shapes, or plain strings
-      try {
-        const s = String((p as any)._id)
-        if (s && s !== '[object Object]') return s
-      } catch (e) {
-        // ignore
-      }
-      if ((p as any)._id._id) return String((p as any)._id._id)
-      if ((p as any)._id.$oid) return String((p as any)._id.$oid)
-    }
-    return ""
-  }
-  const productId = resolveProductId(product)
+  const productId = product.id
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [isWishlistLoading, setIsWishlistLoading] = useState(false)
   const router = useRouter()
   const { user, isAuthenticated } = useAuth()
   const { addToCart } = useCart()
-  const { addToCompare, removeFromCompare, isInCompare } = useCompare()
 
   const handleAddToCart = async () => {
     if (!product) return
@@ -130,26 +83,32 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
       size: null,
     }
 
-    await addToCart(cartItem)
-    toast.success(`${product.name} added to cart!`)
+    const added = await addToCart(cartItem)
+    if (added) toast.success(`${product.name} added to cart!`)
 
     // reset adding state after small delay for UX
     setTimeout(() => setIsAdding(false), 800)
   }
 
   // Deduplicated wishlist check — SWR shares the request across all card instances
-  const wishlistFetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
-  const { data: wishlistData } = useSWR(
-    user ? `/api/wishlist?userId=${encodeURIComponent(user.id)}` : null,
+  const wishlistFetcher = async (url: string) => {
+    const response = await fetch(url, { cache: "no-store" })
+    if (!response.ok) throw new Error("Wishlist could not be loaded")
+    return wishlistResponseSchema.parse(await response.json())
+  }
+  const { data: wishlistData, error: wishlistError } = useSWR(
+    user ? "/api/wishlist" : null,
     wishlistFetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
   React.useEffect(() => {
     if (!wishlistData) return
-    const items: any[] = wishlistData.items || []
-    const found = items.some((p: any) => String(p.id || p._id || p._id?._id) === String(productId || product.id) || String(p.id) === String(productId || product.id))
+    const found = wishlistData.items.some((p) => p.id === productId)
     setIsWishlisted(found)
   }, [wishlistData, productId, product.id])
+  React.useEffect(() => {
+    if (wishlistError) console.error("Wishlist could not be loaded", wishlistError)
+  }, [wishlistError])
 
   const toggleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -200,35 +159,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
     }
   }
 
-  const rating = product.rating || 4.5
-  const reviews = product.reviews || Math.floor(Math.random() * 100) + 10
-
-  // Prioritize MRP: 1) Database mrp field, 2) raw.MRP/raw.mrp, 3) originalPrice, 4) calculated fallback
-  const effectiveOriginalPrice = (() => {
-    // First check database mrp field
-    if (typeof product.mrp === 'number' && !Number.isNaN(product.mrp) && product.mrp > 0) {
-      return Math.round(product.mrp)
-    }
-
-    // Then check raw.MRP or raw.mrp
-    try {
-      const rawAny = (product as any).raw
-      const rawCandidates = [rawAny?.MRP, rawAny?.mrp]
-      for (const cand of rawCandidates) {
-        if (cand === undefined || cand === null) continue
-        const num = Number(String(cand).replace(/[^0-9.\-]/g, ""))
-        if (!Number.isNaN(num) && num > 0) return Math.round(num)
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    // Then check originalPrice
-    if (typeof product.originalPrice === 'number' && !Number.isNaN(product.originalPrice) && product.originalPrice > 0) return product.originalPrice
-
-    // Finally, calculate fallback (20% higher than price)
-    return Math.floor(product.price * 1.2)
-  })()
+  const effectiveOriginalPrice = getCatalogMRP(product)
 
   // Derived from the resolved MRP so the badge can never contradict the prices shown.
   const discount =
@@ -243,8 +174,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
   const technicalDetails = product.technical_details
 
   const displayTitle = cleanProductName(
-    extractSpecTitle((technicalDetails as any)?.Title) ||
-    extractSpecTitle(product.technical_details?.Title) ||
+    extractSpecTitle(technicalDetails?.Title) ||
     product.name
   )
 
@@ -254,55 +184,24 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
     specImages = urlsFromTD.slice(0, 5)
   } else {
     const firstImageFromTD =
-      typeof (technicalDetails as any)?.["First Image"] === "string" ? (technicalDetails as any)["First Image"] : null
+      typeof technicalDetails?.["First Image"] === "string" ? technicalDetails["First Image"] : null
     if (firstImageFromTD) {
       firstSpecImage = firstImageFromTD
       specImages = [firstImageFromTD]
     } else {
-      const specImgs: any = product.specification_images
-      if (Array.isArray(specImgs) && specImgs.length > 0) {
+      const specImgs = productImageUrls(product.specification_images)
+      if (specImgs.length > 0) {
         firstSpecImage = specImgs[0]
         specImages = specImgs.slice(0, 5)
-      } else if (typeof specImgs === "string" && specImgs) {
-        firstSpecImage = specImgs
-        specImages = [specImgs]
       }
     }
   }
 
-  const displayImage = firstSpecImage || product.specification_images || product.image || "/modern-tech-product.png"
+  const displayImage = firstSpecImage || product.image || "/modern-tech-product.png"
 
   return (
     <Link href={`/product/${product.slug || productId || product.id}`} className="group">
       <div className="bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.02] relative border border-transparent hover:border-gray-100">
-        {/* Compare button (prevent navigation) */}
-        <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (process.env.NODE_ENV !== "production") console.debug("[CategoryProductCard] compare click, productId:", productId, "product:", product)
-              if (!productId) return
-              if (isInCompare(productId)) {
-                removeFromCompare(productId)
-                toast.success("Removed from compare")
-              } else {
-                // Only keep compare changes local (in-memory / localStorage via hook)
-                addToCompare(productId)
-                toast.success("Added to compare")
-              }
-            }}
-            className={`w-11 h-11 bg-white/95 hover:bg-white border border-gray-200 rounded-full flex items-center justify-center hover:shadow-lg transition-all hover:scale-110 ${isInCompare(productId) ? 'ring-2 ring-brand-primary bg-brand-primary-light' : ''}`}
-            aria-label="Compare product"
-            title={isInCompare(productId) ? 'Remove from compare' : 'Add to compare'}
-          >
-            <svg className={`h-4 w-4 transition-colors ${isInCompare(productId) ? 'text-brand-primary' : 'text-gray-600 hover:text-brand-primary'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M3 6h18M3 12h12M3 18h18" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-
-
         {/* Show up to 5 specification images as a gallery if available */}
         {/* {specImages.length > 0 && (
           <div className="flex gap-2 px-2 pt-2 pb-1 overflow-x-auto">
@@ -322,11 +221,11 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
         <div className="relative h-40 sm:h-44 md:h-52 overflow-hidden bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
           <div className="absolute left-3 top-3 z-20 flex flex-col items-start gap-1.5">
             {discount > 0 && (
-              <span className="bg-emerald-600 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm">
+              <span className="bg-emerald-700 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm">
                 {discount}% OFF
               </span>
             )}
-            {(product as any).trusted && (
+            {product.trusted && (
               <span className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-2 py-1 rounded-lg shadow-lg flex items-center gap-1">
                 <Shield className="h-3 w-3" />
                 <span className="text-xs font-bold">Trusted</span>
@@ -376,9 +275,9 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
             <div>
               <div className="flex items-baseline gap-3">
                 <span className="text-lg sm:text-xl font-extrabold text-gray-900">{formatPrice(product.price)}</span>
-                <span className="text-sm text-gray-500 line-through">{formatPrice(effectiveOriginalPrice)}</span>
+                {discount > 0 && <span className="text-sm text-gray-600 line-through">{formatPrice(effectiveOriginalPrice)}</span>}
               </div>
-              <span className="text-sm text-green-600 font-semibold">Save {formatPrice(effectiveOriginalPrice - product.price)}</span>
+              {discount > 0 && <span className="text-sm text-green-700 font-semibold">Save {formatPrice(effectiveOriginalPrice - product.price)}</span>}
               <div className="mt-0.5">
                 <EmiFromBadge price={product.price} />
               </div>
@@ -389,13 +288,14 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
           </div>
 
           <div className="flex flex-col gap-3">
+            <CompareProductButton productId={productId} name={displayTitle} />
             <button
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 handleAddToCart()
               }}
-              className="w-full border border-brand-accent bg-white text-brand-accent py-2.5 rounded-xl font-semibold hover:bg-brand-accent hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-accent/40 flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200"
+              className="w-full border border-brand-accent bg-white text-orange-700 py-2.5 rounded-xl font-semibold hover:bg-orange-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-accent/40 flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200"
               aria-label="Add to cart"
             >
               {isAdding ? (
@@ -428,7 +328,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  toggleWishlist(e as any)
+                  toggleWishlist(e)
                 }}
                 className={`w-12 h-11 rounded-xl flex items-center justify-center
     hover:shadow-md active:scale-90 transition-all duration-200

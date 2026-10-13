@@ -16,6 +16,6 @@ export function generateProductSlug(name: string): string {
  * Get the best URL identifier for a product.
  * Prefers slug, falls back to id.
  */
-export function getProductUrlId(product: { slug?: string; id?: string; _id?: any }): string {
+export function getProductUrlId(product: { slug?: string; id?: string; _id?: unknown }): string {
   return product.slug || product.id || String(product._id || '')
 }

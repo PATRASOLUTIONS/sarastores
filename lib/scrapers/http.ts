@@ -1,6 +1,42 @@
-import axios from "axios"
+import axios, { type AxiosRequestConfig } from "axios"
 import * as cheerio from "cheerio"
 import { ScraperError, type ScraperSource } from "./types"
+import { z } from "zod"
+
+const offerSchema = z.object({ price: z.unknown().optional(), lowPrice: z.unknown().optional(), availability: z.unknown().optional() }).passthrough()
+const reviewSchema = z.object({
+  reviewRating: z.object({ ratingValue: z.unknown().optional() }).nullish(),
+  name: z.unknown().optional(), reviewBody: z.unknown().optional(), description: z.unknown().optional(),
+}).passthrough()
+
+const jsonLdNodeSchema = z.object({
+  "@type": z.union([z.string(), z.array(z.string())]).optional(),
+  name: z.unknown().optional(),
+  description: z.unknown().optional(),
+  brand: z.union([z.string(), z.object({ name: z.unknown().optional() })]).nullish(),
+  sku: z.unknown().optional(),
+  productID: z.unknown().optional(),
+  image: z.unknown().optional(),
+  category: z.unknown().optional(),
+  color: z.unknown().optional(),
+  mpn: z.unknown().optional(),
+  gtin: z.unknown().optional(),
+  offers: z.union([offerSchema, z.array(offerSchema)]).nullish().transform((value) => Array.isArray(value) ? value[0] : value),
+  aggregateRating: z.object({ ratingValue: z.unknown().optional(), reviewCount: z.unknown().optional(), ratingCount: z.unknown().optional() }).nullish(),
+  review: z.union([reviewSchema, z.array(reviewSchema)]).nullish().transform((value) => value == null || Array.isArray(value) ? value : [value]),
+  itemListElement: z.array(z.object({ name: z.unknown().optional(), item: z.union([z.string(), z.object({ name: z.unknown().optional() })]).nullish() })).nullish(),
+  mainEntity: z.array(z.object({ name: z.unknown().optional(), acceptedAnswer: z.object({ text: z.unknown().optional() }).nullish() })).nullish(),
+}).passthrough()
+
+export type JsonLdNode = z.infer<typeof jsonLdNodeSchema>
+
+function isDataRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+export function dataRecord(value: unknown): Record<string, unknown> {
+  return isDataRecord(value) ? value : {}
+}
 
 /** Only these hosts are ever fetched server-side. */
 const HOST_MAP: { hosts: string[]; source: ScraperSource }[] = [
@@ -45,12 +81,52 @@ export function detectSource(rawUrl: string): ScraperSource | null {
     return null
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
+  if (parsed.username || parsed.password || parsed.port) return null
 
   const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
   for (const entry of HOST_MAP) {
     if (entry.hosts.some((h) => host === h || host.endsWith(`.${h}`))) return entry.source
   }
   return null
+}
+
+export async function fetchBoundedText(
+  url: string,
+  allowed: (url: string) => boolean,
+  options: Pick<AxiosRequestConfig, "headers" | "timeout"> = {},
+): Promise<{ html: string; finalUrl: string; status: number }> {
+  let current = url
+  const deadline = Date.now() + (options.timeout ?? 30000)
+  for (let hop = 0; hop <= 5; hop++) {
+    if (!allowed(current)) throw new ScraperError("Redirect destination is not permitted", 400)
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new ScraperError("Source request timed out", 504)
+    const response = await axios.get<string>(current, {
+      ...options,
+      timeout: remaining,
+      maxRedirects: 0,
+      maxContentLength: 8 * 1024 * 1024,
+      maxBodyLength: 8 * 1024 * 1024,
+      validateStatus: () => true,
+      responseType: "text",
+      transformResponse: [(value: string) => value],
+    })
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location: unknown = response.headers.location
+      if (typeof location !== "string" || !location || hop === 5) {
+        throw new ScraperError("Source returned an invalid redirect chain", 422)
+      }
+      try {
+        current = new URL(location, current).toString()
+      } catch {
+        throw new ScraperError("Source returned an invalid redirect", 422)
+      }
+      continue
+    }
+    if (typeof response.data !== "string") throw new ScraperError("Source did not return text", 422)
+    return { html: response.data, finalUrl: current, status: response.status }
+  }
+  throw new ScraperError("Source returned too many redirects", 422)
 }
 
 export async function fetchHtml(url: string, timeout = 30000): Promise<{ html: string; finalUrl: string }> {
@@ -60,22 +136,18 @@ export async function fetchHtml(url: string, timeout = 30000): Promise<{ html: s
 
   let lastStatus = 0
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await axios.get(url, {
+    const res = await fetchBoundedText(url, candidate => detectSource(candidate) === detectSource(url), {
       headers: browserHeaders(),
       timeout,
-      maxRedirects: 5,
-      validateStatus: () => true,
-      responseType: "text",
-      transformResponse: [(d) => d],
     })
     lastStatus = res.status
 
     if (res.status === 200) {
-      const html = String(res.data ?? "")
+      const html = res.html
       if (/captcha|are you a robot|automated access/i.test(html.slice(0, 4000))) {
         throw new ScraperError("The site served a bot check instead of the product page", 429, "Retry in a minute, or paste the details manually.")
       }
-      return { html, finalUrl: res.request?.res?.responseUrl || url }
+      return { html, finalUrl: res.finalUrl }
     }
     if (res.status === 403 || res.status === 429) break
     await new Promise((r) => setTimeout(r, 800 + attempt * 700))
@@ -92,17 +164,17 @@ export async function fetchHtml(url: string, timeout = 30000): Promise<{ html: s
  * throwing: every caller has an HTML fallback, so a flaky API must degrade the
  * result rather than fail the scrape.
  */
-export async function fetchJson<T = any>(url: string, timeout = 20000): Promise<T | null> {
+export async function fetchJson<T = unknown>(url: string, timeout = 20000): Promise<T | null> {
   if (!detectSource(url)) return null
   try {
-    const res = await axios.get(url, {
+    const res = await fetchBoundedText(url, candidate => detectSource(candidate) === detectSource(url), {
       headers: { ...browserHeaders(), Accept: "application/json, text/plain, */*" },
       timeout,
-      maxRedirects: 3,
-      validateStatus: (s) => s === 200,
     })
-    return res.data as T
-  } catch {
+    if (res.status !== 200) throw new ScraperError("Companion endpoint did not return success", 422)
+    return JSON.parse(res.html)
+  } catch (error) {
+    console.warn("[Scraper] Companion JSON endpoint unavailable", error instanceof Error ? error.name : "UnknownError")
     return null
   }
 }
@@ -110,40 +182,38 @@ export async function fetchJson<T = any>(url: string, timeout = 20000): Promise<
 
 /** Follows a short link by reading the redirect header — far cheaper than downloading the page. */
 export async function resolveRedirect(url: string): Promise<string> {
-  const res = await axios.get(url, {
+  const source = detectSource(url)
+  if (!source) throw new ScraperError("Unsupported short link", 400)
+  const res = await fetchBoundedText(url, candidate => detectSource(candidate) === source, {
     headers: browserHeaders(),
     timeout: 25000,
-    maxRedirects: 0,
-    validateStatus: (s) => s < 400,
-    responseType: "text",
-    transformResponse: [(d) => d],
   })
-  const location = res.headers?.location
-  if (typeof location === "string" && location) {
-    const absolute = new URL(location, url).toString()
-    if (!detectSource(absolute)) throw new ScraperError("Short link redirected off the expected site", 400)
-    return absolute
-  }
-  return res.request?.res?.responseUrl || url
+  if (res.status !== 200) throw new ScraperError("Could not resolve short link", 422)
+  return res.finalUrl
 }
 
 /** Every JSON-LD node on the page, flattened through `@graph`. */
-export function jsonLdNodes(html: string): any[] {
+export function jsonLdNodes(html: string): JsonLdNode[] {
   const $ = cheerio.load(html)
-  const nodes: any[] = []
+  const nodes: JsonLdNode[] = []
   $('script[type="application/ld+json"]').each((_, el) => {
     try {
-      const parsed = JSON.parse($(el).contents().text())
-      const arr = Array.isArray(parsed) ? parsed : parsed["@graph"] ? parsed["@graph"] : [parsed]
-      nodes.push(...arr)
-    } catch {
-      /* a malformed block must not sink the whole scrape */
+      const parsed: unknown = JSON.parse($(el).contents().text())
+      const graph = dataRecord(parsed)["@graph"]
+      const arr: unknown[] = Array.isArray(parsed) ? parsed : Array.isArray(graph) ? graph : [parsed]
+      for (const value of arr) {
+        const node = jsonLdNodeSchema.safeParse(value)
+        if (node.success) nodes.push(node.data)
+        else console.warn("[Scraper] Ignoring invalid JSON-LD node")
+      }
+    } catch (error) {
+      console.warn("[Scraper] Ignoring malformed JSON-LD block", error instanceof Error ? error.name : "UnknownError")
     }
   })
   return nodes
 }
 
-export function findLdType(html: string, type: string): any | null {
+export function findLdType(html: string, type: string): JsonLdNode | null {
   const wanted = type.toLowerCase()
   return (
     jsonLdNodes(html).find((n) => {
@@ -155,7 +225,7 @@ export function findLdType(html: string, type: string): any | null {
 }
 
 /** Next.js pages router embeds its server props here; often the richest source. */
-export function nextData(html: string): any | null {
+export function nextData<T = unknown>(html: string): T | null {
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
   if (!m) return null
   try {
@@ -214,7 +284,7 @@ function balancedSlice(text: string, from: number): string | null {
  * Pulls the value of `"key":` out of a raw JSON-ish blob. Used on payloads that
  * are too large and too deeply nested to parse wholesale.
  */
-export function jsonAfterKey<T = any>(text: string, key: string, occurrence = 0): T | null {
+export function jsonAfterKey<T = unknown>(text: string, key: string, occurrence = 0): T | null {
   const needle = `"${key}":`
   let at = -1
   for (let i = 0; i <= occurrence; i++) {
@@ -237,7 +307,7 @@ export function jsonAfterKey<T = any>(text: string, key: string, occurrence = 0)
  * i18n bundle reuses keys such as `specifications` and `highlights` for label
  * objects, and those come first in the payload.
  */
-export function jsonArrayAfterKey<T = any>(text: string, key: string): T[] {
+export function jsonArrayAfterKey<T = unknown>(text: string, key: string): T[] {
   const re = new RegExp(`"${key}"\\s*:\\s*\\[`, "g")
   let m: RegExpExecArray | null
   while ((m = re.exec(text))) {
@@ -274,7 +344,7 @@ export function allStringsAfterKey(text: string, key: string): string[] {
  * spec table. Single-quoted strings appear in these blobs, so brace counting
  * has to be quote-aware.
  */
-export function windowState(html: string, name = "__INITIAL_STATE__"): any | null {
+export function windowState<T = unknown>(html: string, name = "__INITIAL_STATE__"): T | null {
   const at = html.indexOf(`window.${name}`)
   if (at < 0) return null
   const from = html.indexOf("{", at)

@@ -8,21 +8,28 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import * as XLSX from "xlsx"
 import { products } from "@/lib/mock-data"
-import BulkStatusUpload from "../orders/bulk-update/page"
+import BulkStatusUpload from "@/components/admin/BulkStatusUpload"
 import PaymentBadge from "@/app/components/PaymentBadge"
 
 interface OrderItem {
+  id?: string
   productId: string
   name: string
   price: number
   quantity: number
   type?: 'product' | 'software'
+  provider?: string
+  kgenProductId?: string
+  validity?: string
+  validityYears?: number
+  maxDevices?: number
 }
 
 interface Customer {
   name: string
   email: string
   address?: string
+  phone?: string
 }
 
 interface Order {
@@ -37,12 +44,15 @@ interface Order {
   updatedAt: string
   trackingNumber?: string
   subtotal?: number
+  tax?: number
+  licenseKeys?: string[]
   paymentMethod?: string
   paymentDetails?: {
     transactionId?: string
     paymentId?: string
     verifiedEmail?: string
     employeeId?: string
+    razorpayOrderId?: string
   }
   source?: 'direct' | 'partner'
   partnerName?: string
@@ -101,17 +111,8 @@ export default function AdminOrders() {
         }
 
         // Safely parse JSON — response may be empty which causes response.json() to throw.
-        let data: any = []
-        try {
-          const text = await response.text()
-          console.log("[Admin Orders] 📄 Response text length:", text.length)
-          data = text ? JSON.parse(text) : []
-          console.log("[Admin Orders] ✅ Orders fetched:", data.length, "orders")
-          console.log("[Admin Orders] 📊 First 2 orders:", data.slice(0, 2))
-        } catch (parseErr) {
-          console.warn("[Admin Orders] ⚠️ Failed to parse JSON, using empty array", parseErr)
-          data = []
-        }
+        const data: Order[] = await response.json()
+        if (!Array.isArray(data)) throw new Error("Invalid orders response")
         setOrders(data)
 
         // After fetching, attempt to auto-assign licenses for new orders that need it
@@ -147,12 +148,12 @@ export default function AdminOrders() {
         if (processed.has(order.id)) continue
 
         // find software items that are not from an external provider
-        const softwareItems = (order.items || []).filter(it => (it as any).type === 'software' && !(it as any).provider)
+        const softwareItems = (order.items || []).filter(it => it.type === 'software' && !it.provider)
         if (softwareItems.length === 0) continue
 
         // Skip if order already has licenseKeys sufficient for requested quantities
-        const existingKeys = (order as any).licenseKeys || []
-        const totalRequested = softwareItems.reduce((s, it) => s + (Number((it as any).quantity) || 1), 0)
+        const existingKeys = order.licenseKeys || []
+        const totalRequested = softwareItems.reduce((s, it) => s + (Number(it.quantity) || 1), 0)
         if (existingKeys.length >= totalRequested) {
           // mark processed so we don't check again
           processed.add(order.id)
@@ -161,26 +162,18 @@ export default function AdminOrders() {
 
         console.log('[Admin Orders] Auto-assigning licenses for order', order.id)
 
-        for (const item of softwareItems) {
-          try {
-            const payload: any = {
-              softwareId: (item as any).kgenProductId || (item as any).id,
-              validity: (item as any).validity || undefined,
-              validityYears: (item as any).validityYears || undefined,
-              maxDevices: (item as any).maxDevices || 1,
-              quantity: Number((item as any).quantity || 1)
-            }
-
+        try {
             const resp = await apiFetch(`/api/orders/${order.id}/assign-license`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
             })
 
-            const jr = await resp.json().catch(() => null)
-            console.log('[Admin Orders] assign-license result for', order.id, jr)
+            const jr: { data?: { licenseKeys?: string[] }; error?: string } = await resp.json()
+            if (!resp.ok) throw new Error(jr.error || "License assignment failed")
+            if (!Array.isArray(jr.data?.licenseKeys) || jr.data.licenseKeys.length === 0) {
+              throw new Error("License assignment returned no keys")
+            }
+            const licenseKeys = jr.data.licenseKeys
 
-            if (resp.ok && jr && jr.data && Array.isArray(jr.data.licenseKeys) && jr.data.licenseKeys.length > 0) {
               // refresh the single order from server so we pick up status/timeline changes
               try {
                 const updatedResp = await apiFetch(`/api/orders/${order.id}`)
@@ -191,20 +184,17 @@ export default function AdminOrders() {
                   }
                 } else {
                   // fallback: append licenseKeys locally
-                  setOrders(prev => prev.map(o => o.id === order.id ? { ...o, licenseKeys: ((o as any).licenseKeys || []).concat(jr.data.licenseKeys) } as any : o))
+                  setOrders(prev => prev.map(o => o.id === order.id ? { ...o, licenseKeys } : o))
                 }
               } catch (refreshErr) {
                 console.warn('[Admin Orders] Failed to refresh order after assign-license', refreshErr)
-                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, licenseKeys: ((o as any).licenseKeys || []).concat(jr.data.licenseKeys) } as any : o))
+                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, licenseKeys } : o))
               }
-            }
-          } catch (e) {
+              processed.add(order.id)
+        } catch (e) {
             console.warn('[Admin Orders] assign-license failed for order', order.id, e)
-          }
+            toast.error(e instanceof Error ? e.message : "License assignment failed")
         }
-
-        // mark processed for now to avoid repeated attempts
-        processed.add(order.id)
       }
 
       localStorage.setItem('assignLicenseProcessed', JSON.stringify(Array.from(processed)))
@@ -436,7 +426,7 @@ export default function AdminOrders() {
     ]
 
     // Prepare rows for Excel
-    const rows: any[] = []
+    const rows: Record<string, string | number>[] = []
     filtered.forEach((order) => {
       order.items.forEach((item, idx) => {
         rows.push({
@@ -451,7 +441,7 @@ export default function AdminOrders() {
           "So Date": "",
           "Customer/Vendor Code": "",
           "CustomerName": order.customer?.name || "",
-          "Mobile No": (order.customer as any)?.phone || "",
+          "Mobile No": order.customer?.phone || "",
           "Customer GroupName": "",
           "Row Number": idx + 1,
           "Item No.": item.productId || "",
@@ -472,7 +462,7 @@ export default function AdminOrders() {
           "IGST Tax value": "",
           "SGST+CGST Rate": "",
           "SGST + CGST Tax value": "",
-          "Total tax": (order as any).tax || "",
+          "Total tax": order.tax || "",
           "DocTotal": order.total || "",
           "Incentive": "",
           "last purchase price": "",
@@ -771,7 +761,7 @@ export default function AdminOrders() {
                           <div className="flex flex-col items-center gap-1">
                             <button
                               onClick={async () => {
-                                const orderId = (order as any).orderId || order.id
+                                const orderId = order.orderId || order.id
                                 const isVerified = order.paymentVerification?.verified
                                 try {
                                   const res = await apiFetch(
@@ -890,11 +880,11 @@ export default function AdminOrders() {
                           {order.paymentMethod === 'razorpay' && order.paymentDetails && (
                             <div className="bg-blue-50 p-2 rounded-md border border-blue-100">
                               <div className="flex flex-col space-y-1">
-                                {(order.paymentDetails as any).razorpayOrderId && (
+                                {order.paymentDetails.razorpayOrderId && (
                                   <div className="text-[10px] text-gray-700 flex items-center">
                                     <span className="font-medium min-w-20">RZP Order:</span>
                                     <span className="ml-1 font-mono text-blue-700">
-                                      {(order.paymentDetails as any).razorpayOrderId}
+                                      {order.paymentDetails.razorpayOrderId}
                                     </span>
                                   </div>
                                 )}

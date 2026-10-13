@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="An illustrated SARA customer journey using screenshots from the isolated customer UI audit.">
+  <title>SARA | Customer journey in screenshots</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #10244c;
+      --muted: #526078;
+      --blue: #1558bf;
+      --line: #dce4ef;
+      --paper: #ffffff;
+      --canvas: #f3f6fb;
+      --green: #13653c;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a { color: var(--blue); text-underline-offset: .2em; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible, summary:focus-visible { outline: 3px solid #a9480e; outline-offset: 5px; border-radius: 3px; }
+    .skip { position: absolute; top: -100px; left: 16px; z-index: 5; padding: 12px; background: white; }
+    .skip:focus { top: 16px; }
+    .hero { background: #10244c; color: white; padding: 62px 24px 48px; }
+    .wrap { width: min(1180px, 100%); margin: auto; }
+    .eyebrow { margin: 0 0 16px; font-size: .78rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+    .hero .eyebrow { color: #ffbe8b; }
+    h1 { max-width: 850px; margin: 0; font-size: clamp(2rem, 5vw, 3.8rem); line-height: 1.12; letter-spacing: -.045em; }
+    .intro { max-width: 790px; margin: 22px 0; color: #dce6fa; font-size: 1.1rem; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; }
+    .hero-meta span { padding: 6px 12px; border: 1px solid #596b8e; border-radius: 30px; font-size: .8rem; }
+    .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 30px; padding: 32px 24px 64px; }
+    .sidebar { align-self: start; position: sticky; top: 20px; }
+    .sidebar h2 { margin: 0 0 12px; font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; }
+    .sidebar ol { margin: 0; padding: 0; list-style: none; }
+    .sidebar a { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 7px 8px; color: var(--muted); text-decoration: none; border-radius: 8px; font-size: .9rem; }
+    .sidebar a:hover { color: var(--ink); background: #e3eaf5; }
+    .sidebar .index { color: var(--blue); font-size: .75rem; font-weight: 750; }
+    .sidebar .extra { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+    main { min-width: 0; }
+    .scope, .step, .closing { margin-bottom: 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); overflow: hidden; }
+    .scope, .closing { padding: 28px; }
+    .scope h2, .closing h2 { margin: 0 0 10px; font-size: 1.35rem; line-height: 1.35; }
+    p { margin: 0 0 14px; }
+    .scope p:last-child, .closing p:last-child { margin-bottom: 0; }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; padding: 0; list-style: none; }
+    .flow li { background: #eef3fc; border-radius: 8px; padding: 7px 11px; font-size: .82rem; font-weight: 650; }
+    .notice { border-left: 4px solid #a9480e; background: #fff4e8; padding: 14px 16px; color: #66370b; font-size: .9rem; border-radius: 0 8px 8px 0; }
+    .step { scroll-margin-top: 24px; }
+    .step-head { display: flex; align-items: flex-start; gap: 16px; padding: 26px 28px 18px; }
+    .number { display: grid; place-items: center; flex: 0 0 42px; height: 42px; background: #eef3fc; color: var(--blue); border-radius: 12px; font-weight: 800; }
+    .step h2 { margin: 0 0 6px; font-size: clamp(1.2rem, 2vw, 1.6rem); line-height: 1.3; letter-spacing: -.025em; }
+    .path { display: inline-block; max-width: 100%; font: .76rem/1.5 ui-monospace, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; }
+    .step-body { padding: 0 28px 28px; }
+    .mobile-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 290px); gap: 28px; align-items: start; }
+    .explanation { min-width: 0; }
+    .detail { margin: 18px 0; }
+    .detail dt { font-weight: 750; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 5px; }
+    .detail dd { margin: 0 0 16px; }
+    .verified { padding: 12px 14px; background: #edf7f0; border: 1px solid #c6e3d0; border-radius: 10px; color: var(--green); font-size: .87rem; }
+    .tag { display: inline-block; margin: 0 0 12px; padding: 4px 9px; border-radius: 6px; font-size: .73rem; font-weight: 750; background: #eef3fc; color: #244c8e; }
+    .tag.branch { background: #fff0df; color: #783d0c; }
+    figure { min-width: 0; margin: 20px 0 0; }
+    .mobile-layout figure { margin: 0; }
+    .shot-link { display: block; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: #eaf0f8; }
+    .shot-link img { display: block; width: 100%; height: auto; border-radius: 6px; background: white; }
+    figcaption { margin-top: 10px; color: var(--muted); font-size: .76rem; line-height: 1.55; }
+    .choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+    .choice { border: 1px solid var(--line); background: #f8faff; border-radius: 10px; padding: 18px; }
+    h3 { margin: 0 0 8px; font-size: 1rem; }
+    .choice p { margin-bottom: 0; font-size: .9rem; }
+    details { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+    summary { cursor: pointer; min-height: 44px; padding: 9px 0; font-weight: 650; }
+    details p { color: var(--muted); font-size: .9rem; }
+    .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+    .fact { padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+    .fact strong { display: block; font-size: 1.7rem; line-height: 1.25; }
+    .fact span { display: block; font-size: .78rem; color: var(--muted); margin-top: 6px; }
+    .report-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+    .report-links a { padding: 8px 0; min-height: 44px; }
+    footer { padding: 0 24px 34px; text-align: center; color: var(--muted); font-size: .8rem; }
+    @media (max-width: 1000px) {
+      .shell { grid-template-columns: 1fr; gap: 24px; }
+      .sidebar { position: static; }
+      .sidebar ol { display: flex; flex-wrap: wrap; gap: 4px; }
+      .sidebar .extra { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+    }
+    @media (max-width: 600px) {
+      .hero { padding: 38px 20px 32px; }
+      .intro { font-size: 1rem; }
+      .shell { padding: 22px 14px 32px; }
+      .scope, .closing { padding: 20px; }
+      .step-head { padding: 20px 20px 16px; gap: 12px; }
+      .step-body { padding: 0 20px 22px; }
+      .mobile-layout { grid-template-columns: 1fr; gap: 20px; }
+      .mobile-layout figure { width: min(100%, 300px); margin: auto; }
+      .choices, .facts { grid-template-columns: 1fr; }
+      .fact { display: flex; gap: 16px; align-items: center; }
+      .fact span { margin-top: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      body { background: white; font-size: 11pt; }
+      .hero { background: white; color: var(--ink); padding: 16px 0; }
+      .hero .eyebrow, .intro { color: var(--muted); }
+      .hero-meta span { border-color: var(--line); }
+      .shell { display: block; padding: 16px 0; }
+      .sidebar, .skip, .report-links, footer { display: none; }
+      .step { break-before: page; border: 0; }
+      .scope, .closing { border-radius: 0; }
+      figure, .choice { break-inside: avoid; }
+      .mobile-layout { grid-template-columns: 1fr 230px; }
+      .shot-link { padding: 0; }
+      .step-head, .step-body { padding-left: 0; padding-right: 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#journey">Skip to the customer journey</a>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">SARA Electronics / Illustrated customer experience</p>
+      <h1>From the first visit<br>to the first order.</h1>
+      <p class="intro">A step-by-step explanation of how a customer discovers a product,
+        creates an account, checks out and returns for support. Real application screenshots
+        make each stage easy to follow.</p>
+      <div class="hero-meta">
+        <span>Mobile + desktop screenshots</span>
+        <span>Isolated audit begun 12 October 2026</span>
+        <span>Synthetic customers and products</span>
+      </div>
+    </div>
+  </header>
+  <div class="wrap shell">
+    <nav class="sidebar" aria-label="Customer journey steps">
+      <h2>Explore the journey</h2>
+      <ol>
+        <li><a href="#discover"><span class="index">01</span> Discover the store</a></li>
+        <li><a href="#register"><span class="index">02</span> Create an account</a></li>
+        <li><a href="#login"><span class="index">03</span> Sign in</a></li>
+        <li><a href="#product"><span class="index">04</span> Choose a product</a></li>
+        <li><a href="#cart"><span class="index">05</span> Review the cart</a></li>
+        <li><a href="#address"><span class="index">06</span> Add delivery details</a></li>
+        <li><a href="#payment"><span class="index">07</span> Choose how to pay</a></li>
+        <li><a href="#confirmation"><span class="index">08</span> Receive confirmation</a></li>
+        <li><a href="#orders"><span class="index">09</span> Return to My Orders</a></li>
+        <li><a href="#support"><span class="index">10</span> Get help</a></li>
+      </ol>
+      <div class="extra">
+        <a href="#recovery">Password recovery</a>
+        <a href="#evidence">Evidence and limits</a>
+      </div>
+    </nav>
+    <main id="journey">
+      <section class="scope" aria-labelledby="scope-title">
+        <h2 id="scope-title">One shopping journey. Two checkout choices.</h2>
+        <p>The customer can sign in for saved addresses and account order history, or
+          buy as a guest and keep a private order link. Both paths lead to order confirmation;
+          cash on delivery does not mean the order has already been paid.</p>
+        <ol class="flow" aria-label="Journey overview">
+          <li>Discover</li><li>Account or guest</li><li>Product</li><li>Cart</li>
+          <li>Delivery</li><li>Payment</li><li>Confirmation</li><li>Support</li>
+        </ol>
+        <p class="notice"><strong>Read the screenshots as an illustrated guide, not one continuous recording.</strong>
+          They come from separate verified audit views and purchases. All displayed customer
+          details and products are synthetic. Email, captcha and online-payment providers
+          were local fixtures. Select any screenshot to open the original image at full size.</p>
+      </section>
+
+      <article class="step" id="discover" aria-labelledby="discover-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">01</span>
+          <div><h2 id="discover-title">Discover the store</h2><span class="path">Home /</span></div>
+        </header>
+        <div class="step-body">
+          <p>The journey starts with a need: a television, appliance or another electronics
+            product. The homepage gives the customer a search box, categories, deals and
+            brand shortcuts instead of requiring them to know an exact product URL.</p>
+          <dl class="detail">
+            <dt>Customer action</dt><dd>Browse a category or search for a product, then open a promising result.</dd>
+            <dt>What the store provides</dt><dd>Product cards with prices, savings and quick shopping actions.</dd>
+          </dl>
+          <p class="verified"><strong>Verified:</strong> mobile search found the synthetic catalogue product.
+            The homepage was also assessed at all five audit viewport sizes.</p>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/01-home-desktop.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/01-home-desktop.png" width="1440" height="1000"
+                alt="Desktop homepage showing categories, two synthetic television deals and brand shortcuts." decoding="async">
+            </a>
+            <figcaption>Desktop homepage, 1440px wide. The two television cards are audit fixtures,
+              not a representation of the full production catalogue.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="register" aria-labelledby="register-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">02</span>
+          <div><h2 id="register-title">Create an account</h2><span class="path">/register</span></div>
+        </header>
+        <div class="step-body mobile-layout">
+          <div class="explanation">
+            <span class="tag">Account path / optional for guest checkout</span>
+            <p>A new customer enters their name and email, chooses a password, confirms it
+              and completes the required consent. The form explains how their details are used.</p>
+            <dl class="detail">
+              <dt>Customer action</dt><dd>Complete the form and follow the verification link sent to their email.</dd>
+              <dt>What the store provides</dt><dd>Validation for missing details and consent before the account can be completed.</dd>
+            </dl>
+            <p class="verified"><strong>Verified:</strong> missing-field rejection, completed
+              registration and verification through a captured local email link.</p>
+            <details><summary>What this screenshot does not prove</summary>
+              <p>This is the initial registration form, not the submitted success state.
+                The audit used a local email sink and captcha fixture; real inbox delivery
+                and Google captcha behavior still need hosted testing.</p>
+            </details>
+          </div>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/02-register-mobile.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/02-register-mobile.png" width="390" height="844"
+                alt="Mobile create-account form with name, email, password, confirmation and data-use explanation."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>390px mobile view. The captured viewport shows the upper portion of the form;
+              the remaining consent and submission controls are below it.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="login" aria-labelledby="login-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">03</span>
+          <div><h2 id="login-title">Sign in and continue shopping</h2><span class="path">/login</span></div>
+        </header>
+        <div class="step-body mobile-layout">
+          <div class="explanation">
+            <p>A returning or newly verified customer signs in with their email and password.
+              The actual signed session, not an old browser hint, determines whether they are logged in.</p>
+            <dl class="detail">
+              <dt>Customer action</dt><dd>Enter valid credentials and select Sign in.</dd>
+              <dt>What the store provides</dt><dd>Access to their profile, saved addresses and orders.
+                An incorrect password is rejected without creating a session.</dd>
+            </dl>
+            <p class="verified"><strong>Verified:</strong> wrong-password rejection, successful
+              login, persistent profile changes, logout and protected-page denial.</p>
+          </div>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/03-login-mobile.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/03-login-mobile.png" width="390" height="844"
+                alt="Mobile sign-in screen with email, password, Sign in and Forgot password controls."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Initial sign-in screen, 390px wide. No real credentials are displayed.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="product" aria-labelledby="product-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">04</span>
+          <div><h2 id="product-title">Evaluate the product</h2><span class="path">/product/audit-fixture-television</span></div>
+        </header>
+        <div class="step-body mobile-layout">
+          <div class="explanation">
+            <p>The customer opens a product to review its details and price before buying.
+              In the illustrated example, the synthetic television costs <strong>INR 4,999</strong>.</p>
+            <dl class="detail">
+              <dt>Customer action</dt><dd>Review the product, optionally save or compare alternatives,
+                then select Add to Cart.</dd>
+              <dt>What the store provides</dt><dd>A product-detail page and a mobile purchase bar
+                that keeps the price and cart action available.</dd>
+            </dl>
+            <p class="verified"><strong>Verified:</strong> wishlist add/remove persistence,
+              two-product comparison and clearing, and adding a product through the mobile UI.</p>
+          </div>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/04-product-mobile.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/04-product-mobile.png" width="390" height="844"
+                alt="Synthetic television product page with INR 4,999 price and mobile Add to Cart action."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Product page, 390px wide. The SARA logo is the fixture product image,
+              not a missing product-image placeholder.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="cart" aria-labelledby="cart-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">05</span>
+          <div><h2 id="cart-title">Review the basket and total</h2><span class="path">/cart</span></div>
+        </header>
+        <div class="step-body mobile-layout">
+          <div class="explanation">
+            <p>The cart is the customer's last product-level check: is this the right item,
+              quantity and displayed total? They can remove an item or move it to the wishlist
+              instead of continuing.</p>
+            <dl class="detail">
+              <dt>Customer action</dt><dd>Adjust quantity, review the price breakdown and select Proceed to Checkout.</dd>
+              <dt>What the store provides</dt><dd>Quantity controls, savings, delivery charges and
+                a clear progression from cart to address, payment and order placement.</dd>
+            </dl>
+            <p class="verified"><strong>Verified:</strong> quantity increment/decrement and the
+              populated mobile cart. Checkout recalculates prices on the server; the displayed
+              browser total is not the payment authority.</p>
+          </div>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/05-cart-mobile.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/05-cart-mobile.png" width="390" height="844"
+                alt="Populated mobile cart with one television, quantity controls, INR 4,999 total and checkout button."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Actual populated-cart state from the mobile journey, not the empty-cart route sweep.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="address" aria-labelledby="address-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">06</span>
+          <div><h2 id="address-title">Provide delivery details</h2><span class="path">Checkout / saved addresses at /dashboard/addresses</span></div>
+        </header>
+        <div class="step-body">
+          <p>At checkout, the customer supplies their contact and delivery details and chooses
+            an available delivery or pickup option. Signed-in customers can save an address
+            for later use; guests supply their details for that purchase.</p>
+          <dl class="detail">
+            <dt>Customer action</dt><dd>Complete the address and select the appropriate fulfillment option.</dd>
+            <dt>What the store provides</dt><dd>Address validation before payment and saved-address access for an authenticated account.</dd>
+          </dl>
+          <p class="verified"><strong>Verified:</strong> missing-address rejection, saving a
+            delivery address and its actual persistence in the isolated database.</p>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/06-saved-address-desktop.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/06-saved-address-desktop.png" width="1440" height="1000"
+                alt="Signed-in My Addresses page showing one synthetic saved home address."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Saved-address account view, 1440px wide. This illustrates the persisted
+              address after checkout setup, not the checkout address-entry form.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="payment" aria-labelledby="payment-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">07</span>
+          <div><h2 id="payment-title">Choose how to pay</h2><span class="path">/checkout</span></div>
+        </header>
+        <div class="step-body">
+          <p>The customer chooses a payment option after providing the required delivery
+            information. Online payment and cash on delivery have different confirmation
+            rules; a cancelled or invalid payment must not become a successful paid order.</p>
+          <div class="choices">
+            <div class="choice">
+              <h3>Signed-in online-payment path</h3>
+              <p>The application prepares a server-priced payment and verifies its proof before
+                creating the paid order. Cancellation preserved the cart; invalid proof was rejected;
+                simulated captured payment created the INR 4,999 order.</p>
+            </div>
+            <div class="choice">
+              <h3>Guest cash-on-delivery path</h3>
+              <p>The guest selects COD and places an order without paying online.
+                The separate desktop journey purchased the second synthetic television
+                for INR 6,999, with payment pending on delivery.</p>
+            </div>
+          </div>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/07-cod-checkout-desktop.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/07-cod-checkout-desktop.png" width="1440" height="1000"
+                alt="Desktop checkout payment section with Cash on Delivery selected among the available options."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Actual guest checkout, scrolled to Payment Method, 1440px wide.
+              This shows COD selection, not a Razorpay widget or an online-payment success.</figcaption>
+          </figure>
+          <details><summary>Online-payment test boundary</summary>
+            <p>The real application pricing, verification and persistence code ran against a
+              local Razorpay provider and synthetic widget. No real money moved.
+              Genuine hosted payment, UPI/bank behavior, webhook delivery, refunds and
+              reconciliation were not certified.</p>
+          </details>
+        </div>
+      </article>
+
+      <article class="step" id="confirmation" aria-labelledby="confirmation-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">08</span>
+          <div><h2 id="confirmation-title">Receive an order confirmation</h2><span class="path">Post-checkout confirmation</span></div>
+        </header>
+        <div class="step-body">
+          <span class="tag branch">Screenshot: guest COD branch</span>
+          <p>The confirmation brings together the order number, purchased item, total,
+            delivery details and payment method. The guest should save the private order link
+            so they can return without creating an account.</p>
+          <dl class="detail">
+            <dt>Customer action</dt><dd>Check the summary and keep the order reference or private link.</dd>
+            <dt>What the store provides</dt><dd>An order-placement acknowledgement and progress indicators.
+              For this COD example, payment remains due on delivery and later fulfillment stages await updates.</dd>
+          </dl>
+          <p class="verified"><strong>Verified:</strong> guest order persistence, cart cleanup,
+            private-link refresh and denial after removing the stored guest capability.
+            The authenticated simulated online purchase was also verified separately.</p>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/08-guest-confirmation-desktop.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/08-guest-confirmation-desktop.png" width="1440" height="1000"
+                alt="Guest COD confirmation showing synthetic order summary, INR 6,999 total, payment due on delivery and private-link guidance."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Actual guest confirmation for the INR 6,999 fixture purchase.
+              Visible name, address, phone and email are synthetic. Placed does not mean paid,
+              shipped or delivered.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="orders" aria-labelledby="orders-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">09</span>
+          <div><h2 id="orders-title">Return to My Orders</h2><span class="path">/account/orders and /dashboard/orders</span></div>
+        </header>
+        <div class="step-body">
+          <p>A signed-in customer returns to order history to find their order, open its
+            details or use Track Order. Guests use their private link instead of another
+            customer's account history.</p>
+          <dl class="detail">
+            <dt>Customer action</dt><dd>Open My Orders and select the relevant order.</dd>
+            <dt>What the store provides</dt><dd>Order reference, item, amount and current status in one place.</dd>
+          </dl>
+          <p class="verified"><strong>Verified:</strong> the authenticated online purchase appeared
+            in history and the cart was empty. Account/dashboard route views passed at five sizes.</p>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/09-order-history-desktop.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/09-order-history-desktop.png" width="1440" height="1000"
+                alt="Signed-in order history showing a synthetic INR 4,999 pending order with Track Order and View Details."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>This later layout recheck uses a separate authenticated COD order.
+              Its Pending label is not proof of captured online payment or actual shipping.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="support" aria-labelledby="support-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">10</span>
+          <div><h2 id="support-title">Get help before or after buying</h2><span class="path">Contact enquiries / complaints</span></div>
+        </header>
+        <div class="step-body">
+          <p>The journey continues when a customer needs advice or has a problem.
+            They can send an enquiry, or submit a complaint with the required image
+            and retain its reference for follow-up.</p>
+          <dl class="detail">
+            <dt>Customer action</dt><dd>Provide the requested details and consent, add supporting
+              information where required, then submit.</dd>
+            <dt>What the store provides</dt><dd>A visible acknowledgement rather than leaving
+              the customer unsure whether their message was received.</dd>
+          </dl>
+          <p class="verified"><strong>Verified:</strong> enquiry submission with consent,
+            complaint image validation/upload and stored reference, and newsletter acknowledgement.
+            Database assertions confirmed the records were saved.</p>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/10-enquiry-success-desktop.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/10-enquiry-success-desktop.png" width="1440" height="1000"
+                alt="Submitted desktop enquiry showing Enquiry received and Send another enquiry."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Actual enquiry success state from the support journey.
+              Storage and acknowledgement were verified; a real support response or delivered email was not.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="recovery" aria-labelledby="recovery-title">
+        <header class="step-head">
+          <span class="number" aria-hidden="true">+</span>
+          <div><h2 id="recovery-title">If the customer forgets their password</h2><span class="path">/forgot-password &rarr; /reset-password &rarr; /login</span></div>
+        </header>
+        <div class="step-body mobile-layout">
+          <div class="explanation">
+            <span class="tag">Recovery branch</span>
+            <p>Forgetting a password should not end the shopping journey. The customer requests
+              a recovery email, follows its reset link, sets a new password and signs in again.</p>
+            <dl class="detail">
+              <dt>Customer action</dt><dd>Select Forgot password on the login form and follow the recovery steps.</dd>
+              <dt>What the store provides</dt><dd>A reset request screen and a token-based password-reset flow.</dd>
+            </dl>
+            <p class="verified"><strong>Verified:</strong> the recovery email was captured locally,
+              its link was used in the browser, and login with the new password succeeded.</p>
+          </div>
+          <figure>
+            <a class="shot-link" href="customer-journey-assets/11-recovery-mobile.png" target="_blank" rel="noopener">
+              <img src="customer-journey-assets/11-recovery-mobile.png" width="390" height="844"
+                alt="Mobile forgot-password screen with email input and Send Reset Link button."
+                loading="lazy" decoding="async">
+            </a>
+            <figcaption>Initial recovery form, 390px wide. This is not a screenshot of a real email inbox.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <section class="closing" id="evidence" aria-labelledby="evidence-title">
+        <h2 id="evidence-title">What supports this walkthrough?</h2>
+        <p>These screenshots were selected from the retained browser audit and visually checked
+          for the states described above. They are original viewport captures, not mockups,
+          full-page composites or screenshots of real customers.</p>
+        <div class="facts">
+          <div class="fact"><strong>377</strong><span>Final effective UI/accessibility assessments</span></div>
+          <div class="fact"><strong>5</strong><span>Audited widths: 360, 390, 768, 1024 and 1440px</span></div>
+          <div class="fact"><strong>12</strong><span>Customer/support database assertions passed</span></div>
+        </div>
+        <p>The complete online purchase was exercised at 390px; guest COD at 1440px.
+          Route views were assessed at all five widths, but every purchase variation was
+          not repeated at every width. This guide includes 11 selected mobile/desktop images.</p>
+        <p class="notice"><strong>Local journey passed; production launch is still not approved.</strong>
+          Real hosted providers, operational readiness, physical devices, Safari/Firefox
+          and native assistive technology remain outside this evidence. Later delivery,
+          returns, refunds and real customer-support resolution are not demonstrated here.</p>
+        <div class="report-links">
+          <a href="customer-journey-ui-audit.md">Detailed customer UI audit</a>
+          <a href="production-readiness-audit.md">Production-readiness findings</a>
+          <a href="#journey">Back to the journey</a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <footer>
+    SARA Electronics customer-journey guide. Open locally in a browser; no application server,
+    login or internet connection is needed. Use your browser's Print command to save a PDF.
+    Keep customer-journey.html and its customer-journey-assets folder together when sharing.
+  </footer>
+</body>
+</html>

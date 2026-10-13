@@ -2,29 +2,47 @@ import { NextResponse } from 'next/server'
 import { addLicenseKeys, getAllLicenseKeys, revokeLicenseKey } from '@/lib/software-service'
 import { requireAdmin } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/mongodb'
-import { ObjectId } from 'mongodb'
+import { ObjectId, type WithId } from 'mongodb'
+import { normalizeId } from '@/lib/db-service'
+import { handleApiError } from '@/lib/api-error'
+import { AddLicenseKeysSchema, RevokeLicenseKeySchema, LicenseKeyFilterSchema } from '@/lib/validation'
+import type { StoredLicenseKey } from '@/types/software'
+
+type OrderDate = Date | string | number
+interface LicenseOrder {
+  _id: ObjectId | string
+  id?: string
+  customer?: { email?: string; name?: string; firstName?: string; lastName?: string }
+  shippingAddress?: { email?: string }
+  createdAt?: OrderDate | { $date: OrderDate }
+}
 
 export async function GET(request: Request) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   try {
     const { searchParams } = new URL(request.url)
     const softwareId = searchParams.get('softwareId')
     const status = searchParams.get('status')
     const customerEmail = searchParams.get('customerEmail')
     
-    const filter: any = {}
-    if (softwareId) filter.softwareId = softwareId
-    if (status) filter.status = status
-    if (customerEmail) filter.customerEmail = customerEmail
+    const parsed = LicenseKeyFilterSchema.safeParse({
+      softwareId: softwareId ?? undefined,
+      status: status ?? undefined,
+      customerEmail: customerEmail ?? undefined,
+    })
+    if (!parsed.success) return NextResponse.json({ success: false, error: 'Invalid license key filter' }, { status: 400 })
     
-    const keys = await getAllLicenseKeys(filter)
+    const keys = await getAllLicenseKeys(parsed.data)
 
     // Enrich keys with order/customer info when assignedTo is missing
     const { db } = await connectToDatabase()
-    const ordersCollection = db.collection('orders')
+    const ordersCollection = db.collection<LicenseOrder>('orders')
 
-    const enriched = await Promise.all(keys.map(async (k: any) => {
+    const enriched = await Promise.all(keys.map(async (k) => {
       // normalize id
-      const out: any = { ...k, _id: k._id.toString() }
+      const out: Omit<StoredLicenseKey, '_id'> & { id: string } = normalizeId(k)
 
       // If assignedTo already present, ensure expiresAt is a string
       if (out.assignedTo) {
@@ -34,20 +52,16 @@ export async function GET(request: Request) {
 
       // Try to populate from order if orderId or email is present
       const orderId = k.orderId || k.assignedTo?.orderId
-      let order: any = null
+      let order: WithId<LicenseOrder> | null = null
 
       if (orderId) {
-        try {
-          if (ObjectId.isValid(orderId)) {
-            order = await ordersCollection.findOne({ _id: new ObjectId(orderId) })
-          }
-        } catch (e) {
-          // ignore
+        if (ObjectId.isValid(orderId)) {
+          order = await ordersCollection.findOne({ _id: new ObjectId(orderId) })
         }
 
         if (!order) {
           // try fallback shapes
-          order = await ordersCollection.findOne({ id: orderId } as any) || await ordersCollection.findOne({ _id: orderId } as any)
+          order = await ordersCollection.findOne({ id: orderId }) || await ordersCollection.findOne({ _id: orderId })
         }
       }
 
@@ -55,7 +69,7 @@ export async function GET(request: Request) {
       if (order) {
         const customerEmail = order.customer?.email || order.shippingAddress?.email || k.email || null
         const customerName = order.customer?.name || `${order.customer?.firstName || ''} ${order.customer?.lastName || ''}`.trim() || null
-        const orderNumber = order._id ? (order._id.toString ? order._id.toString() : order._id) : (order.id || orderId)
+        const orderNumber = order._id.toString()
 
         out.assignedTo = out.assignedTo || {
           customerName,
@@ -64,9 +78,9 @@ export async function GET(request: Request) {
         }
 
         // compute expiresAt from order.createdAt + validity
-        try {
-          const createdRaw = order.createdAt || order.createdAt?.$date || order.createdAt
-          const createdDate = createdRaw && createdRaw.$date ? new Date(createdRaw.$date) : new Date(createdRaw)
+        if (order.createdAt !== undefined) {
+          const createdRaw = order.createdAt
+          const createdDate = new Date(typeof createdRaw === 'object' && '$date' in createdRaw ? createdRaw.$date : createdRaw)
           let validityDays = null
           if (k.validityDays) validityDays = k.validityDays
           else if (k.validityYears) validityDays = k.validityYears * 365
@@ -76,13 +90,14 @@ export async function GET(request: Request) {
             if (m) validityDays = parseInt(m[1]) * 365
           }
 
-          if (createdDate && validityDays) {
+          if (Number.isFinite(createdDate.getTime()) && validityDays && Number.isFinite(Number(validityDays))) {
             const exp = new Date(createdDate)
             exp.setDate(exp.getDate() + Number(validityDays))
-            out.expiresAt = exp.toISOString()
+            if (Number.isFinite(exp.getTime())) out.expiresAt = exp.toISOString()
+            else console.warn('[License keys] Invalid legacy expiry')
+          } else {
+            console.warn('[License keys] Invalid or missing legacy validity/date')
           }
-        } catch (e) {
-          // ignore date parse issues
         }
       }
 
@@ -97,11 +112,7 @@ export async function GET(request: Request) {
       keys: enriched
     })
   } catch (error) {
-    console.error('Error fetching license keys:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch license keys' },
-      { status: 500 }
-    )
+    return handleApiError(error, 'Failed to fetch license keys')
   }
 }
 
@@ -110,34 +121,22 @@ export async function POST(request: Request) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { softwareId, keys } = body
-    
-    if (!softwareId || !keys || !Array.isArray(keys)) {
+    const parsed = AddLicenseKeysSchema.safeParse(await request.json())
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Invalid license key input' },
         { status: 400 }
       )
     }
     
-    // Validate maxDevices for each key
-    const validatedKeys = keys.map(key => ({
-      ...key,
-      maxDevices: Math.max(1, parseInt(key.maxDevices) || 1) // Ensure at least 1 device
-    }))
-    
-    const count = await addLicenseKeys(softwareId, validatedKeys)
+    const count = await addLicenseKeys(parsed.data.softwareId, parsed.data.keys)
     
     return NextResponse.json({
       success: true,
       message: `${count} license keys added successfully`
     })
-  } catch (error: any) {
-    console.error('Error adding license keys:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to add license keys' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return handleApiError(error, 'Failed to add license keys')
   }
 }
 
@@ -147,12 +146,12 @@ export async function PATCH(request: Request) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { keyId, action, reason } = body
+    const parsed = RevokeLicenseKeySchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ success: false, error: 'Invalid revoke input' }, { status: 400 })
+    const { keyId, action, reason, password: providedPassword } = parsed.data
     
     if (action === 'revoke') {
       // Require admin password for revoke operation
-      const providedPassword = body.password
       const revokePassword = process.env.REVOKE_PASSWORD
 
       if (!revokePassword) {

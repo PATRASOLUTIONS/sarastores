@@ -1,10 +1,14 @@
 "use client"
 
-import { apiFetch } from "@/lib/api-client"
+import { apiFetchJson } from "@/lib/api-client"
+import { CreateCouponSchema, CouponListSchema, CouponMutationSchema, CouponDeleteSchema } from "@/lib/coupon-validation"
+import { useSubmitLock } from "@/hooks/useSubmitLock"
+import { z } from "zod"
+import { productCardResponseSchema } from "@/lib/product-card-response"
 import { useEffect, useState } from "react"
 import { toast } from "react-hot-toast"
 
-type Scope = "all" | "products" | "skus" | "brands"
+type Scope = "all" | "products" | "categories" | "skus" | "brands"
 type Type = "fixed" | "percentage" | "buy_get"
 
 interface CouponForm {
@@ -15,6 +19,7 @@ interface CouponForm {
   maxDiscount?: number
   applyScope: Scope
   productIds?: string
+  categoryIds?: string
   skus?: string
   brands?: string
   startDate?: string
@@ -36,9 +41,37 @@ interface Product {
   image?: string
 }
 
+interface Coupon extends Omit<CouponForm, "productIds" | "categoryIds" | "skus" | "brands" | "startDate" | "endDate" | "maxDiscount" | "buyQty" | "getQty"> {
+  id: string
+  productIds?: string[]
+  categoryIds?: string[]
+  skus?: string[]
+  brands?: string[]
+  startDate?: string | null
+  endDate?: string | null
+  maxDiscount?: number | null
+  buyQty?: number | null
+  getQty?: number | null
+  usageCount?: number
+}
+
+const productListSchema = z.array(productCardResponseSchema.pick({
+  id: true, name: true, price: true, sku: true, manufacturerName: true, image: true,
+}).extend({
+  sku: z.string().nullish().transform(value => value ?? undefined),
+  manufacturerName: z.string().nullish().transform(value => value ?? undefined),
+}))
+const usageListSchema = z.array(z.object({
+  id: z.string(), total: z.number().finite().nonnegative(),
+  createdAt: z.string().optional(), date: z.string().optional(), status: z.string().optional(),
+}))
+
 export default function PromotionsAdminPage() {
+  const submitLock = useSubmitLock()
   const [loading, setLoading] = useState(false)
-  const [list, setList] = useState<any[]>([])
+  const [list, setList] = useState<Coupon[]>([])
+  const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [productsLoading, setProductsLoading] = useState(false)
   const [productSearch, setProductSearch] = useState("")
@@ -72,21 +105,19 @@ export default function PromotionsAdminPage() {
   )
 
   const load = async () => {
-    const res = await apiFetch("/api/coupons")
-    const data = await res.json()
-    const coupons = data.coupons || []
-
-    // Fetch usage counts for all coupon codes
-    const codes = coupons.map((c: any) => c.code)
-    const usageCounts = await fetchUsageCounts(codes)
-
-    // Merge usage counts into coupons
-    const couponsWithUsage = coupons.map((c: any) => ({
-      ...c,
-      usageCount: usageCounts[c.code] || 0,
-    }))
-
-    setList(couponsWithUsage)
+    setListLoading(true)
+    setListError(null)
+    try {
+      const data = await apiFetchJson("/api/coupons", { signal: AbortSignal.timeout(12_000) }, value => CouponListSchema.parse(value))
+      setList(data.coupons)
+    } catch (error) {
+      console.error("Failed to load coupons", error)
+      const message = error instanceof Error ? error.message : "Failed to load coupons"
+      setListError(message)
+      toast.error(message)
+    } finally {
+      setListLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -97,9 +128,8 @@ export default function PromotionsAdminPage() {
   const loadProducts = async () => {
     try {
       setProductsLoading(true)
-      const res = await apiFetch("/api/products")
-      const data = await res.json()
-      setProducts(data || [])
+      const data = await apiFetchJson("/api/products", { signal: AbortSignal.timeout(12_000) }, value => productListSchema.parse(value))
+      setProducts(data)
     } catch (e) {
       console.error("Failed to load products", e)
       toast.error("Failed to load products")
@@ -150,10 +180,11 @@ export default function PromotionsAdminPage() {
       toast.error("Buy and Get quantities are required for Buy X Get Y offers")
       return
     }
+    if (!submitLock.acquire()) return
 
     try {
       setLoading(true)
-      const payload: any = {
+      const payload = {
         ...form,
         productIds:
           form.applyScope === "products" && form.productIds
@@ -162,6 +193,9 @@ export default function PromotionsAdminPage() {
                 .map((s) => s.trim())
                 .filter(Boolean)
             : [],
+        categoryIds: form.applyScope === "categories"
+          ? (form.categoryIds || "").split(",").map(value => value.trim()).filter(Boolean)
+          : [],
         skus:
           form.applyScope === "skus" && form.skus
             ? form.skus
@@ -180,14 +214,14 @@ export default function PromotionsAdminPage() {
 
       const url = editingId ? `/api/coupons/${editingId}` : "/api/coupons"
       const method = editingId ? "PUT" : "POST"
-
-      const res = await apiFetch(url, {
+      const parsed = CreateCouponSchema.safeParse(payload)
+      if (!parsed.success) return toast.error(parsed.error.issues[0].message)
+      const data = await apiFetchJson(url, {
         method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!data.success) return toast.error(data.error || "Failed to save coupon")
+        json: parsed.data,
+        signal: AbortSignal.timeout(12_000),
+      }, value => CouponMutationSchema.parse(value))
+      if (editingId && data.coupon.id !== editingId) throw new Error("Coupon save acknowledgement did not match")
       toast.success(editingId ? "Coupon updated successfully!" : "Coupon created successfully!")
       
       // Reset form
@@ -214,22 +248,24 @@ export default function PromotionsAdminPage() {
       await load()
     } catch (e) {
       console.error(e)
-      toast.error("Error saving coupon")
+      toast.error(e instanceof Error ? e.message : "Error saving coupon")
     } finally {
+      submitLock.release()
       setLoading(false)
     }
   }
 
-  const startEdit = (c: any) => {
-    setEditingId(c.id || c._id)
+  const startEdit = (c: Coupon) => {
+    setEditingId(c.id)
     setForm({
       code: c.code || "",
       name: c.name || "",
-      type: (c.type as any) || "fixed",
+      type: c.type || "fixed",
       value: c.value || 0,
       maxDiscount: c.maxDiscount ?? undefined,
-  applyScope: (c.applyScope as any) || "all",
+  applyScope: c.applyScope || "all",
   productIds: (c.productIds || []).join(","),
+      categoryIds: (c.categoryIds || []).join(","),
   skus: (c.skus || []).join(","),
       brands: (c.brands || []).join(","),
       startDate: c.startDate ? new Date(c.startDate).toISOString().slice(0, 10) : "",
@@ -247,9 +283,7 @@ export default function PromotionsAdminPage() {
   const remove = async (id: string) => {
     if (!confirm("Delete this coupon?")) return
     try {
-      const res = await apiFetch(`/api/coupons/${id}`, { method: "DELETE" })
-      const data = await res.json()
-      if (!data.success) return toast.error(data.error || "Delete failed")
+      await apiFetchJson(`/api/coupons/${id}`, { method: "DELETE", signal: AbortSignal.timeout(12_000) }, value => CouponDeleteSchema.parse(value))
       toast.success("Deleted")
       await load()
     } catch (e) {
@@ -263,21 +297,12 @@ export default function PromotionsAdminPage() {
     setUsageLoading(true)
     setUsageRows([])
     try {
-      const res = await apiFetch(`/api/orders?couponCode=${encodeURIComponent(code)}`)
-      const orders = await res.json()
-      // Each order will have a .coupon property if a coupon was used
-      orders.forEach((order: any) => {
-        if (order.coupon && order.coupon.code === code) {
-          // Coupon was used in this order
-          // You can access order.coupon.name and order.coupon.discount as well
-        }
-      })
-      const rows = (orders || []).map((o: any) => ({
+      const orders = await apiFetchJson(`/api/orders?couponCode=${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(12_000) }, value => usageListSchema.parse(value))
+      const rows = orders.map((o) => ({
         id: o.id,
         total: Number(o.total || 0),
         createdAt: o.createdAt || o.date,
         status: o.status || "pending",
-        coupon: o.coupon || null, // <-- Add coupon info
       }))
       setUsageRows(rows)
     } catch (e) {
@@ -285,19 +310,6 @@ export default function PromotionsAdminPage() {
       toast.error("Failed to load usage")
     } finally {
       setUsageLoading(false)
-    }
-  }
-
-  // Fetch usage count for all coupon codes
-  const fetchUsageCounts = async (codes: string[]) => {
-    try {
-      const res = await apiFetch(`/api/orders?couponUsageCount=${codes.join(",")}`)
-      const data = await res.json()
-      // data should be an object: { [code]: count }
-      return data.counts || {}
-    } catch (e) {
-      console.error("Failed to fetch usage counts", e)
-      return {}
     }
   }
 
@@ -424,8 +436,18 @@ export default function PromotionsAdminPage() {
               >
                 <option value="all">All products</option>
                 <option value="products">Specific products (IDs)</option>
+                <option value="categories">Specific categories (IDs)</option>
+                <option value="brands">Specific brands</option>
+                <option value="skus">Specific SKUs</option>
               </select>
             </div>
+            {form.applyScope === "categories" && (
+              <div>
+                <label className="text-sm" htmlFor="coupon-category-ids">Category IDs (comma-separated)</label>
+                <input id="coupon-category-ids" className="w-full border rounded px-2 py-2"
+                  value={form.categoryIds || ""} onChange={event => setForm({ ...form, categoryIds: event.target.value })} />
+              </div>
+            )}
             {form.applyScope === "products" && (
               <div className="md:col-span-2">
                 <label className="text-sm font-medium mb-2 block">Select Products</label>
@@ -582,7 +604,7 @@ export default function PromotionsAdminPage() {
                   checked={form.noEndDate}
                   onChange={(e) => setForm({ ...form, noEndDate: e.target.checked })}
                 />
-                Don't set an end date
+                Don&apos;t set an end date
               </label>
             </div>
             <div>
@@ -642,9 +664,14 @@ export default function PromotionsAdminPage() {
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-5 border-b">
               <h2 className="font-semibold">Coupons</h2>
+              <p className="text-xs text-gray-500 mt-1">Recorded usage controls checkout limits. Historical order totals are available under Usage.</p>
             </div>
             <div className="p-5 overflow-x-auto">
-              {list.length === 0 ? (
+              {listLoading ? (
+                <p role="status" className="text-sm text-gray-600">Loading coupons...</p>
+              ) : listError ? (
+                <p role="alert" className="text-sm text-red-700">{listError}</p>
+              ) : list.length === 0 ? (
                 <div className="text-sm text-gray-500">No coupons yet.</div>
               ) : (
                 <table className="min-w-full text-sm">
@@ -654,14 +681,14 @@ export default function PromotionsAdminPage() {
                       <th className="py-2 pr-4">Name</th>
                       <th className="py-2 pr-4">Type</th>
                       <th className="py-2 pr-4">Scope</th>
-                      <th className="py-2 pr-4">Usage</th>
+                      <th className="py-2 pr-4">Recorded usage</th>
                       <th className="py-2 pr-4">Active</th>
                       <th className="py-2 pr-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map((c: any) => (
-                      <tr key={c.id || c._id} className="border-t">
+                    {list.map((c) => (
+                      <tr key={c.id} className="border-t">
                         <td className="py-2 pr-4 font-mono">{c.code}</td>
                         <td className="py-2 pr-4">{c.name}</td>
                         <td className="py-2 pr-4">
@@ -707,14 +734,14 @@ export default function PromotionsAdminPage() {
                               Edit
                             </button>
                             <button
-                              onClick={() => remove(c.id || c._id)}
+                              onClick={() => remove(c.id)}
                               className="px-2 py-1 border rounded hover:bg-gray-50"
                               title="Delete"
                             >
                               Delete
                             </button>
                             <button
-                              onClick={() => loadUsage(c.code, c.id || c._id)}
+                              onClick={() => loadUsage(c.code, c.id)}
                               className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                               title="View Usage"
                             >
@@ -771,13 +798,6 @@ export default function PromotionsAdminPage() {
                         <td className="py-2 pr-4 font-mono">{r.id}</td>
                         <td className="py-2 pr-4">{r.status}</td>
                         <td className="py-2 pr-4 font-semibold">₹{Number(r.total || 0).toLocaleString("en-IN")}</td>
-                        {/* <td className="py-2 pr-4">
-                          {(r as any).customer?.email ? (
-                            <span className="text-blue-600">{(r as any).customer.email}</span>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td> */}
                         <td className="py-2 pr-4">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
                         <td className="py-2 pr-4 text-right">
                           <a

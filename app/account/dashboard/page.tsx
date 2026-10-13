@@ -4,14 +4,15 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCart } from "@/hooks/useCart"
+import { useCart, type Order } from "@/hooks/useCart"
 import { Package, ShoppingBag, User, MapPin, CreditCard, ChevronRight, Clock } from "lucide-react"
 
 export default function UserDashboard() {
   const { user } = useAuth()
   const { getOrders } = useCart()
   const router = useRouter()
-  const [orders, setOrders] = useState<any[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [orderError, setOrderError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -21,12 +22,18 @@ export default function UserDashboard() {
     }
 
     let cancelled = false
+    setIsLoading(true)
+    setOrderError(null)
     ;(async () => {
       try {
         const userOrders = await getOrders()
         if (!cancelled) setOrders(Array.isArray(userOrders) ? userOrders : [])
-      } catch {
-        if (!cancelled) setOrders([])
+      } catch (error) {
+        console.error("[Account dashboard] Orders unavailable:", error)
+        if (!cancelled) {
+          setOrders([])
+          setOrderError("Your orders could not be loaded. Please reload to try again.")
+        }
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -61,6 +68,7 @@ export default function UserDashboard() {
 
   return (
     <>
+          {orderError && <p role="alert" className="mb-6 rounded-lg bg-red-50 p-4 text-red-800">{orderError}</p>}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {/* Quick Stats */}
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -70,7 +78,7 @@ export default function UserDashboard() {
                 </div>
                 <div className="ml-4">
                   <h3 className="text-lg font-semibold">Orders</h3>
-                  <p className="text-2xl font-bold">{orders.length}</p>
+                  <p className="text-2xl font-bold">{orderError ? "-" : orders.length}</p>
                 </div>
               </div>
             </div>
@@ -112,14 +120,16 @@ export default function UserDashboard() {
                 </div>
 
                 <div className="p-6">
-                  {orders.length === 0 ? (
+                  {orderError ? (
+                    <p className="text-gray-600">Recent orders are currently unavailable.</p>
+                  ) : orders.length === 0 ? (
                     <div className="text-center py-8">
                       <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                         <Package className="h-8 w-8 text-gray-400" />
                       </div>
                       <h3 className="text-lg font-semibold mb-2">No orders yet</h3>
                       <p className="text-gray-600 mb-4">
-                        You haven't placed any orders yet. Start shopping to see your orders here.
+                        You haven&apos;t placed any orders yet. Start shopping to see your orders here.
                       </p>
                       <Link href="/products">
                         <button className="bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
@@ -156,7 +166,7 @@ export default function UserDashboard() {
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                            {order.items.slice(0, 3).map((item: any) => (
+                            {order.items.slice(0, 3).map(item => (
                               <div key={item.id} className="flex items-center space-x-4">
                                 <img
                                   src={item.image || "/placeholder.svg"}

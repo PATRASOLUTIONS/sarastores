@@ -11,6 +11,7 @@
  */
 
 import { getCollection } from "@/lib/db-service"
+import { z } from "zod"
 
 export const DEVICE_TOKENS_COLLECTION = "device_tokens"
 
@@ -49,7 +50,7 @@ export async function registerDeviceToken(
   meta: { deviceId?: string; deviceName?: string; appVersion?: string } = {},
 ): Promise<boolean> {
   if (!isExpoPushToken(token)) return false
-  const collection = await getCollection(DEVICE_TOKENS_COLLECTION)
+  const collection = await getCollection<DeviceTokenRecord>(DEVICE_TOKENS_COLLECTION)
   const now = new Date()
   // Keyed on the token, not the user: reinstalling or switching accounts on the
   // same handset must move the token rather than leave it pointing at the old
@@ -73,22 +74,22 @@ export async function registerDeviceToken(
 }
 
 export async function unregisterDeviceToken(token: string): Promise<boolean> {
-  const collection = await getCollection(DEVICE_TOKENS_COLLECTION)
+  const collection = await getCollection<DeviceTokenRecord>(DEVICE_TOKENS_COLLECTION)
   const result = await collection.deleteOne({ token })
   return result.deletedCount > 0
 }
 
 export async function getUserDeviceTokens(userId: string): Promise<string[]> {
-  const collection = await getCollection(DEVICE_TOKENS_COLLECTION)
+  const collection = await getCollection<DeviceTokenRecord>(DEVICE_TOKENS_COLLECTION)
   const docs = await collection.find({ userId }, { projection: { token: 1 } }).toArray()
-  return docs.map((d) => d.token as string).filter(Boolean)
+  return docs.map((d) => d.token).filter(Boolean)
 }
 
 /** Drop tokens Expo reports as dead so we stop paying to retry them. */
 async function pruneTokens(tokens: string[]): Promise<void> {
   if (tokens.length === 0) return
   try {
-    const collection = await getCollection(DEVICE_TOKENS_COLLECTION)
+    const collection = await getCollection<DeviceTokenRecord>(DEVICE_TOKENS_COLLECTION)
     await collection.deleteMany({ token: { $in: tokens } })
   } catch (error) {
     console.warn("[push] failed to prune dead tokens", error)
@@ -124,12 +125,16 @@ export async function sendPushToTokens(tokens: string[], message: PushMessage): 
         console.warn("[push] Expo rejected batch", { status: res.status })
         continue
       }
-      const json = await res.json()
-      const tickets = Array.isArray(json?.data) ? json.data : []
-      tickets.forEach((ticket: any, index: number) => {
+      const json = z.object({
+        data: z.array(z.discriminatedUnion("status", [
+          z.object({ status: z.literal("ok"), id: z.string() }),
+          z.object({ status: z.literal("error"), message: z.string().optional(), details: z.object({ error: z.string().optional() }).optional() }),
+        ])).length(batch.length),
+      }).parse(await res.json())
+      json.data.forEach((ticket, index) => {
         if (ticket?.status === "ok") {
           delivered++
-        } else if (ticket?.details?.error === "DeviceNotRegistered") {
+        } else if (ticket.details?.error === "DeviceNotRegistered") {
           dead.push(batch[index])
         }
       })

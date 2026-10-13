@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const { db } = await connectToDatabase()
     const templates = await db.collection('email_templates').find({}).limit(100).toArray()
-    const mapped = templates.map((t: any) => ({ id: String(t._id), ...t }))
+    const mapped = templates.map((t) => ({ id: String(t._id), ...t }))
     return NextResponse.json(mapped)
   } catch (err) {
     console.error('GET /api/admin/email-templates error', err)

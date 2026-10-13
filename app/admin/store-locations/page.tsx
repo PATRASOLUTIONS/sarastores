@@ -168,7 +168,7 @@ export default function StoreLocationsPage() {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data)
       const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[]
+      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet)
 
       if (jsonData.length === 0) {
         toast.error("No data found in the file", { id: toastId })
@@ -183,8 +183,12 @@ export default function StoreLocationsPage() {
         shopTiming: String(row["Shop Timing"] || row.shopTiming || "9:00 AM - 9:00 PM").trim(),
         shopImage: String(row["Shop Image"] || row.shopImage || "").trim(),
         emailId: String(row["Email ID"] || row.emailId || "").trim(),
-        isActive: String(row["Is Active"] || row.isActive || "Yes").toLowerCase() === "yes",
-      })).filter(store => store.shopName)
+        isActive: ["yes", "true", "1"].includes(String(row["Is Active"] ?? row.isActive ?? "Yes").trim().toLowerCase()),
+      }))
+      if (storesPayload.some(store => !store.shopName)) {
+        toast.error("Every upload row must have a shop name", { id: toastId })
+        return
+      }
 
       const res = await apiFetch("/api/admin/store-locations/bulk", {
         method: "POST",
@@ -251,7 +255,12 @@ export default function StoreLocationsPage() {
       const res = await apiFetch(`/api/admin/store-locations/${editingStore.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editingStore)
+        body: JSON.stringify({
+          shopName: editingStore.shopName, locationDescription: editingStore.locationDescription,
+          googleMapLocation: editingStore.googleMapLocation, mobileNo: editingStore.mobileNo,
+          shopTiming: editingStore.shopTiming, shopImage: editingStore.shopImage,
+          emailId: editingStore.emailId, isActive: editingStore.isActive,
+        })
       })
 
       const result = await res.json()
@@ -332,7 +341,7 @@ export default function StoreLocationsPage() {
     title 
   }: { 
     store: Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'> | StoreLocation
-    onChange: (field: string, value: any) => void
+    onChange: <K extends keyof typeof EMPTY_STORE>(field: K, value: (typeof EMPTY_STORE)[K]) => void
     onSave: () => void
     onCancel: () => void
     title: string

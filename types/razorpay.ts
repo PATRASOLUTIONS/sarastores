@@ -1,23 +1,52 @@
-export interface RazorpayOffer {
-  id: string
+import type { LiveRazorpayOffer } from "@/lib/razorpay-offers"
+import { z } from "zod"
+
+export interface RazorpayCheckoutResponse {
+  razorpay_order_id: string
+  razorpay_payment_id: string
+  razorpay_signature: string
+}
+
+export interface RazorpayCheckoutOptions {
+  key: string
+  amount: number
+  currency: string
   name: string
   description: string
-  bank: string
-  discount_percentage: number | null
-  discount_amount: number | null
-  min_amount: number | null
-  max_discount: number | null
-  payment_method: string
-  active: boolean
-  starts_at?: number
-  ends_at?: number
-  type: 'instant' | 'emi' | 'cashback'
+  order_id: string
+  handler: (response: RazorpayCheckoutResponse) => void | Promise<void>
+  prefill: { name: string; email: string; contact: string }
+  notes: Record<string, string>
+  theme: { color: string }
+  config?: {
+    display: {
+      blocks: Record<string, { name: string; instruments: Array<{ method: string }> }>
+      sequence: string[]
+      preferences: { show_default_blocks: boolean }
+    }
+  }
+  modal: { ondismiss: () => void }
 }
+
+export const RazorpayOrderResponseSchema = z.object({
+  keyId: z.string().min(1),
+  orderId: z.string().min(1),
+  checkoutToken: z.string().min(1),
+  amount: z.coerce.number().int().positive(),
+  currency: z.literal("INR"),
+})
+
+export const RazorpayVerificationResponseSchema = z.object({
+  paymentId: z.string().min(1),
+  orderId: z.string().min(1),
+})
+
+export type RazorpayOffer = LiveRazorpayOffer
 
 export interface RazorpayOffersResponse {
   items: RazorpayOffer[]
   count: number
-  source: 'razorpay' | 'fallback'
+  source: 'razorpay'
 }
 
 // Bank color mapping for UI

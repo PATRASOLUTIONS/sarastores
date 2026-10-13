@@ -64,18 +64,39 @@ export interface OfferMerchandising {
   endsAt: string | null
 }
 
-export function getOfferMerchandising(offer: any): OfferMerchandising {
+interface OfferMerchandisingInput {
+  section?: unknown
+  storeIds?: unknown
+  endsAt?: unknown
+  active?: unknown
+}
+
+function offerEndDate(value: unknown): Date | null {
+  if (!value) return null
+  if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) {
+    console.warn("[Offers] Invalid offer expiry type")
+    return null
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    console.warn("[Offers] Invalid offer expiry")
+    return null
+  }
+  return date
+}
+
+export function getOfferMerchandising(offer: OfferMerchandisingInput): OfferMerchandising {
   return {
     section: normalizeOfferSection(offer?.section),
     storeIds: Array.isArray(offer?.storeIds) ? offer.storeIds.map(String) : [],
-    endsAt: offer?.endsAt ? new Date(offer.endsAt).toISOString() : null,
+    endsAt: offerEndDate(offer?.endsAt)?.toISOString() ?? null,
   }
 }
 
 /** An offer is live when it is active and inside its end window. */
-export function isOfferLive(offer: any, now: Date = new Date()): boolean {
+export function isOfferLive(offer: OfferMerchandisingInput, now: Date = new Date()): boolean {
   if (offer?.active === false) return false
   if (!offer?.endsAt) return true
-  const endsAt = new Date(offer.endsAt)
-  return Number.isNaN(endsAt.getTime()) ? true : now <= endsAt
+  const endsAt = offerEndDate(offer.endsAt)
+  return endsAt === null || now <= endsAt
 }

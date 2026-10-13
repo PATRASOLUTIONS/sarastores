@@ -7,6 +7,8 @@
 import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
+import { getAuthenticatedUserById } from '@/lib/auth-credentials';
+import { staffCanAccessApi } from '@/lib/admin-access';
 
 export interface AuthSession {
   user: {
@@ -61,18 +63,10 @@ export async function getSession(): Promise<AuthSession | null> {
     }
     const payload = await verifySessionToken(token);
     if (!payload) return null;
-
-    return {
-      user: {
-        id: payload.id,
-        // Older tokens predate `name`; fall back to the email local-part.
-        name: payload.name || payload.email?.split('@')[0] || 'User',
-        email: payload.email,
-        role: payload.role || 'user',
-        dashboardAccess: payload.dashboardAccess,
-        allowedPages: payload.allowedPages,
-      },
-    } as AuthSession;
+    const user = await getAuthenticatedUserById(payload.id);
+    if (!user || user.sessionVersion !== (payload.sessionVersion ?? 0)) return null;
+    if (!['user', 'vendor', 'admin', 'superadmin'].includes(user.role)) return null;
+    return { user: { ...user, role: user.role as AuthSession['user']['role'] } };
   } catch (error) {
     console.error('[Auth] Session verification error:', error);
     return null;
@@ -120,7 +114,17 @@ export async function requireAdmin(): Promise<GuardOk<{ userId: string }> | Guar
       response: NextResponse.json({ error: auth.error || 'Admin access required' }, { status: 401 }),
     };
   }
+
   return { ok: true, userId: auth.userId! };
+}
+
+export async function requireFullAdmin(): Promise<GuardOk<{ user: AuthSession['user'] }> | GuardFail> {
+  const guard = await requireUser();
+  if (!guard.ok) return guard;
+  if (guard.user.role !== 'admin' && guard.user.role !== 'superadmin') {
+    return { ok: false, response: NextResponse.json({ error: 'Full administrator access required' }, { status: 403 }) };
+  }
+  return guard;
 }
 
 /**
@@ -181,70 +185,17 @@ export async function checkAdminAuthorization(): Promise<{
 }> {
   try {
     const session = await getSession();
-
-    console.log(
-      `[Auth] checkAdminAuthorization: session=${session ? 'yes' : 'null'} ` +
-        `role=${session?.user?.role} dashboardAccess=${session?.user?.dashboardAccess} ` +
-        `id=${session?.user?.id}`
-    );
-
     if (!session?.user) {
       return { authorized: false, error: 'Authentication required' };
     }
-
-    const userId = session.user.id || session.user.email;
-
-    // Fast path: session token already has admin role
-    const sessionIsAdmin = session.user.role && ['admin', 'superadmin'].includes(session.user.role);
-    if (sessionIsAdmin) {
-      console.log(`[Auth] checkAdminAuthorization: fast path authorized (role=${session.user.role})`);
-      return { authorized: true, userId };
+    const requestHeaders = await headers();
+    const path = requestHeaders.get('x-sara-request-path') || '';
+    if (staffCanAccessApi(session.user, path)) {
+      return { authorized: true, userId: session.user.id };
     }
-
-    // Authorize against the live DB so stale session tokens don't block access.
-    try {
-      const { connectToDatabase } = await import('@/lib/mongodb');
-      const { ObjectId } = await import('mongodb');
-      const { db } = await connectToDatabase();
-      const id = session.user.id;
-
-      let userDoc: any = null;
-
-      // Try common ID patterns used across this codebase
-      if (ObjectId.isValid(id)) {
-        userDoc = await db.collection('users').findOne({ _id: new ObjectId(id) });
-      }
-      if (!userDoc) {
-        userDoc = await db.collection('users').findOne({ _id: id } as any);
-      }
-      if (!userDoc) {
-        userDoc = await db.collection('users').findOne({ id } as any);
-      }
-
-      if (!userDoc) {
-        console.warn(`[Auth] Admin check: user ${id} not found in DB`);
-        return { authorized: false, error: 'Admin access required' };
-      }
-
-      const dbRole = userDoc.role as string | undefined;
-      const dbDash = !!userDoc.dashboardAccess;
-      if (dbRole === 'admin' || dbRole === 'superadmin' || dbDash) {
-        return { authorized: true, userId };
-      }
-
-      console.warn(
-        `[Auth] Admin check denied for ${id}: db.role=${dbRole} db.dashboardAccess=${dbDash}`,
-      );
-    } catch (dbErr) {
-      console.error('[Auth] DB admin-check failed, falling back to session', dbErr);
-      // DB is down — fall back to session token so the app is not completely blocked
-      if (session.user.dashboardAccess) {
-        return { authorized: true, userId };
-      }
-    }
-
     return { authorized: false, error: 'Admin access required' };
   } catch (error) {
+    console.error('[Auth] Authorization check failed', error);
     return { authorized: false, error: 'Authorization check failed' };
   }
 }

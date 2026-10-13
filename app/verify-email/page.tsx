@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { CheckCircle, XCircle, Mail, ArrowLeft, Loader2 } from "lucide-react"
+import { CheckCircle, XCircle, Mail, ArrowLeft, Loader2, type LucideIcon } from "lucide-react"
 
 export default function VerifyEmailPage() {
   const searchParams = useSearchParams()
@@ -14,7 +14,7 @@ export default function VerifyEmailPage() {
   const [resending, setResending] = useState(false)
   const [resendError, setResendError] = useState("")
 
-  const statusConfig: Record<string, { icon: any; color: string; title: string; message: string }> = {
+  const statusConfig: Record<string, { icon: LucideIcon; color: string; title: string; message: string }> = {
     success: {
       icon: CheckCircle,
       color: "text-green-600",

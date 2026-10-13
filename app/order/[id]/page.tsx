@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle, Package, Truck } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { cleanProductName } from "@/utils/cleanProductName"
+import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-confirmation"
 
 /**
  * Order view reachable without a session.
@@ -29,12 +30,15 @@ function OrderView() {
   const searchParams = useSearchParams()
   const orderId = params?.id
 
-  const [order, setOrder] = useState<any>(null)
+  const [order, setOrder] = useState<OrderConfirmation | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!orderId) return
+    setOrder(null)
+    setError(null)
+    setLoading(true)
 
     let token = searchParams.get("token")
     if (!token) {
@@ -70,7 +74,8 @@ function OrderView() {
           return
         }
 
-        setOrder(await res.json())
+        const data = OrderConfirmationSchema.parse(await res.json())
+        if (!cancelled) setOrder(data)
       } catch {
         if (!cancelled) setError("Something went wrong loading this order.")
       } finally {
@@ -112,18 +117,18 @@ function OrderView() {
                 </Link>
               </div>
             </div>
-          ) : (
+          ) : order ? (
             <>
               <div className="rounded-xl border border-gray-200 bg-white p-6">
                 <div className="flex items-start gap-3">
                   <CheckCircle className="mt-0.5 h-6 w-6 shrink-0 text-green-600" />
                   <div>
                     <h1 className="text-xl font-bold text-gray-900">
-                      Order {order.orderId || order.id}
+                      Order {order.orderId}
                     </h1>
                     <p className="mt-1 text-sm capitalize text-gray-600">
                       Status: {order.status || "pending"} · Placed{" "}
-                      {order.date ? new Date(order.date).toLocaleDateString("en-IN") : "recently"}
+                      {new Date(order.createdAt).toLocaleDateString("en-IN")}
                     </p>
                   </div>
                 </div>
@@ -175,7 +180,7 @@ function OrderView() {
                     Items
                   </h2>
                   <ul className="mt-4 divide-y divide-gray-100">
-                    {order.items.map((item: any, index: number) => (
+                    {order.items.map((item, index) => (
                       <li key={index} className="flex items-center justify-between gap-4 py-3">
                         <span className="text-sm text-gray-800">
                           {cleanProductName(item.name || "Item")}
@@ -206,7 +211,7 @@ function OrderView() {
                 </Link>
               </div>
             </>
-          )}
+          ) : null}
         </div>
       </main>
 

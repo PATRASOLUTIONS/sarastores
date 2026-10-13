@@ -3,6 +3,13 @@ import Link from 'next/link'
 import { ChevronLeft, ShieldCheck, Ticket, HelpCircle, Gift, CheckCircle2 } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { pageMetadata } from '@/lib/seo-page'
+
+export const generateMetadata = pageMetadata({
+  path: '/spin/terms', title: brand => `Spin & Win Campaign Terms | ${brand}`,
+  description: 'Read the participation, identity verification, prize collection and support terms for the SARA Spin & Win campaign.',
+  noIndex: true,
+})
 
 export default function SpinTermsPage() {
   return (
@@ -46,7 +53,7 @@ export default function SpinTermsPage() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 mt-0.5">3</span>
-                <div><strong>Spin the Wheel:</strong> Once verified, agree to the final spin terms and click "SPIN NOW".</div>
+                <div><strong>Spin the Wheel:</strong> Once verified, agree to the final spin terms and click &quot;SPIN NOW&quot;.</div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 mt-0.5">4</span>
@@ -107,7 +114,7 @@ export default function SpinTermsPage() {
               <a href="mailto:support@saramobiles.com" className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors w-full sm:w-auto">
                 Email Support
               </a>
-              <a href="tel:+917892051553" className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-medium transition-colors shadow-lg shadow-amber-500/20 w-full sm:w-auto text-center">
+              <a href="tel:+917892051553" className="px-6 py-3 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-medium transition-colors shadow-lg shadow-amber-500/20 w-full sm:w-auto text-center">
                 Call Us: +91 78920 51553
               </a>
             </div>

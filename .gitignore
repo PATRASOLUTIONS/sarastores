@@ -13,6 +13,9 @@
 
 # next.js
 /.next/
+/.next-audit/
+/.next-audit-strict/
+/.next-audit-dev/
 /out/
 
 # locally stored product media (MEDIA_DRIVER=local); real deployments use R2
@@ -51,3 +54,8 @@ order_debug_dump.json
 *_debug_dump.json
 /dumps/
 /exports/
+
+# Local audit output and historical logs are not application source.
+/scripts/audit/
+/scripts/archive/
+/documents/private-artifacts/

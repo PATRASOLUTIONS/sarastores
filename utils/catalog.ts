@@ -7,7 +7,13 @@
  * These helpers map the raw data onto labels a shopper would recognise.
  */
 
-export type CatalogProduct = Record<string, any>
+import { productCardResponseSchema } from "@/lib/product-card-response"
+import { z } from "zod"
+
+export const catalogProductResponseSchema = productCardResponseSchema.passthrough()
+export const catalogProductListResponseSchema = z.array(catalogProductResponseSchema)
+
+export type CatalogProduct = z.infer<typeof catalogProductResponseSchema>
 
 const CATEGORY_RULES: Array<{ match: RegExp; label: string }> = [
   { match: /washing\s*machine|washer/i, label: "Washing Machines" },
@@ -22,7 +28,7 @@ const CATEGORY_RULES: Array<{ match: RegExp; label: string }> = [
 ]
 
 /** Shopper-facing category for a product, or null when it can't be classified. */
-export function categoryOf(product: CatalogProduct): string | null {
+export function categoryOf(product: Partial<Pick<CatalogProduct, "name" | "category" | "subCategory">>): string | null {
   const haystack = [product?.subCategory, product?.category, product?.name]
     .filter(Boolean)
     .join(" ")
@@ -33,7 +39,7 @@ export function categoryOf(product: CatalogProduct): string | null {
 }
 
 /** `manufacturerName` is the most reliable brand source; fall back to the title's first word. */
-export function brandOf(product: CatalogProduct): string | null {
+export function brandOf(product: Partial<Pick<CatalogProduct, "name" | "manufacturerName" | "manufacturer_name">>): string | null {
   const raw =
     product?.manufacturerName ||
     product?.manufacturer_name ||
@@ -45,8 +51,22 @@ export function brandOf(product: CatalogProduct): string | null {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()
 }
 
-export function isInStock(product: CatalogProduct): boolean {
+export function isInStock(product: { stock?: unknown }): boolean {
   return typeof product?.stock === "number" ? product.stock > 0 : true
+}
+
+export function productSuggestions(product: Partial<Pick<CatalogProduct, "id" | "subCategory" | "category" | "name">>, catalog: CatalogProduct[], limit = 6): CatalogProduct[] {
+  const normalize = (value: unknown) => String(value || "").trim().toLowerCase()
+  const subcategory = normalize(product.subCategory)
+  const category = categoryOf(product)
+  const available = catalog.filter(candidate =>
+    String(candidate.id) !== String(product.id) &&
+    candidate.image && Number(candidate.price) > 0 &&
+    candidate.active !== false && isInStock(candidate),
+  )
+  const exact = available.filter(candidate => subcategory && normalize(candidate.subCategory) === subcategory)
+  const related = available.filter(candidate => category && categoryOf(candidate) === category)
+  return [...new Map([...exact, ...related].map(candidate => [String(candidate.id), candidate])).values()].slice(0, limit)
 }
 
 export type Rail = {

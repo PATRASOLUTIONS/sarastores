@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { useState, useEffect, useCallback } from "react"
 import { 
@@ -324,12 +326,12 @@ const endpoints: Endpoint[] = [
     name: 'Create Razorpay Order',
     method: 'POST',
     path: '/api/v1/partner/orders/razorpay/create',
-    description: 'Create a Razorpay order for payment processing. Returns order ID and key for frontend integration.',
+    description: 'Create a server-priced product quote in the API key environment. Requires configured partner credentials; returns the authoritative amount, order ID and checkout key.',
     category: 'razorpay',
     requiresAuth: true,
     bodyTemplate: {
       orderId: 'YOUR_ORDER_ID_123',
-      amount: 999.99,
+      items: [{ productId: 'YOUR_PRODUCT_ID', quantity: 1 }],
       currency: 'INR',
       receipt: 'receipt_123',
       notes: {
@@ -343,7 +345,7 @@ const endpoints: Endpoint[] = [
     name: 'Verify Razorpay Payment',
     method: 'POST',
     path: '/api/v1/partner/orders/razorpay/verify',
-    description: 'Verify Razorpay payment signature after successful payment. Confirms payment authenticity.',
+    description: 'Verify captured payment against the original partner quote, amount, currency and account. Provider failures never mark payment paid.',
     category: 'razorpay',
     requiresAuth: true,
     bodyTemplate: {
@@ -417,7 +419,7 @@ export default function PartnerAPITestPage() {
   const [queryParamValues, setQueryParamValues] = useState<Record<string, string>>({})
   const [requestBody, setRequestBody] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [response, setResponse] = useState<any>(null)
+  const [response, setResponse] = useState<unknown>(null)
   const [responseTime, setResponseTime] = useState<number | null>(null)
   const [statusCode, setStatusCode] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
@@ -568,7 +570,6 @@ export default function PartnerAPITestPage() {
           try {
             JSON.parse(requestBody)
             fetchOptions.body = requestBody
-            console.log('[API Test] Request body:', requestBody)
           } catch (e) {
             toast.error('Invalid JSON in request body')
             setIsLoading(false)
@@ -585,34 +586,39 @@ export default function PartnerAPITestPage() {
       setResponseTime(Math.round(endTime - startTime))
       setStatusCode(res.status)
 
-      const data = await res.json()
-      console.log('[API Test] Response data:', data)
+      const data: unknown = await res.json()
       setResponse(data)
 
       if (!res.ok) {
-        setError(data.error?.message || data.error || 'Request failed')
+        const error = data !== null && typeof data === "object" && "error" in data ? data.error : null
+        setError(typeof error === "string" && error ? error : getErrorMessage(error, 'Request failed'))
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to execute request')
-      setResponse({ error: err.message })
+    } catch (err) {
+      const message = getErrorMessage(err, 'Failed to execute request')
+      setError(message)
+      setResponse({ error: message })
     } finally {
       setIsLoading(false)
     }
   }
 
   // Copy response to clipboard
-  const copyResponse = () => {
-    if (response) {
-      navigator.clipboard.writeText(JSON.stringify(response, null, 2))
+  const copyResponse = async () => {
+    if (!response) return
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard is unavailable")
+      await navigator.clipboard.writeText(JSON.stringify(response, null, 2))
       setCopied(true)
       toast.success('Copied to clipboard!')
       setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Copy failed"))
     }
   }
 
   // Format JSON with syntax highlighting
-  const formatJSON = (obj: any): string => {
-    return JSON.stringify(obj, null, 2)
+  const formatJSON = (obj: unknown): string => {
+    return JSON.stringify(obj, null, 2) ?? "null"
   }
 
   // Group endpoints by category
@@ -781,9 +787,9 @@ export default function PartnerAPITestPage() {
                         toast.error('Website does not have access')
                       }
                     }
-                  } catch (err: any) {
+                  } catch (err) {
                     setAccessStatus('error')
-                    toast.error(err.message || 'Failed to check access')
+                    toast.error(getErrorMessage(err, 'Failed to check access'))
                   } finally {
                     setIsCheckingAccess(false)
                   }
@@ -1025,7 +1031,7 @@ export default function PartnerAPITestPage() {
                 <Terminal className="h-5 w-5 text-gray-500" />
                 <h2 className="text-lg font-semibold">Response</h2>
               </div>
-              {response && (
+              {Boolean(response) && (
                 <button
                   onClick={copyResponse}
                   className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"

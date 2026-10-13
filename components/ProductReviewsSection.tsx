@@ -1,7 +1,10 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Star, ThumbsUp, ThumbsDown, CheckCircle2, ChevronDown, Camera, User, Search } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import Link from "next/link"
+import useSWR from "swr"
+import { z } from "zod"
+import { Star, ThumbsUp, ThumbsDown, CheckCircle2, ChevronDown, User, Search } from "lucide-react"
 import WriteReviewForm from "@/components/WriteReviewForm"
 
 interface ReviewAuthor {
@@ -37,19 +40,27 @@ interface ProductReviewsSectionProps {
   /** Reviews seeded from the product record. Field names vary by source. */
   seedReviews?: Array<{
     title?: string
-    rating?: number | string
+    rating?: number | string | null
     body?: string
     text?: string
     content?: string
-    author?: string
+    author?: string | { name?: string }
     name?: string
     date?: string
+    createdAt?: string
+    id?: string
+    isVerifiedPurchase?: boolean
+    verified?: boolean
+    images?: string[]
   }> | null
   /** Aggregate stats from the product. */
   average?: number
   count?: number
   /** Drop the outer card chrome when rendered inside a panel that already has it. */
   embedded?: boolean
+  preview?: boolean
+  onViewAll?: () => void
+  onStatsChange?: (stats: { rating: number; count: number }) => void
 }
 
 const SENTIMENT_BUCKETS = [
@@ -61,6 +72,7 @@ const SENTIMENT_BUCKETS = [
 ]
 
 function formatDate(d: string): string {
+  if (!d || Number.isNaN(new Date(d).getTime())) return "Date not provided"
   try {
     return new Date(d).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })
   } catch {
@@ -76,17 +88,33 @@ export default function ProductReviewsSection({
   average,
   count,
   embedded = false,
+  preview = false,
+  onViewAll,
+  onStatsChange,
 }: ProductReviewsSectionProps) {
   const [activeFilter, setActiveFilter] = useState<number | "all" | "photo">("all")
   const [sortBy, setSortBy] = useState<"recent" | "helpful" | "highest" | "lowest">("recent")
   const [search, setSearch] = useState("")
   const [helpfulMap, setHelpfulMap] = useState<Record<string, 0 | 1 | -1>>({})
   const [writeOpen, setWriteOpen] = useState(false)
+  const { data: liveReviews, error: reviewsError, isLoading: reviewsLoading, mutate } = useSWR(
+    productId ? `/api/reviews?productId=${encodeURIComponent(productId)}` : null,
+    async (url: string) => {
+      const response = await fetch(url, { cache: "no-store" })
+      if (!response.ok) throw new Error("Customer reviews could not be loaded")
+      return z.array(z.object({
+        id: z.string(), rating: z.number().min(1).max(5), title: z.string().optional(), content: z.string().optional(),
+        author: z.union([z.string(), z.object({ name: z.string().optional() })]).optional(), name: z.string().optional(),
+        createdAt: z.string().optional(), isVerifiedPurchase: z.boolean().optional(), images: z.array(z.string()).optional(),
+      })).parse(await response.json())
+    }, { shouldRetryOnError: false },
+  )
 
   // Normalize seed reviews from the product_specifications collection
   const seed = useMemo<CustomerReview[]>(() => {
-    if (!Array.isArray(seedReviews)) return []
-    return seedReviews.map((r, i) => {
+    const liveIds = new Set((liveReviews || []).map(review => review.id))
+    const source = [...(liveReviews || []), ...(Array.isArray(seedReviews) ? seedReviews.filter(review => !review.id || !liveIds.has(review.id)) : [])]
+    return source.map((r, i) => {
       const ratingNum =
         typeof r.rating === "number"
           ? r.rating
@@ -94,31 +122,37 @@ export default function ProductReviewsSection({
       const rawTitle = r.title || ""
       const cleanTitle = rawTitle.replace(/^\d+\.?\d*\s*out of \d+\s*stars?\s*/i, "").trim()
       return {
-        id: `seed-${i}`,
-        name: r.author || r.name || "Verified Buyer",
-        rating: ratingNum || 5,
-        date: r.date || new Date().toISOString(),
+        id: r.id || `seed-${i}`,
+        name: typeof r.author === "string" ? r.author : r.author?.name || r.name || "Customer",
+        rating: Math.max(0, Math.min(5, ratingNum)),
+        date: ("date" in r ? r.date : undefined) || r.createdAt || "",
         title: cleanTitle || "Customer review",
-        content: r.body || r.text || r.content || "",
-        verified: true,
+        content: ("body" in r ? r.body : undefined) || ("text" in r ? r.text : undefined) || r.content || "",
+        verified: r.isVerifiedPurchase === true || ("verified" in r && r.verified === true),
+        images: r.images,
         helpful: 0,
         product: { id: productId, name: productName, image: productImage },
       }
     })
-  }, [seedReviews, productId, productName, productImage])
+  }, [liveReviews, seedReviews, productId, productName, productImage])
 
   // Compute aggregate
   const stats = useMemo(() => {
     const all = seed
-    const total = count || all.length
-    const avg = average ?? (all.length ? all.reduce((a, r) => a + r.rating, 0) / all.length : 0)
+    const total = liveReviews !== undefined ? all.length : Math.max(count || 0, all.length)
+    const avg = liveReviews !== undefined ? (all.length ? all.reduce((sum, r) => sum + r.rating, 0) / all.length : 0) :
+      average ?? (all.length ? all.reduce((a, r) => a + r.rating, 0) / all.length : 0)
     const histogram: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
     for (const r of all) {
       const k = Math.min(5, Math.max(1, Math.round(r.rating)))
       histogram[k] = (histogram[k] || 0) + 1
     }
     return { total, avg, histogram }
-  }, [seed, average, count])
+  }, [seed, average, count, liveReviews])
+
+  useEffect(() => {
+    onStatsChange?.({ rating: stats.avg, count: stats.total })
+  }, [stats, onStatsChange])
 
   const filtered = useMemo<CustomerReview[]>(() => {
     let list = [...seed]
@@ -200,6 +234,57 @@ export default function ProductReviewsSection({
     return { positivePct, criticalPct, label }
   }, [seed])
 
+  if (preview) return (
+    <section id="reviews" className="mt-6 border-t border-gray-100 pt-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-gray-900">Customer Reviews</h2>
+        {onViewAll && <button type="button" onClick={onViewAll} className="text-xs font-semibold text-[#1560bd]">View All Reviews &rarr;</button>}
+      </div>
+      {reviewsLoading && <p role="status" className="mb-4 text-sm text-slate-500">Loading customer reviews...</p>}
+      {reviewsError && <p role="alert" className="mb-4 text-sm text-amber-800">Customer reviews could not be loaded. <button type="button" onClick={() => void mutate()} className="underline">Retry reviews</button></p>}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+        <div>
+          <div className="flex items-center gap-3">
+            <p className="text-3xl font-bold text-emerald-700">{stats.avg.toFixed(1)}</p>
+            <span className="text-sm font-semibold">out of 5</span>
+          </div>
+          <div className="mt-2">{renderedStars(stats.avg)}</div>
+          <p className="mt-1 text-xs text-gray-500">Based on {stats.total.toLocaleString("en-IN")} ratings</p>
+          <div className="mt-3 space-y-1">
+            {SENTIMENT_BUCKETS.map(bucket => {
+              const percentage = seed.length ? Math.round((stats.histogram[bucket.key] / seed.length) * 100) : 0
+              return <div key={bucket.key} className="flex items-center gap-2 text-xs">
+                <span className="w-5">{bucket.key}★</span>
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100"><span className="block h-full rounded-full bg-emerald-600" style={{ width: `${percentage}%` }} /></span>
+                <span className="w-8 text-right text-gray-500">{percentage}%</span>
+              </div>
+            })}
+          </div>
+          <button type="button" onClick={() => setWriteOpen(true)} className="mt-4 rounded-md bg-[#1560bd] px-4 py-2 text-xs font-semibold text-white">Write a review</button>
+        </div>
+        {seed.length ? <div className="grid gap-3 sm:grid-cols-2">
+          {filtered.slice(0, 2).map(review => <article key={review.id} className="min-w-0 rounded-lg border border-gray-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-semibold">{review.name}</span>
+              <span className="text-[10px] text-gray-500">{formatDate(review.date)}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {renderedStars(review.rating, "sm")}
+              {review.verified && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700"><CheckCircle2 size={12} />Verified Purchase</span>}
+            </div>
+            <h3 className="mt-3 text-xs font-bold">{review.title}</h3>
+            <p className="mt-1 line-clamp-3 break-words text-xs leading-relaxed text-gray-600">{review.content}</p>
+            {!!review.images?.length && <div className="mt-3 flex flex-wrap gap-2">
+              {review.images.slice(0, 4).map((image, index) => <a key={`${image}-${index}`} href={image} target="_blank" rel="noopener noreferrer"><img src={image} alt={`Review photo ${index + 1}`} className="h-12 w-12 rounded border border-gray-200 object-cover" loading="lazy" /></a>)}
+            </div>}
+            <Link href="/contact" className="mt-3 inline-block text-[10px] text-gray-500 hover:text-[#1560bd]">Report a concern</Link>
+          </article>)}
+        </div> : <p className="py-4 text-sm text-gray-500">No reviews yet. Be the first to share your experience with this product.</p>}
+      </div>
+      <WriteReviewForm productId={productId} productName={productName} open={writeOpen} onClose={() => setWriteOpen(false)} onSubmitted={() => void mutate()} />
+    </section>
+  )
+
   return (
     <section
       id="reviews"
@@ -258,7 +343,10 @@ export default function ProductReviewsSection({
         productName={productName}
         open={writeOpen}
         onClose={() => setWriteOpen(false)}
+        onSubmitted={() => void mutate()}
       />
+      {reviewsLoading && <p role="status" className="mb-4 text-sm text-slate-500">Loading customer reviews...</p>}
+      {reviewsError && <p role="alert" className="mb-4 text-sm text-amber-800">Customer reviews could not be loaded. <button type="button" onClick={() => void mutate()} className="underline">Retry reviews</button></p>}
 
       {/* Histogram */}
       {seed.length > 0 && (
@@ -301,14 +389,6 @@ export default function ProductReviewsSection({
               >
                 <Star className="h-4 w-4" />
                 Write a customer review
-              </button>
-              <button
-                type="button"
-                onClick={() => setWriteOpen(true)}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:border-brand-primary hover:text-brand-primary hover:bg-brand-primary-subtle transition-colors"
-              >
-                <Camera className="h-4 w-4" />
-                Share a photo
               </button>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed pt-2">
@@ -411,7 +491,7 @@ export default function ProductReviewsSection({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
                     {renderedStars(r.rating, "sm")}
                     <span className="text-xs text-gray-500">{formatDate(r.date)}</span>
                   </div>
@@ -432,7 +512,7 @@ export default function ProductReviewsSection({
                       ))}
                     </div>
                   )}
-                  <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                     <span>Helpful?</span>
                     <button
                       onClick={() => toggleHelpful(String(r.id), 1)}
@@ -457,7 +537,7 @@ export default function ProductReviewsSection({
                       No
                     </button>
                     <span className="mx-1">·</span>
-                    <button className="hover:text-brand-primary">Report</button>
+                    <Link href="/contact" className="hover:text-brand-primary">Report</Link>
                   </div>
                 </div>
               </div>
@@ -475,6 +555,7 @@ export default function ProductReviewsSection({
           <p className="text-sm text-gray-500 mb-4">Be the first to share your experience with this product.</p>
           <button
             type="button"
+            onClick={() => setWriteOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white text-sm font-semibold hover:bg-brand-primary-hover transition-colors"
           >
             Write a review
@@ -482,13 +563,6 @@ export default function ProductReviewsSection({
         </div>
       )}
 
-      {filtered.length >= 5 && (
-        <div className="pt-6 mt-2 border-t border-gray-100 flex justify-center">
-          <button className="text-sm font-semibold text-brand-primary hover:text-brand-primary-hover">
-            See more reviews →
-          </button>
-        </div>
-      )}
     </section>
   )
 }

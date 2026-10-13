@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 import { connectToDatabase } from "@/lib/mongodb"
+import { normalizeId } from "@/lib/db-service"
+import { SpecificationUpdateSchema, UpdateProductSchema } from "@/lib/validation"
+import { handleApiError } from "@/lib/api-error"
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ sku: string }> }) {
   try {
@@ -44,32 +47,44 @@ export async function PUT(req: Request, context: { params: Promise<{ sku: string
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
 
-  const { sku } = await context.params
-  const data = await req.json()
-  const { db } = await connectToDatabase()
-  const result = await db.collection("products").updateOne(
-    { sku },
-    {
-      $set: {
-        name: data.name,
-        description: data.description,
-        price: data.price,
-        images: data.images,
-      }
-    },
-  )
-  if (result.matchedCount === 0) {
-    return NextResponse.json({ error: "Product not found" }, { status: 404 })
+  try {
+    const { sku } = await context.params
+    let body: unknown
+    try { body = await req.json() } catch (error) {
+      console.warn("Invalid product specification JSON:", error)
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    }
+    const parsed = UpdateProductSchema.pick({ name: true, description: true, price: true, images: true })
+      .strict().refine(value => Object.keys(value).length > 0, "Provide a product update").safeParse(body)
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid product update" }, { status: 400 })
+    const { db } = await connectToDatabase()
+    const updated = await db.collection("products").findOneAndUpdate(
+      { sku, ...(parsed.data.price === undefined ? {} : {
+        $or: [{ mrp: { $exists: false } }, { mrp: null }, { mrp: { $gte: parsed.data.price } }],
+      }) },
+      { $set: { ...parsed.data, updatedAt: new Date() } }, { returnDocument: "after" },
+    )
+    if (!updated) return NextResponse.json({ error: "Product is missing or the price exceeds its MRP" }, { status: 409 })
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    return handleApiError(error, "Failed to update product")
   }
-  return NextResponse.json({ ok: true })
 }
 
 export async function PATCH(req: Request, context: { params: Promise<{ sku: string }> }) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
 
+  try {
   const { sku } = await context.params
-  const data = await req.json()
+  let body: unknown
+  try { body = await req.json() } catch (error) {
+    console.warn("Invalid specification update JSON:", error)
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+  const parsed = SpecificationUpdateSchema.safeParse(body)
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid specification update" }, { status: 400 })
+  const data = parsed.data
   const { db } = await connectToDatabase()
   const specsCollection = db.collection("product_specifications")
 
@@ -78,55 +93,31 @@ export async function PATCH(req: Request, context: { params: Promise<{ sku: stri
     return NextResponse.json({ error: "Specifications not found for SKU" }, { status: 404 })
   }
 
-  // If the specification is locked, disallow arbitrary updates unless the request explicitly includes a `locked` field
-  if (existing.locked && typeof data.locked === 'undefined') {
+  if (existing.locked && !(Object.keys(data).length === 1 && typeof data.locked === "boolean")) {
     return NextResponse.json({ error: "Specifications are locked and cannot be modified" }, { status: 409 })
   }
 
-  const allowed: any = {}
-  if (typeof data.name !== 'undefined') allowed.name = data.name
-  if (typeof data.mrp !== 'undefined') allowed.mrp = data.mrp
-  if (typeof data.description !== 'undefined') allowed.description = data.description
-  if (typeof data.technical_details !== 'undefined') allowed.technical_details = data.technical_details
-  if (typeof data.from_manufacturer !== 'undefined') allowed.from_manufacturer = data.from_manufacturer
-  if (typeof data.specification_images !== 'undefined') allowed.specification_images = data.specification_images
-  if (typeof data.product_id !== 'undefined') allowed.product_id = data.product_id
-  if (typeof data.locked !== 'undefined') allowed.locked = !!data.locked
-  if (typeof data.overview !== 'undefined') allowed.overview = data.overview
-  if (typeof data.category !== 'undefined') allowed.category = data.category
-  if (typeof data.subCategory !== 'undefined') allowed.subCategory = data.subCategory
-  if (typeof data.included_components !== 'undefined') allowed.included_components = data.included_components
-  if (typeof data.features !== 'undefined') allowed.features = data.features
-  if (typeof data.isSynced !== 'undefined') allowed.isSynced = !!data.isSynced
-  if (typeof data.prod_desc !== 'undefined') allowed.prod_desc = data.prod_desc
-  if (typeof data.group_name !== 'undefined') allowed.group_name = data.group_name
-  if (typeof data.char_desc !== 'undefined') allowed.char_desc = data.char_desc
-  if (typeof data.manufacturer_name !== 'undefined') allowed.manufacturer_name = data.manufacturer_name
-
-  if (Object.keys(allowed).length === 0) {
-    return NextResponse.json({ error: "No valid fields provided for update" }, { status: 400 })
-  }
-
-  // If isSynced is NOT explicitly provided, and we are updating other fields, mark as unsynced
-  if (typeof allowed.isSynced === 'undefined') {
-    allowed.isSynced = false
-  }
-
-  await specsCollection.updateOne({ sku }, { $set: { ...allowed, updatedAt: new Date().toISOString() } })
-
-  // Fetch and return the updated specification
-  const updated = await specsCollection.findOne({ sku })
+  const updated = await specsCollection.findOneAndUpdate({
+    _id: existing._id,
+    locked: existing.locked === undefined ? { $exists: false } : existing.locked,
+    updatedAt: existing.updatedAt === undefined ? { $exists: false } : existing.updatedAt,
+  }, { $set: { ...data, isSynced: data.isSynced ?? false, updatedAt: new Date() } }, { returnDocument: "after" })
+  if (!updated) return NextResponse.json({ error: "Specification changed before this update; reload and try again" }, { status: 409 })
 
   return NextResponse.json({
     ok: true,
-    data: updated
+    data: normalizeId(updated)
   })
+  } catch (error) {
+    return handleApiError(error, "Failed to update specification")
+  }
 }
 
 export async function DELETE(_req: Request, context: { params: Promise<{ sku: string }> }) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
 
+  try {
   const { sku } = await context.params
   const { db } = await connectToDatabase()
   const specsCollection = db.collection("product_specifications")
@@ -140,6 +131,15 @@ export async function DELETE(_req: Request, context: { params: Promise<{ sku: st
     return NextResponse.json({ error: "Specifications are locked and cannot be deleted" }, { status: 409 })
   }
 
-  await specsCollection.deleteOne({ sku })
+  const result = await specsCollection.deleteOne({
+    _id: existing._id, locked: { $ne: true },
+    updatedAt: existing.updatedAt === undefined ? { $exists: false } : existing.updatedAt,
+  })
+  if (!result.acknowledged || result.deletedCount !== 1) {
+    return NextResponse.json({ error: "Specification changed before deletion; reload and try again" }, { status: 409 })
+  }
   return NextResponse.json({ ok: true })
+  } catch (error) {
+    return handleApiError(error, "Failed to delete specification")
+  }
 }

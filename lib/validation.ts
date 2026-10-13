@@ -6,6 +6,8 @@
  */
 
 import { z } from 'zod';
+import { checkoutCity } from './checkout-region';
+import { isDpdpComplaint } from './complaintTypes';
 
 // ============================================
 // Common Validators
@@ -18,6 +20,40 @@ export const phoneSchema = z.string()
 // Indian pincode (6 digits)
 export const pincodeSchema = z.string()
   .regex(/^\d{6}$/, 'Invalid pincode. Must be 6 digits');
+
+export const PincodeRestrictionsResponseSchema = z.object({
+  mode: z.enum(['blocked', 'allowed', 'both']).optional().default('blocked'),
+  blockedPincodes: z.array(z.union([z.string(), z.object({ pincode: z.string() })])).optional().default([]),
+  allowedPincodes: z.array(z.union([z.string(), z.object({ pincode: z.string() })])).optional().default([]),
+});
+
+export const InStoreOrderShortcutListSchema = z.array(z.object({
+  paymentMethod: z.string().nullish(),
+  paymentDetails: z.object({ verifiedEmail: z.string().nullish() }).nullish(),
+}));
+
+export const AdminCustomerSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  email: z.string(),
+  role: z.string().optional(),
+  phone: z.string().nullish().transform(value => value ?? undefined),
+  address: z.string().nullish().transform(value => value ?? undefined),
+  createdAt: z.string(),
+});
+const AdminCustomerListSchema = z.array(AdminCustomerSchema);
+export const AdminCustomersResponseSchema = z.union([
+  z.object({ items: AdminCustomerListSchema, total: z.number().int().nonnegative() }),
+  AdminCustomerListSchema.transform(items => ({ items, total: items.length })),
+]);
+export const CustomerOrderSummarySchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().nullish(),
+  total: z.number().finite().nonnegative(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+export const CustomerOrderSummaryListSchema = z.array(CustomerOrderSummarySchema);
 
 // Email validation
 export const emailSchema = z.string()
@@ -59,6 +95,309 @@ export const quantitySchema = z.number()
   .int('Quantity must be a whole number')
   .positive('Quantity must be positive')
   .max(1000, 'Maximum quantity exceeded');
+
+const spinNumber = z.union([z.number(), z.string().trim().min(1)])
+  .transform(Number).pipe(z.number().finite());
+const spinDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}, 'Invalid date');
+const spinTime = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+export const SpinPrizeFieldsSchema = z.object({
+  prizeName: z.string().trim().min(1).max(150),
+  emoji: z.string().max(50).optional(),
+  productImage: z.string().max(2000000).nullable().optional(),
+  total: spinNumber.pipe(z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)),
+  isActive: z.boolean().optional(),
+  dateRanges: z.array(z.object({ startDate: spinDate, endDate: spinDate }).strict()
+    .refine(value => value.startDate <= value.endDate, 'Date range is reversed')).max(100).optional(),
+  timeSlots: z.array(z.object({ startTime: spinTime, endTime: spinTime }).strict()
+    .refine(value => value.startTime <= value.endTime, 'Time range is reversed')).max(100).optional(),
+  weightMultiplier: spinNumber.pipe(z.number().positive()).optional(),
+});
+export const SpinPrizeCreateSchema = SpinPrizeFieldsSchema.extend({
+  campaignId: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(),
+}).strict();
+export const SpinPrizeUpdateSchema = SpinPrizeFieldsSchema.partial().extend({
+  prizeName: SpinPrizeFieldsSchema.shape.prizeName,
+  campaignId: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(),
+}).strict().refine(value => Object.keys(value).some(key => key !== 'prizeName' && key !== 'campaignId'), 'No fields to update');
+
+export const PartnerOrderItemsSchema = z.array(z.object({
+  productId: z.string().trim().min(1).max(100),
+  quantity: quantitySchema,
+})).min(1).max(100).superRefine((items, context) => {
+  if (new Set(items.map(item => item.productId)).size !== items.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Duplicate products must be combined into one item' });
+  }
+});
+const partnerOrderReference = z.string().trim().min(1).max(100);
+const partnerPaymentDetails = z.object({
+  razorpayOrderId: z.string().regex(/^order_[A-Za-z0-9]+$/),
+  transactionId: z.string().regex(/^pay_[A-Za-z0-9]+$/),
+  method: z.string().max(40).optional(),
+  paymentMethod: z.string().max(40).optional(),
+  amount: priceSchema.optional(),
+});
+const partnerAddressFields = z.object({
+  line1: z.string().trim().min(1).max(300),
+  line2: z.string().trim().max(300).optional(),
+  city: z.string().trim().min(1).max(100),
+  state: z.string().trim().min(1).max(100),
+  pincode: pincodeSchema.optional(),
+  postalCode: pincodeSchema.optional(),
+  country: z.string().trim().min(1).max(100).default('India'),
+}).transform((address, context) => {
+  const pincode = address.pincode || address.postalCode;
+  if (!pincode) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid pincode is required' });
+    return z.NEVER;
+  }
+  return { ...address, pincode };
+});
+const partnerAddress = z.preprocess(value => {
+  if (typeof value !== 'string') return value;
+  const parts = value.split(',').map(part => part.trim());
+  if (parts.length < 3) return value;
+  return {
+    line1: value, city: parts[parts.length - 3], state: parts[parts.length - 2],
+    pincode: parts[parts.length - 1].match(/\d{6}/)?.[0], country: 'India',
+  };
+}, partnerAddressFields);
+const partnerCustomer = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: emailSchema,
+  phone: z.string().trim().regex(/^\+?\d{10,15}$/),
+  address: partnerAddress,
+});
+export const PartnerOrderCreateSchema = z.object({
+  items: PartnerOrderItemsSchema,
+  customer: partnerCustomer.optional(),
+  customerDetails: partnerCustomer.optional(),
+  partnerOrderId: partnerOrderReference.optional(),
+  externalOrderId: partnerOrderReference.optional(),
+  paymentMethod: z.string().max(40).optional(),
+  paymentDetails: partnerPaymentDetails.optional(),
+  notes: z.string().max(2000).optional(),
+}).transform((body, context) => {
+  const customer = body.customer || body.customerDetails;
+  const method = (body.paymentMethod || body.paymentDetails?.paymentMethod || '').toLowerCase();
+  const paymentMethod: 'prepaid' | 'cod' | undefined = method === 'razorpay' || method === 'stripe' || method === 'prepaid' ? 'prepaid'
+    : method === 'cash' || method === 'cod' ? 'cod' : undefined;
+  if (!customer || !paymentMethod || (paymentMethod === 'prepaid' && !body.paymentDetails)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Valid customer, paymentMethod and prepaid payment details are required' });
+    return z.NEVER;
+  }
+  return {
+    items: body.items, customer, paymentMethod, notes: body.notes,
+    partnerOrderId: body.partnerOrderId || body.externalOrderId,
+    paymentDetails: body.paymentDetails,
+  };
+});
+export const PartnerPaymentCreateSchema = z.object({
+  orderId: partnerOrderReference,
+  items: PartnerOrderItemsSchema,
+  amount: priceSchema.optional(),
+  currency: z.literal('INR').default('INR'),
+  receipt: z.string().trim().min(1).max(40).optional(),
+  notes: z.record(z.string().max(256)).refine(notes => Object.keys(notes).length <= 12, 'Too many notes').optional(),
+});
+export const PartnerPaymentVerifySchema = z.object({
+  razorpay_payment_id: z.string().regex(/^pay_[A-Za-z0-9]+$/),
+  razorpay_order_id: z.string().regex(/^order_[A-Za-z0-9]+$/),
+  razorpay_signature: z.string().regex(/^[a-fA-F0-9]{64}$/),
+});
+export const PartnerOrderStatusSchema = z.enum(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned']);
+export const PartnerOrderListQuerySchema = z.object({
+  status: PartnerOrderStatusSchema.optional(),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export const PartnerOrderCancelSchema = z.object({ reason: z.string().trim().max(2000).optional() });
+export const PartnerManualPaymentVerificationSchema = z.object({ verifiedBy: z.string().max(100).optional() });
+export const ExternalOrderWebhookSchema = z.object({
+  queueId: z.string().trim().min(1).max(150).optional(),
+  externalOrderId: z.string().trim().min(1).max(150).optional(),
+  orderId: z.string().trim().min(1).max(150).optional(),
+  status: z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9_-]{0,79}$/).default('updated'),
+  message: z.string().max(2000).optional(),
+  payload: z.unknown().optional(),
+}).refine(body => Boolean(body.queueId || body.externalOrderId || body.orderId), 'An external order identifier is required');
+
+const settingsText = z.string().nullish();
+const settingsStatistic = z.union([z.string(), z.number().finite().transform(String)]).nullish();
+const settingsNumeric = z.union([z.number(), z.string().trim().regex(/^(?:\d+(?:\.\d+)?|\.\d+)$/).transform(Number)]);
+const settingsAmount = settingsNumeric.pipe(z.number().finite().nonnegative()).nullish();
+export const StoreSettingsFieldsSchema = z.object({
+  storeName: settingsText,
+  legalName: settingsText,
+  statYears: settingsStatistic,
+  statStores: settingsStatistic,
+  statCustomers: settingsStatistic,
+  storeEmail: settingsText,
+  storePhone: settingsText,
+  storeAddress: settingsText,
+  storeDescription: settingsText,
+  brandLogo: settingsText,
+  signature: settingsText,
+  storefrontImage: settingsText,
+  lifestyleImage: settingsText,
+  landmarkImage: settingsText,
+  primaryColor: settingsText,
+  favicon: settingsText,
+  currency: settingsText,
+  taxRate: settingsNumeric.pipe(z.number().finite().min(0).max(100)).nullish(),
+  gstNumber: settingsText,
+  panNumber: settingsText,
+  shippingFee: settingsAmount,
+  freeShippingThreshold: settingsAmount,
+  codAvailable: z.boolean().nullish(),
+  estimatedDeliveryDays: settingsNumeric.pipe(z.number().finite().int().nonnegative()).nullish(),
+  websiteUrl: settingsText,
+  facebookUrl: settingsText,
+  instagramUrl: settingsText,
+  twitterUrl: settingsText,
+  youtubeUrl: settingsText,
+  whatsappNumber: settingsText,
+  metaTitle: settingsText,
+  metaDescription: settingsText,
+});
+export const StoreSettingsSchema = StoreSettingsFieldsSchema.passthrough().superRefine((settings, context) => {
+  for (const key of Object.keys(settings)) {
+    if (key.startsWith("$") || key.includes(".")) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "Invalid settings field name" });
+    }
+  }
+});
+export type StoreSettings = z.infer<typeof StoreSettingsSchema>;
+export type StoreSettingsFields = z.infer<typeof StoreSettingsFieldsSchema>;
+
+export const PartnerTierSchema = z.enum(['starter', 'growth', 'professional', 'enterprise']);
+export const PartnerStatusSchema = z.enum(['pending', 'active', 'suspended', 'terminated']);
+export const PartnerListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: PartnerStatusSchema.optional(),
+  tier: PartnerTierSchema.optional(),
+  search: z.string().trim().max(200).optional(),
+  sortBy: z.enum(['createdAt', 'name', 'tier', 'status']).default('createdAt'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+});
+export const RegisterPartnerSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  email: emailSchema,
+  phone: z.string().trim().min(1).max(32),
+  website: urlSchema.optional(),
+  businessDetails: z.object({
+    gstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, 'Invalid GSTIN format'),
+    pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Invalid PAN format'),
+    businessType: z.enum(['sole_proprietorship', 'partnership', 'llp', 'pvt_ltd', 'public_ltd']),
+    registeredAddress: z.object({
+      line1: z.string().trim().min(1),
+      line2: z.string().optional(),
+      city: z.string().trim().min(1),
+      state: z.string().trim().min(1),
+      pincode: pincodeSchema,
+      country: z.string().trim().min(1),
+    }),
+  }),
+  contactPerson: z.object({
+    name: z.string().trim().min(1),
+    email: emailSchema.optional(),
+    phone: z.string().min(1).max(32).optional(),
+    designation: z.string().optional(),
+  }).optional(),
+  tier: PartnerTierSchema.default('starter'),
+});
+export const CreateAdminPartnerSchema = RegisterPartnerSchema.extend({
+  name: z.string().trim().min(1).max(200).optional(),
+  companyName: z.string().trim().min(1).max(200).optional(),
+  commissionRate: z.number().finite().min(0).max(100).optional(),
+}).transform((value, context) => {
+  const name = value.name ?? value.companyName;
+  if (!name) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'name is required' });
+    return z.NEVER;
+  }
+  return { ...value, name };
+});
+const partnerDomain = z.string().max(253).refine(value =>
+  value === '*' || /^localhost(?::\d+)?$/.test(value) ||
+  /^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(value),
+  'Invalid domain format'
+);
+const partnerRazorpayCredentials = z.object({
+  keyId: z.string().trim().optional(),
+  keySecret: z.string().trim().optional(),
+});
+export const PartnerRazorpayUpdateSchema = z.object({
+  enabled: z.boolean().optional(),
+  paymentMode: z.enum(['wallet', 'direct']).optional(),
+  commissionPercent: z.number().finite().min(0).max(100).optional(),
+  allowedDomains: z.array(partnerDomain).max(100).optional(),
+  razorpayAccountId: z.string().nullish(),
+  defaultEnvironment: z.enum(['test', 'live']).optional(),
+  credentials: z.object({
+    test: partnerRazorpayCredentials.optional(),
+    live: partnerRazorpayCredentials.optional(),
+  }).optional(),
+});
+export const UpdateAdminPartnerSchema = RegisterPartnerSchema.pick({
+  name: true, phone: true, website: true,
+}).partial().extend({
+  status: PartnerStatusSchema.optional(),
+  tier: PartnerTierSchema.optional(),
+  commissionRate: z.number().finite().min(0).max(100).optional(),
+  businessDetails: RegisterPartnerSchema.shape.businessDetails.partial().optional(),
+  gstin: RegisterPartnerSchema.shape.businessDetails.shape.gstin.optional(),
+  pan: RegisterPartnerSchema.shape.businessDetails.shape.pan.optional(),
+  businessType: RegisterPartnerSchema.shape.businessDetails.shape.businessType.optional(),
+  registeredAddress: RegisterPartnerSchema.shape.businessDetails.shape.registeredAddress.optional(),
+  contactPerson: RegisterPartnerSchema.shape.contactPerson.unwrap().partial().optional(),
+});
+export const SpinOtpRequestSchema = z.object({
+  phone: z.string().transform(value => value.replace(/\D/g, "").slice(-10)).pipe(phoneSchema),
+  email: emailSchema.transform(value => value.trim().toLowerCase()),
+  name: z.string().trim().min(1).max(200),
+  senderNumber: z.string().trim().optional(),
+  campaignId: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
+});
+export const SpinOtpDeliveryResponseSchema = z.object({
+  success: z.literal(true),
+  message: z.string().min(1),
+  expiresIn: z.number().int().positive(),
+  delivery: z.object({ email: z.boolean(), whatsapp: z.boolean() })
+    .refine(value => value.email || value.whatsapp, "No channel accepted the OTP"),
+});
+export const SpinPrizeListResponseSchema = z.object({
+  inventory: z.array(z.object({
+    prizeName: z.string().min(1),
+    emoji: z.string().nullish().transform(value => value || "🎁"),
+    productImage: z.string().nullish().transform(value => value ?? ""),
+    isActive: z.boolean().default(true),
+  })),
+});
+
+const licenseKeyIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid license identifier');
+export const AddLicenseKeysSchema = z.object({
+  softwareId: licenseKeyIdSchema,
+  keys: z.array(z.object({
+    key: z.string().trim().min(1),
+    validityYears: z.coerce.number().int().min(1).max(5),
+    maxDevices: z.coerce.number().int().min(1).default(1),
+  })).min(1),
+});
+export const RevokeLicenseKeySchema = z.object({
+  keyId: licenseKeyIdSchema,
+  action: z.literal('revoke'),
+  reason: z.string().trim().min(1).optional(),
+  password: z.string().min(1),
+});
+export const LicenseKeyFilterSchema = z.object({
+  softwareId: licenseKeyIdSchema.optional(),
+  status: z.enum(['available', 'assigned', 'expired', 'revoked']).optional(),
+  customerEmail: emailSchema.optional(),
+});
 
 // ============================================
 // Authentication Schemas
@@ -129,12 +468,28 @@ export const ChangePasswordSchema = z.object({
 // User Profile Schemas
 // ============================================
 
+export const dateOfBirthSchema = z.string().refine(value => {
+  if (value === '') return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value &&
+    value <= new Date().toISOString().slice(0, 10);
+}, 'Enter a valid date of birth');
+
 export const UpdateProfileSchema = z.object({
   name: nameSchema.optional(),
   phone: phoneSchema.optional(),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: dateOfBirthSchema.optional(),
   gender: z.enum(['male', 'female', 'other', 'prefer-not-to-say']).optional(),
-  avatar: urlSchema.optional(),
+  avatar: z.string().max(200000).refine(value =>
+    /^\/api\/avatars\/(?:[1-9]|1\d|20)$/.test(value) ||
+    /^data:image\/webp;base64,UklGR[A-Za-z0-9+/]+={0,2}$/.test(value) ||
+    (value.startsWith('https://') && urlSchema.safeParse(value).success),
+    'Choose a profile avatar or upload a photo').optional(),
+});
+
+export const AccountProfileSchema = UpdateProfileSchema.pick({ name: true, dateOfBirth: true, avatar: true }).extend({
+  phone: z.union([z.literal(''), phoneSchema]).optional(),
 });
 
 // Marketing consent. Every field is optional so a customer can toggle one channel
@@ -167,6 +522,23 @@ export const AddressSchema = z.object({
   country: z.string().default('India'),
   isDefault: z.boolean().default(false),
 });
+
+export const SavedDeliveryAddressSchema = AddressSchema.pick({
+  type: true, firstName: true, lastName: true, phone: true, address: true,
+  city: true, state: true, pincode: true, country: true,
+}).extend({
+  firstName: z.string().trim().min(1, 'First name is required').max(50),
+  lastName: z.string().trim().max(50).default(''),
+  address: z.string().trim().min(10, 'Address must be at least 10 characters').max(200),
+  phone: z.string().trim().pipe(phoneSchema),
+  pincode: z.string().trim().pipe(pincodeSchema),
+  city: z.string().transform(checkoutCity).refine(Boolean, 'Choose Bangalore or Mysore'),
+  state: z.string().trim().refine(value => value.toLowerCase() === 'karnataka', 'Delivery is available in Karnataka only')
+    .transform(() => 'Karnataka'),
+  country: z.literal('India').default('India'),
+});
+
+export type SavedDeliveryAddress = z.infer<typeof SavedDeliveryAddressSchema> & { id: string };
 
 // ============================================
 // Product Schemas
@@ -213,12 +585,68 @@ export const CreateProductSchema = z.object({
 
 export const UpdateProductSchema = CreateProductSchema.partial();
 
+export const DirectProductUpdateSchema = UpdateProductSchema.pick({
+  name: true, price: true, description: true, sku: true, status: true,
+  brand: true, tags: true, specifications: true, slug: true,
+}).extend({
+  comparePrice: priceSchema.optional(),
+  stock: z.number().int().min(0).max(10000000).optional(),
+  category: z.string().max(200).optional(),
+  subcategory: z.string().max(200).optional(),
+  images: z.array(urlSchema).max(5).optional(),
+  hsnCode: z.string().max(100).optional(),
+  warranty: z.string().max(1000).optional(),
+}).strict().refine(value => Object.keys(value).length > 0, 'No valid fields provided');
+
+export const SeedDatabaseRequestSchema = z.object({
+  apply: z.boolean().default(false),
+}).strict();
+
+export const SeedCatalogueSchema = z.array(z.record(
+  z.union([z.string().max(100000), z.number().finite(), z.boolean(), z.null()]),
+).superRefine((row, context) => {
+  for (const field of ['In Stock', 'MRP']) {
+    const value = row[field];
+    if (value === undefined || value === null || value === '') continue;
+    const number = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+    if (!Number.isFinite(number) || number < 0 || number > 10000000 || (field === 'In Stock' && !Number.isInteger(number))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `Invalid ${field} in seed catalogue` });
+    }
+  }
+})).min(1).max(5000);
+
+export const SpecificationUpdateSchema = z.object({
+  name: z.string().max(500),
+  mrp: z.number().finite().min(0).max(10000000).nullable(),
+  description: z.string().max(100000),
+  overview: z.string().max(100000),
+  technical_details: z.record(z.string().max(10000)),
+  from_manufacturer: z.string().max(500000),
+  specification_images: z.array(urlSchema).max(100),
+  product_id: z.string().max(200).nullable(),
+  locked: z.boolean(),
+  category: z.string().max(200),
+  subCategory: z.string().max(200),
+  included_components: z.array(z.string().max(1000)).max(100),
+  features: z.array(z.string().max(10000)).max(100),
+  reviews: z.array(z.object({
+    rating: z.number().min(0).max(5).nullable(),
+    title: z.string().max(1000),
+    text: z.string().max(10000),
+  })).max(100),
+  isSynced: z.boolean(),
+  prod_desc: z.string().max(500),
+  group_name: z.string().max(500),
+  char_desc: z.string().max(500),
+  manufacturer_name: z.string().max(500),
+}).partial().strict().refine(value => Object.keys(value).length > 0, 'Provide a specification update');
+
 // ============================================
 // Order Schemas
 // ============================================
 
 export const OrderItemSchema = z.object({
-  productId: z.string().min(1, 'Product ID is required'),
+  productId: z.string().trim().min(1, 'Product ID is required').max(200),
   variantId: z.string().optional(),
   quantity: quantitySchema,
 });
@@ -239,6 +667,46 @@ export const CreateOrderSchema = z.object({
   { message: 'Shipping address is required', path: ['shippingAddress'] }
 );
 
+export const EmployeeCreationResponseSchema = z.object({
+  success: z.literal(true),
+  employeeId: z.string().min(1),
+  userId: z.string().min(1),
+  temporaryPassword: z.string().min(16).optional(),
+});
+
+export const EmployeeResponseSchema = z.object({
+  id: z.string().min(1),
+  employeeId: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+  department: z.string().default(""),
+  role: z.string().default("Staff"),
+  status: z.enum(["active", "inactive"]).default("active"),
+  dashboardAccess: z.boolean().default(false),
+  allowedPages: z.array(z.string()).default([]),
+  storeAccess: z.enum(["none", "selected", "all"]).default("none"),
+  storeIds: z.array(z.string()).default([]),
+  createdAt: z.union([z.string(), z.date()]).transform(value => value instanceof Date ? value.toISOString() : value),
+  updatedAt: z.union([z.string(), z.date()]).transform(value => value instanceof Date ? value.toISOString() : value),
+});
+export const EmployeeListResponseSchema = z.array(EmployeeResponseSchema);
+
+export const CreateLeadSchema = z.object({
+  name: z.string().trim().min(3).max(100),
+  phone: z.string().transform(value => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{10}$/)),
+  pincode: z.string().trim().pipe(pincodeSchema),
+  email: z.union([z.literal(""), emailSchema]).optional().default(""),
+  category: z.string().trim().min(1).max(200),
+  source: z.string().trim().min(1).max(200).optional().default("Shubham Lucky Draw"),
+});
+
+export const UpdateLeadSchema = CreateLeadSchema.partial().omit({ pincode: true }).extend({
+  id: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid lead ID'),
+  status: z.enum(["new", "contacted", "interested", "converted", "closed"]).optional(),
+  city: z.string().max(100).optional(),
+  notes: z.string().max(5000).optional(),
+}).strict().refine(value => Object.keys(value).length > 1, 'Provide a lead update');
+
 export const UpdateOrderStatusSchema = z.object({
   status: z.enum([
     'pending',
@@ -256,21 +724,110 @@ export const UpdateOrderStatusSchema = z.object({
   carrier: z.string().max(50).optional(),
 });
 
+export const AdminOrderUpdateSchema = UpdateOrderStatusSchema.extend({
+  status: UpdateOrderStatusSchema.shape.status.optional(),
+  trackingNumber: z.string().trim().min(1).max(100).optional(),
+  cancellation: z.object({
+    reason: z.string().trim().min(1).max(500),
+    note: z.string().max(1000).optional(),
+    date: z.string().datetime().optional(),
+    refundStatus: z.literal('pending').optional(),
+  }).strict().optional(),
+}).strict().refine(value => Object.keys(value).length > 0, 'Provide an order update')
+  .refine(value => !value.cancellation || value.status === 'cancelled', 'Cancellation requires cancelled status');
+export const BulkOrderUploadSchema = z.object({
+  rows: z.array(UpdateOrderStatusSchema.pick({ status: true, trackingNumber: true }).extend({
+    orderId: z.string().trim().min(1).max(100)
+      .transform(value => /^[a-f\d]{24}$/i.test(value) ? value.toLowerCase() : value),
+  }).strict()).min(1).max(100)
+    .refine(rows => new Set(rows.map(row => row.orderId)).size === rows.length, "Order IDs must be unique"),
+}).strict();
+export const DebugCartRecoverySchema = z.object({ dryRun: z.boolean().default(true) }).strict();
+
 // ============================================
 // Review Schemas
 // ============================================
+
+export const StoreQrTypeSchema = z.enum(["google_maps", "whatsapp", "instagram"]);
+export const StoreObjectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Invalid store or QR ID")
+  .transform(value => value.toLowerCase());
+export const StoreHttpUrlSchema = z.string().trim().max(2048).url().refine(value => {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+}, "URL must use HTTP(S) without credentials");
+export const CreateStoreQrSchema = z.object({
+  storeId: StoreObjectIdSchema,
+  storeName: z.string().trim().max(200).optional(),
+  type: StoreQrTypeSchema,
+  label: z.string().trim().max(200).default(""),
+  targetUrl: StoreHttpUrlSchema,
+}).strict();
+export const UpdateStoreQrSchema = CreateStoreQrSchema.pick({ storeName: true, label: true, targetUrl: true })
+  .partial().extend({ isActive: z.boolean().optional() }).strict()
+  .refine(value => Object.keys(value).length > 0, "Provide a QR update");
+export const BulkStoreQrSchema = z.object({
+  storeIds: z.array(StoreObjectIdSchema).min(1).max(100)
+    .refine(ids => new Set(ids).size === ids.length, "Store IDs must be unique"),
+}).strict();
+export const StoreQrAnalyticsQuerySchema = z.object({
+  range: z.enum(["all", "7d", "30d", "90d", "1y"]).default("all"),
+  storeId: StoreObjectIdSchema.optional(),
+}).strict();
+export const CreateStoreLocationSchema = z.object({
+  shopName: z.string().trim().min(1).max(200),
+  locationDescription: z.string().trim().max(2000).default(""),
+  googleMapLocation: z.union([StoreHttpUrlSchema, z.literal("")]).default(""),
+  mobileNo: z.string().trim().max(30).default(""),
+  shopTiming: z.string().trim().max(200).default("9:00 AM - 9:00 PM"),
+  shopImage: z.string().trim().max(2_000_000).default(""),
+  emailId: z.union([z.string().trim().email().max(254), z.literal("")]).default(""),
+  isActive: z.boolean().default(true),
+}).strict();
+export const UpdateStoreLocationSchema = CreateStoreLocationSchema.partial().strict()
+  .refine(value => Object.keys(value).length > 0, "Provide a store update");
+export const BulkStoreLocationSchema = z.object({
+  stores: z.array(CreateStoreLocationSchema).min(1).max(500)
+    .refine(stores => new Set(stores.map(store => store.shopName)).size === stores.length, "Shop names must be unique in an upload"),
+}).strict();
+export const PartnerProductAssignmentSchema = z.object({
+  productId: z.string().trim().min(1).max(100).transform(value => /^[a-f\d]{24}$/i.test(value) ? value.toLowerCase() : value),
+  enabled: z.boolean(),
+  customPrice: z.number().finite().min(0).max(10_000_000).nullable().optional(),
+  customCommission: z.number().finite().min(0).max(100).nullable().optional(),
+}).strict();
+export const PartnerProductAssignmentsSchema = z.object({
+  products: z.array(PartnerProductAssignmentSchema).max(5000)
+    .refine(products => new Set(products.map(product => product.productId)).size === products.length, "Product IDs must be unique"),
+}).strict();
+export const PosterSettingsWriteSchema = z.object({
+  enabled: z.array(z.string().min(1).max(100)).max(100)
+    .refine(slugs => new Set(slugs).size === slugs.length, "Poster selections must be unique"),
+  links: z.record(z.object({
+    href: z.string().trim().min(1).max(2048)
+      .refine(value => value.startsWith("/") && !value.startsWith("//") && !/[\\\u0000-\u001f\u007f]/.test(value), "Poster link must be a site-relative path"),
+    feature: z.object({
+      type: z.enum(["product", "category", "subcategory"]),
+      id: z.string().trim().min(1).max(100),
+    }).strict().optional(),
+  }).strict()),
+}).strict();
 
 export const ReviewSchema = z.object({
   productId: z.string().min(1, 'Product ID is required'),
   orderId: z.string().optional(),
   rating: z.number().int().min(1).max(5),
-  title: z.string().min(5, 'Title must be at least 5 characters').max(100),
-  content: z.string().min(20, 'Review must be at least 20 characters').max(2000),
+  title: z.string().trim().min(5, 'Title must be at least 5 characters').max(100),
+  content: z.string().trim().min(20, 'Review must be at least 20 characters').max(2000),
   images: z.array(urlSchema).max(5).optional(),
   pros: z.array(z.string().max(100)).max(5).optional(),
   cons: z.array(z.string().max(100)).max(5).optional(),
   isVerifiedPurchase: z.boolean().default(false),
 });
+
+export const UpdateReviewSchema = ReviewSchema.pick({
+  rating: true, title: true, content: true, images: true, pros: true, cons: true,
+}).partial().refine(value => Object.keys(value).length > 0, 'Provide at least one review field');
 
 // ============================================
 // Contact & Support Schemas
@@ -296,6 +853,31 @@ export const ContactFormSchema = z.object({
   ]).default('general'),
 });
 
+export const ContactInquirySchema = ContactFormSchema.pick({ name: true, email: true }).extend({
+  name: z.string().trim().min(1, 'Please enter your name').max(100),
+  email: z.string().trim().toLowerCase().pipe(emailSchema),
+  phone: z.string().transform((value) => value.replace(/\D/g, ''))
+    .pipe(z.string().regex(/^\d{10}$/, 'Please enter a 10-digit phone number')),
+  company: z.string().trim().max(150).optional(),
+  enquiryType: z.string().trim().max(100).optional(),
+  city: z.string().trim().max(100).optional(),
+  message: z.string().trim().max(5000).optional(),
+  consent: z.boolean().optional(),
+  source: z.enum(['contact_page']).optional(),
+}).superRefine((data, context) => {
+  if (data.source !== 'contact_page') return;
+  for (const field of ['company', 'enquiryType', 'city', 'message'] as const) {
+    if (!data[field]) context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: 'Please fill in all required fields' });
+  }
+  if (data.consent !== true) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['consent'], message: 'Please accept the Terms & Conditions and Privacy Policy' });
+  }
+});
+
+export const AccountEnquirySchema = ContactFormSchema.pick({ subject: true, message: true, category: true, orderNumber: true }).extend({
+  phone: phoneSchema,
+});
+
 export const ComplaintSchema = z.object({
   orderId: z.string().min(1, 'Order ID is required'),
   type: z.enum([
@@ -316,6 +898,59 @@ export const ComplaintSchema = z.object({
     'credit',
     'other',
   ]).optional(),
+});
+
+export const ComplaintStatusSchema = z.enum([
+  'pending', 'processing', 'refund_initiated', 'no_refund', 'resolved', 'revoked',
+]);
+
+export const UpdateComplaintSchema = z.object({
+  status: ComplaintStatusSchema,
+  adminNote: z.string().trim().max(5000).optional(),
+}).strict();
+
+export const ComplaintEmailSchema = z.object({
+  to: z.string().trim().pipe(emailSchema),
+  templateId: z.enum([
+    'COMPLAINT_SUBMITTED', 'COMPLAINT_PROCESSING', 'COMPLAINT_REFUND_INITIATED',
+    'COMPLAINT_NO_REFUND', 'COMPLAINT_RESOLVED', 'COMPLAINT_REVOKED',
+  ]),
+  data: z.object({
+    complaintId: z.string().min(1).max(100),
+    customerName: z.string().min(1).max(100),
+    orderNumber: z.string().max(100).nullish(),
+    subject: z.string().min(1).max(250),
+    adminNote: z.string().max(5000).optional(),
+  }),
+}).strict();
+
+export const CreateComplaintSchema = z.object({
+  customerName: z.string().trim().min(1).max(100),
+  email: z.string().trim().pipe(emailSchema),
+  phone: z.string().trim().max(30).optional(),
+  orderNumber: z.string().trim().max(100).optional(),
+  complaintType: z.enum([
+    'defective', 'breakage', 'return', 'enquiry', 'wrong_item', 'missing_item', 'other',
+    'data_access', 'data_correction', 'data_erasure', 'consent_withdrawal', 'data_privacy_other',
+  ]),
+  subject: z.string().trim().min(1).max(250),
+  description: z.string().trim().min(1).max(10000),
+  productName: z.string().trim().max(250).optional(),
+  images: z.array(z.string().max(7 * 1024 * 1024)
+    .regex(/^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/, 'Invalid image'))
+    .max(5).default([]),
+}).strict().superRefine((data, context) => {
+  if (!isDpdpComplaint(data.complaintType)) {
+    for (const field of ['phone', 'orderNumber', 'productName'] as const) {
+      if (!data[field]) context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: 'All fields are required' });
+    }
+  }
+  if (['breakage', 'return', 'defective'].includes(data.complaintType) && !data.images.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['images'], message: 'Images are required for this complaint type' });
+  }
+  if (data.images.reduce((size, image) => size + image.length, 0) > 12 * 1024 * 1024) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['images'], message: 'Combined images are too large; use fewer or smaller images' });
+  }
 });
 
 // ============================================

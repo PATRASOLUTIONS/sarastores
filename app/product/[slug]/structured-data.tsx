@@ -3,7 +3,29 @@ import Script from "next/script";
 import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName";
 import { safeJsonLd } from "@/lib/jsonld-safe";
 
-export function ProductJsonLd({ product, companyName, pageUrl, imageUrl }: { product: any, companyName: string, pageUrl: string, imageUrl: string }) {
+interface ProductJsonLdInput {
+  id?: string;
+  sku?: string;
+  name: string;
+  description?: string | null;
+  images?: string[] | null;
+  specification_images?: string[] | null;
+  price: number;
+  mrp?: number | null;
+  originalPrice?: number | null;
+  gtin?: string | null;
+  ean?: string | null;
+  brand?: string | null;
+  category?: string | null;
+  stock: number;
+  reviews?: {
+    average?: number;
+    count?: number;
+    top?: Array<{ author?: string; date?: string; createdAt?: string; rating?: number; title?: string; body?: string }>;
+  } | null;
+}
+
+export function ProductJsonLd({ product, companyName, pageUrl, imageUrl }: { product: ProductJsonLdInput | null, companyName: string, pageUrl: string, imageUrl: string }) {
   if (!product) return null;
 
   // Clean product name and description
@@ -29,7 +51,7 @@ export function ProductJsonLd({ product, companyName, pageUrl, imageUrl }: { pro
     (typeof reviewData.count === 'number' && reviewData.count > 0)
   );
 
-  const data: Record<string, any> = {
+  const data: Record<string, unknown> = {
     "@context": "https://schema.org/",
     "@type": "Product",
     "name": cleanedName,
@@ -79,7 +101,7 @@ export function ProductJsonLd({ product, companyName, pageUrl, imageUrl }: { pro
 
   // Add individual reviews if available
   if (Array.isArray(reviewData?.top) && reviewData.top.length > 0) {
-    data.review = reviewData.top.slice(0, 5).map((r: any) => ({
+    data.review = reviewData.top.slice(0, 5).map(r => ({
       "@type": "Review",
       "author": r.author ? { "@type": "Person", "name": r.author } : undefined,
       "datePublished": r.date || r.createdAt || undefined,

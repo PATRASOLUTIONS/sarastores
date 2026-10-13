@@ -7,14 +7,26 @@ import Link from "next/link"
 import { User, Package, Heart, MapPin, Settings, LogOut } from "lucide-react"
 
 export default function AccountPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, isLoading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!user) {
+    if (!isLoading && !user) {
       router.push("/login?redirect=/account")
     }
-  }, [user, router])
+  }, [user, isLoading, router])
+
+  if (isLoading) {
+    return (
+      <div role="status" aria-label="Loading your account">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="h-[168px] animate-pulse rounded-lg bg-gray-100" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (!user) {
     return (

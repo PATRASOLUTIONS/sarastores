@@ -2,12 +2,23 @@ import { type NextRequest, NextResponse } from "next/server"
 import * as dbService from "@/lib/db-service"
 import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS } from "@/lib/db-service"
-import { ObjectId, type Document } from "mongodb"
+import { ObjectId, type Document, type Filter } from "mongodb"
 import { handleApiError } from "@/lib/api-error"
 import { isAdmin } from "@/lib/auth"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { withProductDisplay } from "@/lib/product-presenter"
 import { generateProductSlug } from "@/utils/slug"
+import type { ProductDisplayInput } from "@/lib/product-display"
+
+interface ProductDocument extends ProductDisplayInput {
+  _id: ObjectId | string
+  id?: string
+  slug?: string
+  name?: string
+  active?: boolean
+  images?: string[]
+  image?: string | null
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -23,37 +34,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // If fields are specified, build a projection for MongoDB
-    let projection: any = undefined
+    let projection: Record<string, 1> | undefined
     if (fields && fields.length > 0) {
       projection = {}
       for (const f of fields) projection[f] = 1
       // Always include _id for normalization
       projection._id = 1
+      projection.active = 1
     }
 
-    // Use a custom getByIdWithProjection if projection is needed
-    let product: any
-    if (projection) {
-      const collection = await dbService.getCollection<Document & {
-        _id: ObjectId | string
-      }>(COLLECTIONS.PRODUCTS)
-      // Try slug first, then ObjectId, then string _id, then id field
-      let doc = null
-      doc = await collection.findOne({ slug: id }, { projection })
-      if (!doc) try { doc = await collection.findOne({ _id: new ObjectId(id) }, { projection }) } catch { /* not a valid ObjectId — fall through to string _id lookup */ }
-      if (!doc) doc = await collection.findOne({ _id: id }, { projection })
-      if (!doc) doc = await collection.findOne({ id: id }, { projection })
-      product = dbService.normalizeId(doc)
-    } else {
-      // Try slug first, then fall back to getById (ObjectId/string _id/id)
-      const collection = await dbService.getCollection(COLLECTIONS.PRODUCTS)
-      let doc = await collection.findOne({ slug: id })
-      if (!doc) {
-        product = await dbService.getById(COLLECTIONS.PRODUCTS, id)
-      } else {
-        product = dbService.normalizeId(doc)
-      }
-    }
+    const collection = await dbService.getCollection<ProductDocument>(COLLECTIONS.PRODUCTS)
+    let doc = await collection.findOne({ slug: id }, { projection })
+    if (!doc && ObjectId.isValid(id)) doc = await collection.findOne({ _id: new ObjectId(id) }, { projection })
+    if (!doc) doc = await collection.findOne({ _id: id }, { projection })
+    if (!doc) doc = await collection.findOne({ id }, { projection })
+    const product = dbService.normalizeId(doc)
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
@@ -64,21 +59,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 
-    let normalizedBase: any
-    if (product._id) {
-      const { _id, ...rest } = product as any
-      normalizedBase = { id: _id.toString?.() ?? String(_id), ...rest }
-    } else {
-      normalizedBase = { ...product }
-      if (!normalizedBase.id && normalizedBase._id) {
-        normalizedBase.id = String(normalizedBase._id)
-        delete normalizedBase._id
-      }
-    }
+    const normalizedBase = { ...product }
+    if (fields && !fields.includes("active")) delete normalizedBase.active
 
     // Only build images/image if not a minimal fetch
-    let images = []
-    let image = undefined
+    let images: string[] = []
+    let image: string | null | undefined
     if (!fields || fields.includes('images') || fields.includes('image')) {
       images = Array.isArray(normalizedBase.images)
         ? normalizedBase.images.filter(Boolean).slice(0, 5)
@@ -114,7 +100,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const { id } = await params
     const data = await request.json()
-    const updateFields: any = { ...data, updatedAt: new Date() }
+    const updateFields: Document = { ...data, updatedAt: new Date() }
+    delete updateFields.id
+    delete updateFields._id
 
     // Regenerate slug if name changes
     if (data.name) {
@@ -164,33 +152,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updateFields.images = [updateFields.image]
     }
 
-    const collection = await dbService.getCollection(COLLECTIONS.PRODUCTS)
+    const collection = await dbService.getCollection<ProductDocument>(COLLECTIONS.PRODUCTS)
 
     // Try slug first, then ObjectId, then string _id
-    const filterCandidates: any[] = [{ slug: id }]
-    try {
-      filterCandidates.push({ _id: new ObjectId(id) })
-    } catch { /* not a valid ObjectId — skip this filter candidate */ }
+    const filterCandidates: Filter<ProductDocument>[] = [{ slug: id }]
+    if (ObjectId.isValid(id)) filterCandidates.push({ _id: new ObjectId(id) })
     filterCandidates.push({ _id: id })
 
     let matched = 0
-    let matchedFilter: any = null
+    let matchedFilter: Filter<ProductDocument> | null = null
     for (const f of filterCandidates) {
       const res = await collection.updateOne(f, { $set: updateFields })
       matched += res.matchedCount
       if (res.matchedCount > 0) { matchedFilter = f; break }
     }
 
-    if (matched === 0) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    if (matched === 0 || !matchedFilter) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
     // Return updated doc
     const updated = await collection.findOne(matchedFilter)
     if (!updated) return NextResponse.json({ error: 'Failed to fetch updated product' }, { status: 500 })
 
-    const { _id, ...rest } = updated as any
+    const rest = dbService.normalizeId(updated)
     const respImages = Array.isArray(rest.images) ? rest.images.filter(Boolean).slice(0, 5) : rest.image ? [rest.image] : []
     const respImage = respImages[0] || rest.image || null
-    const normalizedProduct = { id: _id?.toString?.() ?? String(_id), ...rest, images: respImages, image: respImage }
+    const normalizedProduct = { ...rest, images: respImages, image: respImage }
 
     return NextResponse.json(normalizedProduct)
   } catch (err) {
@@ -209,6 +195,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Parse the request body
     const data = await request.json()
+    delete data.id
+    delete data._id
     if (process.env.NODE_ENV === "development") console.log("Request data:", data)
 
     // Regenerate slug if name changes
@@ -262,28 +250,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Use dbService.getCollection to ensure we connect to the correct database ("e-commerce-bytewise")
-    const collection = await dbService.getCollection(COLLECTIONS.PRODUCTS)
+    const collection = await dbService.getCollection<ProductDocument>(COLLECTIONS.PRODUCTS)
 
     // Try slug first, then ObjectId, then string _id
-    const candidateFilters: any[] = [{ slug: id }]
-    let asObjectId: ObjectId | null = null
-    try {
-      asObjectId = new ObjectId(id)
-      candidateFilters.push({ _id: asObjectId })
-    } catch {
-      asObjectId = null
-    }
+    const candidateFilters: Filter<ProductDocument>[] = [{ slug: id }]
+    if (ObjectId.isValid(id)) candidateFilters.push({ _id: new ObjectId(id) })
     candidateFilters.push({ _id: id }) // handle string _id
 
     let matched = 0
-    let matchedFilter: any = null
+    let matchedFilter: Filter<ProductDocument> | null = null
     for (const filter of candidateFilters) {
       const res = await collection.updateOne(filter, { $set: { ...data, updatedAt: new Date() } })
       matched += res.matchedCount
       if (res.matchedCount > 0) { matchedFilter = filter; break }
     }
 
-    if (matched === 0) {
+    if (matched === 0 || !matchedFilter) {
       // Still no match: return 404
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
@@ -295,14 +277,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Normalize response: ensure images[0] is the primary image
-    const { _id, ...rest } = updated as any
+    const rest = dbService.normalizeId(updated)
     const respImages = Array.isArray(rest.images)
       ? rest.images.filter(Boolean).slice(0, 5)
       : rest.image
         ? [rest.image]
         : []
     const respImage = respImages[0] || rest.image || null
-    const normalizedProduct = { id: _id?.toString?.() ?? String(_id), ...rest, images: respImages, image: respImage }
+    const normalizedProduct = { ...rest, images: respImages, image: respImage }
 
     return NextResponse.json(normalizedProduct)
   } catch (error) {
@@ -319,7 +301,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { id } = await params
     // Try slug first, then fall back to remove by id
     const collection = await dbService.getCollection(COLLECTIONS.PRODUCTS)
-    let doc = await collection.findOne({ slug: id })
+    const doc = await collection.findOne({ slug: id })
     if (doc) {
       await collection.deleteOne({ slug: id })
     } else {

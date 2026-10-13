@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { stores } from "@/lib/store-data"
 import { analytics } from "@/lib/analytics"
 import { Truck, MapPin, CheckCircle, XCircle, Calendar } from "lucide-react"
+import { PincodeRestrictionsResponseSchema } from "@/lib/validation"
 
 export default function DeliveryEstimator() {
     const [pincode, setPincode] = useState("")
@@ -32,7 +33,7 @@ export default function DeliveryEstimator() {
 
     const checkDelivery = async (pinOverride?: string) => {
         const pinToCheck = pinOverride || pincode
-        if (!pinToCheck || pinToCheck.length !== 6) {
+        if (!/^\d{6}$/.test(pinToCheck)) {
             if (touched) setResult({ deliverable: false, message: "Please enter a valid 6-digit pincode." })
             return
         }
@@ -49,11 +50,11 @@ export default function DeliveryEstimator() {
             const res = await fetch('/api/blocked-pincodes')
             if (!res.ok) throw new Error("Failed to fetch delivery rules")
 
-            const data = await res.json()
+            const data = PincodeRestrictionsResponseSchema.parse(await res.json())
             const { blockedPincodes, allowedPincodes, mode } = data
 
-            const isBlocked = (blockedPincodes || []).some((p: any) => p.pincode === pinToCheck)
-            const isAllowed = (allowedPincodes || []).some((p: any) => p.pincode === pinToCheck)
+            const isBlocked = blockedPincodes.some(p => (typeof p === "string" ? p : p.pincode) === pinToCheck)
+            const isAllowed = allowedPincodes.some(p => (typeof p === "string" ? p : p.pincode) === pinToCheck)
 
             let canDeliver = true
 
@@ -102,12 +103,10 @@ export default function DeliveryEstimator() {
             analytics.checkPincode(pinToCheck, true, "delivery_estimator")
 
         } catch (e) {
-            console.error(e)
-            // Fallback
+            console.error("[Delivery estimator] Availability check failed:", e)
             setResult({
-                deliverable: true,
-                dateRange: `${formatDate(3)} - ${formatDate(7)}`,
-                message: "Available for delivery"
+                deliverable: false,
+                message: "Delivery availability could not be checked. Please try again."
             })
         } finally {
             setLoading(false)

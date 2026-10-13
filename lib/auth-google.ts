@@ -7,8 +7,10 @@
 
 import { connectToDatabase } from "@/lib/mongodb"
 import type { NextRequest } from "next/server"
-import type { AuthenticatedUser } from "@/lib/auth-credentials"
+import type { AuthenticatedUser, AuthUserRecord } from "@/lib/auth-credentials"
+import type { WithId } from "mongodb"
 import { recordConsent, CONSENT_PURPOSES } from "@/lib/consent"
+import { defaultProfileAvatar } from "@/lib/profile-avatars"
 
 export interface GoogleIdentity {
   email: string
@@ -85,7 +87,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<VerifyIdToke
   }
 }
 
-function toAuthenticatedUser(user: Record<string, any>): AuthenticatedUser {
+function toAuthenticatedUser(user: WithId<AuthUserRecord>): AuthenticatedUser {
   return {
     id: user._id.toString(),
     name: user.name,
@@ -98,6 +100,7 @@ function toAuthenticatedUser(user: Record<string, any>): AuthenticatedUser {
     address: user.address || null,
     dashboardAccess: !!user.dashboardAccess,
     allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
+    sessionVersion: user.sessionVersion ?? 0,
   }
 }
 
@@ -110,6 +113,7 @@ export type ResolveGoogleUserResult =
    * onboarding step before any record is written.
    */
   | { status: "onboarding_required" }
+  | { status: "inactive" }
 
 /**
  * Resolve a verified Google identity to a local account **without ever creating
@@ -118,10 +122,11 @@ export type ResolveGoogleUserResult =
  */
 export async function resolveGoogleUser(identity: GoogleIdentity): Promise<ResolveGoogleUserResult> {
   const { db } = await connectToDatabase()
-  const users = db.collection("users")
+  const users = db.collection<AuthUserRecord>("users")
 
   const user = await users.findOne({ email: identity.email })
   if (!user) return { status: "onboarding_required" }
+  if (user.status === "inactive" || user.status === "deleted") return { status: "inactive" }
 
   if (!user.authProvider) {
     // Pre-existing password account signing in with Google for the first time.
@@ -160,21 +165,26 @@ export async function createGoogleUser(
   request?: NextRequest,
 ): Promise<CreateGoogleUserResult> {
   const { db } = await connectToDatabase()
-  const users = db.collection("users")
+  const users = db.collection<AuthUserRecord>("users")
 
   // The form may have sat open while another tab or device created the account.
   // Treat that as a plain sign-in rather than an error.
   const existing = await users.findOne({ email: identity.email })
-  if (existing) return { ok: true, user: toAuthenticatedUser(existing) }
+  if (existing) {
+    if (existing.status === "inactive" || existing.status === "deleted") {
+      return { ok: false, status: 403, code: "ACCOUNT_INACTIVE", message: "This account is inactive" }
+    }
+    return { ok: true, user: toAuthenticatedUser(existing) }
+  }
 
   const now = new Date()
-  const doc: Record<string, any> = {
+  const doc = {
     name: identity.name || identity.email.split("@")[0] || "Google User",
     email: identity.email,
     password: null,
     role: "user",
     emailVerified: true,
-    avatar: identity.picture || null,
+    avatar: defaultProfileAvatar(identity.email),
     authProvider: "google",
     createdAt: now,
     updatedAt: now,
@@ -190,7 +200,12 @@ export async function createGoogleUser(
   } catch (error) {
     // Lost a race against a concurrent signup for the same address.
     const raced = await users.findOne({ email: identity.email })
-    if (raced) return { ok: true, user: toAuthenticatedUser(raced) }
+    if (raced) {
+      if (raced.status === "inactive" || raced.status === "deleted") {
+        return { ok: false, status: 403, code: "ACCOUNT_INACTIVE", message: "This account is inactive" }
+      }
+      return { ok: true, user: toAuthenticatedUser(raced) }
+    }
     throw error
   }
 

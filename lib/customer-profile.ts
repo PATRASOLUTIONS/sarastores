@@ -16,6 +16,7 @@ import { getCollection, normalizeId, COLLECTIONS } from "@/lib/db-service"
 
 export const COLLECTION_CUSTOMER_PROFILES = "customer_profiles"
 export const COLLECTION_CUSTOMER_EVENTS = "customer_events"
+export const COLLECTION_UNSUBSCRIBE_TOKENS = "customer_unsubscribe_tokens"
 
 /** Order states that represent value actually realised, not merely promised. */
 export const EARNING_STATUSES = ["delivered", "completed"] as const
@@ -245,13 +246,15 @@ export async function setConsent(
  * Issue a fresh unsubscribe token and return the plaintext exactly once. Only the
  * hash is stored, so this is the single opportunity to embed it in a link.
  */
-export async function issueUnsubscribeToken(userId: string): Promise<string> {
-  const token = generateUnsubscribeToken()
+export async function issueUnsubscribeToken(userId: string, requireConsent?: keyof ChannelConsent): Promise<string> {
   const profiles = await getCollection(COLLECTION_CUSTOMER_PROFILES)
-  await profiles.updateOne(
-    { userId },
-    { $set: { unsubscribeTokenHash: hashUnsubscribeToken(token), updatedAt: new Date() } },
-  )
+  const filter = { userId, ...(requireConsent ? { [`consent.${requireConsent}`]: true } : {}) }
+  if (!await profiles.findOne(filter, { projection: { _id: 1 } })) {
+    throw new Error("Customer profile is missing or required marketing consent was withdrawn")
+  }
+  const token = generateUnsubscribeToken()
+  const tokens = await getCollection<{ _id: string; userId: string; createdAt: Date }>(COLLECTION_UNSUBSCRIBE_TOKENS)
+  await tokens.insertOne({ _id: hashUnsubscribeToken(token), userId, createdAt: new Date() })
   return token
 }
 
@@ -261,8 +264,11 @@ export async function unsubscribeByToken(
   channel: keyof ChannelConsent | "all",
 ): Promise<boolean> {
   if (!token) return false
+  const hash = hashUnsubscribeToken(token)
+  const tokens = await getCollection<{ _id: string; userId: string }>(COLLECTION_UNSUBSCRIBE_TOKENS)
+  const issued = await tokens.findOne({ _id: hash })
   const profiles = await getCollection(COLLECTION_CUSTOMER_PROFILES)
-  const profile = await profiles.findOne({ unsubscribeTokenHash: hashUnsubscribeToken(token) })
+  const profile = await profiles.findOne(issued ? { userId: issued.userId } : { unsubscribeTokenHash: hash })
   if (!profile) return false
 
   const now = new Date()
@@ -273,7 +279,8 @@ export async function unsubscribeByToken(
     update[`consent.${channel}`] = false
   }
 
-  await profiles.updateOne({ _id: profile._id }, { $set: update })
+  const result = await profiles.updateOne({ _id: profile._id }, { $set: update })
+  if (result.matchedCount !== 1) return false
   await recordEvent(String(profile.userId), "unsubscribed", { channel })
   return true
 }
@@ -291,8 +298,8 @@ export async function recordEvent(
   try {
     const events = await getCollection(COLLECTION_CUSTOMER_EVENTS)
     await events.insertOne({ userId, type, payload, createdAt: new Date() })
-  } catch {
-    // Telemetry must never break the request that triggered it.
+  } catch (error) {
+    console.error("[Customer profile] Failed to record activity", { userId, type, error })
   }
 }
 

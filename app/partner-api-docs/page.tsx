@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { useState, useCallback, useEffect, Suspense } from "react"
 import {
@@ -129,7 +131,7 @@ interface APIPlaygroundProps {
 function APIPlayground({ apiKey, baseUrl }: APIPlaygroundProps) {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string>('products-list')
   const [isLoading, setIsLoading] = useState(false)
-  const [response, setResponse] = useState<any>(null)
+  const [response, setResponse] = useState<unknown>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Form states for different endpoints
@@ -174,7 +176,7 @@ function APIPlayground({ apiKey, baseUrl }: APIPlaygroundProps) {
     try {
       let url = baseUrl
       let method = 'GET'
-      let body: any = null
+      let body: Record<string, unknown> | null = null
 
       switch (selectedEndpoint) {
         case 'products-list':
@@ -250,15 +252,17 @@ function APIPlayground({ apiKey, baseUrl }: APIPlaygroundProps) {
       }
 
       const res = await fetch(url, fetchOptions)
-      const data = await res.json()
+      const data: unknown = await res.json()
 
       setResponse(data)
 
       if (!res.ok) {
-        setError(`HTTP ${res.status}: ${data.error?.message || 'Request failed'}`)
+        const error = data !== null && typeof data === "object" && "error" in data ? data.error : null
+        const message = typeof error === "string" && error ? error : getErrorMessage(error, 'Request failed')
+        setError(`HTTP ${res.status}: ${message}`)
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to execute request')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to execute request'))
     } finally {
       setIsLoading(false)
     }
@@ -562,11 +566,11 @@ function APIPlayground({ apiKey, baseUrl }: APIPlaygroundProps) {
           </div>
         )}
 
-        {response && (
+        {Boolean(response) && (
           <div className="bg-gray-900 rounded-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 bg-gray-800">
               <span className="text-sm text-gray-400">
-                {response.success ? (
+                {response !== null && typeof response === "object" && "success" in response && response.success === true ? (
                   <span className="text-green-400 flex items-center gap-1">
                     <CheckCircle className="h-4 w-4" /> Success
                   </span>
@@ -1234,7 +1238,7 @@ const orderResponse = await fetch('https://sarastores.com/api/v1/partner/orders/
   },
   body: JSON.stringify({
     orderId: 'YOUR_ORDER_ID_123',   // Your internal order ID
-    amount: 999.99,                  // Amount in INR
+    items: [{ productId: 'PRODUCT_ID', quantity: 1 }], // Required server-priced quote
     currency: 'INR',
     notes: {
       customerName: 'John Doe',
@@ -1296,7 +1300,7 @@ rzp.open();`}
                       Getting Started
                     </h3>
                     <p className="text-yellow-800 mb-4">
-                      Contact our partner support team to configure your integration mode. We'll help you set up:
+                      Contact our partner support team to configure your integration mode. We&apos;ll help you set up:
                     </p>
                     <ul className="text-yellow-800 space-y-2">
                       <li className="flex items-start gap-2">
@@ -1640,8 +1644,10 @@ Content-Type: application/json
     "brand": "Samsung",
     "warranty": "2 years",
     "deliveryInfo": {
-      "estimatedDays": 3,
-      "freeDelivery": true
+      "estimatedDays": null,
+      "freeDelivery": null,
+      "installationAvailable": null,
+      "message": "Confirm delivery and installation with the store; consult the server order quote for charges."
     }
   }
 }`}
@@ -1838,7 +1844,7 @@ Content-Type: application/json
 
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 my-4">
                       <p className="text-sm text-red-800">
-                        <strong>Important:</strong> For <code className="bg-red-100 px-1 rounded">prepaid</code> orders, you must first create a Razorpay order using <code className="bg-red-100 px-1 rounded">POST /orders/razorpay/create</code>, complete the payment on your frontend, verify it via <code className="bg-red-100 px-1 rounded">POST /orders/razorpay/verify</code>, and then pass the <code className="bg-red-100 px-1 rounded">paymentDetails</code> when creating the order.
+                        <strong>Important:</strong> For <code className="bg-red-100 px-1 rounded">prepaid</code> orders, first submit the product IDs and quantities to <code className="bg-red-100 px-1 rounded">POST /orders/razorpay/create</code>, complete checkout using its returned amount, and verify the captured payment via <code className="bg-red-100 px-1 rounded">POST /orders/razorpay/verify</code>. Then create the order with the same items, matching external reference and <code className="bg-red-100 px-1 rounded">paymentDetails</code>. Each verified payment can fund only one order. Changed catalogue prices require reconciliation and a new quote, not a client-supplied amount override.
                       </p>
                     </div>
 
@@ -1856,7 +1862,7 @@ Content-Type: application/json
                         <tbody className="divide-y">
                           <tr><td className="px-3 py-2 font-mono text-xs">razorpayOrderId</td><td className="px-3 py-2">string</td><td className="px-3 py-2">Yes</td><td className="px-3 py-2">The Razorpay order ID from create endpoint</td></tr>
                           <tr><td className="px-3 py-2 font-mono text-xs">transactionId</td><td className="px-3 py-2">string</td><td className="px-3 py-2">Yes</td><td className="px-3 py-2">The Razorpay payment ID (pay_xxx)</td></tr>
-                          <tr><td className="px-3 py-2 font-mono text-xs">method</td><td className="px-3 py-2">string</td><td className="px-3 py-2">No</td><td className="px-3 py-2">Payment gateway used (default: "razorpay")</td></tr>
+                          <tr><td className="px-3 py-2 font-mono text-xs">method</td><td className="px-3 py-2">string</td><td className="px-3 py-2">No</td><td className="px-3 py-2">Display hint only; the stored method and amount come from the verified provider payment</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -2021,11 +2027,13 @@ Content-Type: application/json
                   </EndpointCard>
 
                   <EndpointCard method="POST" path="/orders/{orderId}/cancel" description="Cancel an order">
+                    <p className="text-gray-600 mb-4">
+                      Live API keys can cancel pending, confirmed or processing orders. Cancellation and stock release commit together; retries cannot restore stock twice. Test keys cannot cancel live orders. Cancellation does not refund payment or make its proof reusable; reconcile refunds through an authorized operator.
+                    </p>
                     <h4 className="font-medium text-gray-900 mb-2">Request Body</h4>
                     <CodeBlock
                       code={`{
-  "reason": "customer_request",
-  "notes": "Customer changed their mind"
+  "reason": "customer_request"
 }`}
                       title="Request"
                     />
@@ -2365,18 +2373,17 @@ Content-Type: application/json
 
                   <EndpointCard method="POST" path="/orders/razorpay/create" description="Create Razorpay order for payment">
                     <p className="text-gray-600 mb-4">
-                      Creates a Razorpay order and returns the order ID needed to initiate payment on your frontend.
+                      Creates a server-priced item quote and returns the Razorpay order ID and amount needed for checkout. Prices, 18% GST and free shipping follow the partner order pricing policy. Client amounts do not override catalogue pricing.
                     </p>
                     <h4 className="font-medium text-gray-900 mb-2">Required Permissions</h4>
                     <div className="flex gap-2 mb-4">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">razorpay:create</span>
                       <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">orders:create</span>
                     </div>
                     <h4 className="font-medium text-gray-900 mb-2">Request Body</h4>
                     <CodeBlock
                       code={`{
   "orderId": "YOUR_ORDER_ID_123",    // Your internal order ID (required)
-  "amount": 999.99,                   // Amount in INR (required)
+  "items": [{ "productId": "PRODUCT_ID", "quantity": 1 }], // Required
   "currency": "INR",                  // Currency code (optional, default: INR)
   "receipt": "receipt_123",           // Receipt reference (optional)
   "notes": {                          // Additional metadata (optional)
@@ -2410,18 +2417,17 @@ Content-Type: application/json
                     />
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
                       <p className="text-sm text-blue-800">
-                        <strong>Note:</strong> Use the returned <code className="bg-blue-100 px-1 rounded">razorpayOrderId</code> and <code className="bg-blue-100 px-1 rounded">keyId</code> to initialize the Razorpay checkout on your frontend.
+                        <strong>Note:</strong> Use the returned <code className="bg-blue-100 px-1 rounded">razorpayOrderId</code>, <code className="bg-blue-100 px-1 rounded">amount</code> (paise) and <code className="bg-blue-100 px-1 rounded">keyId</code> for checkout. The authenticated API key selects test or live credentials, regardless of the partner&apos;s default environment. Integration must be enabled with matching credentials; configuration/decryption failures never fall back to a different account. Test orders do not reserve stock or create live fulfillment records.
                       </p>
                     </div>
                   </EndpointCard>
 
                   <EndpointCard method="POST" path="/orders/razorpay/verify" description="Verify Razorpay payment signature">
                     <p className="text-gray-600 mb-4">
-                      Verifies the payment signature after successful payment. This confirms the payment is authentic and not tampered with.
+                      Verifies the signature and confirms captured payment with Razorpay against this partner&apos;s original quote, environment, account, amount, currency and order. Provider retrieval failures return an error without marking the payment paid. Repeating verification for the same payment is safe.
                     </p>
                     <h4 className="font-medium text-gray-900 mb-2">Required Permissions</h4>
                     <div className="flex gap-2 mb-4">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">razorpay:write</span>
                       <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">orders:write</span>
                     </div>
                     <h4 className="font-medium text-gray-900 mb-2">Request Body</h4>
@@ -2465,7 +2471,7 @@ Content-Type: application/json
                     />
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
                       <p className="text-sm text-red-800">
-                        <strong>Important:</strong> Never fulfill an order until you receive a successful verification response. A failed signature indicates potential tampering.
+                        <strong>Important:</strong> Never fulfill an order until verification and order creation succeed. Order creation atomically consumes the verified payment with stock reservation and persistence. Legacy unbound payment initiations cannot be verified by this endpoint; reconcile any already collected legacy payments through an authorized operator rather than charging again automatically.
                       </p>
                     </div>
                   </EndpointCard>
@@ -2487,7 +2493,7 @@ async function initiatePayment(orderData) {
     },
     body: JSON.stringify({
       orderId: orderData.id,
-      amount: orderData.total,
+      items: orderData.items, // Required productId and quantity; total is calculated server-side
       notes: { customerName: orderData.customerName }
     })
   });
@@ -2555,7 +2561,7 @@ async function verifyPayment(razorpayResponse) {
                   <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <h4 className="font-medium text-yellow-900 mb-2 flex items-center gap-2">
                       <AlertCircle className="h-4 w-4" />
-                      Don't Forget the Razorpay Script
+                      Don&apos;t Forget the Razorpay Script
                     </h4>
                     <p className="text-sm text-yellow-800 mb-2">
                       Add the Razorpay checkout script to your HTML head:
@@ -2631,7 +2637,7 @@ async function verifyPayment(razorpayResponse) {
                       <tbody className="divide-y">
                         <tr><td className="px-4 py-2 font-mono text-xs">INVALID_API_KEY</td><td className="px-4 py-2">API key is invalid or revoked</td><td className="px-4 py-2">Check your API key</td></tr>
                         <tr><td className="px-4 py-2 font-mono text-xs">RATE_LIMITED</td><td className="px-4 py-2">Too many requests</td><td className="px-4 py-2">Wait and retry</td></tr>
-                        <tr><td className="px-4 py-2 font-mono text-xs">PRODUCT_NOT_FOUND</td><td className="px-4 py-2">Product doesn't exist</td><td className="px-4 py-2">Verify product ID</td></tr>
+                        <tr><td className="px-4 py-2 font-mono text-xs">PRODUCT_NOT_FOUND</td><td className="px-4 py-2">Product doesn&apos;t exist</td><td className="px-4 py-2">Verify product ID</td></tr>
                         <tr><td className="px-4 py-2 font-mono text-xs">INSUFFICIENT_STOCK</td><td className="px-4 py-2">Not enough inventory</td><td className="px-4 py-2">Reduce quantity or try later</td></tr>
                         <tr><td className="px-4 py-2 font-mono text-xs">INSUFFICIENT_BALANCE</td><td className="px-4 py-2">Wallet balance too low</td><td className="px-4 py-2">Wait for pending earnings</td></tr>
                         <tr><td className="px-4 py-2 font-mono text-xs">ORDER_NOT_CANCELLABLE</td><td className="px-4 py-2">Order already shipped</td><td className="px-4 py-2">Contact support</td></tr>
@@ -2720,7 +2726,7 @@ Retry-After: 45`}
                     <h4 className="font-medium text-blue-900 mb-2">💡 Tips</h4>
                     <ul className="text-sm text-blue-800 space-y-1">
                       <li>• Use your <strong>test API key</strong> (sk_test_...) for testing</li>
-                      <li>• Test orders created with test keys don't affect your wallet</li>
+                      <li>• Test orders created with test keys don&apos;t affect your wallet</li>
                       <li>• Check the Products API first to get valid product IDs</li>
                       <li>• All responses are shown in JSON format</li>
                     </ul>

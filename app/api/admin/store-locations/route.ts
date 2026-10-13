@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
-import { ObjectId } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
+import { CreateStoreLocationSchema } from "@/lib/validation"
+import type { StoredStoreLocation } from "@/lib/store-locations"
 
 const COLLECTION = "store_locations"
 
@@ -11,7 +12,7 @@ export async function GET() {
   if (!guard.ok) return guard.response
 
   try {
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<StoredStoreLocation>(COLLECTION)
     const stores = await collection.find({}).sort({ createdAt: -1 }).toArray()
     
     // Normalize _id to id for frontend
@@ -48,40 +49,10 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    
-    const { 
-      shopName, 
-      locationDescription, 
-      googleMapLocation, 
-      mobileNo, 
-      shopTiming, 
-      shopImage, 
-      emailId,
-      isActive = true 
-    } = body
-
-    if (!shopName || !shopName.trim()) {
-      return NextResponse.json({ 
-        success: false, 
-        message: "Shop name is required" 
-      }, { status: 400 })
-    }
-
-    const storeData = {
-      shopName: shopName.trim(),
-      locationDescription: locationDescription?.trim() || "",
-      googleMapLocation: googleMapLocation?.trim() || "",
-      mobileNo: mobileNo?.trim() || "",
-      shopTiming: shopTiming?.trim() || "9:00 AM - 9:00 PM",
-      shopImage: shopImage?.trim() || "",
-      emailId: emailId?.trim() || "",
-      isActive: Boolean(isActive),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }
-
-    const collection = await getCollection(COLLECTION)
+    const parsed = CreateStoreLocationSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
+    const storeData = { ...parsed.data, createdAt: new Date(), updatedAt: new Date() }
+    const collection = await getCollection<StoredStoreLocation>(COLLECTION)
     const result = await collection.insertOne(storeData)
 
     return NextResponse.json({ 
@@ -90,6 +61,7 @@ export async function POST(request: NextRequest) {
       id: result.insertedId.toString()
     })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
     console.error("Error adding store location:", error)
     return NextResponse.json({ 
       success: false, 

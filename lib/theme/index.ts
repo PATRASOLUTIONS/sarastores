@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 /**
  * Storefront theming.
  *
@@ -715,18 +717,31 @@ export function getPreset(id: string): Theme | null {
 }
 
 /** Guard against a malformed stored theme repainting the site with `undefined`. */
-export function normalizeTheme(input: any): Theme {
-  if (!input || typeof input !== "object") return DEFAULT_THEME
+export function normalizeTheme(value: unknown): Theme {
+  const parsed = z.record(z.unknown()).safeParse(value)
+  if (!parsed.success) return DEFAULT_THEME
+  const input = parsed.data
+  const parsedTokens = z.record(z.unknown()).safeParse(input.tokens)
+  const inputTokens = parsedTokens.success ? parsedTokens.data : {}
 
   const tokens: ThemeTokens = { ...BASE_TOKENS }
   for (const key of Object.keys(BASE_TOKENS) as (keyof ThemeTokens)[]) {
-    const value = input?.tokens?.[key]
+    const value = inputTokens[key]
     if (typeof value === "string" && /^#[0-9a-f]{3,8}$/i.test(value.trim())) {
       tokens[key] = value.trim()
     }
   }
 
   const radius = Number(input.radius)
+  const date = (value: unknown): string | null => {
+    if (value == null || value === "") return null
+    if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) {
+      throw new Error("Invalid theme scheduling date")
+    }
+    const parsed = new Date(value)
+    if (!Number.isFinite(parsed.getTime())) throw new Error("Invalid theme scheduling date")
+    return parsed.toISOString()
+  }
 
   return {
     id: String(input.id || "custom"),
@@ -734,16 +749,16 @@ export function normalizeTheme(input: any): Theme {
     occasion: String(input.occasion || ""),
     occasionKey: input.occasionKey ? String(input.occasionKey) : null,
     tokens,
-    effect: THEME_EFFECTS.includes(input.effect) ? input.effect : "none",
-    intensity: THEME_INTENSITIES.includes(input.intensity) ? input.intensity : "festive",
-    pattern: THEME_PATTERNS.includes(input.pattern) ? input.pattern : "none",
+    effect: THEME_EFFECTS.find(value => value === input.effect) ?? "none",
+    intensity: THEME_INTENSITIES.find(value => value === input.intensity) ?? "festive",
+    pattern: THEME_PATTERNS.find(value => value === input.pattern) ?? "none",
     toran: input.toran !== false,
     blessing: input.blessing === true,
     announcement: String(input.announcement || ""),
     announcementLink: String(input.announcementLink || "/offers"),
     radius: Number.isFinite(radius) && radius >= 0 && radius <= 2 ? radius : 0.75,
-    startsAt: input.startsAt ? new Date(input.startsAt).toISOString() : null,
-    endsAt: input.endsAt ? new Date(input.endsAt).toISOString() : null,
+    startsAt: input.startsAt ? date(input.startsAt) : null,
+    endsAt: input.endsAt ? date(input.endsAt) : null,
   }
 }
 

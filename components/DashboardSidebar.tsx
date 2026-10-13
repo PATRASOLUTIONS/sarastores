@@ -2,14 +2,16 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { User, ShoppingCart, Package, Heart, Tag, Settings, ChevronRight, Menu, X, Store } from "lucide-react"
+import { User, ShoppingCart, Package, Heart, Tag, Settings, ChevronRight, Menu, X, Store, type LucideIcon } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useState, useEffect } from "react"
+import { apiFetch } from "@/lib/api-client"
+import { InStoreOrderShortcutListSchema } from "@/lib/validation"
 
 interface NavItem {
   name: string
   href: string
-  icon: any
+  icon: LucideIcon
   exact?: boolean
   badge?: string
 }
@@ -41,46 +43,34 @@ export default function DashboardSidebar() {
 
   // Check if user has any in-store orders
   useEffect(() => {
+    let cancelled = false
+    setHasInstoreOrders(false)
+    setIsCheckingInstoreOrders(true)
     const checkInstoreOrders = async () => {
       if (!user?.email) {
-        console.log('[Sidebar] No user email found')
         setIsCheckingInstoreOrders(false)
         return
       }
 
-      console.log('[Sidebar] Checking in-store orders for:', user.email)
       try {
-        const response = await fetch(`/api/orders?employeeId=${encodeURIComponent(user.email)}`)
-        console.log('[Sidebar] API response status:', response.status)
-        
-        if (response.ok) {
-          const orders = await response.json()
-          console.log('[Sidebar] Total orders fetched:', orders.length)
-          
-          const instoreOnly = orders.filter((order: any) => 
-            order.paymentMethod === 'instore' || 
-            order.paymentDetails?.verifiedEmail === user.email
-          )
-          console.log('[Sidebar] In-store orders found:', instoreOnly.length)
-          
-          setHasInstoreOrders(instoreOnly.length > 0)
-          console.log('[Sidebar] hasInstoreOrders set to:', instoreOnly.length > 0)
-        } else {
-          console.log('[Sidebar] API response not OK')
-        }
+        const response = await apiFetch(`/api/orders?employeeId=${encodeURIComponent(user.email)}`)
+        if (!response.ok) throw new Error("In-store purchase shortcut could not be loaded")
+        const orders = InStoreOrderShortcutListSchema.parse(await response.json())
+        const hasInstore = orders.some(order =>
+          order.paymentMethod === "instore" || order.paymentDetails?.verifiedEmail === user.email)
+        if (!cancelled) setHasInstoreOrders(hasInstore)
       } catch (error) {
-        console.error("[Sidebar] Error checking in-store orders:", error)
+        if (!cancelled) console.error("[Sidebar] Error checking in-store orders:", error)
       } finally {
-        setIsCheckingInstoreOrders(false)
+        if (!cancelled) setIsCheckingInstoreOrders(false)
       }
     }
 
     checkInstoreOrders()
-  }, [user])
+    return () => { cancelled = true }
+  }, [user?.email])
 
   if (!user) return null
-
-  console.log('[Sidebar Render] hasInstoreOrders:', hasInstoreOrders, 'isChecking:', isCheckingInstoreOrders)
 
   const navItems: NavItem[] = [
     {

@@ -3,15 +3,8 @@
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import CategoryProductCard from "@/components/CategoryProductCard"
-
-interface Product {
-    id: string
-    slug?: string
-    name: string
-    price: number
-    image: string
-    // Add other necessary fields
-}
+import { productCardResponseSchema, recentlyViewedResponseSchema, type ProductCardResponse } from "@/lib/product-card-response"
+import { z } from "zod"
 
 interface RecentlyViewedProps {
     /** Hide the current product (so it doesn't appear in its own list). */
@@ -22,7 +15,7 @@ interface RecentlyViewedProps {
 
 export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }: RecentlyViewedProps) {
     const { user } = useAuth()
-    const [products, setProducts] = useState<Product[]>([])
+    const [products, setProducts] = useState<ProductCardResponse[]>([])
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
@@ -32,16 +25,15 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
             try {
                 if (user) {
                     // Fetch from DB — single API call
-                    const res = await fetch(`/api/user/recently-viewed?userId=${(user as any)._id || user.id}`)
+                    const res = await fetch("/api/user/recently-viewed")
+                    if (!res.ok) throw new Error("Recently viewed products could not be loaded")
                     if (res.ok && !aborted) {
-                        const data = await res.json()
-                        const fetched = (data.products || []).slice(0, 16)
-                        // Deduplicate by id/_id to avoid duplicate keys
-                        const uniqueProducts: Product[] = []
+                        const data = recentlyViewedResponseSchema.parse(await res.json())
+                        const fetched = data.products.slice(0, 16)
+                        const uniqueProducts: ProductCardResponse[] = []
                         const seen = new Set<string>()
-                        fetched.forEach((p: any) => {
-                            const id = p?.id ?? p?._id
-                            const sid = id ? String(id) : JSON.stringify(p)
+                        fetched.forEach((p) => {
+                            const sid = p.id
                             if (!seen.has(sid)) {
                                 seen.add(sid)
                                 uniqueProducts.push(p)
@@ -51,7 +43,7 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
                     }
                 } else {
                     // Fetch from LocalStorage — batch into parallel fetches (max 8)
-                    const rawIds: string[] = JSON.parse(localStorage.getItem("recently_viewed_ids") || "[]")
+                    const rawIds = z.array(z.string()).parse(JSON.parse(localStorage.getItem("recently_viewed_ids") || "[]"))
                     // Deduplicate IDs just in case
                     const recentIds = Array.from(new Set(rawIds))
 
@@ -61,20 +53,23 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
                         return
                     }
 
-                    const promises = recentIds.slice(0, 12).map((id: string) =>
-                        fetch(`/api/products/${id}`).then(r => r.ok ? r.json() : null).catch(() => null)
-                    )
+                    const promises = recentIds.slice(0, 12).map(async (id) => {
+                        const response = await fetch(`/api/products/${encodeURIComponent(id)}`)
+                        if (response.status === 404) return null
+                        if (!response.ok) throw new Error("Recently viewed product could not be loaded")
+                        return productCardResponseSchema.parse(await response.json())
+                    })
                     const results = await Promise.all(promises)
                     if (!aborted) {
-                        const validProducts = results.filter(Boolean)
+                        const validProducts = results.filter((product) => product !== null)
                         // Final deduplication by ID to prevent duplicate keys
-                        const uniqueProducts: Product[] = []
-                        const seenIds = new Set()
+                        const uniqueProducts: ProductCardResponse[] = []
+                        const seenIds = new Set<string>()
 
                         validProducts.forEach(p => {
-                            const id = (p as any).id || (p as any)._id
-                            if (id && !seenIds.has(String(id))) {
-                                seenIds.add(String(id))
+                            const id = p.id
+                            if (!seenIds.has(id)) {
+                                seenIds.add(id)
                                 uniqueProducts.push(p)
                             }
                         })
@@ -82,7 +77,7 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
                         setProducts(uniqueProducts)
 
                         // Clean up stale IDs (404/deleted products) from localStorage
-                        const validIds = new Set(uniqueProducts.map(p => String(p.id || (p as any)._id)))
+                        const validIds = new Set(uniqueProducts.map(p => p.id))
                         const cleanedIds = recentIds.filter(id => validIds.has(id))
                         if (cleanedIds.length !== recentIds.length) {
                             localStorage.setItem("recently_viewed_ids", JSON.stringify(cleanedIds))
@@ -92,7 +87,7 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
             } catch (err) {
                 console.error(err)
             } finally {
-                setLoading(false)
+                if (!aborted) setLoading(false)
             }
         }
         fetchRecentlyViewed()
@@ -100,7 +95,7 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
     }, [user])
 
     const filtered = excludeId
-        ? products.filter((p: any) => String(p.id ?? p._id) !== String(excludeId))
+        ? products.filter((p) => p.id !== String(excludeId))
         : products
 
     if (filtered.length === 0) return null
@@ -121,11 +116,10 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
             ) : (
                 <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide -mx-2 px-2">
                     {filtered.map((product, idx) => {
-                        const id = (product as any)?.id ?? (product as any)?._id ?? `recent-${idx}`
-                        const key = `${String(id)}-${idx}`
+                        const key = `${product.id}-${idx}`
                         return (
                             <div key={key} className="min-w-[180px] w-[180px] md:min-w-[220px] md:w-[220px]">
-                                <CategoryProductCard product={product as any} />
+                                <CategoryProductCard product={product} />
                             </div>
                         )
                     })}

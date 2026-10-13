@@ -26,16 +26,19 @@ export async function getSettingsData() {
   const id = settings._id?.toString?.() || settings.id
   const { brandLogoIsData, brandLogoLen, signatureIsData, signatureLen, ...rest } = settings
 
-  return {
+  return normalizeId({
     ...rest,
     brandLogo: brandLogoIsData ? `/api/media/brand-logo/${id}?v=${brandLogoLen}` : settings.brandLogo,
     signature: signatureIsData ? `/api/media/signature/${id}?v=${signatureLen}` : settings.signature,
-  }
+  })
 }
 
-export async function setSettingsData(data: any) {
+export async function setSettingsData(data: Document) {
   const collection = await getCollection("settings")
   const payload = { ...data }
+  for (const field of ["_id", "id", "createdAt", "updatedAt", "brandLogoIsData", "brandLogoLen", "signatureIsData", "signatureLen"]) {
+    delete payload[field]
+  }
 
   // A client that read a media URL must not overwrite the stored image with it.
   for (const field of ["brandLogo", "signature"]) {
@@ -51,7 +54,7 @@ export async function getFooterData() {
   return await findOne("footer", {})
 }
 
-export async function setFooterData(data: any) {
+export async function setFooterData(data: Document) {
   const collection = await getCollection("footer")
   // Upsert: update if exists, otherwise insert
   await collection.updateOne({}, { $set: { ...data, updatedAt: new Date() } }, { upsert: true })
@@ -59,7 +62,15 @@ export async function setFooterData(data: any) {
 }
 import { connectToDatabase } from "./mongodb"
 import { isMediaUrl } from "./media"
-import { type Collection, type Document, ObjectId } from "mongodb"
+import {
+  type Collection,
+  type CreateIndexesOptions,
+  type Document,
+  type Filter,
+  type FindOptions,
+  type IndexSpecification,
+  ObjectId,
+} from "mongodb"
 
 // Collection names constant
 export const COLLECTIONS = {
@@ -94,7 +105,14 @@ export async function getCollection<TSchema extends Document = Document>(
   }
 }
 
-export function normalizeId(doc: any): any {
+export type NormalizedDocument<T extends Document> = Omit<T, "_id" | "id"> & { id: string }
+
+export function normalizeId<T extends Document>(doc: T[]): NormalizedDocument<T>[]
+export function normalizeId<T extends Document>(doc: T): NormalizedDocument<T>
+export function normalizeId(doc: null): null
+export function normalizeId(doc: undefined): undefined
+export function normalizeId<T extends Document>(doc: T | null): NormalizedDocument<T> | null
+export function normalizeId(doc: Document | Document[] | null | undefined): Document | Document[] | null | undefined {
   if (!doc) return doc
 
   if (Array.isArray(doc)) {
@@ -123,10 +141,10 @@ export function createObjectId(id?: string): ObjectId {
 }
 
 // Generic CRUD operations with better error handling
-export async function getAll(collectionName: string, filter: any = {}, options: any = {}) {
+export async function getAll<T extends Document = Document>(collectionName: string, filter: Filter<T> = {}, options: FindOptions<T> = {}) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Fetching all documents from ${collectionName} with filter:`, filter, 'options:', options)
-    const collection = await getCollection(collectionName)
+    const collection = await getCollection<T>(collectionName)
     
     // Build query with limit if provided
     let query = collection.find(filter)
@@ -153,34 +171,20 @@ export async function getAll(collectionName: string, filter: any = {}, options: 
 export async function getById(collectionName: string, id: string) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Fetching document by id ${id} from ${collectionName}`)
-    const collection = await getCollection(collectionName)
-    let document: any = null
+    const collection = await getCollection<Document & { _id: ObjectId | string }>(collectionName)
+    let document: Document | null = null
 
-    // Try ObjectId lookup first (most common case)
-    try {
-      const objId = createObjectId(id)
-      document = await collection.findOne({ _id: objId })
-    } catch (e) {
-      // createObjectId may throw for non-ObjectId strings — ignore and try fallbacks
-      document = null
+    if (ObjectId.isValid(id)) {
+      document = await collection.findOne({ _id: createObjectId(id) })
     }
 
     // Fallbacks: some documents may store string _id or an `id` field
     if (!document) {
-      try {
-        // TypeScript expects _id to be an ObjectId; cast to any to allow string lookups
-        document = await collection.findOne({ _id: id as any })
-      } catch (e) {
-        // ignore
-      }
+      document = await collection.findOne({ _id: id })
     }
 
     if (!document) {
-      try {
-        document = await collection.findOne({ id })
-      } catch (e) {
-        // ignore
-      }
+      document = await collection.findOne({ id })
     }
 
     if (process.env.NODE_ENV === "development") console.log(`Document found:`, document ? "Yes" : "No")
@@ -191,7 +195,7 @@ export async function getById(collectionName: string, id: string) {
   }
 }
 
-export async function create(collectionName: string, data: any) {
+export async function create(collectionName: string, data: Document) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Creating new document in ${collectionName}:`, data)
     const collection = await getCollection(collectionName)
@@ -202,6 +206,7 @@ export async function create(collectionName: string, data: any) {
     })
 
     const document = await collection.findOne({ _id: result.insertedId })
+    if (!document) throw new Error("Created document could not be reloaded")
     if (process.env.NODE_ENV === "development") console.log(`Document created successfully with id: ${result.insertedId}`)
     return normalizeId(document)
   } catch (error) {
@@ -210,7 +215,7 @@ export async function create(collectionName: string, data: any) {
   }
 }
 
-export async function update(collectionName: string, id: string, data: any) {
+export async function update(collectionName: string, id: string, data: Document) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Updating document ${id} in ${collectionName}:`, data)
     const collection = await getCollection(collectionName)
@@ -231,6 +236,7 @@ export async function update(collectionName: string, id: string, data: any) {
     }
 
     const document = await collection.findOne({ _id: createObjectId(id) })
+    if (!document) throw new Error("Updated document could not be reloaded")
     if (process.env.NODE_ENV === "development") console.log(`Document updated successfully`)
     return normalizeId(document)
   } catch (error) {
@@ -270,7 +276,7 @@ export async function migrateFromLocalStorage(collectionName: string, localStora
 }
 
 // Additional utility functions
-export async function findOne(collectionName: string, filter: any) {
+export async function findOne(collectionName: string, filter: Filter<Document>) {
   try {
     const collection = await getCollection(collectionName)
     const document = await collection.findOne(filter)
@@ -281,7 +287,7 @@ export async function findOne(collectionName: string, filter: any) {
   }
 }
 
-export async function findMany(collectionName: string, filter: any = {}, options: any = {}) {
+export async function findMany(collectionName: string, filter: Filter<Document> = {}, options: FindOptions<Document> = {}) {
   try {
     const collection = await getCollection(collectionName)
     const documents = await collection.find(filter, options).toArray()
@@ -292,7 +298,7 @@ export async function findMany(collectionName: string, filter: any = {}, options
   }
 }
 
-export async function count(collectionName: string, filter: any = {}) {
+export async function count(collectionName: string, filter: Filter<Document> = {}) {
   try {
     const collection = await getCollection(collectionName)
     return await collection.countDocuments(filter)
@@ -302,7 +308,7 @@ export async function count(collectionName: string, filter: any = {}) {
   }
 }
 
-export async function aggregate(collectionName: string, pipeline: any[]) {
+export async function aggregate(collectionName: string, pipeline: Document[]) {
   try {
     const collection = await getCollection(collectionName)
     const result = await collection.aggregate(pipeline).toArray()
@@ -314,7 +320,7 @@ export async function aggregate(collectionName: string, pipeline: any[]) {
 }
 
 // Bulk operations - MISSING EXPORTS ADDED HERE
-export async function insertMany(collectionName: string, documents: any[]) {
+export async function insertMany(collectionName: string, documents: Document[]) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Inserting ${documents.length} documents into ${collectionName}`)
     const collection = await getCollection(collectionName)
@@ -337,7 +343,7 @@ export async function insertMany(collectionName: string, documents: any[]) {
   }
 }
 
-export async function updateMany(collectionName: string, filter: any, update: any) {
+export async function updateMany(collectionName: string, filter: Filter<Document>, update: Document) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Updating multiple documents in ${collectionName}`)
     const collection = await getCollection(collectionName)
@@ -360,7 +366,7 @@ export async function updateMany(collectionName: string, filter: any, update: an
   }
 }
 
-export async function deleteMany(collectionName: string, filter: any) {
+export async function deleteMany(collectionName: string, filter: Filter<Document>) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Deleting multiple documents from ${collectionName} with filter:`, filter)
     const collection = await getCollection(collectionName)
@@ -391,7 +397,7 @@ export async function dropCollection(collectionName: string) {
   }
 }
 
-export async function createIndex(collectionName: string, indexSpec: any, options: any = {}) {
+export async function createIndex(collectionName: string, indexSpec: IndexSpecification, options: CreateIndexesOptions = {}) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Creating index on ${collectionName}:`, indexSpec)
     const collection = await getCollection(collectionName)

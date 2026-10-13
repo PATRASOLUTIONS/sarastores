@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { getPartnerPayouts } from '@/lib/partner/wallet';
+import { PAYOUT_STATUSES, isPayoutStatus } from '@/lib/partner/types';
 
 /**
  * GET /api/v1/partner/wallet/payouts
@@ -21,16 +22,15 @@ async function handleGet(req: PartnerAuthRequest) {
     const limit = parseInt(searchParams.get('limit') || '20', 10);
 
     // Validate status if provided
-    const validStatuses = ['pending_approval', 'approved', 'processing', 'completed', 'failed', 'rejected'];
-    if (status && !validStatuses.includes(status)) {
+    if (status && !isPayoutStatus(status)) {
       return NextResponse.json(
-        { success: false, error: `Invalid status. Valid values: ${validStatuses.join(', ')}` },
+        { success: false, error: `Invalid status. Valid values: ${PAYOUT_STATUSES.join(', ')}` },
         { status: 400 }
       );
     }
 
     const result = await getPartnerPayouts(req.partner.id, {
-      status: status || undefined,
+      status: status && isPayoutStatus(status) ? status : undefined,
       page: Math.max(1, page),
       limit: Math.min(Math.max(1, limit), 100),
     });
@@ -67,7 +67,7 @@ async function handleGet(req: PartnerAuthRequest) {
 }
 
 // Export wrapped handler
-export const GET = withPartnerAuth(handleGet as any, ['wallet:read']);
+export const GET = withPartnerAuth(handleGet, ['wallet:read']);
 
 // Handle CORS preflight requests
 export { OPTIONS } from '@/lib/partner/auth';

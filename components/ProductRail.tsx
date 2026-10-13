@@ -43,7 +43,7 @@ export default function ProductRail({ rail }: { rail: Rail }) {
           {rail.products.map((p) => {
             const product = {
               ...p,
-              id: p.id || p._id,
+              id: p.id,
               name: p.name,
               price: p.price,
               image: p.image,

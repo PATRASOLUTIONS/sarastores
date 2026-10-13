@@ -365,7 +365,7 @@ export default function ShubhamCollaborationPage() {
                         viewport={{ once: true }}
                         className="text-center mb-16"
                     >
-                        <span className="inline-block px-4 py-2 bg-red-100 text-red-600 rounded-full text-sm font-medium mb-4">
+                        <span className="inline-block px-4 py-2 bg-red-100 text-red-700 rounded-full text-sm font-medium mb-4">
                             Our Partner
                         </span>
                         <h2 className="text-3xl md:text-5xl font-bold text-gray-900 mb-6">
@@ -485,7 +485,7 @@ export default function ShubhamCollaborationPage() {
                         viewport={{ once: true }}
                         className="text-center mb-16"
                     >
-                        <span className="inline-block px-4 py-2 bg-green-100 text-green-600 rounded-full text-sm font-medium mb-4">
+                        <span className="inline-block px-4 py-2 bg-green-100 text-green-700 rounded-full text-sm font-medium mb-4">
                             Why Choose Us
                         </span>
                         <h2 className="text-3xl md:text-5xl font-bold text-gray-900 mb-6">
@@ -500,8 +500,8 @@ export default function ShubhamCollaborationPage() {
                         {partnershipBenefits.map((benefit, index) => (
                             <motion.div
                                 key={index}
-                                initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
-                                whileInView={{ opacity: 1, x: 0 }}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
                                 transition={{ delay: index * 0.1 }}
                                 viewport={{ once: true }}
                                 className="flex items-start gap-6 bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all border border-gray-100"
@@ -509,7 +509,7 @@ export default function ShubhamCollaborationPage() {
                                 <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
                                     <benefit.icon className="w-7 h-7 text-white" />
                                 </div>
-                                <div>
+                                <div className="min-w-0">
                                     <h3 className="text-xl font-bold text-gray-900 mb-2">{benefit.title}</h3>
                                     <p className="text-gray-600">{benefit.description}</p>
                                 </div>
@@ -539,8 +539,8 @@ export default function ShubhamCollaborationPage() {
                     <div className="grid md:grid-cols-2 gap-8">
                         {/* Sara Mobiles Contact */}
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            whileInView={{ opacity: 1, x: 0 }}
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
                             className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20"
                         >
@@ -578,8 +578,8 @@ export default function ShubhamCollaborationPage() {
 
                         {/* Shubham World Contact */}
                         <motion.div
-                            initial={{ opacity: 0, x: 20 }}
-                            whileInView={{ opacity: 1, x: 0 }}
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
                             className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20"
                         >
@@ -779,7 +779,7 @@ export default function ShubhamCollaborationPage() {
                     >
                         <div className="inline-flex items-center gap-3 mb-8">
                             <TrendingUp className="w-8 h-8 text-green-500" />
-                            <span className="text-green-600 font-semibold text-lg">Growing Together</span>
+                            <span className="text-green-700 font-semibold text-lg">Growing Together</span>
                         </div>
                         <h2 className="text-3xl md:text-5xl font-bold text-gray-900 mb-6">
                             Ready to Experience the Best?

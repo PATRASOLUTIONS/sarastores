@@ -6,6 +6,24 @@ const STORAGE_KEY = "compare_products"
 const MAX_STORAGE_SIZE = 5000 // 5KB limit for compare data
 const MAX_COMPARE_ITEMS = 6 // Maximum 6 products to compare
 
+export function normalizeCompareIds(input: unknown): string[] {
+  const items: unknown[] = Array.isArray(input) ? input : [input]
+  const ids: string[] = []
+  for (const item of items) {
+    let value: unknown = item
+    if (item && typeof item === "object") {
+      value = "id" in item && typeof item.id === "string" && item.id
+        ? item.id
+        : "_id" in item ? item._id : undefined
+      if (value && typeof value === "object" && "$oid" in value) value = value.$oid
+    }
+    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) continue
+    const id = String(value).trim()
+    if (id && id.length < 100) ids.push(id)
+  }
+  return Array.from(new Set(ids)).slice(0, MAX_COMPARE_ITEMS)
+}
+
 export function useCompare() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const instanceId = useRef<string>(`${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -14,55 +32,9 @@ export function useCompare() {
     compareRef.current = compareIds
   }, [compareIds])
 
-  const initialLoaded = useRef(false)
+  const [initialLoaded, setInitialLoaded] = useState(false)
 
-  // Extract only the ID from complex objects, ensure minimal storage
-  const normalizeIds = (input: any): string[] => {
-    if (!input) return []
-    try {
-      const arr = Array.isArray(input) ? input : [input]
-      const ids: string[] = []
-      arr.forEach((item) => {
-        if (item === null || item === undefined) return
-        // Only extract simple string IDs, reject large objects
-        if (typeof item === "string") {
-          const s = item.trim()
-          // Only accept reasonable length IDs (max 100 chars)
-          if (s && s.length < 100) ids.push(s)
-          return
-        }
-        if (typeof item === "number") {
-          ids.push(String(item))
-          return
-        }
-        if (typeof item === "object") {
-          try {
-            // Only extract id/_id, ignore rest of the object
-            if (item.id && typeof item.id === "string") {
-              const s = String(item.id).trim()
-              if (s && s.length < 100) ids.push(s)
-              return
-            }
-            if (item._id && typeof item._id === "string") {
-              const s = item._id.trim()
-              if (s && s.length < 100) ids.push(s)
-              return
-            }
-            if ((item._id as any)?.$oid) {
-              const s = String((item._id as any).$oid).trim()
-              if (s && s.length < 100) ids.push(s)
-              return
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-      })
-      return Array.from(new Set(ids)).slice(0, MAX_COMPARE_ITEMS)
-    } catch (e) {
-      return []
-    }
-  }
+  const normalizeIds = normalizeCompareIds
 
   // Clean up old/corrupted localStorage data
   const cleanupOldData = () => {
@@ -134,11 +106,11 @@ export function useCompare() {
     } catch (e) {
       setCompareIds([])
     }
-    initialLoaded.current = true
+    setInitialLoaded(true)
   }, [])
 
   useEffect(() => {
-    if (!initialLoaded.current) return
+    if (!initialLoaded) return
     try {
       // Store ONLY the IDs array - minimal footprint
       const rawToStore = JSON.stringify(compareIds)
@@ -164,7 +136,7 @@ export function useCompare() {
     } catch (e) {
       // ignore
     }
-  }, [compareIds])
+  }, [compareIds, initialLoaded])
 
   useEffect(() => {
     const onCustom = (e: Event) => {
@@ -216,7 +188,7 @@ export function useCompare() {
     }
   }, [])
 
-  const addToCompare = (idOrItem: any) => {
+  const addToCompare = (idOrItem: unknown) => {
     // Accept string ids, numbers, or product-like objects and normalize to an ID
     const ids = normalizeIds(idOrItem)
     if (!ids || ids.length === 0) {
@@ -234,7 +206,7 @@ export function useCompare() {
     })
   }
 
-  const removeFromCompare = (idOrItem: any) => {
+  const removeFromCompare = (idOrItem: unknown) => {
     const ids = normalizeIds(idOrItem)
     const sid = ids && ids.length ? String(ids[0]).trim() : String(idOrItem || "").trim()
     if (!sid) return
@@ -244,7 +216,7 @@ export function useCompare() {
 
   const clearCompare = () => setCompareIds([])
 
-  const isInCompare = (idOrItem: any) => {
+  const isInCompare = (idOrItem: unknown) => {
     if (!idOrItem) return false
     const ids = normalizeIds(idOrItem)
     const sid = ids && ids.length ? String(ids[0]).trim() : String(idOrItem).trim()

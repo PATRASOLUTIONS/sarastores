@@ -4,12 +4,16 @@ import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { Loader2, Plus, Edit2, Trash2, Link as LinkIcon, Image as ImageIcon, Search } from "lucide-react"
+import { campaignPageListResponseSchema, type CampaignPageResponse } from "@/lib/campaign-page"
+import { productListingListResponseSchema, type ProductListingResponse } from "@/lib/product-card-response"
+import toast from "react-hot-toast"
 
 export default function CampaignPagesAdmin() {
-  const [campaigns, setCampaigns] = useState<any[]>([])
+  const [campaigns, setCampaigns] = useState<CampaignPageResponse[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<ProductListingResponse[]>([])
   const [productSearch, setProductSearch] = useState("")
 
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -32,10 +36,13 @@ export default function CampaignPagesAdmin() {
   const fetchCampaigns = async () => {
     try {
       const res = await apiFetch("/api/admin/campaign-pages")
-      const data = await res.json()
-      if (data.success) setCampaigns(data.campaigns)
+      const data = campaignPageListResponseSchema.safeParse(await res.json())
+      if (!res.ok || !data.success) throw new Error("Failed to load campaigns")
+      setCampaigns(data.data.campaigns)
+      setLoadError(null)
     } catch (e) {
       console.error(e)
+      setLoadError("Campaigns could not be loaded. Refresh to retry.")
     } finally {
       setLoading(false)
     }
@@ -43,19 +50,21 @@ export default function CampaignPagesAdmin() {
 
   const fetchProducts = async () => {
     try {
-      const res = await apiFetch("/api/products") // Fetches products for the selector
+      const res = await apiFetch("/api/products")
       const data = await res.json()
       // Adjusting based on standard api/products response formats
-      const list = Array.isArray(data) ? data : (data.products || data.items || [])
-      setProducts(list)
+      const list = productListingListResponseSchema.safeParse(Array.isArray(data) ? data : (data.products || data.items))
+      if (!res.ok || !list.success) throw new Error("Invalid product response")
+      setProducts(list.data)
     } catch (e) {
       console.error("Failed to fetch products", e)
+      toast.error("Products could not be loaded")
     }
   }
 
-  const openForm = (campaign?: any) => {
+  const openForm = (campaign?: CampaignPageResponse) => {
     if (campaign) {
-      setId(campaign._id)
+      setId(campaign.id)
       setName(campaign.name)
       setSlug(campaign.slug)
       setBanner(campaign.banner || "")
@@ -84,10 +93,15 @@ export default function CampaignPagesAdmin() {
   const handleBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
+      toast.error("Choose an image no larger than 5 MB")
+      return
+    }
     const reader = new FileReader()
     reader.onload = (event) => {
-      setBanner(event.target?.result as string)
+      if (typeof event.target?.result === "string") setBanner(event.target.result)
     }
+    reader.onerror = () => toast.error("Banner image could not be read")
     reader.readAsDataURL(file)
   }
 
@@ -116,14 +130,14 @@ export default function CampaignPagesAdmin() {
       })
       const data = await res.json()
       
-      if (data.success) {
+      if (res.ok && data.success) {
         setIsModalOpen(false)
         fetchCampaigns()
       } else {
-        alert(data.error || "Failed to save")
+        toast.error(typeof data.error === "string" ? data.error : "Failed to save")
       }
     } catch (err) {
-      alert("Error saving campaign")
+      toast.error("Error saving campaign")
     } finally {
       lock.release()
       setSaving(false)
@@ -133,10 +147,12 @@ export default function CampaignPagesAdmin() {
   const handleDelete = async (deleteId: string) => {
     if (!confirm("Are you sure you want to delete this custom page?")) return
     try {
-      await apiFetch(`/api/admin/campaign-pages/${deleteId}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/admin/campaign-pages/${deleteId}`, { method: "DELETE" })
+      const data = await response.json()
+      if (!response.ok || !data.success) throw new Error("Campaign was not deleted")
       fetchCampaigns()
     } catch (e) {
-      alert("Error deleting campaign")
+      toast.error("Error deleting campaign")
     }
   }
 
@@ -165,11 +181,13 @@ export default function CampaignPagesAdmin() {
         <div className="flex justify-center items-center h-64">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
         </div>
+      ) : loadError ? (
+        <p role="alert" className="rounded border border-red-200 bg-red-50 p-4 text-red-700">{loadError}</p>
       ) : campaigns.length === 0 ? (
         <div className="bg-white border text-center py-16 rounded shadow-sm">
           <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <h3 className="text-lg font-medium text-gray-900">No Custom Pages</h3>
-          <p className="text-gray-500 mt-1 mb-4">You haven't built any campaign landing pages yet.</p>
+          <p className="text-gray-500 mt-1 mb-4">You haven&apos;t built any campaign landing pages yet.</p>
           <button onClick={() => openForm()} className="text-blue-600 font-medium hover:underline">
             Create your first page
           </button>
@@ -188,7 +206,7 @@ export default function CampaignPagesAdmin() {
             </thead>
             <tbody className="divide-y">
               {campaigns.map((c) => (
-                <tr key={c._id} className="hover:bg-gray-50 transition-colors">
+                <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-8 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -220,7 +238,7 @@ export default function CampaignPagesAdmin() {
                       <button onClick={() => openForm(c)} className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(c._id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                      <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -299,7 +317,7 @@ export default function CampaignPagesAdmin() {
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {filteredProducts.map(p => {
-                        const idStr = p._id || p.id
+                        const idStr = p.id
                         const isSelected = selectedProductIds.includes(idStr)
                         return (
                           <div 

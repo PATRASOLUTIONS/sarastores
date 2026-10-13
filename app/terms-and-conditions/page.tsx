@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BrandMarquee from "@/components/BrandMarquee";
 import HeroSection from "@/components/HeroSection";
+import Link from "next/link";
 
 const TermsAndConditionsPage = () => (
   <div className="flex flex-col min-h-screen">
@@ -68,12 +69,12 @@ const TermsAndConditionsPage = () => (
         </h2>
         <p className="text-justify mb-4">
           All products sold by{" "}
-          <a
+          <Link
             href="/"
             className="text-brand-primary underline"
           >
             Sara Mobiles and Electronics
-          </a>{" "}
+          </Link>{" "}
           are covered under our conditional Replacement Guarantee. If any issue,
           defect, or damage is found within 3 days of delivery, please contact our
           Customer Care via the “Contact Us” page or call us at{" "}

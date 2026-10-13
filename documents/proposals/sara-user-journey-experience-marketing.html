@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sara Electronics - User Journey, Experience, Benefits and Marketing Setup</title>
+<style>
+  :root {
+    --navy: #0f2557;
+    --navy-dark: #081633;
+    --navy-soft: #edf2fb;
+    --orange: #ff6a2c;
+    --orange-dark: #dd4e12;
+    --orange-soft: #fff0e8;
+    --blue: #2a7fff;
+    --green: #0b7a4b;
+    --green-soft: #e7f5ee;
+    --gold: #c88400;
+    --gold-soft: #fff5db;
+    --red: #c72c48;
+    --red-soft: #fdecef;
+    --ink: #172033;
+    --muted: #5d6b7e;
+    --line: #dce4ef;
+    --surface: #f7f9fc;
+    --white: #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: #8d98a8;
+    color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    line-height: 1.48;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page { size: A4; margin: 0; }
+
+  .page {
+    position: relative;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 8mm;
+    padding: 15mm 16mm 18mm;
+    overflow: hidden;
+    background: var(--white);
+    box-shadow: 0 5px 24px rgba(7, 20, 46, 0.24);
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .page:last-child { page-break-after: auto; }
+
+  @media print {
+    html, body { background: #fff; }
+    .page { margin: 0; box-shadow: none; }
+  }
+
+  h1, h2, h3, h4 { color: var(--navy); line-height: 1.16; }
+  h2 { font-size: 24px; margin-bottom: 4px; }
+  h3 { font-size: 15px; margin: 8px 0 5px; }
+  h4 { font-size: 12px; margin-bottom: 3px; }
+  p { margin-bottom: 5px; }
+  strong { color: var(--navy); }
+  ul, ol { margin: 3px 0 5px 17px; }
+  li { margin-bottom: 2px; }
+
+  .page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 5px;
+    margin-bottom: 9px;
+    border-bottom: 2px solid var(--line);
+  }
+
+  .brand-lockup {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.045em;
+  }
+
+  .brand-lockup img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+  }
+
+  .brand-lockup span { color: var(--orange); }
+  .page-tag { color: var(--muted); font-size: 9px; }
+
+  .footer {
+    position: absolute;
+    right: 16mm;
+    bottom: 9mm;
+    left: 16mm;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 8.5px;
+  }
+
+  .eyebrow {
+    display: inline-block;
+    margin-bottom: 3px;
+    color: var(--orange-dark);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .section-sub {
+    max-width: 172mm;
+    margin-bottom: 9px;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+  .card {
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--white);
+    page-break-inside: avoid;
+  }
+
+  .card.soft { background: var(--surface); }
+  .card.orange { border-color: #ffd2bd; background: var(--orange-soft); }
+  .card.navy { border-color: #c7d5ed; background: var(--navy-soft); }
+  .card.green { border-color: #bde3cf; background: var(--green-soft); }
+  .card.gold { border-color: #f1d991; background: var(--gold-soft); }
+  .card p { margin: 0; color: var(--muted); font-size: 10px; }
+
+  .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 29px;
+    height: 29px;
+    margin-bottom: 6px;
+    border-radius: 9px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .icon.orange { background: var(--orange); }
+  .icon.green { background: var(--green); }
+  .icon.blue { background: var(--blue); }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 30px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .pill.live { background: var(--green-soft); color: var(--green); }
+  .pill.setup { background: var(--gold-soft); color: var(--gold); }
+  .pill.action { background: var(--orange-soft); color: var(--orange-dark); }
+  .pill.info { background: var(--navy-soft); color: var(--navy); }
+
+  .callout {
+    padding: 8px 11px;
+    margin: 7px 0;
+    border-left: 4px solid var(--orange);
+    border-radius: 0 8px 8px 0;
+    background: var(--orange-soft);
+    font-size: 10.5px;
+  }
+
+  .callout.navy { border-color: var(--navy); background: var(--navy-soft); }
+  .callout.green { border-color: var(--green); background: var(--green-soft); }
+  .callout.gold { border-color: var(--gold); background: var(--gold-soft); }
+
+  table {
+    width: 100%;
+    margin: 5px 0 8px;
+    border-collapse: collapse;
+    font-size: 9.7px;
+  }
+
+  th {
+    padding: 5px 7px;
+    background: var(--navy);
+    color: #fff;
+    text-align: left;
+    font-weight: 700;
+  }
+
+  td {
+    padding: 5px 7px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  tr:nth-child(even) td { background: var(--surface); }
+
+  .flow {
+    display: flex;
+    align-items: stretch;
+    margin: 7px 0 9px;
+  }
+
+  .flow-step {
+    position: relative;
+    flex: 1;
+    padding: 8px 6px;
+    border: 1px solid var(--line);
+    border-right: none;
+    background: var(--surface);
+    text-align: center;
+  }
+
+  .flow-step:first-child { border-radius: 9px 0 0 9px; }
+  .flow-step:last-child { border-right: 1px solid var(--line); border-radius: 0 9px 9px 0; }
+  .flow-step:not(:last-child)::after {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    right: -7px;
+    width: 12px;
+    height: 12px;
+    border-top: 2px solid var(--orange);
+    border-right: 2px solid var(--orange);
+    background: var(--surface);
+    content: "";
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  .flow-step .number {
+    color: var(--orange-dark);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .flow-step .title { color: var(--navy); font-size: 10.5px; font-weight: 800; }
+  .flow-step .desc { margin-top: 2px; color: var(--muted); font-size: 8.5px; }
+
+  .journey-row {
+    display: grid;
+    grid-template-columns: 24mm 1fr 1fr 1fr;
+    gap: 5px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .journey-row.head {
+    padding: 5px 0;
+    border: none;
+    border-radius: 7px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .journey-row > div { padding: 0 6px; }
+  .journey-stage { color: var(--navy); font-weight: 800; }
+  .journey-row p { margin: 0; color: var(--muted); font-size: 9.2px; }
+
+  .metric-strip {
+    display: flex;
+    gap: 6px;
+    margin: 7px 0;
+  }
+
+  .metric {
+    flex: 1;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--orange);
+    border-radius: 8px;
+  }
+
+  .metric .value { color: var(--navy); font-size: 14px; font-weight: 900; }
+  .metric .label { color: var(--muted); font-size: 8px; text-transform: uppercase; }
+
+  .timeline { margin: 6px 0 7px 5px; border-left: 3px solid var(--orange); }
+  .timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 31mm 1fr;
+    gap: 7px;
+    padding: 3px 0 8px 12px;
+  }
+
+  .timeline-item::before {
+    position: absolute;
+    top: 5px;
+    left: -8px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--orange);
+    border-radius: 50%;
+    background: #fff;
+    content: "";
+  }
+
+  .timeline-when { color: var(--navy); font-size: 10.5px; font-weight: 800; }
+  .timeline-when span { display: block; color: var(--orange-dark); font-size: 8px; text-transform: uppercase; }
+  .timeline-item p { margin: 0; color: var(--muted); font-size: 9.5px; }
+
+  .cover {
+    padding: 0;
+    color: #fff;
+    background:
+      radial-gradient(650px 430px at 87% -6%, rgba(255, 106, 44, 0.47), transparent 61%),
+      radial-gradient(600px 460px at -8% 108%, rgba(42, 127, 255, 0.35), transparent 57%),
+      linear-gradient(148deg, var(--navy) 0%, #0b1d46 56%, var(--navy-dark) 100%);
+  }
+
+  .cover-inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 297mm;
+    padding: 20mm 18mm;
+  }
+
+  .cover-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cover-logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+
+  .cover-logo img {
+    width: 38px;
+    height: 38px;
+    padding: 4px;
+    border-radius: 10px;
+    background: #fff;
+    object-fit: contain;
+  }
+
+  .cover-chip {
+    padding: 5px 11px;
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 30px;
+    background: rgba(255,255,255,0.1);
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .cover-copy { margin-top: auto; }
+  .cover h1 {
+    max-width: 170mm;
+    color: #fff;
+    font-size: 39px;
+    line-height: 1.06;
+  }
+
+  .cover h1 span {
+    color: #ffc8ad;
+  }
+
+  .cover-lead {
+    max-width: 154mm;
+    margin-top: 14px;
+    color: #cbd8ee;
+    font-size: 13px;
+  }
+
+  .cover-topics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .cover-topic {
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 11px;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .cover-topic .num { color: #ffb895; font-size: 19px; font-weight: 900; }
+  .cover-topic .label { color: #e6edf8; font-size: 9px; }
+
+  .cover-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.2);
+    color: #aebed7;
+    font-size: 9.5px;
+  }
+
+  .quote {
+    margin: 7px 0 9px;
+    padding-left: 12px;
+    border-left: 4px solid var(--orange);
+    color: var(--navy);
+    font-size: 15px;
+    font-weight: 750;
+    line-height: 1.35;
+  }
+
+  .audience-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 9px;
+    border-radius: 11px;
+    background: linear-gradient(110deg, var(--navy), #183d84);
+    color: #fff;
+  }
+
+  .audience-banner .badge {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--orange);
+    font-size: 15px;
+    font-weight: 900;
+  }
+
+  .audience-banner h3 { margin: 0; color: #fff; font-size: 17px; }
+  .audience-banner p { margin: 2px 0 0; color: #d8e3f6; font-size: 10px; }
+
+  .checklist {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px 12px;
+    margin-top: 5px;
+  }
+
+  .check {
+    position: relative;
+    padding: 5px 7px 5px 25px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 9.5px;
+  }
+
+  .check::before {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--green);
+    color: #fff;
+    content: "✓";
+    font-size: 8px;
+    font-weight: 900;
+  }
+</style>
+</head>
+<body>
+
+<!-- 1. Cover -->
+<section class="page cover">
+  <div class="cover-inner">
+    <div class="cover-brand">
+      <div class="cover-logo">
+        <img src="../../public/sara-logo.png" alt="Sara Electronics logo" />
+        <div>SARA <span style="color:#ff8d57">ELECTRONICS</span></div>
+      </div>
+      <div class="cover-chip">Client Experience Documentation</div>
+    </div>
+
+    <div class="cover-copy">
+      <h1>From first discovery to <span>long-term customer value</span></h1>
+      <p class="cover-lead">
+        A business and customer-facing guide to the Sara Electronics user journey,
+        user experience, customer benefits, and marketing operating model.
+      </p>
+
+      <div class="cover-topics">
+        <div class="cover-topic"><div class="num">01</div><div class="label">User journey</div></div>
+        <div class="cover-topic"><div class="num">02</div><div class="label">User experience</div></div>
+        <div class="cover-topic"><div class="num">03</div><div class="label">User benefits</div></div>
+        <div class="cover-topic"><div class="num">04</div><div class="label">Marketing setup</div></div>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <span>Prepared for Sara Electronics</span>
+      <span>October 2026</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Executive overview -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Executive Overview</div>
+  </div>
+
+  <span class="eyebrow">Purpose</span>
+  <h2>A connected commerce experience, not only an online catalogue</h2>
+  <p class="section-sub">
+    The platform supports the full customer lifecycle: attracting shoppers, helping them make a confident
+    product decision, completing payment, tracking fulfilment, and re-engaging them after purchase.
+  </p>
+
+  <div class="quote">
+    The central experience promise is simple: make electronics easier to discover, safer to buy,
+    and more valuable to own.
+  </div>
+
+  <div class="grid4">
+    <div class="card navy">
+      <div class="icon">1</div>
+      <h4>Discover</h4>
+      <p>Search, categories, brands, campaign pages, offers, store discovery and organic visibility.</p>
+    </div>
+    <div class="card orange">
+      <div class="icon orange">2</div>
+      <h4>Decide</h4>
+      <p>Specifications, images, reviews, comparison, availability, delivery and pricing clarity.</p>
+    </div>
+    <div class="card green">
+      <div class="icon green">3</div>
+      <h4>Purchase</h4>
+      <p>Cart, coupons, address validation, Razorpay, COD and order confirmation.</p>
+    </div>
+    <div class="card gold">
+      <div class="icon blue">4</div>
+      <h4>Return</h4>
+      <p>Accounts, order history, wishlist, alerts, lifecycle messages and targeted campaigns.</p>
+    </div>
+  </div>
+
+  <h3>Who should use this document</h3>
+  <table>
+    <tr><th>Audience</th><th>What this document explains</th><th>Primary outcome</th></tr>
+    <tr><td><strong>Business owner / leadership</strong></td><td>Commercial value, trust, conversion and retention model</td><td>Clear priorities and investment decisions</td></tr>
+    <tr><td><strong>Marketing team</strong></td><td>Acquisition, segmentation, campaigns, channels and measurement</td><td>Repeatable campaign operations</td></tr>
+    <tr><td><strong>End customers</strong></td><td>How the experience helps before, during and after a purchase</td><td>Confidence, convenience and loyalty</td></tr>
+    <tr><td><strong>Operations and technical teams</strong></td><td>Capabilities, dependencies, setup requirements and ownership</td><td>Reliable delivery and governance</td></tr>
+  </table>
+
+  <div class="callout navy">
+    <strong>Document principle:</strong> existing capabilities and recommended operating practices are separated.
+    A feature being technically available does not mean the related campaign or scheduled automation is already active.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 2</span></div>
+</section>
+
+<!-- 3. Journey map -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">User Journey</div>
+  </div>
+
+  <span class="eyebrow">End-to-End Lifecycle</span>
+  <h2>The complete customer journey</h2>
+  <p class="section-sub">
+    Each stage has a customer goal, an experience responsibility and a measurable business outcome.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><div class="number">Stage 1</div><div class="title">Awareness</div><div class="desc">Find Sara</div></div>
+    <div class="flow-step"><div class="number">Stage 2</div><div class="title">Discovery</div><div class="desc">Explore options</div></div>
+    <div class="flow-step"><div class="number">Stage 3</div><div class="title">Evaluation</div><div class="desc">Build confidence</div></div>
+    <div class="flow-step"><div class="number">Stage 4</div><div class="title">Purchase</div><div class="desc">Complete order</div></div>
+    <div class="flow-step"><div class="number">Stage 5</div><div class="title">Fulfilment</div><div class="desc">Receive safely</div></div>
+    <div class="flow-step"><div class="number">Stage 6</div><div class="title">Retention</div><div class="desc">Return and refer</div></div>
+  </div>
+
+  <div class="journey-row head">
+    <div>Stage</div><div>Customer need</div><div>Platform response</div><div>Business signal</div>
+  </div>
+  <div class="journey-row">
+    <div class="journey-stage">Awareness</div>
+    <div><p>Recognise the brand and understand why it is relevant.</p></div>
+    <div><p>Search visibility, campaign landing pages, brand pages, promotions, social links and store QR journeys.</p></div>
+    <div><p>Traffic source, landing-page engagement, campaign visits.</p></div>
+  </div>
+  <div class="journey-row">
+    <div class="journey-stage">Discovery</div>
+    <div><p>Quickly find products that match budget and need.</p></div>
+    <div><p>Search, suggestions, category navigation, filters, sorting, curated home sections and offers.</p></div>
+    <div><p>Searches, product-list views, filter use, product clicks.</p></div>
+  </div>
+  <div class="journey-row">
+    <div class="journey-stage">Evaluation</div>
+    <div><p>Understand value, quality, compatibility and availability.</p></div>
+    <div><p>Product images, specifications, price and MRP, reviews, compare, wishlist, delivery estimate and related products.</p></div>
+    <div><p>Product views, compare activity, wishlist additions, cart additions.</p></div>
+  </div>
+  <div class="journey-row">
+    <div class="journey-stage">Purchase</div>
+    <div><p>Pay with confidence and without unnecessary effort.</p></div>
+    <div><p>Persistent cart, quantity control, coupon validation, address entry, Razorpay or COD, clear order summary.</p></div>
+    <div><p>Checkout starts, coupon use, payment completion, abandonment.</p></div>
+  </div>
+  <div class="journey-row">
+    <div class="journey-stage">Fulfilment</div>
+    <div><p>Know what is happening and when the order will arrive.</p></div>
+    <div><p>Confirmation, order history, tracking status, invoice access and software licence fulfilment where applicable.</p></div>
+    <div><p>Status progression, delivery completion, support contacts.</p></div>
+  </div>
+  <div class="journey-row">
+    <div class="journey-stage">Retention</div>
+    <div><p>Receive useful reasons to return, not irrelevant messages.</p></div>
+    <div><p>Wishlist alerts, cart recovery, lifecycle campaigns, tailored offers, spin-wheel engagement and account history.</p></div>
+    <div><p>Repeat purchase, recovered carts, campaign conversion, unsubscribe rate.</p></div>
+  </div>
+
+  <div class="callout green">
+    <strong>Journey design rule:</strong> every message and screen should answer the customer's next question.
+    Marketing should continue the journey, not interrupt it.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 3</span></div>
+</section>
+
+<!-- 4. Discovery and decision -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Journey Detail</div>
+  </div>
+
+  <span class="eyebrow">Stages 1-3</span>
+  <h2>From first visit to purchase confidence</h2>
+  <p class="section-sub">
+    Electronics purchases are information-heavy. The experience reduces uncertainty progressively instead of
+    forcing a customer directly into checkout.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <span class="pill info">Awareness</span>
+      <h3>Bring qualified visitors</h3>
+      <ul>
+        <li>Search-friendly product, category and brand pages</li>
+        <li>Campaign-specific landing pages</li>
+        <li>Homepage banners, offers and merchandising</li>
+        <li>Physical-store QR and promotional journeys</li>
+        <li>Shareable product pages and WhatsApp sharing</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <span class="pill action">Discovery</span>
+      <h3>Help users narrow choices</h3>
+      <ul>
+        <li>Text search and suggestions</li>
+        <li>Category, sub-category and brand navigation</li>
+        <li>Price, availability, rating and product filters</li>
+        <li>Relevance, price, discount and rating sorting</li>
+        <li>Curated sections for deals and featured products</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <span class="pill live">Evaluation</span>
+      <h3>Remove buying anxiety</h3>
+      <ul>
+        <li>Image gallery and detailed specifications</li>
+        <li>MRP, selling price and discount visibility</li>
+        <li>Reviews and trust indicators</li>
+        <li>Wishlist and comparison for up to six products</li>
+        <li>Pincode delivery checks and related products</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Experience questions the platform should answer</h3>
+  <table>
+    <tr><th>Customer question</th><th>Experience answer</th><th>Desired effect</th></tr>
+    <tr><td>“Do you sell what I need?”</td><td>Clear taxonomy, search suggestions, filters and visible stock state</td><td>Faster product discovery</td></tr>
+    <tr><td>“Is this the right model?”</td><td>Specifications, variants, images, comparison and related products</td><td>Higher decision confidence</td></tr>
+    <tr><td>“Am I getting a fair deal?”</td><td>Transparent MRP, selling price, discounts, offers and coupon terms</td><td>Reduced price uncertainty</td></tr>
+    <tr><td>“Can Sara deliver to me?”</td><td>Pincode-based delivery validation and store locator</td><td>Fewer checkout surprises</td></tr>
+    <tr><td>“Can I trust this purchase?”</td><td>Reviews, trust badges, secure payment choices and visible policies</td><td>Lower perceived risk</td></tr>
+  </table>
+
+  <div class="callout navy">
+    <strong>UX priority:</strong> preserve the customer's context. Search terms, selected filters, wishlist items,
+    comparison choices and cart contents should help the user resume rather than restart.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 4</span></div>
+</section>
+
+<!-- 5. Conversion and fulfilment -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Journey Detail</div>
+  </div>
+
+  <span class="eyebrow">Stages 4-6</span>
+  <h2>From cart to delivery and the next purchase</h2>
+  <p class="section-sub">
+    Conversion is not complete at payment. A reliable post-purchase experience protects trust and creates
+    the permission to market to the customer again.
+  </p>
+
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Step 1</span>Cart review</div>
+      <div><p>Customer checks items, images, quantities, variants, pricing, tax, shipping and the free-shipping progress message.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Step 2</span>Customer details</div>
+      <div><p>Profile data can reduce repeat entry. Address, city, state, phone and pincode are validated before payment.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Step 3</span>Offer and payment</div>
+      <div><p>Coupon eligibility is checked and the customer chooses secure online payment through Razorpay or cash on delivery.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Step 4</span>Confirmation</div>
+      <div><p>The order record, payment status, customer summary and items are confirmed with a unique order reference.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Step 5</span>Tracking</div>
+      <div><p>Customers can follow progress from ordered and processing through shipping, transit and delivery.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Step 6</span>Re-engagement</div>
+      <div><p>Relevant follow-ups can use purchase history, cart, wishlist, activity and consent to select the right message.</p></div>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="card">
+      <div class="icon orange">C</div>
+      <h4>Conversion controls</h4>
+      <p>Coupon validation, clear totals, payment choices, delivery checks and error feedback reduce avoidable exits.</p>
+    </div>
+    <div class="card">
+      <div class="icon blue">T</div>
+      <h4>Trust controls</h4>
+      <p>Server-side pricing, payment verification, authenticated accounts and status visibility protect the transaction.</p>
+    </div>
+    <div class="card">
+      <div class="icon green">R</div>
+      <h4>Retention controls</h4>
+      <p>Consent-aware profiles, preference management and relevance rules protect the customer relationship.</p>
+    </div>
+  </div>
+
+  <div class="callout gold">
+    <strong>Operational dependency:</strong> cart recovery, wishlist alerts and lifecycle reminder logic exist,
+    but scheduled execution must be connected to Vercel Cron or another secure scheduler before these journeys run automatically.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 5</span></div>
+</section>
+
+<!-- 6. UX principles -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">User Experience</div>
+  </div>
+
+  <span class="eyebrow">Experience Framework</span>
+  <h2>Six principles for a consistent user experience</h2>
+  <p class="section-sub">
+    These principles should guide storefront changes, campaign landing pages, account features and customer communication.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <div class="icon">01</div>
+      <h4>Clarity before persuasion</h4>
+      <p>Show product, price, discount, availability, delivery and terms before asking for commitment.</p>
+    </div>
+    <div class="card orange">
+      <div class="icon orange">02</div>
+      <h4>Progressive information</h4>
+      <p>Lead with decision essentials, then provide specifications and policies for users who need depth.</p>
+    </div>
+    <div class="card green">
+      <div class="icon green">03</div>
+      <h4>Mobile-first action</h4>
+      <p>Keep search, filters, cart and primary purchase actions reachable on smaller screens.</p>
+    </div>
+    <div class="card">
+      <div class="icon blue">04</div>
+      <h4>Visible system status</h4>
+      <p>Use loading, success, error, stock, payment and order states so users always know what happened.</p>
+    </div>
+    <div class="card gold">
+      <div class="icon orange">05</div>
+      <h4>Trust through consistency</h4>
+      <p>Use consistent brand language, totals, policies, security signals and post-purchase communication.</p>
+    </div>
+    <div class="card soft">
+      <div class="icon">06</div>
+      <h4>Relevant personalisation</h4>
+      <p>Use behaviour and consent to reduce noise, not to create intrusive or unexplained experiences.</p>
+    </div>
+  </div>
+
+  <h3>Experience quality checklist</h3>
+  <div class="checklist">
+    <div class="check">Primary action is clear on every key page</div>
+    <div class="check">Prices and discounts remain consistent through checkout</div>
+    <div class="check">Errors explain how the customer can recover</div>
+    <div class="check">Forms request only information needed for the task</div>
+    <div class="check">Mobile layouts preserve essential product information</div>
+    <div class="check">Images have useful alternative text</div>
+    <div class="check">Keyboard focus and contrast remain visible</div>
+    <div class="check">Consent and unsubscribe choices are respected</div>
+    <div class="check">Campaign pages match the promise in the advertisement</div>
+    <div class="check">Order and payment states use plain language</div>
+    <div class="check">Slow network states do not appear as failure</div>
+    <div class="check">Support and store contact paths are easy to find</div>
+  </div>
+
+  <div class="callout navy">
+    <strong>Brand tone:</strong> confident, clear, modern and approachable. Avoid technical jargon in customer-facing
+    messages and explain the benefit before the feature.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 6</span></div>
+</section>
+
+<!-- 7. End customer audience -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Audience 1</div>
+  </div>
+
+  <div class="audience-banner">
+    <div class="badge">U</div>
+    <div><h3>End customers</h3><p>What users experience and why it benefits them</p></div>
+  </div>
+
+  <span class="eyebrow">User Benefits</span>
+  <h2>A simpler, safer and more useful buying journey</h2>
+  <p class="section-sub">
+    Customer value comes from reducing the effort, uncertainty and risk involved in purchasing electronics.
+  </p>
+
+  <div class="grid2">
+    <div class="card navy">
+      <h3>Find the right product faster</h3>
+      <ul>
+        <li>Search suggestions and structured category browsing</li>
+        <li>Filters for price, brand, rating, availability and product attributes</li>
+        <li>Sorting by relevance, price, discount and rating</li>
+        <li>Brand, offer and campaign pages for focused discovery</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <h3>Make a confident decision</h3>
+      <ul>
+        <li>Detailed product images and specifications</li>
+        <li>Transparent MRP, price and discount information</li>
+        <li>Product comparison, wishlist and reviews</li>
+        <li>Delivery estimation and store discovery</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <h3>Purchase with flexibility</h3>
+      <ul>
+        <li>Cart quantity and item management</li>
+        <li>Coupon validation before order completion</li>
+        <li>Online payment through Razorpay or cash on delivery</li>
+        <li>Saved account information for repeat convenience</li>
+      </ul>
+    </div>
+    <div class="card gold">
+      <h3>Stay informed after purchase</h3>
+      <ul>
+        <li>Order confirmation and history</li>
+        <li>Public order tracking and status timeline</li>
+        <li>Invoice access and software licence details where relevant</li>
+        <li>Useful alerts and offers based on consent and interest</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Customer promise by moment</h3>
+  <table>
+    <tr><th>Moment</th><th>Customer promise</th><th>Proof in the experience</th></tr>
+    <tr><td>Before purchase</td><td>“I can understand my options.”</td><td>Search, filters, specifications, comparison and pricing</td></tr>
+    <tr><td>At checkout</td><td>“I know what I am paying and why.”</td><td>Itemised totals, coupon feedback, payment choice and delivery validation</td></tr>
+    <tr><td>After payment</td><td>“My order has been received and is progressing.”</td><td>Confirmation, account history and tracking</td></tr>
+    <tr><td>After delivery</td><td>“Sara remembers my relationship, not only my transaction.”</td><td>Relevant lifecycle communication, preferences and tailored offers</td></tr>
+  </table>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 7</span></div>
+</section>
+
+<!-- 8. Business audience -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Audience 2</div>
+  </div>
+
+  <div class="audience-banner">
+    <div class="badge">B</div>
+    <div><h3>Business owner and leadership</h3><p>How the experience supports growth, efficiency and differentiation</p></div>
+  </div>
+
+  <span class="eyebrow">Business Benefits</span>
+  <h2>A platform for measurable customer value</h2>
+  <p class="section-sub">
+    The commercial opportunity is to connect storefront behaviour, transaction data and communication into
+    one managed customer lifecycle.
+  </p>
+
+  <div class="grid3">
+    <div class="card">
+      <div class="icon orange">C</div>
+      <h4>Conversion</h4>
+      <p>Better discovery, product confidence, offer validation and checkout clarity reduce avoidable purchase friction.</p>
+    </div>
+    <div class="card">
+      <div class="icon green">R</div>
+      <h4>Retention</h4>
+      <p>Cart, wishlist, profile and order signals support relevant reasons for customers to return.</p>
+    </div>
+    <div class="card">
+      <div class="icon blue">A</div>
+      <h4>Average order value</h4>
+      <p>Curated merchandising, related products, coupons and free-shipping nudges can influence basket size.</p>
+    </div>
+    <div class="card">
+      <div class="icon">O</div>
+      <h4>Operational visibility</h4>
+      <p>Admin tools support product, order, campaign, coupon, content and store management.</p>
+    </div>
+    <div class="card">
+      <div class="icon orange">D</div>
+      <h4>Data ownership</h4>
+      <p>First-party account, order, preference and engagement data reduces dependence on marketplace audiences.</p>
+    </div>
+    <div class="card">
+      <div class="icon green">S</div>
+      <h4>Service differentiation</h4>
+      <p>Store presence, local support and post-purchase relationships create value beyond price competition.</p>
+    </div>
+  </div>
+
+  <h3>Leadership dashboard</h3>
+  <table>
+    <tr><th>Business question</th><th>Recommended KPI</th><th>Decision enabled</th></tr>
+    <tr><td>Are qualified visitors becoming buyers?</td><td>Conversion rate, checkout completion, payment success</td><td>Prioritise UX and offer improvements</td></tr>
+    <tr><td>Are customers returning?</td><td>Repeat purchase rate, 90-day active customers</td><td>Adjust retention programmes</td></tr>
+    <tr><td>Are campaigns profitable?</td><td>Revenue per recipient, conversion, unsubscribe rate</td><td>Scale or stop campaigns</td></tr>
+    <tr><td>Where is demand strongest?</td><td>Searches, wishlist demand, category and brand views</td><td>Merchandising and inventory planning</td></tr>
+    <tr><td>Is the digital experience healthy?</td><td>Web Vitals, errors, abandonment and load performance</td><td>Technical investment priorities</td></tr>
+  </table>
+
+  <div class="callout green">
+    <strong>Management recommendation:</strong> review a small set of commercial and customer-health metrics weekly.
+    Avoid reporting activity metrics such as “emails sent” without revenue, engagement and opt-out outcomes.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 8</span></div>
+</section>
+
+<!-- 9. Marketing audience -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Audience 3</div>
+  </div>
+
+  <div class="audience-banner">
+    <div class="badge">M</div>
+    <div><h3>Marketing team</h3><p>How to turn platform capabilities into a repeatable growth system</p></div>
+  </div>
+
+  <span class="eyebrow">Marketing Benefits</span>
+  <h2>One lifecycle, multiple coordinated channels</h2>
+  <p class="section-sub">
+    Marketing can manage acquisition, on-site conversion and retention from shared customer signals rather than
+    running disconnected promotions.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <span class="pill info">Acquire</span>
+      <h3>Reach</h3>
+      <ul>
+        <li>SEO-ready catalogue and brand routes</li>
+        <li>Campaign landing pages</li>
+        <li>Seasonal homepage merchandising</li>
+        <li>Store QR and gamified entry points</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <span class="pill action">Convert</span>
+      <h3>Persuade</h3>
+      <ul>
+        <li>Offers and coupon campaigns</li>
+        <li>Featured products and curated sections</li>
+        <li>Trust content and product comparison</li>
+        <li>Cart and checkout conversion nudges</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <span class="pill live">Retain</span>
+      <h3>Re-engage</h3>
+      <ul>
+        <li>Email campaigns and templates</li>
+        <li>WhatsApp communication integration</li>
+        <li>Cart and wishlist lifecycle triggers</li>
+        <li>Segments based on value and activity</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Campaign briefing template</h3>
+  <table>
+    <tr><th>Field</th><th>Required decision</th><th>Example</th></tr>
+    <tr><td>Objective</td><td>One measurable commercial outcome</td><td>Recover high-value carts</td></tr>
+    <tr><td>Audience</td><td>Who qualifies and who must be excluded</td><td>Cart older than 2 hours; no completed order</td></tr>
+    <tr><td>Offer</td><td>Reason to act and commercial guardrail</td><td>Helpful reminder; optional limited coupon</td></tr>
+    <tr><td>Channel</td><td>Best channel for urgency and consent</td><td>Email first, WhatsApp only if opted in</td></tr>
+    <tr><td>Destination</td><td>Exact page that continues the promise</td><td>Restored cart or focused campaign page</td></tr>
+    <tr><td>Measurement</td><td>Success, failure and customer-health KPIs</td><td>Recovered revenue, conversion, unsubscribe</td></tr>
+  </table>
+
+  <div class="callout navy">
+    <strong>Operating rule:</strong> segment first, message second. A smaller relevant audience is more valuable
+    than a broad campaign that trains customers to ignore the brand.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 9</span></div>
+</section>
+
+<!-- 10. Operations and technical audience -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Audience 4</div>
+  </div>
+
+  <div class="audience-banner">
+    <div class="badge">O</div>
+    <div><h3>Operations and technical teams</h3><p>What must be configured, monitored and governed</p></div>
+  </div>
+
+  <span class="eyebrow">Delivery Responsibilities</span>
+  <h2>Reliable marketing depends on reliable operations</h2>
+  <p class="section-sub">
+    Campaign success requires accurate catalogue data, valid customer consent, configured channels,
+    secure scheduling and clear ownership of failures.
+  </p>
+
+  <table>
+    <tr><th>Capability</th><th>Platform position</th><th>Operational requirement</th><th>Owner</th></tr>
+    <tr><td>Email campaigns</td><td><span class="pill live">Available</span></td><td>Configure SMTP, sender identity, templates and test delivery</td><td>Marketing + Technical</td></tr>
+    <tr><td>WhatsApp messaging</td><td><span class="pill setup">Setup required</span></td><td>Configure AskEva credentials, approved templates, opt-in and fallback</td><td>Marketing + Technical</td></tr>
+    <tr><td>Cart recovery</td><td><span class="pill setup">Scheduler required</span></td><td>Connect secure cron trigger, test dry run, monitor sends and cap frequency</td><td>Technical + CRM</td></tr>
+    <tr><td>Wishlist alerts</td><td><span class="pill setup">Scheduler required</span></td><td>Define price-drop/restock rules and connect scheduled execution</td><td>Merchandising + Technical</td></tr>
+    <tr><td>Lifecycle reminders</td><td><span class="pill setup">Scheduler required</span></td><td>Approve lifecycle rules, timing, exclusions and message content</td><td>CRM + Technical</td></tr>
+    <tr><td>Customer segmentation</td><td><span class="pill live">Available</span></td><td>Rebuild profiles, validate segment definitions and suppress ineligible users</td><td>CRM / Analytics</td></tr>
+    <tr><td>Campaign pages</td><td><span class="pill live">Available</span></td><td>Prepare creative, products, slug, dates, tracking and QA</td><td>Marketing + Merchandising</td></tr>
+    <tr><td>Analytics</td><td><span class="pill live">Available</span></td><td>Confirm GA4/event settings, naming standards and dashboard ownership</td><td>Analytics + Technical</td></tr>
+  </table>
+
+  <h3>Pre-launch controls</h3>
+  <div class="checklist">
+    <div class="check">Product price, stock and images are current</div>
+    <div class="check">Audience count matches the segment rule</div>
+    <div class="check">Unsubscribed users are excluded</div>
+    <div class="check">Links open the correct campaign destination</div>
+    <div class="check">Coupon eligibility and expiry are tested</div>
+    <div class="check">Email and mobile rendering are reviewed</div>
+    <div class="check">Tracking parameters follow the naming standard</div>
+    <div class="check">A campaign owner and rollback plan are assigned</div>
+  </div>
+
+  <div class="callout gold">
+    <strong>Risk control:</strong> automated sends should fail visibly. Channel errors, scheduler failures and
+    invalid configuration must create an operational alert rather than silently appearing successful.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 10</span></div>
+</section>
+
+<!-- 11. Marketing setup architecture -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Marketing Setup</div>
+  </div>
+
+  <span class="eyebrow">Operating Model</span>
+  <h2>The customer marketing system</h2>
+  <p class="section-sub">
+    The setup should connect customer signals to decisions, messages, destinations and measurement.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><div class="number">Input</div><div class="title">Signals</div><div class="desc">Search, view, cart, wishlist, order</div></div>
+    <div class="flow-step"><div class="number">Decision</div><div class="title">Segments</div><div class="desc">Value, recency, intent, consent</div></div>
+    <div class="flow-step"><div class="number">Message</div><div class="title">Campaign</div><div class="desc">Offer, content, timing</div></div>
+    <div class="flow-step"><div class="number">Delivery</div><div class="title">Channel</div><div class="desc">On-site, email, WhatsApp</div></div>
+    <div class="flow-step"><div class="number">Action</div><div class="title">Destination</div><div class="desc">Product, cart, campaign, store</div></div>
+    <div class="flow-step"><div class="number">Learning</div><div class="title">Measure</div><div class="desc">Revenue, conversion, health</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card navy">
+      <h3>1. Data and identity</h3>
+      <p>Use account, profile, order, cart, wishlist, campaign and preference data. Identity must come from the authenticated session; consent status governs communication eligibility.</p>
+    </div>
+    <div class="card orange">
+      <h3>2. Segmentation</h3>
+      <p>Create mutually understandable segments such as new, active, high-value, dormant, cart-intent, wishlist-intent and category-interest. Document entry and exit rules.</p>
+    </div>
+    <div class="card green">
+      <h3>3. Content and offer</h3>
+      <p>Maintain reusable templates for new products, promotional codes, major sales, festivals and custom messages. Keep product and offer claims consistent with the destination page.</p>
+    </div>
+    <div class="card gold">
+      <h3>4. Orchestration</h3>
+      <p>Define trigger, delay, channel, frequency cap, exclusion and stop condition. Scheduled journeys require a secure external scheduler and cron secret.</p>
+    </div>
+    <div class="card">
+      <h3>5. Delivery channels</h3>
+      <p>Use on-site merchandising for all visitors, email for rich lifecycle content and WhatsApp for consented, timely communication. Do not send the same message everywhere by default.</p>
+    </div>
+    <div class="card soft">
+      <h3>6. Measurement and learning</h3>
+      <p>Track campaign identity from message to destination and order. Compare against a baseline or control group where practical, then record the learning for the next campaign.</p>
+    </div>
+  </div>
+
+  <div class="callout green">
+    <strong>Minimum viable setup:</strong> one agreed segment dictionary, one campaign naming standard,
+    one consent policy, one measurement dashboard and one accountable owner per campaign.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 11</span></div>
+</section>
+
+<!-- 12. Acquisition and conversion -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Marketing Setup</div>
+  </div>
+
+  <span class="eyebrow">Acquisition and Conversion</span>
+  <h2>Turn campaigns into connected shopping journeys</h2>
+  <p class="section-sub">
+    Every acquisition campaign should land on a page that continues the message and makes the next action obvious.
+  </p>
+
+  <table>
+    <tr><th>Campaign type</th><th>Audience</th><th>Experience destination</th><th>Primary measure</th></tr>
+    <tr><td>Brand launch</td><td>Category and brand prospects</td><td>Brand page with hero, categories, products and lead path</td><td>Product views and assisted conversion</td></tr>
+    <tr><td>Festival / seasonal sale</td><td>Broad qualified audience</td><td>Campaign page with selected products, offers and expiry</td><td>Revenue and conversion</td></tr>
+    <tr><td>New product announcement</td><td>Relevant category-interest segment</td><td>Product detail or focused collection</td><td>Qualified visits, wishlist and sales</td></tr>
+    <tr><td>Store activation</td><td>Local and in-store audience</td><td>QR entry, store page, spin wheel or campaign landing</td><td>Visits, leads and store-attributed action</td></tr>
+    <tr><td>Coupon promotion</td><td>Eligibility-based segment</td><td>Products where the coupon is valid</td><td>Redemption and incremental margin</td></tr>
+  </table>
+
+  <h3>Conversion setup by page</h3>
+  <div class="grid3">
+    <div class="card">
+      <span class="pill info">Landing page</span>
+      <ul>
+        <li>Match campaign headline and creative</li>
+        <li>Show eligibility and end date</li>
+        <li>Feature a single primary action</li>
+        <li>Use campaign-specific tracking</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="pill action">Product page</span>
+      <ul>
+        <li>Lead with availability and price</li>
+        <li>Explain specifications and value</li>
+        <li>Show review and trust content</li>
+        <li>Keep add-to-cart action visible</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="pill live">Checkout</span>
+      <ul>
+        <li>Preserve offer and cart context</li>
+        <li>Validate coupons clearly</li>
+        <li>Show itemised total before payment</li>
+        <li>Measure payment and form failures</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Recommended acquisition tracking convention</h3>
+  <div class="callout navy">
+    <strong>Campaign name:</strong> YYYYMM_objective_audience_offer &nbsp; | &nbsp;
+    <strong>UTM source:</strong> channel or partner &nbsp; | &nbsp;
+    <strong>UTM medium:</strong> paid-social, email, whatsapp, qr, organic &nbsp; | &nbsp;
+    <strong>UTM campaign:</strong> the campaign name.
+  </div>
+
+  <div class="callout gold">
+    <strong>Commercial guardrail:</strong> discount is not the only conversion tool. Improve product clarity,
+    delivery confidence, trust, financing visibility and service value before increasing promotional cost.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 12</span></div>
+</section>
+
+<!-- 13. Retention and segmentation -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Marketing Setup</div>
+  </div>
+
+  <span class="eyebrow">Retention and Segmentation</span>
+  <h2>Use customer intent to create useful follow-up</h2>
+  <p class="section-sub">
+    Retention should begin with the customer's context: what they considered, what they bought,
+    how recently they engaged and what communication they permitted.
+  </p>
+
+  <table>
+    <tr><th>Segment</th><th>Entry signal</th><th>Recommended journey</th><th>Guardrail</th></tr>
+    <tr><td>New subscriber</td><td>Account or marketing opt-in</td><td>Welcome, value proposition, store and category discovery</td><td>Do not immediately overload with promotions</td></tr>
+    <tr><td>High-intent cart</td><td>Cart with no completed order</td><td>Reminder, assistance, stock or offer context</td><td>Stop after order; cap reminders</td></tr>
+    <tr><td>Wishlist intent</td><td>Saved product</td><td>Price-drop, restock or product-update alert</td><td>Only message on meaningful change</td></tr>
+    <tr><td>First-time buyer</td><td>First completed order</td><td>Delivery guidance, support, review and next-best category</td><td>Prioritise service over immediate upsell</td></tr>
+    <tr><td>High-value customer</td><td>Spend/order threshold</td><td>Early access, service benefits and curated recommendations</td><td>Use margin-aware rewards</td></tr>
+    <tr><td>Dormant customer</td><td>No meaningful activity for defined period</td><td>Preference check, relevant category news or reactivation offer</td><td>Stop if unresponsive; protect sender reputation</td></tr>
+  </table>
+
+  <h3>Recommended lifecycle sequence</h3>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Immediately</span>Transactional</div>
+      <div><p>Confirmation, payment, delivery and service messages. These must be accurate, timely and separate from promotion.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Short term</span>Assistance</div>
+      <div><p>Help incomplete journeys: abandoned cart, failed payment, product questions or delivery uncertainty.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Medium term</span>Value</div>
+      <div><p>Relevant product education, complementary categories, wishlist changes and service reminders.</p></div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Long term</span>Relationship</div>
+      <div><p>Replenishment, upgrade cycles, seasonal needs, loyalty recognition and local store engagement.</p></div>
+    </div>
+  </div>
+
+  <div class="callout gold">
+    <strong>Activation note:</strong> retention routes support dry-run operation and secure cron authentication.
+    Launch each automation in dry-run mode, validate audience and message volume, then enable scheduled delivery.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 13</span></div>
+</section>
+
+<!-- 14. Channels and analytics -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Marketing Setup</div>
+  </div>
+
+  <span class="eyebrow">Channels and Measurement</span>
+  <h2>Choose the right channel and measure the full outcome</h2>
+  <p class="section-sub">
+    Channel choice should depend on urgency, content depth, customer preference and consent.
+  </p>
+
+  <div class="grid3">
+    <div class="card navy">
+      <h3>On-site</h3>
+      <p><strong>Best for:</strong> merchandising, broad promotions, contextual offers and product education.</p>
+      <p><strong>Tools:</strong> hero slides, home sections, banners, campaign pages, offers and featured products.</p>
+      <p><strong>Measure:</strong> engagement, product views, add-to-cart and conversion.</p>
+    </div>
+    <div class="card orange">
+      <h3>Email</h3>
+      <p><strong>Best for:</strong> rich campaigns, product stories, lifecycle content and less urgent reminders.</p>
+      <p><strong>Tools:</strong> templates, recipient selection, segments, batch sending and campaign history.</p>
+      <p><strong>Measure:</strong> delivery, click, conversion, revenue and unsubscribe.</p>
+    </div>
+    <div class="card green">
+      <h3>WhatsApp</h3>
+      <p><strong>Best for:</strong> consented, timely and concise communication with a clear action.</p>
+      <p><strong>Tools:</strong> AskEva integration used by notification workflows; configuration is required.</p>
+      <p><strong>Measure:</strong> delivery, response, conversion and opt-out.</p>
+    </div>
+  </div>
+
+  <h3>Measurement framework</h3>
+  <table>
+    <tr><th>Layer</th><th>Core measures</th><th>What it reveals</th></tr>
+    <tr><td>Reach</td><td>Qualified sessions, source, campaign visits</td><td>Whether the intended audience arrived</td></tr>
+    <tr><td>Engagement</td><td>Search, filters, product views, wishlist, compare</td><td>Whether the content helped evaluation</td></tr>
+    <tr><td>Conversion</td><td>Add-to-cart, checkout start, payment success, orders</td><td>Where buying intent becomes revenue or drops</td></tr>
+    <tr><td>Retention</td><td>Repeat orders, recovered carts, reactivation, active customers</td><td>Whether the relationship continues</td></tr>
+    <tr><td>Customer health</td><td>Unsubscribe, complaint, failed sends, support contact</td><td>Whether growth activity damages trust</td></tr>
+    <tr><td>Experience health</td><td>Web Vitals, errors, latency and failed API actions</td><td>Whether technical quality limits commercial results</td></tr>
+  </table>
+
+  <div class="metric-strip">
+    <div class="metric"><div class="value">Revenue</div><div class="label">Commercial result</div></div>
+    <div class="metric"><div class="value">Conversion</div><div class="label">Journey effectiveness</div></div>
+    <div class="metric"><div class="value">Retention</div><div class="label">Relationship value</div></div>
+    <div class="metric"><div class="value">Opt-out</div><div class="label">Customer guardrail</div></div>
+  </div>
+
+  <div class="callout navy">
+    <strong>Reporting standard:</strong> every campaign report should state objective, audience, cost or discount,
+    delivered volume, conversion, revenue, customer-health impact and the next decision.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 14</span></div>
+</section>
+
+<!-- 15. Implementation roadmap -->
+<section class="page">
+  <div class="page-head">
+    <div class="brand-lockup"><img src="../../public/sara-logo.png" alt="" />SARA <span>ELECTRONICS</span></div>
+    <div class="page-tag">Recommended Roadmap</div>
+  </div>
+
+  <span class="eyebrow">Activation Plan</span>
+  <h2>A practical four-phase rollout</h2>
+  <p class="section-sub">
+    Start with foundations and one measurable journey. Expand only after delivery, consent and reporting are reliable.
+  </p>
+
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Phase 1</span>Foundation</div>
+      <div>
+        <p><strong>Goal:</strong> make data, channels and ownership trustworthy.</p>
+        <p>Confirm sender configuration, WhatsApp setup, consent rules, campaign naming, analytics events,
+        segment definitions, product data quality and responsible owners.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Phase 2</span>Conversion</div>
+      <div>
+        <p><strong>Goal:</strong> improve the existing buying journey.</p>
+        <p>Review top landing pages, product detail clarity, coupon experience, checkout errors, payment success,
+        mobile usability and campaign-to-page consistency.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Phase 3</span>Retention pilot</div>
+      <div>
+        <p><strong>Goal:</strong> activate one controlled lifecycle journey.</p>
+        <p>Connect the scheduler, run cart recovery in dry-run mode, validate exclusions and frequency,
+        enable a limited audience, then measure recovered revenue and opt-outs.</p>
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-when"><span>Phase 4</span>Scale</div>
+      <div>
+        <p><strong>Goal:</strong> add journeys without adding noise.</p>
+        <p>Introduce wishlist alerts, lifecycle reminders, high-value recognition, dormant reactivation,
+        seasonal campaigns and controlled experimentation.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Definition of success</h3>
+  <div class="grid4">
+    <div class="card"><h4>Customer</h4><p>Less effort, greater confidence and useful communication.</p></div>
+    <div class="card"><h4>Marketing</h4><p>Repeatable campaigns with attributable outcomes.</p></div>
+    <div class="card"><h4>Operations</h4><p>Clear ownership, reliable execution and visible failures.</p></div>
+    <div class="card"><h4>Business</h4><p>Higher conversion, retention and lifetime value without harming trust.</p></div>
+  </div>
+
+  <div class="callout green">
+    <strong>Recommended first action:</strong> complete the marketing foundation checklist, then launch one
+    cart-recovery pilot with a defined audience, dry run, frequency cap and revenue dashboard.
+  </div>
+
+  <div class="callout navy">
+    This document is designed for screen presentation and A4 PDF export. In a browser, use
+    <strong>Print &gt; Save as PDF</strong>, enable background graphics, choose A4, and set margins to none.
+  </div>
+
+  <div class="footer"><span>User Journey, Experience and Marketing Setup</span><span>Page 15</span></div>
+</section>
+
+</body>
+</html>

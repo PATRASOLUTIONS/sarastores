@@ -88,7 +88,10 @@ export default function AdminComplaints() {
       })
 
       if (response.ok) {
-        alert("Status updated successfully! Customer will receive an email notification.")
+        const data = await response.json()
+        alert(data.notification?.status === "sent"
+          ? "Status updated successfully! Customer email was accepted for delivery."
+          : "Status updated, but the customer email could not be sent.")
         fetchComplaints()
         setSelectedComplaint(null)
         setNewStatus("")

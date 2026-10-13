@@ -3,6 +3,7 @@ import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
 import { buildSessionPayload, verifyCredentials } from "@/lib/auth-credentials"
 import { LoginSchema } from "@/lib/validation"
+import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
+    if (error instanceof RateLimitUnavailableError) return handleApiError(error)
     console.error("Login error:", error)
     return NextResponse.json({ message: "An error occurred during login. Please try again." }, { status: 500 })
   }

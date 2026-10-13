@@ -12,6 +12,7 @@ import AddToCartButton from "@/components/AddToCartButton"
 import { useCart } from "@/hooks/useCart"
 import HeroSection from "@/components/HeroSection"
 import CategoryProductCard from "@/components/CategoryProductCard"
+import CategoryLoading from "@/components/category/CategoryLoading"
 import * as Slider from '@radix-ui/react-slider';
 import { formatPrice } from "@/utils/formatPrice";
 import { normalizeProductForSchema } from "@/lib/product-schema"
@@ -24,30 +25,9 @@ import {
   type FacetSelection,
 } from "@/lib/product-facets"
 import SpecFacets from "@/components/SpecFacets"
-
-interface Product {
-  id: string
-  name: string
-  description: string
-  price: number
-  image: string
-  stock: number
-  category?: string
-  manufacturer?: string
-  manufacturerName?: string
-  color?: string
-  capacity?: string
-  images?: string[]
-  sku?: string
-  type?: string
-}
-
-interface Category {
-  id: string
-  name: string
-  description: string
-  image: string
-}
+import { subCategoryProductResponseSchema, type SubCategoryProductResponse } from "@/lib/product-card-response"
+import { catalogCategoryListResponseSchema, type CatalogCategoryResponse } from "@/lib/catalog-list-response"
+import { z } from "zod"
 
 // Add this helper function near the top of the file, after the interfaces
 const capitalizeFirstLetter = (string: string) => {
@@ -55,23 +35,23 @@ const capitalizeFirstLetter = (string: string) => {
   return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
 }
 
-const getCanonicalMeta = (product: any) => normalizeProductForSchema(product)
-const getProductType = (product: any) => String(product?.type || getCanonicalMeta(product).subCategoryProdDesc || "")
-const getProductBrand = (product: any) => String(getCanonicalMeta(product).manufacturerName || "")
-const getProductCharDesc = (product: any) => String(getCanonicalMeta(product).charDesc || "")
+const getCanonicalMeta = (product: SubCategoryProductResponse) => normalizeProductForSchema(product)
+const getProductType = (product: SubCategoryProductResponse) => String(product?.type || getCanonicalMeta(product).subCategoryProdDesc || "")
+const getProductBrand = (product: SubCategoryProductResponse) => String(getCanonicalMeta(product).manufacturerName || "")
+const getProductCharDesc = (product: SubCategoryProductResponse) => String(getCanonicalMeta(product).charDesc || "")
 
 export default function CategoryPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [products, setProducts] = useState<Product[]>([])
-  const [category, setCategory] = useState<Category | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [products, setProducts] = useState<SubCategoryProductResponse[]>([])
+  const [category, setCategory] = useState<CatalogCategoryResponse | null>(null)
+  const [categories, setCategories] = useState<CatalogCategoryResponse[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const params = useParams()
+  const params = useParams<{ id: string }>()
   const { cart } = useCart()
   // Decode URL: replace hyphens with spaces and decode URI
-  const categoryName = decodeURIComponent(params.id as string).replace(/-/g, ' ')
+  const categoryName = decodeURIComponent(params.id).replace(/-/g, ' ')
 
   // Filter state variables
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
@@ -111,13 +91,14 @@ export default function CategoryPage() {
       if (!categoriesResponse.ok) {
         throw new Error("Failed to fetch categories")
       }
-      const allCategories: Category[] = await categoriesResponse.json()
+      const allCategories = catalogCategoryListResponseSchema.parse(await categoriesResponse.json())
 
       // The route param may be a category id or a (possibly hyphenated) name.
-      const rawParam = decodeURIComponent(params.id as string)
+      const rawParam = decodeURIComponent(params.id)
       const categoryData = allCategories.find(
         (cat) =>
           cat.id === rawParam ||
+          cat.slug === rawParam ||
           cat.name.toLowerCase() === categoryName.toLowerCase() ||
           cat.name.toLowerCase() === rawParam.toLowerCase(),
       )
@@ -133,16 +114,17 @@ export default function CategoryPage() {
         `/api/products?category=${encodeURIComponent(categoryData.name)}`,
       )
       if (!productsResponse.ok) throw new Error("Failed to fetch products")
-      const scoped: Product[] = await productsResponse.json()
+      const scoped = z.array(subCategoryProductResponseSchema).parse(await productsResponse.json())
 
       const categoryKey = categoryData.name.trim().toLowerCase()
-      let categoryProducts = Array.isArray(scoped) ? scoped : []
+      let categoryProducts = scoped
 
       if (categoryProducts.length === 0) {
         // Legacy rows may hold the category id, or only a groupName.
         const allResponse = await fetch("/api/products")
-        const allProducts: Product[] = allResponse.ok ? await allResponse.json() : []
-        categoryProducts = (Array.isArray(allProducts) ? allProducts : []).filter((product: any) => {
+        if (!allResponse.ok) throw new Error("Failed to load legacy category products")
+        const allProducts = z.array(subCategoryProductResponseSchema).parse(await allResponse.json())
+        categoryProducts = allProducts.filter((product) => {
           const own = String(product?.category ?? "").trim().toLowerCase()
           const group = String(product?.groupName ?? "").trim().toLowerCase()
           return own === categoryKey || group === categoryKey || own === categoryData.id
@@ -153,17 +135,17 @@ export default function CategoryPage() {
 
       // Extract unique filter values from category products only
       const uniqueTypes = Array.from(
-        new Set(categoryProducts.map((p: any) => getProductType(p)).filter(Boolean))
+        new Set(categoryProducts.map((p) => getProductType(p)).filter(Boolean))
       )
       setTypes(uniqueTypes)
 
       const uniqueBrands = Array.from(
         new Set(categoryProducts.map((p) => getProductBrand(p)).filter(Boolean))
-      ) as string[]
+      )
       setBrands(uniqueBrands)
 
       const uniqueCharDescs = Array.from(
-        new Set(categoryProducts.map((p: any) => getProductCharDesc(p)).filter(Boolean))
+        new Set(categoryProducts.map((p) => getProductCharDesc(p)).filter(Boolean))
       )
       setCharDescs(uniqueCharDescs)
 
@@ -181,7 +163,7 @@ export default function CategoryPage() {
   }
 
   // Filter products based on search term and other filters
-  const nonFacetMatches = products.filter((product: any) => {
+  const nonFacetMatches = products.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -217,7 +199,7 @@ export default function CategoryPage() {
   // Facets are built before the facet filter is applied, so selecting "55 inch"
   // doesn't make every other size disappear from the sidebar.
   const facets = buildFacets(nonFacetMatches)
-  const filteredProducts = nonFacetMatches.filter((product: any) =>
+  const filteredProducts = nonFacetMatches.filter((product) =>
     matchesFacets(product, facetSelection),
   )
 
@@ -291,15 +273,7 @@ export default function CategoryPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-grow flex justify-center items-center" id="main-content">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-800" role="status" aria-label="Loading"></div>
-        </main>
-        <Footer />
-      </div>
-    )
+    return <CategoryLoading />
   }
 
   if (error || !category) {
@@ -325,40 +299,6 @@ export default function CategoryPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      {/* Category SEO: BreadcrumbList + ItemList JSON-LD (server-safe) */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BreadcrumbList",
-            itemListElement: [
-              { "@type": "ListItem", position: 1, name: "Home", item: "https://bytewise.shop" },
-              { "@type": "ListItem", position: 2, name: "Products", item: "https://bytewise.shop/products" },
-              { "@type": "ListItem", position: 3, name: capitalizeFirstLetter(category?.name || "Category") },
-            ],
-          }),
-        }}
-      />
-      {filteredProducts.length > 0 && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "ItemList",
-              name: capitalizeFirstLetter(category?.name || "Products"),
-              numberOfItems: filteredProducts.length,
-              itemListElement: filteredProducts.slice(0, 50).map((p: any, idx: number) => ({
-                "@type": "ListItem",
-                position: idx + 1,
-                url: `https://bytewise.shop/product/${p.id || p._id}`,
-                name: p.name,
-              })),
-            }),
-          }}
-        />
-      )}
       <main className="flex-grow" id="main-content">
         {/* Hero Banner with Category Info */}
         {/* <div className="bg-blue-800 text-white py-12">
@@ -463,26 +403,28 @@ export default function CategoryPage() {
                     </div>
                     {openFilters.price && (
                       <div className="px-2">
-                        <Slider.Root
-                          className="relative flex items-center select-none touch-none h-5 mb-4"
-                          value={priceRange}
-                          max={200000}
-                          step={1000}
-                          minStepsBetweenThumbs={1}
-                          onValueChange={(value) => setPriceRange(value as [number, number])}
-                        >
-                          <Slider.Track className="bg-gray-200 relative grow rounded-full h-[3px]">
-                            <Slider.Range className="absolute bg-blue-600 rounded-full h-full" />
-                          </Slider.Track>
-                          <Slider.Thumb
-                            className="block w-5 h-5 bg-white border-2 border-blue-600 rounded-full hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            aria-label="Min price"
-                          />
-                          <Slider.Thumb
-                            className="block w-5 h-5 bg-white border-2 border-blue-600 rounded-full hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            aria-label="Max price"
-                          />
-                        </Slider.Root>
+                        {([0, 1] as const).map((index) => (
+                          <div key={index} className="mb-4">
+                            <p className="mb-1 text-xs text-gray-600">{index === 0 ? "Minimum price" : "Maximum price"}</p>
+                            <Slider.Root
+                              className="relative flex h-6 touch-none select-none items-center"
+                              value={[priceRange[index]]}
+                              max={200000}
+                              step={1000}
+                              onValueChange={([value]) => setPriceRange(index === 0
+                                ? [Math.min(value, Math.max(0, priceRange[1] - 1000)), priceRange[1]]
+                                : [priceRange[0], Math.max(value, Math.min(200000, priceRange[0] + 1000))])}
+                            >
+                              <Slider.Track className="relative h-[3px] grow rounded-full bg-gray-200">
+                                <Slider.Range className="absolute h-full rounded-full bg-blue-600" />
+                              </Slider.Track>
+                              <Slider.Thumb
+                                className="block h-6 w-6 rounded-full border-2 border-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                aria-label={index === 0 ? "Min price" : "Max price"}
+                              />
+                            </Slider.Root>
+                          </div>
+                        ))}
 
                         <div className="flex justify-between items-center gap-4 mt-2">
                           <div className="flex-1">

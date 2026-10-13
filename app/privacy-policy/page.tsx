@@ -1,4 +1,3 @@
-import type { Metadata } from "next"
 import type { ReactNode } from "react"
 import Link from "next/link"
 import Header from "@/components/Header"
@@ -11,12 +10,6 @@ import {
   DPDP_AGE_OF_MAJORITY,
   isDpdpConfigComplete,
 } from "@/lib/dpdp-config"
-
-export const metadata: Metadata = {
-  title: "Privacy Notice",
-  description:
-    "How Sara Mobiles and Electronics collects, uses, shares and protects your personal data under India's Digital Personal Data Protection Act, 2023.",
-}
 
 // Read at request time so a change to the grievance officer or legal entity in
 // the environment takes effect without a rebuild.
@@ -90,7 +83,7 @@ export default function PrivacyPolicy() {
             We collect only what a specified purpose actually needs. Each row below is a purpose; we do not
             reuse data for a purpose that is not listed without asking you first.
           </p>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Data collection and purposes">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100 text-left">
@@ -207,7 +200,7 @@ export default function PrivacyPolicy() {
             We share the minimum needed, with the organisations below, under contract. None of them may use
             your data for their own marketing.
           </p>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Data recipients">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100 text-left">
@@ -244,7 +237,7 @@ export default function PrivacyPolicy() {
             We erase personal data once the purpose it was collected for is served and no law requires us to
             keep it. This is enforced automatically, not by hand.
           </p>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Data retention schedule">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100 text-left">
@@ -273,7 +266,7 @@ export default function PrivacyPolicy() {
         </Section>
 
         <Section id="rights" title="6. Your rights, and how to use them">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Privacy rights">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100 text-left">

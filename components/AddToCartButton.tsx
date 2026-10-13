@@ -73,11 +73,8 @@ export default function AddToCartButton({
         stock: product.stock,
       }
 
-      if (isInCart && cartItem) {
-        await updateQuantity(cartItem.id, (cartItem.quantity || 0) + quantity)
-      } else {
-        await addToCart(cartItem)
-      }
+      const added = await addToCart(cartItem)
+      if (!added) return
 
       toast.success(`${quantity} ${product.name} added to cart!`)
 

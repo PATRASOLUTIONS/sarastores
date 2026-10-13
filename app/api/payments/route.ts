@@ -56,8 +56,8 @@ export async function GET(request: Request) {
           }
           
         }
-      } catch (err: any) {
-        console.error(`Failed to fetch Razorpay payment ${p.razorpayPaymentId}:`, err?.message || err)
+      } catch (err) {
+        console.error(`Failed to fetch Razorpay payment ${p.razorpayPaymentId}:`, err instanceof Error ? err.message : err)
         // continue without failing the whole request
       }
     }

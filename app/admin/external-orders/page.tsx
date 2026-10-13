@@ -1,24 +1,28 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
 
-import { apiFetch } from "@/lib/api-client"
+
+import { apiFetchJson } from "@/lib/api-client"
 import { useEffect, useState } from "react"
+import { useSubmitLock } from "@/hooks/useSubmitLock"
+import { z } from "zod"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import { Copy, RefreshCw, X } from "lucide-react"
 
-interface ExternalOrder {
-  _id: string
-  queueId?: string
-  provider?: string
-  orderId?: string
-  userId?: string
-  status?: string
-  externalOrderId?: string
-  createdAt?: string
-  updatedAt?: string
-  response?: any
-}
+const externalOrderSchema = z.object({
+  id: z.string().min(1), queueId: z.string().nullish(), provider: z.string().nullish(),
+  orderId: z.string().nullish(), userId: z.string().nullish(), status: z.string().nullish(),
+  externalOrderId: z.string().nullish(), createdAt: z.string().nullish(), updatedAt: z.string().nullish(),
+  response: z.unknown().optional(),
+}).passthrough()
+type ExternalOrder = z.infer<typeof externalOrderSchema>
+const queueListSchema = z.object({
+  success: z.literal(true), items: z.array(externalOrderSchema), total: z.number().int().nonnegative(),
+  page: z.number().int().positive(), limit: z.number().int().positive(),
+})
+const queueMutationSchema = z.object({ success: z.literal(true), item: externalOrderSchema, message: z.string().min(1) })
 
 export default function ExternalOrdersPage() {
   const { user, isLoading: authLoading, canAccessAdmin } = useAuth()
@@ -28,6 +32,9 @@ export default function ExternalOrdersPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [selected, setSelected] = useState<ExternalOrder | null>(null)
+  const actionLock = useSubmitLock()
+  const [actionPending, setActionPending] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -37,45 +44,57 @@ export default function ExternalOrdersPage() {
 
   const fetchPage = async () => {
     setIsLoading(true)
+    setLoadError(null)
     try {
-      const res = await apiFetch(`/api/admin/external-orders?limit=${limit}&page=${page}`)
-      if (!res.ok) throw new Error('Failed to fetch')
-      const data = await res.json()
-      setItems(data.items || [])
-      setHasMore((data.items || []).length === limit)
+      const data = await apiFetchJson(`/api/admin/external-orders?limit=${limit}&page=${page}`,
+        { signal: AbortSignal.timeout(12_000) }, value => queueListSchema.parse(value))
+      setItems(data.items)
+      setHasMore(data.page * data.limit < data.total)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to load external orders')
+      const message = getErrorMessage(err, 'Failed to load external orders')
+      setLoadError(message)
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleRetry = async (id: string) => {
-    if (!confirm('Retry this external order? This will re-attempt placement with the provider.')) return
+    if (!confirm('Check whether this fulfillment is still queued? Provider placement is never automatically retried.')) return
+    if (!actionLock.acquire()) return
+    setActionPending(true)
     try {
-      const res = await apiFetch(`/api/admin/external-orders/${id}/retry`, { method: 'POST' })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || 'Retry failed')
-      toast.success('Retry submitted')
-      fetchPage()
-    } catch (err: any) {
+      const data = await apiFetchJson(`/api/admin/external-orders/${encodeURIComponent(id)}/retry`,
+        { method: 'POST', signal: AbortSignal.timeout(12_000) }, value => queueMutationSchema.parse(value))
+      if (data.item.id !== id || data.item.status !== "queued") throw new Error("Queue acknowledgement did not match")
+      toast.success(data.message)
+      await fetchPage()
+    } catch (err) {
       console.error(err)
-      toast.error(err?.message || 'Retry failed')
+      toast.error(getErrorMessage(err, 'Retry failed'))
+    } finally {
+      actionLock.release()
+      setActionPending(false)
     }
   }
 
   const handleCancel = async (id: string) => {
     if (!confirm('Cancel this queued external order? This will mark it cancelled and prevent further attempts.')) return
+    if (!actionLock.acquire()) return
+    setActionPending(true)
     try {
-      const res = await apiFetch(`/api/admin/external-orders/${id}/cancel`, { method: 'POST' })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || 'Cancel failed')
-      toast.success('Cancelled')
-      fetchPage()
-    } catch (err: any) {
+      const data = await apiFetchJson(`/api/admin/external-orders/${encodeURIComponent(id)}/cancel`,
+        { method: 'POST', signal: AbortSignal.timeout(12_000) }, value => queueMutationSchema.parse(value))
+      if (data.item.id !== id || data.item.status !== "cancelled") throw new Error("Cancellation acknowledgement did not match")
+      toast.success(data.message)
+      await fetchPage()
+    } catch (err) {
       console.error(err)
-      toast.error(err?.message || 'Cancel failed')
+      toast.error(getErrorMessage(err, 'Cancel failed'))
+    } finally {
+      actionLock.release()
+      setActionPending(false)
     }
   }
 
@@ -106,6 +125,9 @@ export default function ExternalOrdersPage() {
       </div>
 
       <div className="bg-white rounded shadow p-4">
+        {isLoading && <p role="status" className="text-sm text-gray-600 mb-3">Loading queue...</p>}
+        {loadError && <p role="alert" className="text-sm text-red-700 mb-3">{loadError}</p>}
+        <p className="text-xs text-gray-500 mb-3">Only undispatched queue entries can be cancelled. Provider attempts and uncertain outcomes require reconciliation; cancellation does not refund the customer order.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -121,8 +143,8 @@ export default function ExternalOrdersPage() {
             </thead>
             <tbody>
               {items.map((it) => (
-                <tr key={it._id} className="border-b hover:bg-gray-50">
-                  <td className="py-2 font-mono text-xs">{it.queueId || it._id}</td>
+                <tr key={it.id} className="border-b hover:bg-gray-50">
+                  <td className="py-2 font-mono text-xs">{it.queueId || it.id}</td>
                   <td>{it.provider}</td>
                   <td className="font-medium">{it.status}</td>
                   <td className="font-mono text-xs">{it.externalOrderId || '—'}</td>
@@ -131,10 +153,15 @@ export default function ExternalOrdersPage() {
                   <td className="text-right">
                     <div className="flex justify-end gap-2">
                       <button onClick={() => { setSelected(it) }} className="px-2 py-1 bg-white border rounded text-xs">View</button>
-                      <button onClick={() => { navigator.clipboard?.writeText(it.queueId || it._id || '') ;
- toast.success('Copied') }} className="px-2 py-1 bg-white border rounded text-xs flex items-center gap-1"><Copy className="h-3 w-3" />Copy</button>
-                      <button onClick={() => handleRetry(it._id)} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs flex items-center gap-1"><RefreshCw className="h-3 w-3" />Retry</button>
-                      <button onClick={() => handleCancel(it._id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs flex items-center gap-1"><X className="h-3 w-3" />Cancel</button>
+                      <button onClick={async () => {
+                        try {
+                          if (!navigator.clipboard) throw new Error("Clipboard is unavailable")
+                          await navigator.clipboard.writeText(it.queueId || it.id)
+                          toast.success('Copied')
+                        } catch (error) { toast.error(getErrorMessage(error, "Copy failed")) }
+                      }} className="px-2 py-1 bg-white border rounded text-xs flex items-center gap-1"><Copy className="h-3 w-3" />Copy</button>
+                      <button disabled={actionPending || it.status !== "queued"} onClick={() => handleRetry(it.id)} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs flex items-center gap-1 disabled:opacity-50"><RefreshCw className="h-3 w-3" />Check queue</button>
+                      <button disabled={actionPending || !["queued", "cancelled"].includes(it.status || "")} onClick={() => handleCancel(it.id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs flex items-center gap-1 disabled:opacity-50"><X className="h-3 w-3" />Cancel</button>
                     </div>
                   </td>
                 </tr>

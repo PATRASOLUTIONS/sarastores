@@ -99,7 +99,7 @@ function toNumber(value: unknown): number | null {
 }
 
 function toRecord(value: unknown): Record<string, string> {
-  let source: any = value
+  let source: unknown = value
   if (typeof source === "string") {
     try {
       source = JSON.parse(source)
@@ -124,21 +124,25 @@ function toRecord(value: unknown): Record<string, string> {
  * under `customerReviews` / `topReviews`; the product page only accepts an array.
  */
 export function normalizeReviews(value: unknown): SpecificationReview[] {
-  const raw: any[] = Array.isArray(value)
+  const summary = value && typeof value === "object" && !Array.isArray(value) ? value : {}
+  const raw: unknown = Array.isArray(value)
     ? value
-    : value && typeof value === "object"
-      ? ((value as any).customerReviews ?? (value as any).topReviews ?? (value as any).top ?? [])
-      : []
+    : ("customerReviews" in summary ? summary.customerReviews : undefined)
+      ?? ("topReviews" in summary ? summary.topReviews : undefined)
+      ?? ("top" in summary ? summary.top : [])
 
   if (!Array.isArray(raw)) return []
 
   return raw
-    .map((r) => {
+    .map((r: unknown) => {
       if (typeof r === "string") return { rating: null, title: "", text: text(r) }
+      const review = r && typeof r === "object" ? r : {}
       return {
-        rating: toNumber(r?.rating),
-        title: text(r?.title),
-        text: text(r?.text ?? r?.body ?? r?.content),
+        rating: toNumber("rating" in review ? review.rating : undefined),
+        title: text("title" in review ? review.title : undefined),
+        text: text(("text" in review ? review.text : undefined)
+          ?? ("body" in review ? review.body : undefined)
+          ?? ("content" in review ? review.content : undefined)),
       }
     })
     .filter((r) => r.text || r.title)

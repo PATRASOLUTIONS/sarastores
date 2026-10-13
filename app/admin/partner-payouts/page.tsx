@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, useCallback } from "react"
@@ -36,6 +38,8 @@ interface CommissionOrder {
   commissionRate: number
   commissionAmount: number
   commissionStatus: "pending" | "credited" | "adjusted"
+  paymentVerified: boolean
+  paymentEligible: boolean
   orderStatus: string
   customer: { name: string;
  email: string }
@@ -112,9 +116,9 @@ function PayModal({
         }),
       })
       const data = await res.json()
-      if (data.success) {
-        toast.success(`Commission of ₹${totalAmount.toLocaleString("en-IN")} marked as paid for ${partner.partnerName}`)
-        onPaid([partner.partnerId], orderIds)
+      if (res.ok && data.success) {
+        toast.success(`External commission payment of ₹${data.data.amount.toLocaleString("en-IN")} recorded for ${partner.partnerName}`)
+        onPaid([partner.partnerId], data.data.orderIds)
         onClose()
       } else {
         toast.error(data.error?.message || "Failed to mark as paid")
@@ -130,10 +134,13 @@ function PayModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
         <div className="p-6 border-b">
-          <h3 className="text-lg font-bold text-gray-900">Pay Commission</h3>
+          <h3 className="text-lg font-bold text-gray-900">Record External Commission Payment</h3>
           <p className="text-sm text-gray-500 mt-1">
             Marking {selectedOrders.length} order{selectedOrders.length !== 1 ? "s" : ""} as paid for{" "}
             <span className="font-semibold text-gray-800">{partner.partnerName}</span>
+          </p>
+          <p className="text-sm text-amber-700 mt-2">
+            Confirm only after making the bank/UPI payment externally. This records payment; it does not transfer money or credit a wallet.
           </p>
         </div>
         <div className="p-6 space-y-4">
@@ -158,6 +165,7 @@ function PayModal({
             </label>
             <input
               value={transactionId}
+              maxLength={200}
               onChange={(e) => setTransactionId(e.target.value)}
               placeholder="e.g. UTR123456789"
               className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -169,6 +177,7 @@ function PayModal({
             </label>
             <textarea
               value={notes}
+              maxLength={2000}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Any notes for this payment..."
               rows={2}
@@ -186,7 +195,7 @@ function PayModal({
             className="inline-flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
           >
             {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <IndianRupee className="h-4 w-4" />}
-            Confirm Payment
+            Confirm External Payment
           </button>
         </div>
       </div>
@@ -214,7 +223,7 @@ function PartnerRow({
     (o) => filter === "all" || o.commissionStatus === filter
   )
 
-  const pendingOrders = group.orders.filter((o) => o.commissionStatus === "pending")
+  const pendingOrders = group.orders.filter((o) => o.paymentEligible)
   const allPendingSelected =
     pendingOrders.length > 0 && pendingOrders.every((o) => selectedIds.has(o.orderId))
 
@@ -235,7 +244,7 @@ function PartnerRow({
   }
 
   const selectedPendingOrders = group.orders.filter(
-    (o) => selectedIds.has(o.orderId) && o.commissionStatus === "pending"
+    (o) => selectedIds.has(o.orderId) && o.paymentEligible
   )
 
   const tierColors: Record<string, string> = {
@@ -308,7 +317,7 @@ function PartnerRow({
             <div className="text-right">
               <p className="text-xs text-gray-400">{group.orders.length} orders</p>
             </div>
-            {group.totalPending > 0 && (
+            {pendingOrders.length > 0 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -317,7 +326,7 @@ function PartnerRow({
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
               >
                 <IndianRupee className="h-3.5 w-3.5" />
-                Pay All Pending
+                Record Eligible Payments
               </button>
             )}
             {expanded ? (
@@ -404,7 +413,7 @@ function PartnerRow({
                         }`}
                       >
                         <td className="px-4 py-3">
-                          {order.commissionStatus === "pending" && (
+                          {order.paymentEligible && (
                             <input
                               type="checkbox"
                               checked={selectedIds.has(order.orderId)}
@@ -442,13 +451,15 @@ function PartnerRow({
                         <td className="px-4 py-3 text-center">{orderStatusBadge(order.orderStatus)}</td>
                         <td className="px-4 py-3 text-center">{commissionStatusBadge(order.commissionStatus)}</td>
                         <td className="px-4 py-3 text-center">
-                          {order.commissionStatus === "pending" ? (
+                          {order.paymentEligible ? (
                             <button
                               onClick={() => setPayModal([order])}
                               className="px-2.5 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
                             >
-                              Pay
+                              Record Paid
                             </button>
+                          ) : order.commissionStatus === "pending" ? (
+                            <span className="text-xs text-amber-700">Order unpaid</span>
                           ) : (
                             <BadgeCheck className="h-4 w-4 text-green-500 mx-auto" />
                           )}
@@ -508,8 +519,8 @@ function CommissionsTab() {
         setError(msg)
         toast.error(msg)
       }
-    } catch (err: any) {
-      const msg = err?.message || "Network error — could not reach server"
+    } catch (err) {
+      const msg = getErrorMessage(err, "Network error — could not reach server")
       setError(msg)
       toast.error("Failed to load commissions")
     } finally {
@@ -1002,9 +1013,10 @@ function PayoutRequestsTab() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
             <h3 className="text-lg font-bold text-gray-900 mb-1">Reject Payout</h3>
-            <p className="text-sm text-gray-500 mb-4">Provide a reason — the partner will be notified and funds returned to their wallet.</p>
+            <p className="text-sm text-gray-500 mb-4">Provide a reason. The reserved funds will be returned to the partner wallet; no notification is sent by this action.</p>
             <textarea
               value={rejectReason}
+              maxLength={2000}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Rejection reason..."
               rows={3}
@@ -1051,7 +1063,7 @@ export default function PartnerPayoutsPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Partner Payouts & Commissions</h1>
         <p className="text-gray-500 mt-1 text-sm">
-          View per-order commissions, pay partners directly, and manage payout requests.
+          View per-order commissions, record external payments for paid orders, and manage payout requests.
         </p>
       </div>
 

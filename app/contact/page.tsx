@@ -29,9 +29,18 @@ import {
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useSettingsData } from "@/hooks/useSettingsData"
-import { useBrandImages } from "@/hooks/useBrandImages"
+import styles from "./contact.module.css"
 
 const ENQUIRY_TYPES = [
+  { icon: Boxes, label: "Bulk Purchase" },
+  { icon: Gift, label: "Corporate Gifting" },
+  { icon: Building2, label: "Institutional Sales" },
+  { icon: Handshake, label: "Reseller / Dealer Partnership" },
+  { icon: MonitorPlay, label: "Product Demo & Evaluation" },
+  { icon: MessageCircle, label: "Others" },
+]
+
+const SUPPORT_TYPES = [
   { icon: Boxes, label: "Order Support" },
   { icon: Gift, label: "Product Enquiry" },
   { icon: Wrench, label: "Service & Installation" },
@@ -41,9 +50,9 @@ const ENQUIRY_TYPES = [
 ]
 
 const HERO_POINTS = [
-  { icon: Headphones, title: "Dedicated Support", detail: "Real people, not bots" },
-  { icon: Store, title: "Stores Near You", detail: "Across Karnataka" },
-  { icon: Wrench, title: "Service & Install", detail: "Our own engineers" },
+  { icon: Tag, title: "Best Prices", detail: "for Bulk Orders" },
+  { icon: Boxes, title: "Wide Range", detail: "of Products" },
+  { icon: Headphones, title: "Dedicated", detail: "Account Support" },
   { icon: MapPin, title: "Pan-Karnataka", detail: "Service Network" },
 ]
 
@@ -87,7 +96,6 @@ function Script({ className = "", lines }: { className?: string; lines: string[]
 
 export default function ContactPage() {
   const { data: settings } = useSettingsData()
-  const { storefront } = useBrandImages()
 
   const [form, setForm] = useState({
     name: "",
@@ -115,11 +123,10 @@ export default function ContactPage() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }))
 
-  // Same payload as before: leads require a pincode, and this form collects a city.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
+    if (Object.values(form).some((value) => !value.trim())) {
       toast.error("Please fill in all required fields")
       return
     }
@@ -140,28 +147,27 @@ export default function ContactPage() {
 
     setSubmitting(true)
     try {
-      const parts = [form.enquiryType, form.city, form.company, form.message].filter(Boolean).join(" — ")
-      const response = await fetch("/api/leads", {
+      const response = await fetch("/api/contact-inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: form.name,
-          email: form.email,
+          ...form,
+          name: form.name.trim(),
+          email: form.email.trim(),
           phone: cleanPhone,
-          pincode: "000000",
-          category: "Contact Inquiry",
-          source: `Contact Page${parts ? ` — ${parts.slice(0, 220)}` : ""}`,
+          consent,
+          source: "contact_page",
         }),
       })
       const data = await response.json()
 
-      if (data.success) {
+      if (response.ok && data.success) {
         toast.success("Thank you! We will contact you soon.")
         setSubmitted(true)
         setForm({ name: "", company: "", email: "", phone: "", enquiryType: "", city: "", message: "" })
         setConsent(false)
       } else {
-        toast.error(data.error || "Failed to submit. Please try again.")
+        toast.error(typeof data.error === "string" ? data.error : data.error?.message || "Failed to submit. Please try again.")
       }
     } catch (error) {
       console.error("Error submitting form:", error)
@@ -173,48 +179,47 @@ export default function ContactPage() {
   }
 
   const inputClass =
-    "mt-1.5 h-10 w-full rounded-md border border-gray-300 px-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-[#1560BD] focus:outline-none focus:ring-1 focus:ring-[#1560BD]"
+    "mt-1 h-8 w-full rounded border border-[#D3DFF1] px-2 text-[11px] text-[#071B50] placeholder:text-[#7180A2] focus:border-[#005BFF] focus:outline-none focus:ring-1 focus:ring-[#005BFF]"
   const labelClass = "block text-[12px] font-semibold text-gray-700"
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <Header />
 
-      <main className="flex-grow">
+      <main className={`${styles.page} flex-grow`}>
         {/* ── Hero ───────────────────────────────────────────────── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-[#0F2557] via-[#123A73] to-[#071634] text-white">
+        <section className={`${styles.hero} relative overflow-hidden text-white`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={storefront}
+            src="/contact/business-handshake.webp"
             alt=""
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2 object-cover opacity-40 lg:block"
+            className={styles.heroImage}
           />
 
-          <div className="section-container relative z-10 py-10 md:py-12">
+          <div className={`${styles.container} relative z-10 py-4`}>
             <nav className="flex items-center gap-2 text-[12px] text-white/70" aria-label="Breadcrumb">
               <Link href="/" className="hover:text-white">
                 Home
               </Link>
               <span className="text-white/40">/</span>
-              <span className="font-medium text-white">Contact Us</span>
+              <span className="font-medium text-white">Business Enquiries</span>
             </nav>
 
-            <div className="mt-6 max-w-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/70">Contact Us</p>
-              <h1 className="mt-3 font-heading text-[32px] font-extrabold leading-[1.08] md:text-[44px]">
-                We&apos;re Here
+            <div className={styles.heroContent}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/90">Business Enquiries</p>
+              <h1 className="mt-2 font-heading text-[36px] font-extrabold leading-[1.02] md:text-[46px]">
+                Let&apos;s Grow
                 <br />
-                to Help
+                Together
               </h1>
-              <p className="mt-4 max-w-lg text-sm leading-relaxed text-white/80">
-                Questions about an order, a product, a service visit or a bulk requirement — tell us what you
-                need and the right team will come back to you.
+              <p className="mt-3 max-w-[335px] text-[15px] leading-[1.4] text-white">
+                Partner with SARA for bulk purchases, corporate solutions, institutional sales and customised technology needs.
               </p>
 
-              <ul className="mt-7 flex flex-wrap divide-x divide-white/20">
+              <ul className={styles.heroPoints}>
                 {HERO_POINTS.map(({ icon: Icon, title, detail }) => (
-                  <li key={title} className="px-4 first:pl-0">
+                  <li key={title}>
                     <Icon className="h-5 w-5 text-white" strokeWidth={1.5} />
                     <p className="mt-1.5 text-[12px] font-semibold leading-tight">{title}</p>
                     <p className="text-[11px] leading-tight text-white/70">{detail}</p>
@@ -224,16 +229,16 @@ export default function ContactPage() {
             </div>
 
             <Script
-              className="absolute right-[46%] top-10 hidden text-xl text-white xl:block"
+              className={styles.heroScript}
               lines={["Happier Homes", "Brighter Lives"]}
             />
           </div>
         </section>
 
-        <div className="section-container space-y-8 py-8">
+        <div className={`${styles.container} ${styles.body}`}>
           {/* ── Form + side cards ────────────────────────────────── */}
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-            <section className="rounded-xl border border-gray-200 bg-white p-6" aria-labelledby="enquiry-form">
+          <div className={styles.columns}>
+            <section className={styles.formCard} aria-labelledby="enquiry-form">
               <h2 id="enquiry-form" className="font-heading text-lg font-bold text-gray-900">
                 Send Us Your Enquiry
               </h2>
@@ -256,25 +261,33 @@ export default function ContactPage() {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="mt-6 grid gap-4 sm:grid-cols-2">
+                <form onSubmit={handleSubmit} className="mt-3 grid gap-x-5 gap-y-3 sm:grid-cols-2">
                   <label className="block">
                     <span className={labelClass}>
                       Full Name <span className="text-[#E11D2E]">*</span>
                     </span>
                     <input
+                      name="name"
                       value={form.name}
                       onChange={update("name")}
                       placeholder="Enter your full name"
+                      autoComplete="name"
+                      minLength={2}
+                      maxLength={100}
                       required
                       className={inputClass}
                     />
                   </label>
                   <label className="block">
-                    <span className={labelClass}>Company / Organisation</span>
+                    <span className={labelClass}>Company / Organisation Name <span className="text-[#E11D2E]">*</span></span>
                     <input
+                      name="company"
                       value={form.company}
                       onChange={update("company")}
                       placeholder="Enter company name"
+                      autoComplete="organization"
+                      maxLength={150}
+                      required
                       className={inputClass}
                     />
                   </label>
@@ -283,10 +296,13 @@ export default function ContactPage() {
                       Email ID <span className="text-[#E11D2E]">*</span>
                     </span>
                     <input
+                      name="email"
                       type="email"
                       value={form.email}
                       onChange={update("email")}
                       placeholder="Enter your email address"
+                      autoComplete="email"
+                      maxLength={255}
                       required
                       className={inputClass}
                     />
@@ -296,26 +312,36 @@ export default function ContactPage() {
                       Mobile Number <span className="text-[#E11D2E]">*</span>
                     </span>
                     <input
+                      name="phone"
                       value={form.phone}
+                      type="tel"
                       onChange={update("phone")}
                       inputMode="numeric"
                       placeholder="Enter mobile number"
+                      autoComplete="tel-national"
+                      pattern={String.raw`[0-9\s\(\)\+\-]{10,20}`}
+                      maxLength={20}
                       required
                       className={inputClass}
                     />
                   </label>
                   <label className="block">
-                    <span className={labelClass}>Enquiry Type</span>
-                    <select value={form.enquiryType} onChange={update("enquiryType")} className={`${inputClass} bg-white`}>
+                    <span className={labelClass}>Enquiry Type <span className="text-[#E11D2E]">*</span></span>
+                    <select name="enquiryType" required value={form.enquiryType} onChange={update("enquiryType")} className={`${inputClass} bg-white`}>
                       <option value="">Select enquiry type</option>
+                      <optgroup label="Business enquiries">
                       {ENQUIRY_TYPES.map(({ label }) => (
                         <option key={label}>{label}</option>
                       ))}
+                      </optgroup>
+                      <optgroup label="Customer support">
+                        {SUPPORT_TYPES.map(({ label }) => <option key={label}>{label}</option>)}
+                      </optgroup>
                     </select>
                   </label>
                   <label className="block">
-                    <span className={labelClass}>City</span>
-                    <select value={form.city} onChange={update("city")} className={`${inputClass} bg-white`}>
+                    <span className={labelClass}>City <span className="text-[#E11D2E]">*</span></span>
+                    <select name="city" required value={form.city} onChange={update("city")} className={`${inputClass} bg-white`}>
                       <option value="">Select city</option>
                       {CITIES.map((c) => (
                         <option key={c}>{c}</option>
@@ -323,19 +349,24 @@ export default function ContactPage() {
                     </select>
                   </label>
                   <label className="block sm:col-span-2">
-                    <span className={labelClass}>Your Message</span>
+                    <span className={labelClass}>Your Message <span className="text-[#E11D2E]">*</span></span>
                     <textarea
+                      name="message"
                       value={form.message}
                       onChange={update("message")}
                       rows={4}
+                      required
+                      maxLength={5000}
                       placeholder="Tell us about your requirement..."
-                      className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-[13px] placeholder:text-gray-400 focus:border-[#1560BD] focus:outline-none focus:ring-1 focus:ring-[#1560BD]"
+                      className={`${styles.message} mt-1 w-full rounded border border-[#D3DFF1] px-2 py-2 text-[11px] placeholder:text-[#7180A2] focus:border-[#005BFF] focus:outline-none focus:ring-1 focus:ring-[#005BFF]`}
                     />
                   </label>
 
                   <label className="flex items-start gap-2 sm:col-span-2">
                     <input
+                      name="consent"
                       type="checkbox"
+                      required
                       checked={consent}
                       onChange={(e) => setConsent(e.target.checked)}
                       className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#1560BD] focus:ring-[#1560BD]"
@@ -355,7 +386,7 @@ export default function ContactPage() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#1560BD] text-sm font-semibold text-white transition-colors hover:bg-[#0D4C99] disabled:opacity-60 sm:col-span-2"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded bg-[#005BFF] text-[13px] font-semibold text-white transition-colors hover:bg-[#0045C7] disabled:opacity-60 sm:col-span-2"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     Submit Enquiry
@@ -365,24 +396,24 @@ export default function ContactPage() {
               )}
             </section>
 
-            <div className="space-y-5">
-              <section className="rounded-xl border border-gray-200 bg-[#F5F9FE] p-6" aria-labelledby="enquiry-types">
+            <div className={styles.sideCards}>
+              <section className={styles.typesCard} aria-labelledby="enquiry-types">
                 <h2 id="enquiry-types" className="font-heading text-base font-bold text-gray-900">
                   Enquiry Types
                 </h2>
-                <p className="mt-1 text-[12px] text-gray-500">Choose the category that best fits your requirement.</p>
-                <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <p className="mt-1 text-[12px] text-gray-600">Choose the category that best fits your requirement.</p>
+                <ul className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {ENQUIRY_TYPES.map(({ icon: Icon, label }) => (
                     <li key={label}>
                       <button
                         type="button"
                         onClick={() => setForm((f) => ({ ...f, enquiryType: label }))}
                         aria-pressed={form.enquiryType === label}
-                        className={`flex h-full w-full flex-col items-center gap-2 rounded-lg border bg-white px-2 py-4 text-center transition-colors ${
-                          form.enquiryType === label ? "border-[#1560BD] ring-1 ring-[#1560BD]" : "border-gray-200 hover:border-[#1560BD]/50"
+                        className={`flex h-full min-h-[78px] w-full flex-col items-center justify-center gap-2 rounded border bg-white px-2 py-3 text-center transition-colors ${
+                          form.enquiryType === label ? "border-[#005BFF] ring-1 ring-[#005BFF]" : "border-transparent hover:border-[#005BFF]/50"
                         }`}
                       >
-                        <Icon className="h-5 w-5 text-[#1560BD]" strokeWidth={1.6} />
+                        <Icon className="h-7 w-7 text-[#005BFF]" strokeWidth={1.6} />
                         <span className="text-[11px] font-semibold leading-tight text-gray-700">{label}</span>
                       </button>
                     </li>
@@ -390,9 +421,11 @@ export default function ContactPage() {
                 </ul>
               </section>
 
-              <section className="relative overflow-hidden rounded-xl border border-gray-200 bg-[#F5F9FE] p-6">
+              <section className={styles.supportCard}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/contact/support-advisor.webp" alt="SARA customer support advisor" className={styles.supportImage} />
                 <h2 className="font-heading text-base font-bold text-gray-900">Prefer to speak with us directly?</h2>
-                <ul className="mt-5 space-y-4 text-[13px]">
+                <ul className={`${styles.supportDetails} mt-3 space-y-3 text-[13px]`}>
                   <li className="flex items-center gap-3">
                     <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#1560BD] text-white">
                       <Phone className="h-4 w-4" />
@@ -401,14 +434,13 @@ export default function ContactPage() {
                       <a href={`tel:${phone.replace(/\s/g, "")}`} className="font-bold text-gray-900 hover:underline">
                         {phone}
                       </a>
-                      <p className="text-[11px] text-gray-500">Toll Free</p>
                     </div>
                   </li>
                   <li className="flex items-center gap-3">
                     <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#1560BD] text-white">
                       <Mail className="h-4 w-4" />
                     </span>
-                    <a href={`mailto:${email}`} className="font-medium text-gray-900 hover:underline">
+                    <a href={`mailto:${email}`} className="break-all font-medium text-gray-900 hover:underline">
                       {email}
                     </a>
                   </li>
@@ -423,7 +455,7 @@ export default function ContactPage() {
                   </li>
                 </ul>
                 <Script
-                  className="absolute right-5 top-16 hidden text-base text-[#0F2557] xl:block"
+                  className={styles.supportScript}
                   lines={["Happier Homes", "Brighter Lives"]}
                 />
               </section>
@@ -433,12 +465,12 @@ export default function ContactPage() {
           {/* ── Why choose SARA ──────────────────────────────────── */}
           <section aria-labelledby="why-sara">
             <h2 id="why-sara" className="font-heading text-lg font-bold text-gray-900">
-              Why Customers Choose SARA
+              Why Businesses Choose SARA
             </h2>
-            <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <ul className={styles.whyList}>
               {WHY_US.map(({ icon: Icon, title, detail }) => (
-                <li key={title} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3">
-                  <Icon className="h-5 w-5 flex-shrink-0 text-[#1560BD]" strokeWidth={1.6} />
+                <li key={title} className="flex items-center gap-3 bg-white px-3 py-2">
+                  <Icon className="h-7 w-7 flex-shrink-0 text-[#005BFF]" strokeWidth={1.6} />
                   <div className="min-w-0">
                     <p className="text-[12px] font-semibold leading-tight text-gray-900">{title}</p>
                     <p className="text-[11px] leading-tight text-gray-500">{detail}</p>
@@ -448,13 +480,13 @@ export default function ContactPage() {
             </ul>
           </section>
 
-          {/* ── Closing band ─────────────────────────────────────── */}
-          <section className="relative grid overflow-hidden rounded-xl bg-gradient-to-br from-[#0F2557] to-[#071634] lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
-            <div className="flex items-center justify-center bg-[#0D2B54]">
+        </div>
+          <section className={styles.partnership}>
+            <div className={styles.storeImage}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={storefront} alt="" aria-hidden className="h-full max-h-[240px] w-full object-cover" />
+              <img src="/contact/partnership-store.webp" alt="SARA electronics store" className="h-full w-full object-cover" />
             </div>
-            <div className="relative px-6 py-9 text-white sm:px-9">
+            <div className={styles.partnershipContent}>
               <h2 className="font-heading text-2xl font-bold leading-tight sm:text-[28px]">
                 From Possibilities
                 <br />
@@ -464,30 +496,30 @@ export default function ContactPage() {
                 Let&apos;s create smarter solutions for a brighter tomorrow.
               </p>
               <Link
-                href="/business-enquiries"
-                className="mt-6 inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-[#0F2557] transition-transform hover:scale-[1.02]"
+                href="#enquiry-form"
+                className="mt-3 inline-flex items-center gap-2 rounded bg-white px-5 py-2 text-[12px] font-semibold text-[#0F2557] hover:bg-blue-50"
               >
-                Business Enquiries
+                Get in Touch
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Script
-                className="absolute bottom-8 right-8 hidden text-xl text-white xl:block"
+                className={styles.partnershipScript}
                 lines={["Happier Homes", "Brighter Lives"]}
               />
             </div>
           </section>
 
           {/* ── Stats ────────────────────────────────────────────── */}
-          <section aria-label="SARA at a glance">
-            <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <section className={`${styles.container} ${styles.stats}`} aria-label="SARA at a glance">
+            <ul className="grid grid-cols-2 gap-y-3 lg:grid-cols-4">
               {[
                 { icon: Award, value: `${years} Years`, label: "of Trust" },
                 { icon: Store, value: stores, label: "Stores Across Karnataka" },
                 { icon: Users, value: customers, label: "Happy Customers" },
                 { icon: Handshake, value: "Your Trusted", label: "Technology Partner" },
               ].map(({ icon: Icon, value, label }) => (
-                <li key={label} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-4">
-                  <Icon className="h-6 w-6 flex-shrink-0 text-[#1560BD]" strokeWidth={1.5} />
+                <li key={label} className="flex items-center justify-center gap-4 bg-white px-4">
+                  <Icon className="h-9 w-9 flex-shrink-0 text-[#005BFF]" strokeWidth={1.5} />
                   <div className="min-w-0">
                     <p className="font-heading text-[15px] font-bold leading-tight text-gray-900">{value}</p>
                     <p className="text-[11px] leading-tight text-gray-500">{label}</p>
@@ -496,7 +528,6 @@ export default function ContactPage() {
               ))}
             </ul>
           </section>
-        </div>
       </main>
 
       <Footer />

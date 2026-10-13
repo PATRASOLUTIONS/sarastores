@@ -90,7 +90,7 @@ async function handleGet(req: PartnerAuthRequest) {
 }
 
 // Export wrapped handler
-export const GET = withPartnerAuth(handleGet as any, ['wallet:read']);
+export const GET = withPartnerAuth(handleGet, ['wallet:read']);
 
 // Handle CORS preflight requests
 export { OPTIONS } from '@/lib/partner/auth';

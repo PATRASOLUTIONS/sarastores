@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
-import { LUCKY_DRAW_COLLECTIONS, maskPhone } from "@/lib/lucky-draw"
+import { LUCKY_DRAW_COLLECTIONS, maskPhone, type LuckyDrawCampaign, type LuckyDrawParticipant, type LuckyDrawWinner } from "@/lib/lucky-draw"
 
 export const dynamic = "force-dynamic"
 
@@ -12,12 +12,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const campaigns = await getCollection(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
-    const campaign: any = await campaigns.findOne({ drawToken: token })
+    const campaigns = await getCollection<LuckyDrawCampaign>(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
+    const campaign = await campaigns.findOne({ drawToken: token })
     if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-    const participantsCol = await getCollection(LUCKY_DRAW_COLLECTIONS.PARTICIPANTS)
-    const winnersCol = await getCollection(LUCKY_DRAW_COLLECTIONS.WINNERS)
+    const participantsCol = await getCollection<LuckyDrawParticipant>(LUCKY_DRAW_COLLECTIONS.PARTICIPANTS)
+    const winnersCol = await getCollection<LuckyDrawWinner>(LUCKY_DRAW_COLLECTIONS.WINNERS)
 
     const [remaining, total, winners] = await Promise.all([
       participantsCol.countDocuments({ campaignId: campaign._id, wonAt: null }),
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
         name: campaign.name,
         store: campaign.store,
         status: campaign.status,
-        prizes: (campaign.prizes || []).map((p: any) => ({
+        prizes: (campaign.prizes || []).map(p => ({
           name: p.name,
           icon: p.icon,
           quantity: p.quantity,
@@ -47,10 +47,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
       stats: {
         totalParticipants: total,
         remainingParticipants: remaining,
-        prizesLeft: (campaign.prizes || []).reduce((s: number, p: any) => s + (Number(p.quantity) || 0), 0),
+        prizesLeft: (campaign.prizes || []).reduce((s, p) => s + (Number(p.quantity) || 0), 0),
       },
-      shuffleNames: teaser.map((p: any) => p.name),
-      winners: winners.map((w: any) => ({
+      shuffleNames: teaser.map((p) => p.name),
+      winners: winners.map((w) => ({
         name: w.participantName,
         phone: maskPhone(w.participantPhone),
         prize: w.prize,

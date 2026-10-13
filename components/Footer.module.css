@@ -1,0 +1,108 @@
+.footer { background: linear-gradient(110deg, #061d2f, #071927); color: #fff; }
+.footer h2, .footer h3, .footer p { margin: 0; }
+.footer a:focus-visible, .footer button:focus-visible, .footer input:focus-visible { outline: 2px solid #8ac2ff; outline-offset: 3px; }
+.newsletter { background: linear-gradient(100deg, #06458b, #043773); }
+.newsletterInner, .container { width: 100%; max-width: 1280px; margin: 0 auto; padding-left: 38px; padding-right: 38px; }
+.newsletterInner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto; align-items: center; gap: 28px; min-height: 64px; padding-top: 12px; padding-bottom: 12px; }
+.newsletterCopy h2 { font-family: var(--font-body), sans-serif; font-size: 13px; font-weight: 700; line-height: 1.3; }
+.newsletterCopy p { margin-top: 4px; font-size: 10px; line-height: 1.4; }
+.subscribeForm { display: flex; min-width: 0; height: 32px; overflow: hidden; border-radius: 4px; background: white; }
+.subscribeForm input { width: 0; min-width: 0; flex: 1; padding: 0 12px; border: 0; color: #17243b; font-size: 10px; }
+.subscribeForm input::placeholder { color: #8a93a3; }
+.subscribeForm button { display: flex; width: 103px; flex-shrink: 0; align-items: center; justify-content: center; gap: 6px; border: 0; background: #0055df; color: white; font-size: 10px; font-weight: 600; }
+.subscribeForm button:hover { background: #0048c3; }
+.subscribeForm button:disabled { cursor: wait; opacity: .7; }
+.subscriptionStatus { grid-column: 1 / -1; font-size: 12px; line-height: 1.4; }
+.follow { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 15px; padding-left: 22px; border-left: 1px solid #ffffff24; }
+.follow > span { overflow-wrap: anywhere; font-size: 10px; font-weight: 600; }
+.follow > div { display: flex; flex-wrap: wrap; align-items: center; gap: 15px; }
+.stripSocial { display: grid; width: 24px; height: 24px; place-items: center; color: white; }
+.socialIcon { width: 13px; height: 13px; }
+.unconfiguredSocial { opacity: .55; }
+.columns { display: grid; grid-template-columns: 1.65fr 1fr 1.12fr 1.1fr 1.16fr 1.44fr 84px; gap: 20px; padding: 16px 0 12px; }
+.columns h3 { margin-bottom: 8px; color: white; font-family: var(--font-body), sans-serif; font-size: 10px; font-weight: 600; line-height: 1.4; }
+.brand { padding-right: 6px; }
+.logo { display: inline-block; }
+.logo img { width: 100px; height: auto; }
+.tagline { margin-top: 2px !important; font-size: 8px; line-height: 1.4; }
+.brandCopy { margin-top: 11px !important; font-size: 9px; line-height: 1.5; }
+.brandSocials { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 13px; }
+.socialCircle { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; color: white; }
+.socialCircle .socialIcon { width: 11px; height: 11px; }
+.column, .download, .qr { min-width: 0; border-left: 1px solid #ffffff12; padding-left: 20px; }
+.column { padding-left: 12px; }
+.column:first-of-type { border: 0; padding-left: 0; }
+.column ul { list-style: none; margin: 0; padding: 0; }
+.column li { margin: 0; font-size: 9px; line-height: 1.4; }
+.column a, .cookieLink { display: inline-flex; min-height: 24px; align-items: center; padding: 0; color: #c8d2dc; font-size: 9px; line-height: 1.4; text-align: left; }
+.column a:hover, .cookieLink:hover { color: white; text-decoration: underline; }
+.download h3 { white-space: nowrap; }
+.download > p { margin-top: -4px; margin-bottom: 9px; color: #c8d2dc; font-size: 9px; }
+.appBadge { display: flex; width: 108px; height: 34px; align-items: center; gap: 6px; margin-top: 7px; padding: 3px 7px; border: 1px solid #5d7185; border-radius: 4px; background: #030609; color: white; }
+.appBadge small { display: block; font-size: 5px; line-height: 1.2; }
+.appBadge strong { display: block; font-size: 13px; font-weight: 500; line-height: 1.2; letter-spacing: -.4px; white-space: nowrap; }
+.appBadge svg { flex-shrink: 0; }
+.qr { display: flex; flex-direction: column; align-items: center; padding-top: 5px; }
+.qr img, .qrLoading { width: 64px; min-width: 64px; height: 64px; padding: 3px; border-radius: 2px; background: white; }
+.qrLoading { opacity: .5; }
+.qr p { margin-top: 7px; font-size: 8px; line-height: 1.35; text-align: center; }
+.bottom { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 28px; border-top: 1px solid #ffffff16; padding: 7px 0; color: #a8b7c7; font-size: 8px; line-height: 1.4; }
+.bottom > div { display: flex; flex-wrap: wrap; align-items: center; gap: 0; }
+.bottom span { display: inline-flex; align-items: center; gap: 3px; padding: 0 9px; border-left: 1px solid #ffffff24; }
+.bottom span:first-child { border-left: 0; }
+.bottom span:last-child { padding-right: 0; }
+.bottom a { color: #dceaff; text-decoration: underline; text-underline-offset: 2px; }
+
+@media (min-width: 1280px) {
+  .newsletterInner { min-height: 74px; }
+  .newsletterCopy h2 { font-size: 15px; }
+  .newsletterCopy p, .subscribeForm input, .subscribeForm button, .follow > span { font-size: 12px; }
+  .subscribeForm { height: 38px; }
+  .columns { padding-top: 22px; padding-bottom: 20px; gap: 26px; }
+  .columns h3 { font-size: 12px; }
+  .column li, .column a, .cookieLink, .brandCopy, .download > p { font-size: 11px; }
+  .logo img { width: 120px; }
+  .tagline, .qr p, .bottom { font-size: 10px; }
+}
+@media (max-width: 1000px) {
+  .newsletterInner, .container { padding-left: 24px; padding-right: 24px; }
+  .newsletterInner { grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+  .follow { grid-column: 1 / -1; justify-content: center; padding-left: 0; border-left: 0; }
+  .columns { grid-template-columns: 1.4fr repeat(4, 1fr); gap: 18px; }
+  .column, .download, .qr { padding-left: 14px; }
+  .download { grid-column: 2 / 4; border: 0; padding-left: 0; }
+  .download .appBadge { display: inline-flex; margin-right: 8px; }
+  .qr { grid-column: 4 / 6; align-items: flex-start; border: 0; padding: 0; }
+  .qr p { text-align: left; }
+}
+@media (max-width: 640px) {
+  .newsletterInner, .container { padding-left: 20px; padding-right: 20px; }
+  .newsletterInner { grid-template-columns: 1fr; gap: 14px; padding-top: 20px; padding-bottom: 20px; }
+  .newsletterCopy h2 { font-size: 15px; }
+  .newsletterCopy p { font-size: 12px; }
+  .subscribeForm { height: 40px; }
+  .subscribeForm input, .subscribeForm button { font-size: 12px; }
+  .follow { grid-column: auto; justify-content: flex-start; }
+  .follow > span { font-size: 12px; }
+  .stripSocial { width: 22px; height: 28px; }
+  .socialIcon { width: 16px; height: 16px; }
+  .columns { grid-template-columns: 1fr 1fr; gap: 22px 20px; padding-top: 24px; padding-bottom: 24px; }
+  .brand { grid-column: 1 / -1; }
+  .logo img { width: 110px; }
+  .tagline { font-size: 9px; }
+  .brandCopy { font-size: 12px; }
+  .socialCircle { width: 26px; height: 26px; }
+  .socialCircle .socialIcon { width: 14px; height: 14px; }
+  .column, .download, .qr { padding-left: 0; border: 0; }
+  .columns h3 { font-size: 13px; }
+  .column li { font-size: 12px; }
+  .column a, .cookieLink { padding: 4px 0; font-size: 12px; }
+  .download { grid-column: 1; }
+  .download > p { font-size: 11px; }
+  .download .appBadge { display: flex; margin-right: 0; }
+  .qr { grid-column: 2; align-items: center; padding-top: 4px; }
+  .qr img, .qrLoading { width: 80px; height: 80px; }
+  .qr p { font-size: 11px; text-align: center; }
+  .bottom { flex-direction: column; align-items: flex-start; gap: 9px; padding: 12px 0; font-size: 9px; }
+  .bottom span:first-child { padding-left: 0; }
+}

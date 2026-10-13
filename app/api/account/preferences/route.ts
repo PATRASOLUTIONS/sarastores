@@ -16,11 +16,9 @@ export async function GET() {
     // Identity comes from the session only — never from a query parameter.
     const userId = guard.user.id
 
-    let profile = await getCustomerProfile(userId)
-    if (!profile) {
-      // First visit: derive one from order history so the page is never empty.
-      profile = await rebuildCustomerProfile(userId)
-    }
+    const storedProfile = await getCustomerProfile(userId)
+    // First visit: derive one from order history so the page is never empty.
+    const profile = storedProfile ?? await rebuildCustomerProfile(userId)
 
     return NextResponse.json({
       success: true,

@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { ShoppingBag, Package, AlertCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
+import { apiFetch } from "@/lib/api-client"
+import { catalogProductListResponseSchema } from "@/utils/catalog"
 
 export default function VendorDashboardPage() {
   const { user, isVendor, isLoading } = useAuth()
@@ -31,19 +33,18 @@ export default function VendorDashboardPage() {
   const fetchVendorData = async () => {
     try {
       // Fetch vendor's products
-      const productsResponse = await fetch(`/api/vendor/products?vendorId=${user?.id}`)
+      const productsResponse = await apiFetch("/api/vendor/products")
 
-      if (productsResponse.ok) {
-        const products = await productsResponse.json()
-        const activeProducts = products.filter((p: any) => p.active !== false)
-        const lowStockProducts = products.filter((p: any) => p.stock < 10)
+      if (!productsResponse.ok) throw new Error("Vendor catalogue could not be loaded")
+      const products = catalogProductListResponseSchema.parse(await productsResponse.json())
+      const activeProducts = products.filter(p => p.active !== false)
+      const lowStockProducts = products.filter(p => typeof p.stock === "number" && p.stock < 10)
 
-        setStats({
-          totalProducts: products.length,
-          activeProducts: activeProducts.length,
-          lowStockProducts: lowStockProducts.length,
-        })
-      }
+      setStats({
+        totalProducts: products.length,
+        activeProducts: activeProducts.length,
+        lowStockProducts: lowStockProducts.length,
+      })
     } catch (error) {
       console.error("Error fetching vendor data:", error)
       setError(error instanceof Error ? error.message : "Unknown error")

@@ -5,7 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { partnerService, CreatePartnerInput } from '@/lib/partner/service';
+import { partnerService } from '@/lib/partner/service';
+import { RegisterPartnerSchema } from '@/lib/validation';
 import { getCorsHeaders, handleOptionsRequest } from '@/lib/partner/auth';
 
 // Export OPTIONS handler for CORS preflight
@@ -16,113 +17,12 @@ export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(origin);
   
   try {
-    const body = await request.json();
-    
-    // Validate required fields
-    const requiredFields = ['name', 'email', 'phone', 'businessDetails'];
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: `Missing required field: ${field}`,
-            },
-          },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-    
-    // Validate business details
-    const businessDetailsFields = ['gstin', 'pan', 'businessType', 'registeredAddress'];
-    for (const field of businessDetailsFields) {
-      if (!body.businessDetails[field]) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: `Missing required business detail: ${field}`,
-            },
-          },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-    
-    // Validate address
-    const addressFields = ['line1', 'city', 'state', 'pincode', 'country'];
-    for (const field of addressFields) {
-      if (!body.businessDetails.registeredAddress[field]) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: `Missing required address field: ${field}`,
-            },
-          },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-    
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(body.email)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Invalid email format',
-          },
-        },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-    
-    // Validate GSTIN format (15 characters)
-    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(body.businessDetails.gstin)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Invalid GSTIN format',
-          },
-        },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-    
-    // Validate PAN format (10 characters)
-    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(body.businessDetails.pan)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Invalid PAN format',
-          },
-        },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-    
-    // Create partner
-    const input: CreatePartnerInput = {
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-      website: body.website,
-      businessDetails: body.businessDetails,
-      tier: body.tier, // Optional, defaults to 'starter'
-    };
-    
-    const { partner, apiKey } = await partnerService.createPartner(input);
+    const parsed = RegisterPartnerSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json(
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid partner details', details: parsed.error.flatten() } },
+      { status: 400, headers: corsHeaders }
+    );
+    const { partner, apiKey } = await partnerService.createPartner(parsed.data);
     
     return NextResponse.json(
       {

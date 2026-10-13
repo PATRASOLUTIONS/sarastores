@@ -19,6 +19,7 @@ const CHAR_DESC_COLLECTION = COLLECTIONS.PRODUCTS
 const BRANDS_COLLECTION = "brands"
 
 type ListKey = "brands" | "categories" | "subCategories" | "charDescs"
+type TaxonomyRecord = { name: string; active?: boolean; isEnabled?: boolean; createdAt?: Date; updatedAt?: Date; image?: string; slug?: string }
 
 async function readList(key: ListKey): Promise<string[]> {
   if (key === "charDescs") {
@@ -34,9 +35,9 @@ async function readList(key: ListKey): Promise<string[]> {
         ? COLLECTIONS.CATEGORIES
         : COLLECTIONS.SUB_CATEGORIES
 
-  const collection = await getCollection(name)
+  const collection = await getCollection<TaxonomyRecord>(name)
   const docs = await collection.find({}, { projection: { name: 1 } }).toArray()
-  return Array.from(new Set(docs.map((d: any) => String(d?.name ?? "").trim()).filter(Boolean))).sort(
+  return Array.from(new Set(docs.map((d) => String(d?.name ?? "").trim()).filter(Boolean))).sort(
     (a, b) => a.localeCompare(b),
   )
 }
@@ -87,13 +88,13 @@ export async function POST(request: Request) {
           ? COLLECTIONS.CATEGORIES
           : COLLECTIONS.SUB_CATEGORIES
 
-    const collection = await getCollection(name)
+    const collection = await getCollection<TaxonomyRecord>(name)
     const existing = await collection.findOne({ name: { $regex: `^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } })
     if (existing) {
-      return NextResponse.json({ success: true, value: String((existing as any).name), stored: false })
+      return NextResponse.json({ success: true, value: String(existing.name), stored: false })
     }
 
-    const doc: Record<string, unknown> = {
+    const doc: TaxonomyRecord = {
       name: value,
       active: true,
       isEnabled: true,

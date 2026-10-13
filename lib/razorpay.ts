@@ -24,19 +24,25 @@ export function getRazorpayKeyId(keyId?: string) {
 export async function verifyRazorpayPayment(
   razorpayPaymentId: string,
   expectedAmount: number,
+  expectedOrderId?: string,
+  expectedCurrency = "INR",
 ): Promise<{ verified: boolean; reason?: string; amountPaid?: number }> {
   try {
     const payment = await getRazorpayClient().payments.fetch(razorpayPaymentId)
     if (!payment) return { verified: false, reason: "payment_not_found" }
 
     const status = String(payment.status || "")
-    if (status !== "captured" && status !== "authorized") {
+    if (status !== "captured") {
       return { verified: false, reason: `payment_status_${status || "unknown"}` }
     }
 
     const amountPaid = Number(payment.amount) / 100
-    if (Math.abs(amountPaid - expectedAmount) > 1) {
+    if (Number(payment.amount) !== Math.round(expectedAmount * 100)) {
       return { verified: false, reason: "amount_mismatch", amountPaid }
+    }
+    if (payment.currency !== expectedCurrency) return { verified: false, reason: "currency_mismatch" }
+    if (!expectedOrderId || payment.order_id !== expectedOrderId) {
+      return { verified: false, reason: "checkout_mismatch" }
     }
 
     return { verified: true, amountPaid }

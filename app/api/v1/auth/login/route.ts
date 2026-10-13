@@ -13,6 +13,7 @@ import { buildSessionPayload, verifyCredentials } from "@/lib/auth-credentials"
 import { createSessionToken } from "@/lib/session"
 import { ACCESS_TOKEN_TTL_SECONDS, issueRefreshToken, type DeviceInfo } from "@/lib/refresh-tokens"
 import { LoginSchema } from "@/lib/validation"
+import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
 
 export const dynamic = "force-dynamic"
 
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
       { headers: { "Cache-Control": "private, no-store" } },
     )
   } catch (error) {
+    if (error instanceof RateLimitUnavailableError) return handleApiError(error)
     console.error("[v1/auth/login] error", error)
     return NextResponse.json({ error: "An error occurred during login." }, { status: 500 })
   }

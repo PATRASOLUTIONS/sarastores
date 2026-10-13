@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
+import { handleApiError } from '@/lib/api-error'
 
 // Simple in-memory cache to reduce rate of upstream calls (per instance).
-const cache = new Map<string, { ts: number; body: any; status: number; headers?: Record<string,string> }>()
+const cache = new Map<string, { ts: number; body: unknown; status: number; headers?: Record<string,string> }>()
 const CACHE_TTL_MS = 30 * 1000 // 30s
 
 function buildUpstreamUrl(baseUrl: string, dpId: string, searchParams: URLSearchParams) {
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized to eXlr8 API - check EXLR8_CLIENT_ID/SECRET/DP_ID and environment (UAT/Prod)' }, { status: 502 })
     }
 
-    let body: any = text
+    let body: unknown = text
     try {
       body = JSON.parse(text)
     } catch (e) {
@@ -81,11 +82,11 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(body, { status: resp.status })
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error proxying eXlr8 products:', err)
-    if (err.name === 'AbortError') {
+    if (err instanceof Error && err.name === 'AbortError') {
       return NextResponse.json({ error: 'Upstream request timed out' }, { status: 504 })
     }
-    return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 })
+    return handleApiError(err, "Integration request failed")
   }
 }

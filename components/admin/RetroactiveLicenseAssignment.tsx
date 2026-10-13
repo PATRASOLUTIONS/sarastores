@@ -265,9 +265,9 @@ export default function RetroactiveLicenseAssignment() {
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <h4 className="font-semibold text-sm mb-2">ℹ️ How it works:</h4>
           <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Checks orders with software items that don't have license keys</li>
+            <li>• Checks orders with software items that don&apos;t have license keys</li>
             <li>• Assigns unique unused license keys from the license pool</li>
-            <li>• Marks orders as "delivered"</li>
+            <li>• Marks orders as &quot;delivered&quot;</li>
             <li>• Sends activation emails to customers</li>
             <li>• Includes comprehensive error handling and logging</li>
           </ul>

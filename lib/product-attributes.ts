@@ -51,12 +51,16 @@ export interface ProductCommerceAttributes {
 /** Platform-wide GST fallback used when a product has no explicit rate. */
 export const DEFAULT_GST_RATE = 18
 
-function raw(product: any): Record<string, any> {
-  const nested = product?.raw ?? product?.rawData ?? product?.source
-  return nested && typeof nested === "object" ? nested : {}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
 }
 
-function firstString(product: any, keys: string[]): string | null {
+function raw(product: Record<string, unknown>): Record<string, unknown> {
+  const nested = product?.raw ?? product?.rawData ?? product?.source
+  return isRecord(nested) ? nested : {}
+}
+
+function firstString(product: Record<string, unknown>, keys: string[]): string | null {
   const source = raw(product)
   for (const key of keys) {
     const value = product?.[key] ?? source?.[key]
@@ -67,7 +71,7 @@ function firstString(product: any, keys: string[]): string | null {
   return null
 }
 
-function firstNumber(product: any, keys: string[]): number | null {
+function firstNumber(product: Record<string, unknown>, keys: string[]): number | null {
   const source = raw(product)
   for (const key of keys) {
     const value = product?.[key] ?? source?.[key]
@@ -79,7 +83,7 @@ function firstNumber(product: any, keys: string[]): number | null {
   return null
 }
 
-function firstBoolean(product: any, keys: string[]): boolean | null {
+function firstBoolean(product: Record<string, unknown>, keys: string[]): boolean | null {
   const source = raw(product)
   for (const key of keys) {
     const value = product?.[key] ?? source?.[key]
@@ -92,11 +96,12 @@ function firstBoolean(product: any, keys: string[]): boolean | null {
   return null
 }
 
-function firstDate(product: any, keys: string[]): Date | null {
+function firstDate(product: Record<string, unknown>, keys: string[]): Date | null {
   const source = raw(product)
   for (const key of keys) {
     const value = product?.[key] ?? source?.[key]
     if (!value) continue
+    if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) continue
     const parsed = new Date(value)
     if (!Number.isNaN(parsed.getTime())) return parsed
   }
@@ -117,9 +122,9 @@ export function parseWarrantyMonths(text: string | null | undefined): number | n
   return null
 }
 
-function parseDimensions(product: any): ProductDimensionsCm | null {
+function parseDimensions(product: Record<string, unknown>): ProductDimensionsCm | null {
   const explicit = product?.dimensionsCm ?? product?.dimensions
-  if (explicit && typeof explicit === "object" && !Array.isArray(explicit)) {
+  if (isRecord(explicit)) {
     const length = Number(explicit.length ?? explicit.l)
     const width = Number(explicit.width ?? explicit.w)
     const height = Number(explicit.height ?? explicit.h)
@@ -145,20 +150,25 @@ function parseDimensions(product: any): ProductDimensionsCm | null {
   }
 }
 
-function parseStoreStock(product: any): StoreStockEntry[] {
+function parseStoreStock(product: Record<string, unknown>): StoreStockEntry[] {
   const value = product?.storeStock ?? product?.store_stock
   if (!Array.isArray(value)) return []
 
   return value
-    .map((entry: any) => ({
-      storeId: String(entry?.storeId ?? entry?.store_id ?? "").trim(),
-      storeName: entry?.storeName ?? entry?.store_name ?? undefined,
-      quantity: Number(entry?.quantity ?? entry?.qty ?? 0) || 0,
-    }))
+    .map((entry: unknown) => {
+      const record = isRecord(entry) ? entry : {}
+      const name = record.storeName ?? record.store_name
+      return {
+        storeId: String(record.storeId ?? record.store_id ?? "").trim(),
+        storeName: typeof name === "string" ? name : undefined,
+        quantity: Number(record.quantity ?? record.qty ?? 0) || 0,
+      }
+    })
     .filter((entry: StoreStockEntry) => entry.storeId.length > 0)
 }
 
-export function getProductCommerceAttributes(product: any): ProductCommerceAttributes {
+export function getProductCommerceAttributes(input: unknown): ProductCommerceAttributes {
+  const product = isRecord(input) ? input : {}
   const warrantyText = firstString(product, [
     "warrantyText",
     "warranty",

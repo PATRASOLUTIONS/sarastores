@@ -1,10 +1,12 @@
 "use client"
 
 import { apiFetch } from "@/lib/api-client"
+import { brandEditorListSchema } from "@/lib/brand-landing-response"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import toast from "react-hot-toast"
 import {
+    type LucideIcon,
     ArrowLeft,
     Save,
     Plus,
@@ -40,7 +42,7 @@ const ICON_OPTIONS = [
     "Sparkles", "Heart", "Globe", "ShoppingBag", "MessageSquare",
 ]
 
-const ICON_MAP: Record<string, any> = {
+const ICON_MAP: Record<string, LucideIcon> = {
     Shield, Zap, Award, Star, Settings, Wrench, CheckCircle,
     Sparkles, Heart, Globe, ShoppingBag, MessageSquare,
 }
@@ -180,7 +182,7 @@ function Section({
     defaultOpen = false,
 }: {
     title: string
-    icon: any
+    icon: LucideIcon
     children: React.ReactNode
     defaultOpen?: boolean
 }) {
@@ -221,9 +223,10 @@ export default function AdminBrandEditorPage() {
         const fetchBrand = async () => {
             try {
                 const res = await apiFetch("/api/brands")
-                const data = await res.json()
+                if (!res.ok) throw new Error("Failed to load brands")
+                const data = brandEditorListSchema.parse(await res.json())
                 if (data.success) {
-                    const found = data.brands.find((b: any) => b._id === brandId)
+                    const found = data.brands.find(b => b._id === brandId)
                     if (found) {
                         // Ensure all nested objects exist with defaults
                         setBrand({

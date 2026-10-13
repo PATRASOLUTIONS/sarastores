@@ -107,7 +107,7 @@ export default function AdminLeadsPage() {
                 const res = await apiFetch("/api/leads/settings")
                 const data = await res.json()
                 if (data.success && data.settings) {
-                    setCategories(data.settings.categories || [])
+                    setCategories(Array.from(new Set(["Newsletter", ...(data.settings.categories || [])])))
                     setWhatsappNumber(data.settings.whatsappNumber || "")
                     setWhatsappTemplate(data.settings.whatsappTemplate || "Hello {name}, thank you for participating in our Lucky Draw!")
                 }

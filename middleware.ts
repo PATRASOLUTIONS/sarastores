@@ -1,45 +1,9 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session"
+import { staffCanAccessApi } from "@/lib/admin-access"
 
-const API_PAGE_ACCESS: [string, string][] = [
-  ["/api/admin/store-locations", "/admin/store-locations"],
-  ["/api/admin/store-qr", "/admin/store-qr"],
-  ["/api/admin/lucky-draw", "/admin/lucky-draw"],
-  ["/api/spin-wheel/admin", "/admin/spin-wheel"],
-  ["/api/sub-categories", "/admin/catalogue"],
-  ["/api/categories", "/admin/catalogue"],
-  ["/api/brands", "/admin/catalogue"],
-  ["/api/product-specifications", "/admin/product-specifications"],
-  ["/api/product-advertisements", "/admin/product-advertisements"],
-  ["/api/scraped-products", "/admin/scraper"],
-  ["/api/scrape-amazon", "/admin/scraper"],
-  ["/api/products", "/admin/products"],
-  ["/api/orders", "/admin/orders"],
-  ["/api/payments", "/admin/payments"],
-  ["/api/coupons", "/admin/promotions"],
-  ["/api/employees", "/admin/employees"],
-  ["/api/leads", "/admin/leads"],
-  ["/api/contact-inquiries", "/admin/contact-inquiries"],
-  ["/api/complaints", "/admin/complaints"],
-  ["/api/hero-slides", "/admin/posters"],
-  ["/api/posters", "/admin/posters"],
-  ["/api/home-components", "/admin/home-components"],
-  ["/api/settings", "/admin/settings"],
-  ["/api/software", "/admin/software"],
-  ["/api/blocked-pincodes", "/admin/blocked-pincodes"],
-  ["/api/articles", "/admin/articles"],
-]
-
-function staffCanAccessApi(user: { role: string; dashboardAccess: boolean; allowedPages: string[] }, path: string) {
-  if (user.role === "admin" || user.role === "superadmin") return true
-  if (!user.dashboardAccess) return false
-  const requiredPage = API_PAGE_ACCESS.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1]
-  if (!requiredPage) return true
-  return user.allowedPages.some((page) => page === requiredPage || requiredPage.startsWith(`${page}/`))
-}
-
-export async function middleware(request: NextRequest) {
+async function authorizeRequest(request: NextRequest) {
   // Skip middleware for partner API routes - they have their own CORS and auth handling
   if (request.nextUrl.pathname.startsWith("/api/v1/partner")) {
     return NextResponse.next()
@@ -353,6 +317,14 @@ export async function middleware(request: NextRequest) {
 
   // Continue to the requested resource
   return NextResponse.next()
+}
+
+export async function middleware(request: NextRequest) {
+  const response = await authorizeRequest(request)
+  if (response.headers.get("x-middleware-next") !== "1") return response
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-sara-request-path", request.nextUrl.pathname)
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 // Configure middleware to run on specific paths

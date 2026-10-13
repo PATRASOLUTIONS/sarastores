@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { getCollection, normalizeId } from "@/lib/db-service";
+import { ObjectId, MongoServerError } from "mongodb";
 import { requireAdmin } from "@/lib/auth";
+import { UpdateCampaignPageSchema, type CampaignPageDocument } from "@/lib/campaign-page";
 
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   const guard = await requireAdmin();
@@ -11,36 +12,39 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const { id } = await context.params;
     if (!ObjectId.isValid(id)) return NextResponse.json({ success: false, error: "Invalid ID" }, { status: 400 });
 
-    const { db } = await connectToDatabase();
-    const data = await req.json();
+    let body: unknown;
+    try { body = await req.json(); } catch {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
+    }
+    const parsed = UpdateCampaignPageSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ success: false, error: "Invalid campaign details" }, { status: 400 });
+    const data = parsed.data;
+    const collection = await getCollection<CampaignPageDocument>("campaign_pages");
     
     // Check slug uniqueness if slug changed
-    let finalSlug = data.slug?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const finalSlug = data.slug;
     if (finalSlug) {
-      const existing = await db.collection("campaign_pages").findOne({ 
+      const existing = await collection.findOne({ 
         slug: finalSlug,
         _id: { $ne: new ObjectId(id) }
       });
       if (existing) {
-        return NextResponse.json({ success: false, error: "A campaign with this slug already exists" }, { status: 400 });
+        return NextResponse.json({ success: false, error: "A campaign with this slug already exists" }, { status: 409 });
       }
     }
 
-    const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (finalSlug !== undefined) updateData.slug = finalSlug;
-    if (data.banner !== undefined) updateData.banner = data.banner;
-    if (data.productIds !== undefined) updateData.productIds = data.productIds;
-    if (data.isActive !== undefined) updateData.isActive = data.isActive;
-    updateData.updatedAt = new Date();
-
-    await db.collection("campaign_pages").updateOne(
+    const saved = await collection.findOneAndUpdate(
       { _id: new ObjectId(id) },
-      { $set: updateData }
+      { $set: { ...data, updatedAt: new Date() } },
+      { returnDocument: "after" }
     );
+    if (!saved) return NextResponse.json({ success: false, error: "Campaign not found" }, { status: 404 });
     
-    return NextResponse.json({ success: true, message: "Campaign updated" });
+    return NextResponse.json({ success: true, message: "Campaign updated", campaign: normalizeId(saved) });
   } catch (error) {
+    if (error instanceof MongoServerError && error.code === 11000) return NextResponse.json(
+      { success: false, error: "A campaign with this slug already exists" }, { status: 409 }
+    );
     console.error("Failed to update campaign", error);
     return NextResponse.json({ success: false, error: "Failed to update campaign" }, { status: 500 });
   }
@@ -54,8 +58,9 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     const { id } = await context.params;
     if (!ObjectId.isValid(id)) return NextResponse.json({ success: false, error: "Invalid ID" }, { status: 400 });
 
-    const { db } = await connectToDatabase();
-    await db.collection("campaign_pages").deleteOne({ _id: new ObjectId(id) });
+    const collection = await getCollection<CampaignPageDocument>("campaign_pages");
+    const removed = await collection.deleteOne({ _id: new ObjectId(id) });
+    if (!removed.deletedCount) return NextResponse.json({ success: false, error: "Campaign not found" }, { status: 404 });
     
     return NextResponse.json({ success: true, message: "Campaign deleted" });
   } catch (error) {

@@ -1,9 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getCollection, createObjectId } from "@/lib/db-service"
 import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
+import autoTable, { type Table } from "jspdf-autotable"
+import { getSession, checkAdminAuthorization } from "@/lib/auth"
+import { verifyGuestAccessToken } from "@/lib/guest-order"
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
+  const guestToken = request.nextUrl.searchParams.get("token")
+  if (!session && !guestToken) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+  }
   try {
     const { id } = await context.params
 
@@ -23,6 +30,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const order = await collection.findOne({ _id: orderId })
 
     if (!order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 })
+    }
+    const ownerId = order.userId || order.customerId
+    const isOwner = !!session && !!ownerId && String(ownerId) === session.user.id
+    const isGuestHolder = !ownerId && verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
+    const { authorized: isAdmin } = session ? await checkAdminAuthorization() : { authorized: false }
+    if (!isOwner && !isGuestHolder && !isAdmin) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 })
     }
 
@@ -80,9 +94,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("helvetica", "normal")
     const invoiceDate = new Date().toLocaleDateString("en-IN")
     const orderDate = new Date(order.date || order.createdAt).toLocaleDateString("en-IN")
+    const isPaid = order.paymentVerification?.verified === true ||
+      ["paid", "completed"].includes(order.paymentDetails?.status) || order.paymentStatus === "paid"
+    const isCod = ["cod", "cash-on-delivery", "cash"].includes(order.paymentMethod)
     doc.text(invoiceDate, pageWidth - 22, 55, { align: "right" })
     doc.text(orderDate, pageWidth - 22, 62, { align: "right" })
-    doc.text(order.paymentMethod === "cod" ? "COD" : "Paid", pageWidth - 22, 69, { align: "right" })
+    doc.text(isPaid ? "Paid" : isCod ? "COD" : "Pending", pageWidth - 22, 69, { align: "right" })
     doc.text(order.status || "Pending", pageWidth - 22, 76, { align: "right" })
 
     // Bill To Section
@@ -141,14 +158,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
 
     // Items Table
-    const items = order.items || []
-    const tableData = items.map((item: any, index: number) => [
+    const items: { name?: string; sku?: string; quantity?: number; price?: number }[] = order.items || []
+    const tableData = items.map((item, index) => [
       (index + 1).toString(),
       item.name || "N/A",
       item.sku || "-",
       item.quantity?.toString() || "1",
-      `₹${(item.price || 0).toLocaleString("en-IN")}`,
-      `₹${((item.price || 0) * (item.quantity || 1)).toLocaleString("en-IN")}`,
+      `INR ${(item.price || 0).toLocaleString("en-IN")}`,
+      `INR ${((item.price || 0) * (item.quantity || 1)).toLocaleString("en-IN")}`,
     ])
 
     const tableStartY = order.trackingNumber ? 143 : 133
@@ -183,12 +200,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     })
 
     // Totals Section
-    const finalY = (doc as any).lastAutoTable.finalY || tableStartY + 20
-    const subtotal = order.total - (order.shipping || 0)
+    const finalY = (doc as jsPDF & { lastAutoTable?: Table }).lastAutoTable?.finalY || tableStartY + 20
     const shipping = order.shipping || 0
     const tax = order.tax || 0
-    const discount = order.discount || 0
+    const discount = (order.discount ?? order.coupon?.discount ?? 0) + (order.loyalty?.discount || 0)
     const total = order.total || 0
+    const subtotal = order.subtotal ?? total - shipping - tax + discount
 
     const totalsX = pageWidth - 70
     let currentY = finalY + 15
@@ -198,23 +215,23 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setTextColor(0, 0, 0)
 
     doc.text("Subtotal:", totalsX, currentY)
-    doc.text(`₹${subtotal.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
+    doc.text(`INR ${subtotal.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
     currentY += 7
 
     if (discount > 0) {
       doc.text("Discount:", totalsX, currentY)
-      doc.text(`-₹${discount.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
+      doc.text(`-INR ${discount.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
       currentY += 7
     }
 
     if (tax > 0) {
       doc.text("Tax (GST):", totalsX, currentY)
-      doc.text(`₹${tax.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
+      doc.text(`INR ${tax.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
       currentY += 7
     }
 
     doc.text("Shipping:", totalsX, currentY)
-    doc.text(`₹${shipping.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
+    doc.text(`INR ${shipping.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
     currentY += 10
 
     // Total with background
@@ -225,7 +242,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("helvetica", "bold")
     doc.setTextColor(255, 255, 255)
     doc.text("TOTAL:", totalsX, currentY)
-    doc.text(`₹${total.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
+    doc.text(`INR ${total.toLocaleString("en-IN")}`, pageWidth - 20, currentY, { align: "right" })
 
     // Payment Terms and Notes
     currentY += 20
@@ -241,10 +258,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.setFontSize(8)
       doc.setTextColor(60, 60, 60)
       doc.setFont("helvetica", "normal")
-      const paymentNote =
-        order.paymentMethod === "cod"
+      const paymentNote = isPaid
+        ? "Payment has been received and confirmed. Thank you for your purchase."
+        : isCod
           ? "Payment to be collected upon delivery. Please keep exact change ready."
-          : "Payment has been received and confirmed. Thank you for your purchase."
+          : "Payment has not yet been confirmed. Please check your order payment status."
       doc.text(paymentNote, 25, currentY + 13)
       doc.text("All sales are final. Returns accepted within 7 days with original packaging.", 25, currentY + 18)
     }

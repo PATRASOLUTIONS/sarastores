@@ -92,7 +92,7 @@ function statusMeta(status: string) {
   if (value === "cancelled") return { label: "Cancelled", tone: "text-red-600", icon: XCircle }
   if (value === "out for delivery") return { label: "Out for Delivery", tone: "text-green-700", icon: Truck }
   if (value === "shipped") return { label: "Shipped", tone: "text-[#1560BD]", icon: Truck }
-  return { label: value.charAt(0).toUpperCase() + value.slice(1), tone: "text-amber-600", icon: Package }
+  return { label: value.charAt(0).toUpperCase() + value.slice(1), tone: "text-amber-700", icon: Package }
 }
 
 export default function OrdersPage() {
@@ -103,7 +103,7 @@ export default function OrdersPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [period, setPeriod] = useState("6m")
+  const [period, setPeriod] = useState("all")
   const [recommended, setRecommended] = useState<Suggestion[]>([])
 
   useEffect(() => {
@@ -384,7 +384,7 @@ export default function OrdersPage() {
                             </span>
                             <p
                               className={`mt-1.5 text-[10px] leading-tight ${
-                                done ? "font-semibold text-[#0F2557]" : "text-gray-400"
+                                done ? "font-semibold text-[#0F2557]" : "text-gray-600"
                               }`}
                             >
                               {label}
@@ -453,7 +453,7 @@ export default function OrdersPage() {
           ].map(({ title, subtitle }) => (
             <li key={title} className="rounded-lg bg-white/70 px-3 py-2.5">
               <p className="text-[12px] font-semibold text-[#0F2557]">{title}</p>
-              <p className="text-[11px] text-slate-500">{subtitle}</p>
+              <p className="text-[11px] text-slate-600">{subtitle}</p>
             </li>
           ))}
         </ul>
@@ -486,7 +486,7 @@ export default function OrdersPage() {
                 <p className="mt-1.5 flex items-baseline gap-1.5">
                   <span className="font-heading text-[13px] font-bold text-[#0F2557]">{inr(product.price)}</span>
                   {!!product.mrp && product.mrp > product.price && (
-                    <span className="text-[11px] text-gray-400 line-through">{inr(product.mrp)}</span>
+                    <span className="text-[11px] text-gray-600 line-through">{inr(product.mrp)}</span>
                   )}
                 </p>
                 <button

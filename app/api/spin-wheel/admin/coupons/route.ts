@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, type SpinCoupon } from "@/lib/spin-wheel-campaigns"
+import type { Filter } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -13,9 +14,9 @@ export async function GET(request: NextRequest) {
     const exportCsv = searchParams.get("export") === "csv"
     const campaignSlug = searchParams.get("campaignId") || "default"
 
-    const couponsCol = await getCampaignCollection(campaignSlug, "coupons")
+    const couponsCol = await getCampaignCollection<SpinCoupon>(campaignSlug, "coupons")
 
-    const query: any = {}
+    const query: Filter<SpinCoupon> = {}
     if (prize) query.prize = prize
     if (status) query.status = status
 
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     if (exportCsv) {
       // Generate CSV
       const headers = "Coupon Code,Prize,Participant Name,Phone,Email,Store,Status,Date\n"
-      const rows = coupons.map((c: any) =>
+      const rows = coupons.map((c) =>
         `${c.couponCode},${c.prize},"${c.participantName}",${c.participantPhone},${c.participantEmail},${c.store},${c.status},${new Date(c.createdAt).toLocaleDateString()}`
       ).join("\n")
       const csv = headers + rows
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      coupons: coupons.map((c: any) => ({
+      coupons: coupons.map((c) => ({
         id: c._id.toString(),
         couponCode: c.couponCode,
         prize: c.prize,

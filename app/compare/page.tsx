@@ -9,9 +9,15 @@ import { cleanProductName } from "@/utils/cleanProductName"
 import { ShoppingCart, X } from "lucide-react"
 import { formatPrice } from "@/utils/formatPrice"
 import { toast } from "react-hot-toast"
+import { z } from "zod"
+import { productDetailResponseSchema } from "@/lib/product-card-response"
+import { fetchProductSpecification } from "@/lib/product-specification-response"
+
+const compareProductSchema = productDetailResponseSchema.extend({ SKU: z.string().optional() })
+type CompareProduct = z.infer<typeof compareProductSchema>
 
 export default function ComparePage() {
-  const { compareIds, removeFromCompare, clearCompare, addToCompare } = useCompare()
+  const { compareIds, removeFromCompare, clearCompare } = useCompare()
     // Prevent adding more than 6 products to compare
     useEffect(() => {
       if (compareIds && compareIds.length > 6) {
@@ -19,12 +25,13 @@ export default function ComparePage() {
       }
     }, [compareIds]);
   const { addToCart } = useCart()
-  const [products, setProducts] = useState<any[]>([])
-  const [specs, setSpecs] = useState<any[]>([])
+  const [products, setProducts] = useState<CompareProduct[]>([])
+  const [specs, setSpecs] = useState<(Record<string, unknown> | null)[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     const fetchProductsAndSpecs = async () => {
       setLoading(true)
       setError(null)
@@ -43,38 +50,47 @@ export default function ComparePage() {
           body: JSON.stringify({ ids: compareIds, compare: true })
         })
         if (!res.ok) throw new Error("Failed to fetch products")
-        const data = await res.json()
-        const prods = Array.isArray(data) ? data : (data.items || [])
+        const data: unknown = await res.json()
+        const result = z.union([z.array(compareProductSchema), z.object({ items: z.array(compareProductSchema) })]).safeParse(data)
+        if (!result.success) {
+          console.error("[Compare] Invalid product response", result.error.flatten())
+          throw new Error("Product comparison data is invalid")
+        }
+        const prods = Array.isArray(result.data) ? result.data : result.data.items
+        if (cancelled) return
         setProducts(prods)
+        setSpecs([])
         // Fetch product_specification for each SKU
         const specResults = await Promise.all(
-          prods.map(async (p: any) => {
+          prods.map(async p => {
             const sku = p.sku || p.SKU
             if (!sku) return null
             try {
-              const specRes = await fetch(`${base}/api/products/specifications/${encodeURIComponent(sku)}`)
-              if (!specRes.ok) return null
-              const specData = await specRes.json()
+              const specData = await fetchProductSpecification(`${base}/api/products/specifications/${encodeURIComponent(sku)}`)
               // Prefer technical_details if present, else the whole object
               return specData?.technical_details || specData
-            } catch {
+            } catch (error) {
+              console.error("[Compare] Could not load specifications", { sku, error })
+              if (!cancelled) setError("Some product specifications could not be loaded. Please try again.")
               return null
             }
           })
         )
-        setSpecs(specResults)
-      } catch (e: any) {
-        setError(e.message || "Unknown error")
+        if (!cancelled) setSpecs(specResults)
+      } catch (e) {
+        console.error("[Compare] Could not load comparison", e)
+        if (!cancelled) setError(e instanceof Error ? e.message : "Product comparison could not be loaded")
       }
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     }
     fetchProductsAndSpecs()
+    return () => { cancelled = true }
   }, [compareIds])
 
   // Build a master list of all unique spec keys from product_specification (API)
   const allSpecKeys = useMemo(() => {
     const keys = new Set<string>()
-    specs.forEach((spec: any) => {
+    specs.forEach(spec => {
       if (spec && typeof spec === 'object') {
         Object.keys(spec).forEach(k => keys.add(k))
       }
@@ -115,13 +131,13 @@ export default function ComparePage() {
               <thead>
                 <tr className="bg-gradient-to-r from-blue-50 to-blue-100">
                   <th className="p-4 border-b text-left w-56 text-blue-900 text-lg font-bold tracking-wide">Specification</th>
-                  {products.map((p: any, idx: number) => {
-                    let firstImage = null;
+                  {products.map((p, idx) => {
+                    let firstImage: string | null = null;
                     const spec = specs[idx];
                     if (spec) {
-                      if (Array.isArray(spec.specification_images) && spec.specification_images.length > 0) {
+                      if (Array.isArray(spec.specification_images) && typeof spec.specification_images[0] === "string") {
                         firstImage = spec.specification_images[0];
-                      } else if (Array.isArray(spec.images) && spec.images.length > 0) {
+                      } else if (Array.isArray(spec.images) && typeof spec.images[0] === "string") {
                         firstImage = spec.images[0];
                       }
                     }
@@ -135,7 +151,7 @@ export default function ComparePage() {
                       firstImage = "/placeholder.svg?height=80&width=80&text=No+Image";
                     }
                     return (
-                      <th key={p.id || p._id || idx} className="p-4 border-b text-left min-w-[220px] align-top">
+                      <th key={p.id} className="p-4 border-b text-left min-w-[220px] align-top">
                         <div className="flex flex-col items-center gap-2 w-full max-w-[200px] mx-auto">
                           <img src={firstImage} alt={cleanProductName(p.name)} className="h-20 w-20 object-contain rounded-xl border-2 border-blue-200 bg-white shadow" />
                           <div className="flex flex-col items-center w-full">
@@ -156,8 +172,8 @@ export default function ComparePage() {
                             )}
                             <span className="text-blue-700 font-bold text-base text-center">{formatPrice(p.price)}</span>
                             <div className="flex gap-2 mt-1 justify-center w-full">
-                              <button onClick={() => { removeFromCompare(p.id || p._id); toast.success('Removed from compare') }} className="p-2 bg-white border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-50 hover:shadow transition" title="Remove from compare"><X className="h-4 w-4" /></button>
-                              <button onClick={() => { addToCart({ id: p.id || p._id, name: cleanProductName(p.name), price: p.price, image: firstImage, quantity: 1 } as any); toast.success('Added to cart') }} className="px-3 py-2 bg-brand-accent text-white rounded-lg shadow hover:bg-brand-accent-hover transition flex items-center gap-1" title="Add to cart"><ShoppingCart className="h-4 w-4" />Add</button>
+                              <button onClick={() => { removeFromCompare(p.id); toast.success('Removed from compare') }} className="p-2 bg-white border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-50 hover:shadow transition" title="Remove from compare"><X className="h-4 w-4" /></button>
+                              <button onClick={async () => { const added = await addToCart({ id: p.id, name: cleanProductName(p.name), price: p.price, image: firstImage || p.image, quantity: 1, color: null, size: null, stock: p.stock }); if (added) toast.success('Added to cart') }} className="px-3 py-2 bg-brand-accent text-white rounded-lg shadow hover:bg-brand-accent-hover transition flex items-center gap-1" title="Add to cart"><ShoppingCart className="h-4 w-4" />Add</button>
                             </div>
                           </div>
                         </div>
@@ -182,10 +198,10 @@ export default function ComparePage() {
                   .map((specKey, rowIdx) => (
                     <tr key={specKey} className={rowIdx % 2 === 0 ? "bg-blue-50/40 hover:bg-blue-100/60" : "bg-white hover:bg-blue-50/60"}>
                       <td className="p-4 font-semibold text-blue-900 bg-blue-50/60 border-r border-blue-100 w-56 text-base tracking-tight">{specKey}</td>
-                      {specs.map((spec: any, idx: number) => (
-                        <td key={products[idx]?.id || products[idx]?._id || idx} className="p-4 text-blue-900 text-base text-center align-middle">
-                          {spec && spec[specKey] ? (
-                            <span className="whitespace-pre-line break-words">{spec[specKey]}</span>
+                      {specs.map((spec, idx) => (
+                        <td key={products[idx]?.id || idx} className="p-4 text-blue-900 text-base text-center align-middle">
+                          {spec && spec[specKey] !== null && spec[specKey] !== undefined && spec[specKey] !== "" ? (
+                            <span className="whitespace-pre-line break-words">{typeof spec[specKey] === "object" ? JSON.stringify(spec[specKey]) : String(spec[specKey])}</span>
                           ) : (
                             <span className="text-blue-300">—</span>
                           )}

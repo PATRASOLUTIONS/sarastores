@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import { Search, ArrowUpDown, Eye, Mail, Phone } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
+import { AdminCustomersResponseSchema, CustomerOrderSummaryListSchema } from "@/lib/validation"
 
 interface Customer {
   id: string
@@ -43,22 +44,20 @@ export default function AdminCustomers() {
         if (!response.ok) {
           throw new Error("Failed to fetch customers")
         }
-        const data = await response.json()
-        // Try to read a total if API provides, else fallback to data.length
-        const users = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []
-        const count = typeof data?.total === "number" ? data.total : users.length
-        setTotalCount(count)
+        const data = AdminCustomersResponseSchema.parse(await response.json())
+        const users = data.items
+        setTotalCount(data.total)
 
         // Fetch orders to get customer stats
         const ordersResponse = await apiFetch(`/api/orders`)
         if (!ordersResponse.ok) {
           throw new Error("Failed to fetch orders")
         }
-        const ordersData = await ordersResponse.json()
+        const ordersData = CustomerOrderSummaryListSchema.parse(await ordersResponse.json())
 
         const customersWithStats = users.map((customer: Customer) => {
-          const customerOrders = ordersData.filter((order: any) => order.userId === customer.id)
-          const totalSpent = customerOrders.reduce((total: number, order: any) => total + (order.total || 0), 0)
+          const customerOrders = ordersData.filter(order => order.userId === customer.id)
+          const totalSpent = customerOrders.reduce((total, order) => total + order.total, 0)
           return { ...customer, orders: customerOrders.length, totalSpent }
         })
 

@@ -10,21 +10,18 @@ export default [
   {
     ignores: [
       ".next/**",
+      ".next-audit/**",
+      ".next-audit-strict/**",
+      ".next-audit-dev/**",
+      ".next-audit-journey/**",
       "node_modules/**",
+      "next-env.d.ts",
       "mobile/**",
-      "pdf-gen/**",
-      "proposal/**",
+      "scripts/legacy/pdf-gen/**",
+      "documents/archive/tools/pdf-gen/**",
+      "documents/private-artifacts/**",
+      "documents/proposals/**",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
-  {
-    rules: {
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-require-imports": "warn",
-      "@typescript-eslint/triple-slash-reference": "warn",
-      "@next/next/no-html-link-for-pages": "warn",
-      "react/no-unescaped-entities": "warn",
-      "prefer-const": "warn",
-    },
-  },
 ]

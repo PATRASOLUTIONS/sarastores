@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCollection, normalizeId, createObjectId, COLLECTIONS } from "@/lib/db-service"
 import { isAdmin } from "@/lib/auth"
+import { z } from "zod"
+import { ObjectId, type Filter } from "mongodb"
+
+const bulkRequestSchema = z.object({
+  ids: z.array(z.union([z.string().min(1), z.number().finite()])).default([]),
+  include_inactive: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
+  compare: z.boolean().optional(),
+})
+
+interface BulkProductDocument {
+  _id: ObjectId | string
+  id?: string
+  active?: boolean
+}
 
 const getCorsHeaders = (_req?: NextRequest) => {
   // Public catalogue lookup. No credentials are accepted, so a wildcard origin
@@ -16,20 +30,25 @@ const getCorsHeaders = (_req?: NextRequest) => {
 export async function POST(request: NextRequest) {
   try {
     // Safely parse JSON body — handle empty or invalid JSON gracefully
-    let body: any = null
+    let input: unknown
     try {
       // Read raw text first to detect empty bodies
       const raw = await request.text()
       if (!raw || raw.trim().length === 0) {
         return NextResponse.json({ error: "Empty request body" }, { status: 400, headers: getCorsHeaders(request) })
       }
-      body = JSON.parse(raw)
+      input = JSON.parse(raw)
     } catch (parseErr) {
       console.error("/api/products/bulk parse error:", parseErr)
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
 
-    const ids = Array.isArray(body?.ids) ? body.ids : []
+    const parsed = bulkRequestSchema.safeParse(input)
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid product lookup request" }, { status: 400, headers: getCorsHeaders(request) })
+    }
+    const body = parsed.data
+    const ids = body.ids
     // Deactivated products are not public. Only staff may opt into seeing them.
     const wantsInactive = body?.include_inactive === true || body?.include_inactive === 'true'
     const includeInactive = wantsInactive ? await isAdmin() : false
@@ -38,15 +57,20 @@ export async function POST(request: NextRequest) {
 
     // Helper: fail-fast wrapper for promises that may hang (DB/network)
     const withTimeout = async <T>(p: Promise<T>, ms = 10000): Promise<T> => {
-      return await Promise.race([
-        p,
-        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
-      ])
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        return await Promise.race([
+          p,
+          new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), ms) }),
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
     }
 
-    const collection = await withTimeout(getCollection(COLLECTIONS.PRODUCTS), 10000)
+    const collection = await withTimeout(getCollection<BulkProductDocument>(COLLECTIONS.PRODUCTS), 10000)
 
-    const orFilters: any[] = []
+    const orFilters: Filter<BulkProductDocument>[] = []
     for (const id of ids) {
       try {
         const objId = createObjectId(String(id))
@@ -93,7 +117,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(normalized, { status: 200, headers: getCorsHeaders(request) })
   } catch (err) {
     console.error("/api/products/bulk error", err)
-    const isTimeout = err && (err as Error).message === 'timeout'
+    const isTimeout = err instanceof Error && err.message === 'timeout'
     if (isTimeout) {
       return NextResponse.json({ error: "Request timed out while fetching products" }, { status: 504, headers: getCorsHeaders() })
     }

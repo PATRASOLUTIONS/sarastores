@@ -1,10 +1,10 @@
 /**
  * Checkout with Razorpay's native SDK.
  *
- * The server endpoints are unchanged from the web flow — they only care about
- * the order id, the payment id and the signature, not how the payment UI was
- * presented. The client never sends prices: `create-order` re-derives the
- * amount from the catalogue, so anything the app computed is display-only.
+ * The server binds the provider order, captured payment and signature to a
+ * checkout token, regardless of how the payment UI is presented. The client
+ * never sends prices: `create-order` re-derives the amount from the catalogue,
+ * so anything the app computed is display-only.
  */
 
 import { Platform } from "react-native"
@@ -29,6 +29,7 @@ interface CreateOrderResponse {
   amount: number
   currency: string
   keyId: string
+  checkoutToken: string
   notes?: Record<string, string>
 }
 
@@ -124,6 +125,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<{ orderId: str
       razorpay_order_id: payment.razorpay_order_id,
       razorpay_payment_id: payment.razorpay_payment_id,
       razorpay_signature: payment.razorpay_signature,
+      checkoutToken: order.checkoutToken,
     },
     { auth: true },
   )
@@ -135,9 +137,9 @@ export async function placeOrder(input: PlaceOrderInput): Promise<{ orderId: str
       customer: input.customer,
       paymentMethod: "online",
       paymentDetails: {
-        // `/api/orders` reads `paymentId` — sending only the snake_case keys
-        // makes it treat a paid order as having no payment reference and 400.
         paymentId: payment.razorpay_payment_id,
+        orderId: order.orderId,
+        checkoutToken: order.checkoutToken,
         razorpay_payment_id: payment.razorpay_payment_id,
         razorpay_order_id: payment.razorpay_order_id,
         razorpay_signature: payment.razorpay_signature,

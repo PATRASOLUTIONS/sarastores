@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { titleCaseLabel } from "@/lib/product-display"
 import { categoryIcon } from "@/lib/category-icons"
+import { useMarketingContent } from "@/hooks/useMarketingContent"
 
 /**
  * Deep category navigation ("NAVIGATION — THIS IS ONE OF THE BIGGEST GAPS").
@@ -71,6 +72,8 @@ function parentKeyOf(subCategory: SubCategory): string {
 }
 
 export default function MegaMenu() {
+  const marketing = useMarketingContent("header")
+  const links = marketing.items("navigation", STATIC_LINKS.map(item => ({ ...item, title: item.label })))
   const [categories, setCategories] = useState<Category[]>([])
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
@@ -286,25 +289,25 @@ export default function MegaMenu() {
             })}
 
             <li className="ml-auto flex items-center gap-0.5">
-              {STATIC_LINKS.map(({ href, label, accent }) => (
+              {marketing.enabled("navigation") && links.map(({ href, title, accent }) => (
                 <Link
                   key={href}
                   href={href}
                   className={`whitespace-nowrap px-3 py-2.5 text-sm transition-colors ${
                     accent
-                      ? "font-semibold text-brand-accent hover:underline"
+                      ? "font-semibold text-[#B93C00] hover:underline"
                       : "font-medium text-gray-700 hover:text-brand-primary"
                   }`}
                 >
-                  {label}
+                  {title}
                 </Link>
               ))}
-              <Link
-                href="/offers"
+              {marketing.enabled("promotion") && <Link
+                href={marketing.text("promotion", "ctaLink")}
                 className="ml-2 whitespace-nowrap rounded-full bg-[#E11D2E] px-3.5 py-1.5 text-xs font-bold text-white transition-transform hover:scale-105"
               >
-                SARA Super Sunday
-              </Link>
+                {marketing.text("promotion", "title")}
+              </Link>}
             </li>
           </ul>
         </nav>

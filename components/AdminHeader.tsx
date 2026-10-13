@@ -5,17 +5,16 @@ import { useRouter } from "next/navigation"
 import { Bell, ChevronRight, Loader2, RefreshCw, Search, Menu, X } from "lucide-react"
 import { useAdminAuth } from "@/hooks/useAdminAuth"
 import { apiFetchJson } from "@/lib/api-client"
+import { z } from "zod"
 
-type NotificationItem = {
-  id: string
-  label: string
-  description: string
-  count: number
-  href: string
-  tone: "amber" | "blue" | "red"
-}
-
-type NotificationResponse = { items: NotificationItem[]; total: number }
+const notificationResponseSchema = z.object({
+  items: z.array(z.object({
+    id: z.string(), label: z.string(), description: z.string(), count: z.number().int().nonnegative(),
+    href: z.string(), tone: z.enum(["amber", "blue", "red"]),
+  })),
+  total: z.number().int().nonnegative(),
+})
+type NotificationResponse = z.infer<typeof notificationResponseSchema>
 
 export function AdminHeader({ toggleSidebar, isSidebarOpen }: { toggleSidebar: () => void; isSidebarOpen: boolean }) {
   const { user } = useAdminAuth()
@@ -31,7 +30,7 @@ export function AdminHeader({ toggleSidebar, isSidebarOpen }: { toggleSidebar: (
     setNotificationsLoading(true)
     setNotificationsError(false)
     try {
-      setNotifications(await apiFetchJson<NotificationResponse>("/api/admin/notifications"))
+      setNotifications(await apiFetchJson("/api/admin/notifications", undefined, notificationResponseSchema.parse))
     } catch {
       setNotificationsError(true)
     } finally {

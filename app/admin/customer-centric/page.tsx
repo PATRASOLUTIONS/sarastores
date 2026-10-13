@@ -12,6 +12,11 @@ import {
   BarChart3, Calendar, AlertCircle, Image as ImageIcon, Code
 } from "lucide-react"
 import dynamic from "next/dynamic"
+import { z } from "zod"
+import {
+  savedEmailTemplateSchema, campaignRecipientListResponseSchema, campaignLibraryResponseSchema,
+  whatsappPreviewResponseSchema, readCampaignProgress, type WhatsAppPreview,
+} from "@/lib/marketing/campaign-response"
 
 const RichTextEditor = dynamic(() => import("@/components/ui/RichTextEditor"), { ssr: false })
 
@@ -81,7 +86,7 @@ export default function CustomerCentricIndex() {
   const [mounted, setMounted] = useState(false)
 
   // Template state
-  const [templates, setTemplates] = useState<LocalTemplate[]>(PROMO_TEMPLATES as LocalTemplate[])
+  const [templates, setTemplates] = useState<LocalTemplate[]>(PROMO_TEMPLATES)
   const [selected, setSelected] = useState<LocalTemplate | null>(null)
   const [loadingTemplates, setLoadingTemplates] = useState(false)
 
@@ -100,7 +105,7 @@ export default function CustomerCentricIndex() {
   const [channel, setChannel] = useState<"email" | "whatsapp">("email")
   const [library, setLibrary] = useState<LibraryTemplate[]>([])
   const [libraryCategory, setLibraryCategory] = useState<string>("all")
-  const [waPlan, setWaPlan] = useState<any>(null)
+  const [waPlan, setWaPlan] = useState<WhatsAppPreview | null>(null)
   const [loadingWaPlan, setLoadingWaPlan] = useState(false)
   const [users, setUsers] = useState<Recip[]>([])
   const [loadingUsers, setLoadingUsers] = useState(false)
@@ -146,11 +151,12 @@ export default function CustomerCentricIndex() {
   const fetchLibrary = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/admin/marketing/templates?segment=${encodeURIComponent(segment)}`)
-      if (!res.ok) return
-      const data = await res.json()
-      setLibrary(Array.isArray(data?.items) ? data.items : [])
+      if (!res.ok) throw new Error("Campaign library could not be loaded")
+      const data = campaignLibraryResponseSchema.parse(await res.json())
+      setLibrary(data.items)
     } catch (e) {
       console.error("Failed to load campaign library", e)
+      toast.error("Failed to load campaign library")
     }
   }, [segment])
 
@@ -159,10 +165,10 @@ export default function CustomerCentricIndex() {
     setLoadingTemplates(true)
     try {
       const res = await apiFetch("/api/admin/email-templates")
-      if (!res.ok) return
-      const data = await res.json().catch(() => [])
-      const list: LocalTemplate[] = (data || []).map((t: any) => ({
-        id: t.id || t._id || t.name || String(Math.random()),
+      if (!res.ok) throw new Error("Email templates could not be loaded")
+      const data = z.array(savedEmailTemplateSchema).parse(await res.json())
+      const list: LocalTemplate[] = data.map(t => ({
+        id: t.id || t._id || t.name,
         _id: t._id || t.id,
         name: t.name || "",
         subject: t.subject || "",
@@ -174,6 +180,7 @@ export default function CustomerCentricIndex() {
       }
     } catch (e) {
       console.error("Failed to load templates", e)
+      toast.error("Failed to load templates")
     } finally {
       setLoadingTemplates(false)
     }
@@ -201,28 +208,32 @@ export default function CustomerCentricIndex() {
     try {
       const res = await apiFetch(`/api/admin/campaign-recipients?segment=${encodeURIComponent(segment)}&channel=${channel}&limit=500`)
       if (!res.ok) {
-        setUsers([])
-        return
+        throw new Error("Campaign recipients could not be loaded")
       }
-      const data = await res.json().catch(() => [])
-      const list = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : []
-      const normalized: Recip[] = list.map((u: any) => ({
-        id: u.id || u._id || u.userId || String(Math.random()),
-        name: u.name || u.fullName || u.email,
-        email: u.email || "",
-        phone: u.phone || u.mobile || "",
-        selected: false,
-        totalOrders: u.totalOrders || 0,
-        totalSpent: u.totalSpent || 0,
-        source: u.source || "unknown",
-        segments: Array.isArray(u.segments) ? u.segments : [],
-        tier: u.tier ?? null,
-        lifecycle: u.lifecycle ?? null,
-      }))
+      const data = campaignRecipientListResponseSchema.parse(await res.json())
+      const list = Array.isArray(data) ? data : data.items
+      const normalized: Recip[] = list.map(u => {
+        const id = u.id || u._id || u.userId
+        if (!id) throw new Error("Campaign recipient has no identity")
+        return {
+          id,
+          name: u.name || u.fullName || u.email || undefined,
+          email: u.email || "",
+          phone: u.phone || u.mobile || "",
+          selected: false,
+          totalOrders: u.totalOrders || 0,
+          totalSpent: u.totalSpent || 0,
+          source: u.source || "unknown",
+          segments: u.segments || [],
+          tier: u.tier ?? null,
+          lifecycle: u.lifecycle ?? null,
+        }
+      })
       setUsers(normalized)
       setSelectAll(false)
     } catch (e) {
       console.error("Failed to fetch users", e)
+      toast.error("Failed to fetch campaign recipients")
       setUsers([])
     } finally {
       setLoadingUsers(false)
@@ -373,21 +384,23 @@ export default function CustomerCentricIndex() {
       const workbook = XLSX.read(data, { type: "array" })
       const firstSheet = workbook.SheetNames[0]
       const worksheet = workbook.Sheets[firstSheet]
-      const json = XLSX.utils.sheet_to_json<any>(worksheet)
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet)
+      const textCell = (value: unknown) => typeof value === "string" || typeof value === "number" ? String(value).trim() : ""
 
       const mapped = json
-        .map((row: any, i: number) => {
-          const email = row.Email || row.email || row.EMAIL || row["Email Address"] || ""
-          const name = row.Name || row.name || row.NAME || row["First Name"] || row["Full Name"] || ""
-          const phone = row.Phone || row.phone || row.Mobile || ""
+        .map((row, i) => {
+          const email = textCell(row.Email || row.email || row.EMAIL || row["Email Address"])
+          const name = textCell(row.Name || row.name || row.NAME || row["First Name"] || row["Full Name"])
+          const phone = textCell(row.Phone || row.phone || row.Mobile)
           return { id: `excel-${Date.now()}-${i}`, name: name || "Customer", email, phone, selected: true }
         })
-        .filter((u: any) => u.email)
+        .filter(u => z.string().email().safeParse(u.email).success)
 
       if (mapped.length === 0) {
         toast.error("No valid rows with an 'Email' column found")
         return
       }
+      if (mapped.length < json.length) toast.error(`${json.length - mapped.length} rows skipped because their email address is invalid`)
 
       setUsers((prev) => [...mapped, ...prev])
       setSelectAll(true)
@@ -474,97 +487,54 @@ export default function CustomerCentricIndex() {
         throw new Error(data?.error || "Failed to send")
       }
 
-      // Read streaming response
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split("\n")
-          buffer = lines.pop() || ""
-
-          for (const line of lines) {
-            if (!line.trim()) continue
-            try {
-              const event = JSON.parse(line)
-
-              if (event.type === "start") {
-                setSendProgress((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        totalRecipients: event.totalRecipients,
-                        totalBatches: event.totalBatches,
-                      }
-                    : prev
-                )
-              } else if (event.type === "batch_start") {
-                setSendProgress((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        currentBatch: event.batch,
-                        status: "sending",
-                      }
-                    : prev
-                )
-              } else if (event.type === "batch_complete") {
-                setSendProgress((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        sent: event.sent,
-                        failed: event.failed,
-                      }
-                    : prev
-                )
-              } else if (event.type === "batch_delay") {
-                setSendProgress((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        status: "delaying",
-                        delaySeconds: event.delaySeconds,
-                        nextBatch: event.nextBatch,
-                      }
-                    : prev
-                )
-              } else if (event.type === "complete") {
-                setSendProgress((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        sent: event.sent,
-                        failed: event.failed,
-                        status: "complete",
-                      }
-                    : prev
-                )
-                toast.success(`Campaign sent! ${event.sent} delivered, ${event.failed} failed`)
-                await fetchHistory()
-                setTimeout(() => {
-                  setCurrentStep(1)
-                  setSelected(null)
-                  setSubject("")
-                  setHtml("")
-                  setTemplateName("")
-                  setSendProgress(null)
-                }, 2000)
-              }
-            } catch (e) {
-              // ignore parse errors for incomplete lines
-            }
-          }
+      for await (const event of readCampaignProgress(res.body)) {
+        if (event.type === "start") {
+          setSendProgress(prev => prev ? {
+            ...prev,
+            totalRecipients: event.totalRecipients,
+            totalBatches: event.totalBatches,
+          } : prev)
+        } else if (event.type === "batch_start") {
+          setSendProgress(prev => prev ? {
+            ...prev,
+            currentBatch: event.batch,
+            status: "sending",
+          } : prev)
+        } else if (event.type === "batch_complete") {
+          setSendProgress(prev => prev ? {
+            ...prev,
+            sent: event.sent,
+            failed: event.failed,
+          } : prev)
+        } else if (event.type === "batch_delay") {
+          setSendProgress(prev => prev ? {
+            ...prev,
+            status: "delaying",
+            delaySeconds: event.delaySeconds,
+            nextBatch: event.nextBatch,
+          } : prev)
+        } else if (event.type === "complete") {
+          setSendProgress(prev => prev ? {
+            ...prev,
+            sent: event.sent,
+            failed: event.failed,
+            status: "complete",
+          } : prev)
+          toast.success(`Campaign sent! ${event.sent} delivered, ${event.failed} failed`)
+          await fetchHistory()
+          setTimeout(() => {
+            setCurrentStep(1)
+            setSelected(null)
+            setSubject("")
+            setHtml("")
+            setTemplateName("")
+            setSendProgress(null)
+          }, 2000)
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err)
-      toast.error(err.message || "Failed to send campaign")
+      toast.error(err instanceof Error ? err.message : "Failed to send campaign")
       setSendProgress(null)
     } finally {
       setSending(false)
@@ -732,13 +702,17 @@ export default function CustomerCentricIndex() {
                           setTemplateName(t.name)
                           setSubject(t.subject)
                           apiFetch(`/api/admin/marketing/templates?includeHtml=true`).then(async (r) => {
-                            const d = await r.json().catch(() => ({}))
-                            const full = (d?.items || []).find((x: any) => x.id === t.id)
+                            if (!r.ok) throw new Error("Campaign template could not be loaded")
+                            const d = campaignLibraryResponseSchema.parse(await r.json())
+                            const full = d.items.find(x => x.id === t.id)
                             if (full?.html) {
                               setHtml(full.html)
                               setSelected({ id: t.id, name: t.name, subject: t.subject, html: full.html })
                             }
                             setCurrentStep(2)
+                          }).catch(error => {
+                            console.error("Failed to load campaign template", error)
+                            toast.error("Failed to load campaign template")
                           })
                         }}
                         className="text-left rounded-lg border border-gray-200 p-3 hover:border-blue-400 hover:shadow-sm transition-all"
@@ -1217,7 +1191,12 @@ export default function CustomerCentricIndex() {
                               requireConsent: true,
                             }),
                           })
-                          setWaPlan(await res.json())
+                          if (!res.ok) throw new Error("WhatsApp preview could not be loaded")
+                          setWaPlan(whatsappPreviewResponseSchema.parse(await res.json()))
+                        } catch (error) {
+                          console.error("Failed to load WhatsApp preview", error)
+                          toast.error("Failed to load WhatsApp preview")
+                          setWaPlan(null)
                         } finally {
                           setLoadingWaPlan(false)
                         }
@@ -1235,7 +1214,7 @@ export default function CustomerCentricIndex() {
                     <div className="space-y-2 text-xs">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
-                          {waPlan.mode === "sent" ? "SENT" : "DRY RUN — nothing sent"}
+                          DRY RUN — nothing sent
                         </span>
                       </div>
                       <div className="text-gray-600">
@@ -1669,7 +1648,7 @@ export default function CustomerCentricIndex() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900">Import Recipients</h3>
-                  <p className="text-xs text-gray-500">Upload an Excel or CSV file</p>
+                  <p className="text-xs text-gray-500">Upload an Excel or CSV file. Every address must already have a stored email opt-in; an import does not grant consent.</p>
                 </div>
               </div>
               <button

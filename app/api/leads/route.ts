@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { checkAdminAuthorization } from "@/lib/auth"
+import { checkAdminAuthorization, requireAdmin } from "@/lib/auth"
 import { withRateLimit } from "@/lib/rate-limit"
+import { LeadQuerySchema, buildLeadFilter } from "@/lib/lead-query"
+import { CreateLeadSchema, UpdateLeadSchema } from "@/lib/validation"
 
 // GET - Fetch all leads (admin)
 export async function GET(req: Request) {
@@ -13,35 +15,13 @@ export async function GET(req: Request) {
         }
 
         const { searchParams } = new URL(req.url)
-        const status = searchParams.get("status")
-        const category = searchParams.get("category")
-        const source = searchParams.get("source")
-        const search = searchParams.get("search")
-        const startDate = searchParams.get("startDate")
-        const endDate = searchParams.get("endDate")
-        const sort = searchParams.get("sort") || "latest"
-        const page = parseInt(searchParams.get("page") || "1")
-        const limit = parseInt(searchParams.get("limit") || "10")
+        const parsed = LeadQuerySchema.safeParse(Object.fromEntries(searchParams))
+        if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid lead filters" }, { status: 400 })
+        const { sort, page, limit } = parsed.data
 
         const { db } = await connectToDatabase()
 
-        // Build filter
-        const filter: any = {}
-        if (status && status !== "all") filter.status = status
-        if (category && category !== "all") filter.category = category
-        if (source && source !== "all") filter.source = source
-        if (search) {
-            filter.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { phone: { $regex: search, $options: "i" } },
-                { email: { $regex: search, $options: "i" } },
-            ]
-        }
-        if (startDate || endDate) {
-            filter.createdAt = {}
-            if (startDate) filter.createdAt.$gte = new Date(startDate)
-            if (endDate) filter.createdAt.$lte = new Date(endDate + "T23:59:59.999Z")
-        }
+        const filter = buildLeadFilter(parsed.data)
 
         const sortOrder = sort === "oldest" ? 1 : -1
 
@@ -76,59 +56,18 @@ export async function GET(req: Request) {
 // POST - Submit a new lead. Public and therefore rate limited.
 export const POST = withRateLimit(async function POST(req: Request) {
     try {
-        const body = await req.json()
-        const { name, phone, pincode, email, category, source } = body
-
-        // Validate required fields
-        if (!name || name.trim().length < 3) {
-            return NextResponse.json(
-                { success: false, error: "Name is required (minimum 3 characters)" },
-                { status: 400 }
-            )
-        }
-
-        // Validate phone (10 digit India)
-        const phoneRegex = /^\d{10}$/
-        const cleanPhone = phone?.replace(/\D/g, "")
-        if (!cleanPhone || !phoneRegex.test(cleanPhone)) {
-            return NextResponse.json(
-                { success: false, error: "Valid 10-digit phone number is required" },
-                { status: 400 }
-            )
-        }
-
-        // Validate pincode (6 digit)
-        const pincodeRegex = /^\d{6}$/
-        if (!pincode || !pincodeRegex.test(pincode.trim())) {
-            return NextResponse.json(
-                { success: false, error: "Valid 6-digit pincode is required" },
-                { status: 400 }
-            )
-        }
-
-        // Validate email if provided
-        if (email && email.trim()) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-            if (!emailRegex.test(email.trim())) {
-                return NextResponse.json(
-                    { success: false, error: "Invalid email format" },
-                    { status: 400 }
-                )
-            }
-        }
-
-        if (!category) {
-            return NextResponse.json(
-                { success: false, error: "Category is required" },
-                { status: 400 }
-            )
-        }
+        const parsed = CreateLeadSchema.safeParse(await req.json().catch(error => {
+            console.warn("Invalid lead submission JSON:", error)
+            return null
+        }))
+        if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid lead submission" }, { status: 400 })
+        const { name, phone, pincode, email, category, source } = parsed.data
 
         const { db } = await connectToDatabase()
 
         const lead = {
             name: name.trim(),
-            phone: cleanPhone,
+            phone,
             pincode: pincode.trim(),
             email: email ? email.toLowerCase().trim() : "",
             category,
@@ -156,15 +95,17 @@ export const POST = withRateLimit(async function POST(req: Request) {
             { status: 500 }
         )
     }
-} as any, { windowMs: 60 * 1000, maxRequests: 8, message: "Too many submissions, please try again shortly." })
+}, { windowMs: 60 * 1000, maxRequests: 8, message: "Too many submissions, please try again shortly." })
 
 // DELETE - Delete a lead (admin)
 export async function DELETE(req: Request) {
+    const guard = await requireAdmin()
+    if (!guard.ok) return guard.response
     try {
         const { searchParams } = new URL(req.url)
         const id = searchParams.get("id")
 
-        if (!id) {
+        if (!id || !ObjectId.isValid(id)) {
             return NextResponse.json(
                 { success: false, error: "Lead ID is required" },
                 { status: 400 }
@@ -195,32 +136,16 @@ export async function DELETE(req: Request) {
 
 // PATCH - Update lead status or details
 export async function PATCH(req: Request) {
+    const guard = await requireAdmin()
+    if (!guard.ok) return guard.response
     try {
-        const body = await req.json()
-        const { id, status, ...otherFields } = body
-
-        if (!id) {
-            return NextResponse.json(
-                { success: false, error: "Lead ID is required" },
-                { status: 400 }
-            )
-        }
-
-        const validStatuses = ["new", "contacted", "interested", "converted", "closed"]
-        if (status && !validStatuses.includes(status)) {
-            return NextResponse.json(
-                { success: false, error: "Invalid status. Must be one of: " + validStatuses.join(", ") },
-                { status: 400 }
-            )
-        }
-
-        const updateData: any = { updatedAt: new Date() }
-        if (status) updateData.status = status
-        // Allow-list the editable fields; anything else in the body is ignored so
-        // a client cannot rewrite _id, createdAt or arbitrary keys.
-        for (const field of ["name", "email", "phone", "city", "category", "source", "notes"]) {
-            if (typeof otherFields[field] === "string") updateData[field] = otherFields[field]
-        }
+        const parsed = UpdateLeadSchema.safeParse(await req.json().catch(error => {
+            console.warn("Invalid lead update JSON:", error)
+            return null
+        }))
+        if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid lead update" }, { status: 400 })
+        const { id, ...fields } = parsed.data
+        const updateData = { ...fields, updatedAt: new Date() }
 
         const { db } = await connectToDatabase()
         const result = await db

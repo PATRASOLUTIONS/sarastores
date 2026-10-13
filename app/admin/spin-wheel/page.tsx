@@ -17,6 +17,80 @@ import {
 } from "recharts"
 import EmojiPicker from "emoji-picker-react"
 
+interface SpinStore {
+  store: string
+  visits: number
+  participants: number
+  conversionRate: string
+  url: string
+}
+
+interface SpinDashboard {
+  totalVisitors: number
+  totalParticipants: number
+  totalSpins: number
+  otpVerifiedCount: number
+  prizeDistribution: Array<{ prize: string; count: number }>
+  storePerformance: SpinStore[]
+}
+
+interface SpinParticipant {
+  id: string
+  name: string
+  phone: string
+  email?: string
+  otpCode?: string
+  otp?: string
+  otpVerified?: boolean
+  prize?: string
+  store?: string
+  createdAt: string
+}
+
+interface SpinCoupon {
+  id: string
+  couponCode: string
+  prize: string
+  participantName: string
+  participantPhone: string
+  store?: string
+  createdAt: string
+}
+
+interface PrizeInventory {
+  id?: string
+  prizeName: string
+  total: number
+  distributed?: number
+  isActive: boolean
+  emoji?: string
+  productImage?: string | null
+  weightMultiplier?: number | string
+  dateRanges?: Array<{ startDate: string; endDate: string }>
+  timeSlots?: Array<{ startTime: string; endTime: string }>
+}
+
+type InventoryEditor = PrizeInventory & {
+  isNew?: boolean
+  dateRanges: NonNullable<PrizeInventory["dateRanges"]>
+  timeSlots: NonNullable<PrizeInventory["timeSlots"]>
+}
+
+interface CouponCode {
+  code: string
+  isUsed?: boolean
+}
+
+interface SpinAnalytics {
+  summary: {
+    totalVisits: number
+    totalRegistrations: number
+    dropOffRate: string
+    spinSuccessRate: string
+  }
+  dailyData: Array<{ date: string; visits: number; registrations: number; spins: number; winners: number }>
+}
+
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "coupons", label: "Coupons", icon: Ticket },
@@ -83,17 +157,20 @@ function SpinWheelAdminContent() {
 
 /* ==================== TAB 1: DASHBOARD ==================== */
 function DashboardTab({ campaignSlug }: { campaignSlug: string }) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<SpinDashboard | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const res = await apiFetch(`/api/spin-wheel/admin/dashboard?campaignId=${campaignSlug}`)
+      if (!res.ok) throw new Error("Campaign dashboard could not be loaded")
       const json = await res.json()
       setData(json)
     } catch (err) {
       console.error(err)
+      setData(null)
+      toast.error("Campaign dashboard could not be loaded")
     } finally {
       setLoading(false)
     }
@@ -155,7 +232,7 @@ function DashboardTab({ campaignSlug }: { campaignSlug: string }) {
           <h3 className="font-semibold text-gray-900 mb-4">Top Performing Stores</h3>
           {data.storePerformance?.length > 0 ? (
             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-              {data.storePerformance.slice(0, 5).map((store: any, i: number) => (
+              {data.storePerformance.slice(0, 5).map((store, i) => (
                 <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold text-sm">
@@ -193,7 +270,7 @@ function DashboardTab({ campaignSlug }: { campaignSlug: string }) {
 
 /* ==================== TAB 2: PARTICIPANTS ==================== */
 function ParticipantsTab({ campaignSlug }: { campaignSlug: string }) {
-  const [participants, setParticipants] = useState<any[]>([])
+  const [participants, setParticipants] = useState<SpinParticipant[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [prizeFilter, setPrizeFilter] = useState("")
@@ -211,6 +288,7 @@ function ParticipantsTab({ campaignSlug }: { campaignSlug: string }) {
       params.set("page", page.toString())
       params.set("limit", "15")
       const res = await apiFetch(`/api/spin-wheel/admin/participants?${params}`)
+      if (!res.ok) throw new Error("Campaign participants could not be loaded")
       const json = await res.json()
       setParticipants(json.participants || [])
       setTotalPages(json.totalPages || 1)
@@ -274,7 +352,7 @@ function ParticipantsTab({ campaignSlug }: { campaignSlug: string }) {
             <tbody className="divide-y divide-gray-100">
               {participants.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No participants found</td></tr>
-              ) : participants.map((p: any) => (
+              ) : participants.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
                   <td className="px-4 py-3">
@@ -321,7 +399,7 @@ function ParticipantsTab({ campaignSlug }: { campaignSlug: string }) {
 
 /* ==================== TAB 3: COUPONS ==================== */
 function CouponsTab({ campaignSlug }: { campaignSlug: string }) {
-  const [coupons, setCoupons] = useState<any[]>([])
+  const [coupons, setCoupons] = useState<SpinCoupon[]>([])
   const [loading, setLoading] = useState(true)
   const [prizeFilter, setPrizeFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
@@ -334,6 +412,7 @@ function CouponsTab({ campaignSlug }: { campaignSlug: string }) {
       if (prizeFilter) params.set("prize", prizeFilter)
       if (statusFilter) params.set("status", statusFilter)
       const res = await apiFetch(`/api/spin-wheel/admin/coupons?${params}`)
+      if (!res.ok) throw new Error("Campaign coupons could not be loaded")
       const json = await res.json()
       setCoupons(json.coupons || [])
     } catch (err) {
@@ -381,7 +460,7 @@ function CouponsTab({ campaignSlug }: { campaignSlug: string }) {
             <tbody className="divide-y divide-gray-100">
               {coupons.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No coupons found</td></tr>
-              ) : coupons.map((c: any) => (
+              ) : coupons.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3 font-mono font-bold text-gray-900">{c.couponCode}</td>
                   <td className="px-4 py-3">
@@ -403,12 +482,12 @@ function CouponsTab({ campaignSlug }: { campaignSlug: string }) {
 
 /* ==================== TAB 4: ADVANCED INVENTORY ==================== */
 function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
-  const [inventory, setInventory] = useState<any[]>([])
+  const [inventory, setInventory] = useState<PrizeInventory[]>([])
   const [loading, setLoading] = useState(true)
-  const [couponCodes, setCouponCodes] = useState<Record<string, any[]>>({})
+  const [couponCodes, setCouponCodes] = useState<Record<string, CouponCode[]>>({})
 
   // Editor State
-  const [editingItem, setEditingItem] = useState<any>(null)
+  const [editingItem, setEditingItem] = useState<InventoryEditor | null>(null)
   const [saveLoading, setSaveLoading] = useState(false)
   const [codeInputValue, setCodeInputValue] = useState("")
 
@@ -419,6 +498,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
         apiFetch(`/api/spin-wheel/admin/inventory?campaignId=${campaignSlug}`),
         apiFetch(`/api/spin-wheel/admin/coupon-codes?campaignId=${campaignSlug}`)
       ])
+      if (!invRes.ok || !codesRes.ok) throw new Error("Campaign inventory could not be loaded")
       const invJson = await invRes.json()
       const codesJson = await codesRes.json()
       setInventory(invJson.inventory || [])
@@ -443,6 +523,8 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prizeName: editingItem.prizeName,
+          campaignId: campaignSlug,
+          ...(editingItem.isNew ? { total: editingItem.total } : {}),
           emoji: editingItem.emoji,
           productImage: editingItem.productImage || "",
           isActive: editingItem.isActive,
@@ -451,15 +533,17 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
           timeSlots: editingItem.timeSlots || []
         })
       })
+      if (!res.ok) throw new Error("Failed to save prize configuration")
 
       // 2. Upload Codes if any
       if (codeInputValue.trim().length > 0) {
         const codes = codeInputValue.split(/[\n,]+/).map(c => c.trim()).filter(c => c.length > 0)
-        await apiFetch(`/api/spin-wheel/admin/coupon-codes?campaignId=${campaignSlug}`, {
+        const upload = await apiFetch(`/api/spin-wheel/admin/coupon-codes?campaignId=${campaignSlug}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prizeName: editingItem.prizeName, codes })
+          body: JSON.stringify({ prizeName: editingItem.prizeName, codes, campaignId: campaignSlug })
         })
+        if (!upload.ok) throw new Error("Prize configuration saved, but coupon-code upload failed. Please retry the upload.")
       }
 
       if (res.ok) {
@@ -472,7 +556,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
       }
     } catch (err) {
       console.error("Save failed", err)
-      toast.error("❌ Error saving prize configuration")
+      toast.error(err instanceof Error ? err.message : "Error saving prize configuration")
     } finally {
       setSaveLoading(false)
     }
@@ -531,9 +615,9 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {inventory.map((item: any) => {
+        {inventory.map((item) => {
           const codes = couponCodes[item.prizeName] || []
-          const availableCount = codes.filter((c: any) => !c.isUsed).length
+          const availableCount = codes.filter((c) => !c.isUsed).length
           const usedCount = codes.length - availableCount
           const isBetterLuck = item.prizeName === "BETTER LUCK NEXT TIME"
 
@@ -556,7 +640,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => setEditingItem(item)}
+                  onClick={() => setEditingItem({ ...item, dateRanges: item.dateRanges || [], timeSlots: item.timeSlots || [] })}
                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                 >
                   <Settings className="w-4 h-4" />
@@ -584,13 +668,13 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                 <div className="flex justify-between">
                   <span>Date Limits:</span>
                   <span className="font-medium text-gray-900">
-                    {item.dateRanges?.length > 0 ? `${item.dateRanges.length} active ranges` : "None (Always active)"}
+                    {item.dateRanges?.length ? `${item.dateRanges.length} active ranges` : "None (Always active)"}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Time Slots:</span>
                   <span className="font-medium text-gray-900">
-                    {item.timeSlots?.length > 0 ? item.timeSlots.map((ts: any) => `${ts.startTime}-${ts.endTime}`).join(", ") : "None (24/7)"}
+                    {item.timeSlots?.length ? item.timeSlots.map((ts) => `${ts.startTime}-${ts.endTime}`).join(", ") : "None (24/7)"}
                   </span>
                 </div>
               </div>
@@ -605,7 +689,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-white px-6 py-4 flex items-center justify-between border-b border-gray-100 z-10">
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <Settings className="w-5 h-5 text-blue-500" /> Let's Configure "{editingItem.prizeName}"
+                <Settings className="w-5 h-5 text-blue-500" /> Let&apos;s Configure &quot;{editingItem.prizeName}&quot;
               </h3>
               <button onClick={() => { setEditingItem(null); setCodeInputValue("") }} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
                 <XCircle className="w-5 h-5" />
@@ -720,7 +804,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                   <p className="text-xs text-gray-500 italic">Leaves active all dates</p>
                 ) : (
                   <div className="space-y-2">
-                    {editingItem.dateRanges.map((dr: any, i: number) => (
+                    {editingItem.dateRanges.map((dr, i) => (
                       <div key={i} className="flex flex-wrap gap-2 items-center">
                         <input type="date" value={dr.startDate} onChange={e => {
                           const newRanges = [...editingItem.dateRanges]; newRanges[i].startDate = e.target.value; setEditingItem({ ...editingItem, dateRanges: newRanges })
@@ -730,7 +814,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                           const newRanges = [...editingItem.dateRanges]; newRanges[i].endDate = e.target.value; setEditingItem({ ...editingItem, dateRanges: newRanges })
                         }} className="px-2 py-1 border rounded text-sm bg-white" />
                         <button onClick={() => {
-                          const newRanges = editingItem.dateRanges.filter((_: any, idx: number) => idx !== i); setEditingItem({ ...editingItem, dateRanges: newRanges })
+                          const newRanges = editingItem.dateRanges.filter((_, idx) => idx !== i); setEditingItem({ ...editingItem, dateRanges: newRanges })
                         }} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     ))}
@@ -750,7 +834,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                   <p className="text-xs text-gray-500 italic">Leaves active 24/7</p>
                 ) : (
                   <div className="space-y-2">
-                    {editingItem.timeSlots.map((ts: any, i: number) => (
+                    {editingItem.timeSlots.map((ts, i) => (
                       <div key={i} className="flex gap-2 items-center">
                         <input type="time" value={ts.startTime} onChange={e => {
                           const newSlots = [...editingItem.timeSlots]; newSlots[i].startTime = e.target.value; setEditingItem({ ...editingItem, timeSlots: newSlots })
@@ -760,7 +844,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                           const newSlots = [...editingItem.timeSlots]; newSlots[i].endTime = e.target.value; setEditingItem({ ...editingItem, timeSlots: newSlots })
                         }} className="px-2 py-1 border rounded text-sm" />
                         <button onClick={() => {
-                          const newSlots = editingItem.timeSlots.filter((_: any, idx: number) => idx !== i); setEditingItem({ ...editingItem, timeSlots: newSlots })
+                          const newSlots = editingItem.timeSlots.filter((_, idx) => idx !== i); setEditingItem({ ...editingItem, timeSlots: newSlots })
                         }} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     ))}
@@ -785,16 +869,16 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                   <div className="mt-4">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex justify-between">
                       <span>Currently Available Codes</span>
-                      <span className="text-blue-600">{couponCodes[editingItem.prizeName]?.filter((x: any) => !x.isUsed).length || 0} active</span>
+                      <span className="text-blue-600">{couponCodes[editingItem.prizeName]?.filter((x) => !x.isUsed).length || 0} active</span>
                     </p>
                     <div className="max-h-32 overflow-y-auto space-y-1 pr-2 custom-scrollbar border border-gray-100 rounded-lg p-2 bg-white">
-                      {couponCodes[editingItem.prizeName]?.filter((x: any) => !x.isUsed).map((c: any) => (
+                      {couponCodes[editingItem.prizeName]?.filter((x) => !x.isUsed).map((c) => (
                         <div key={c.code} className="flex justify-between items-center text-xs py-1 hover:bg-gray-50 px-2 rounded">
                           <span className="font-mono">{c.code}</span>
                           <button onClick={() => handleDeleteCode(c.code)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       ))}
-                      {(!couponCodes[editingItem.prizeName] || couponCodes[editingItem.prizeName].filter((x: any) => !x.isUsed).length === 0) && (
+                      {(!couponCodes[editingItem.prizeName] || couponCodes[editingItem.prizeName].filter((x) => !x.isUsed).length === 0) && (
                         <p className="text-xs text-gray-400 text-center py-2">No active codes. This prize will not be randomly picked.</p>
                       )}
                     </div>
@@ -843,7 +927,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
 /* ==================== TAB 4: WHEEL PREVIEW ==================== */
 function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [inventory, setInventory] = useState<any[]>([])
+  const [inventory, setInventory] = useState<PrizeInventory[]>([])
   const [loading, setLoading] = useState(true)
   const [preloadedImages, setPreloadedImages] = useState<{ [key: number]: HTMLImageElement }>({})
   const [rotation, setRotation] = useState(0)
@@ -856,8 +940,9 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
     setLoading(true)
     try {
       const res = await apiFetch(`/api/spin-wheel/admin/inventory?campaignId=${campaignSlug}`)
-      const json = await res.json()
-      const active = json.inventory?.filter((p: any) => p.isActive) || []
+      if (!res.ok) throw new Error("Campaign inventory could not be loaded")
+      const json: { inventory?: PrizeInventory[] } = await res.json()
+      const active = json.inventory?.filter((p) => p.isActive) || []
       setInventory(active)
 
       // Preload images
@@ -865,7 +950,7 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
       let loaded = 0
       let toLoad = 0
 
-      active.forEach((item: any, idx: number) => {
+      active.forEach((item, idx) => {
         if (item.productImage) {
           toLoad++
           const img = new window.Image()
@@ -1137,7 +1222,7 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
   if (loading) return <LoadingState />
 
   const activePrizes = inventory.filter(p => p.isActive)
-  const totalCodeCount = activePrizes.reduce((sum: number, p: any) => sum + (p.total || 0), 0)
+  const totalCodeCount = activePrizes.reduce((sum, p) => sum + (p.total || 0), 0)
 
   return (
     <div className="space-y-8">
@@ -1237,7 +1322,7 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {activePrizes.map((prize: any, idx: number) => (
+                {activePrizes.map((prize, idx) => (
                   <tr key={prize.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-3 font-bold text-gray-900">
                       <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs">
@@ -1254,7 +1339,7 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
                       </span>
                     </td>
                     <td className="px-6 py-3 text-gray-600">
-                      {prize.dateRanges?.length > 0 ? (
+                      {prize.dateRanges?.length ? (
                         <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-md">
                           {prize.dateRanges.length} range{prize.dateRanges.length > 1 ? "s" : ""}
                         </span>
@@ -1263,7 +1348,7 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
                       )}
                     </td>
                     <td className="px-6 py-3 text-gray-600">
-                      {prize.timeSlots?.length > 0 ? (
+                      {prize.timeSlots?.length ? (
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-md">
                           {prize.timeSlots.length} slot{prize.timeSlots.length > 1 ? "s" : ""}
                         </span>
@@ -1298,7 +1383,7 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
 
 /* ==================== TAB 5: STORE TRACKING & QR ==================== */
 function StoresTab({ campaignSlug }: { campaignSlug: string }) {
-  const [stores, setStores] = useState<any[]>([])
+  const [stores, setStores] = useState<SpinStore[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState<string | null>(null)
   const [customStoreName, setCustomStoreName] = useState("")
@@ -1314,6 +1399,7 @@ function StoresTab({ campaignSlug }: { campaignSlug: string }) {
     setLoading(true)
     try {
       const res = await apiFetch(`/api/spin-wheel/admin/stores?campaignId=${campaignSlug}`)
+      if (!res.ok) throw new Error("Campaign stores could not be loaded")
       const json = await res.json()
       setStores(json.stores || [])
     } catch (err) {
@@ -1428,7 +1514,7 @@ function StoresTab({ campaignSlug }: { campaignSlug: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {stores.map((store: any) => (
+              {stores.map((store) => (
                 <tr key={store.store} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3 font-bold text-gray-900">{store.store}</td>
                   <td className="px-4 py-3 text-gray-600">{store.visits} scans</td>
@@ -1496,13 +1582,14 @@ function StoresTab({ campaignSlug }: { campaignSlug: string }) {
 
 /* ==================== TAB 6: TRAFFIC ANALYTICS ==================== */
 function AnalyticsTab({ campaignSlug }: { campaignSlug: string }) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<SpinAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const res = await apiFetch(`/api/spin-wheel/admin/analytics?campaignId=${campaignSlug}`)
+      if (!res.ok) throw new Error("Campaign analytics could not be loaded")
       const json = await res.json()
       setData(json)
     } catch (err) {
@@ -1659,7 +1746,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
         <AlertCircle className="w-8 h-8 text-red-500" />
       </div>
       <h3 className="text-gray-900 font-bold mb-2">Data Load Failed</h3>
-      <p className="text-gray-500 text-sm mb-6">We couldn't reach the server right now. It might be a network issue.</p>
+      <p className="text-gray-500 text-sm mb-6">We couldn&apos;t reach the server right now. It might be a network issue.</p>
       <button onClick={onRetry} className="px-6 py-2.5 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors">
         Try Again
       </button>

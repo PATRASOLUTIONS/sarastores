@@ -17,7 +17,35 @@ import { useScrollState } from '@/hooks/useAnimations'
 import DeliverToPincode from '@/components/DeliverToPincode'
 import MegaMenu from '@/components/MegaMenu'
 import { useSettingsData } from '@/hooks/useSettingsData'
+import { useMarketingContent } from "@/hooks/useMarketingContent"
 import CategoryGlyph from '@/components/CategoryGlyph'
+import { z } from "zod"
+
+const searchProductSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  slug: z.string().optional(),
+  image: z.string().nullish(),
+  sku: z.string().optional(),
+  SKU: z.string().optional(),
+  raw: z.record(z.unknown()).nullish(),
+  brand: z.string().nullish(),
+  manufacturer: z.string().nullish(),
+})
+type SearchProduct = z.infer<typeof searchProductSchema>
+const searchProductListSchema = z.union([
+  z.array(searchProductSchema),
+  z.object({ products: z.array(searchProductSchema) }),
+])
+
+function parseSearchProducts(value: unknown): SearchProduct[] {
+  const result = searchProductListSchema.safeParse(value)
+  if (!result.success) {
+    console.error("[Header] Invalid product search response", result.error.flatten())
+    throw new Error("Product search response is invalid")
+  }
+  return Array.isArray(result.data) ? result.data : result.data.products
+}
 
 interface Category {
   id: string
@@ -43,6 +71,7 @@ export default function Header() {
   const { cart } = useCart()
   const { openCart } = useCartUI()
   const { data: siteSettings } = useSettingsData()
+  const marketing = useMarketingContent("header")
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
@@ -52,7 +81,7 @@ export default function Header() {
   const { isScrolled, scrollY } = useScrollState(10)
   const [cartItemCount, setCartItemCount] = useState(0)
   const [cartBounce, setCartBounce] = useState(false)
-  const [searchSuggestions, setSearchSuggestions] = useState<any[]>([])
+  const [searchSuggestions, setSearchSuggestions] = useState<SearchProduct[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<{ id: string; name: string }>({ id: "", name: "All" })
@@ -80,9 +109,8 @@ export default function Header() {
       try {
         const fetchArr = async (url: string) => {
           const res = await fetch(url)
-          if (!res.ok) return [] as any[]
-          const data = await res.json()
-          return Array.isArray(data) ? data : (data.products || [])
+          if (!res.ok) throw new Error("Trending products could not be loaded")
+          return parseSearchProducts(await res.json())
         }
         let arr = await fetchArr("/api/products?featured=true&limit=12")
         if (arr.length < 4) arr = await fetchArr("/api/products?limit=12")
@@ -100,7 +128,8 @@ export default function Header() {
           if (terms.length >= 7) break
         }
         if (!ignore && terms.length >= 4) setTrendingTerms(terms)
-      } catch {
+      } catch (error) {
+        console.warn("[Header] Using curated trending searches", error)
         // keep curated fallback
       }
     }
@@ -164,14 +193,13 @@ export default function Header() {
   }, [])
 
   // Helper: robustly extract SKU from product object
-  const extractSku = (p: any) => {
-    return (
-      p.sku || p.SKU || p.raw?.SKU || p.raw?.sku || p.raw?.['SKU'] || p.raw?.['Prod SKU'] || p.raw?.['PROD SKU'] || ''
-    )
+  const extractSku = (p: SearchProduct): string => {
+    const value = p.sku || p.SKU || p.raw?.SKU || p.raw?.sku || p.raw?.['Prod SKU'] || p.raw?.['PROD SKU']
+    return typeof value === "string" || typeof value === "number" ? String(value) : ""
   }
 
   // Subcomponent for suggestion row — uses hook to prefer spec images by SKU
-  function SuggestionRow({ product, isActive }: { product: any; isActive?: boolean }) {
+  function SuggestionRow({ product, isActive }: { product: SearchProduct; isActive?: boolean }) {
     const sku = extractSku(product)
     const specImages = useProductSpecImages(sku)
     const imageSrc = (specImages && specImages.length > 0 && specImages[0]) || product.image || '/placeholder.png'
@@ -290,7 +318,7 @@ export default function Header() {
 
   const getDashboardLink = () => {
     // Check if user has dashboard access (for admin role)
-    const dashboardAccess = (user as any)?.dashboardAccess
+    const dashboardAccess = user?.dashboardAccess
 
     if (isAdmin && dashboardAccess !== false) return "/admin"
     if (isVendor) return "/vendor/dashboard"
@@ -332,12 +360,13 @@ export default function Header() {
         // Use server-side search param + limit to avoid fetching entire catalog
         const res = await fetch(`/api/products?search=${encodeURIComponent(searchQuery.trim())}&limit=6`)
         if (!res.ok) throw new Error('Failed to fetch')
-        const data = await res.json()
+        const data = parseSearchProducts(await res.json())
         if (!ignore) {
-          setSearchSuggestions(Array.isArray(data) ? data.slice(0, 6) : [])
+          setSearchSuggestions(data.slice(0, 6))
           setShowSuggestions(true)
         }
-      } catch {
+      } catch (error) {
+        console.error("[Header] Product suggestions could not be loaded", error)
         if (!ignore) {
           setSearchSuggestions([])
           setShowSuggestions(false)
@@ -421,37 +450,37 @@ export default function Header() {
       transition={{ duration: durations.normal, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* Announcement bar */}
-      <div className="hidden bg-[#1560BD] text-white md:block">
+      {marketing.enabled("announcement") && <div className="hidden bg-[#1560BD] text-white md:block">
         <div className="section-container flex items-center justify-between gap-4 py-1.5 text-[11px]">
           <p className="flex items-center gap-1.5">
             <Zap className="h-3.5 w-3.5" />
-            <span className="font-bold">SARA Super Sunday</span>
+            <span className="font-bold">{marketing.text("announcement", "title")}</span>
             <span className="text-white/40">|</span>
-            <span className="text-white/90">Biggest Deals. Brighter Days.</span>
+            <span className="text-white/90">{marketing.text("announcement", "description")}</span>
           </p>
           <div className="flex items-center gap-5 text-white/90">
-            <Link href="/#download-app" className="flex items-center gap-1.5 transition-colors hover:text-white">
+            <Link href={marketing.text("announcement", "downloadLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <Download className="h-3.5 w-3.5" />
-              Download App
+              {marketing.text("announcement", "downloadTitle")}
             </Link>
-            <Link href="/store-locator" className="flex items-center gap-1.5 transition-colors hover:text-white">
+            <Link href={marketing.text("announcement", "storeLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <MapPin className="h-3.5 w-3.5" />
-              Find a Store
+              {marketing.text("announcement", "storeTitle")}
             </Link>
-            <Link href="/faq" className="flex items-center gap-1.5 transition-colors hover:text-white">
+            <Link href={marketing.text("announcement", "helpLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <HelpCircle className="h-3.5 w-3.5" />
-              Help
+              {marketing.text("announcement", "helpTitle")}
             </Link>
             <a
               href={`tel:${supportPhone.replace(/\s/g, "")}`}
               className="flex items-center gap-1.5 font-semibold transition-colors hover:text-white"
             >
               <Phone className="h-3.5 w-3.5" />
-              {supportPhone} <span className="font-normal text-white/70">(Toll Free)</span>
+              {supportPhone} <span className="font-normal text-white/90">{marketing.text("announcement", "phoneSuffix")}</span>
             </a>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Top Navigation (desktop) */}
 
@@ -487,7 +516,7 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex-shrink-0 flex items-center gap-3" aria-label="Sara Mobiles and Electronics - Home">
             <div className="text-lg md:text-2xl font-heading font-bold">
-              <Image src="/sara-logo.png" alt="SARA" width={374} height={100} className="h-9 md:h-12 w-auto object-contain" priority />
+              {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-9 md:h-12 w-auto object-contain" priority unoptimized />}
             </div>
           </Link>
 
@@ -559,7 +588,7 @@ export default function Header() {
                 {/* Input (middle) */}
                 <input
                   type="text"
-                  placeholder="Search for products, brands and more..."
+                  placeholder={marketing.text("brand", "searchHint")}
                   className="flex-1 min-w-0 px-4 bg-transparent focus:outline-none text-gray-800 placeholder-gray-400 text-sm"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -691,6 +720,7 @@ export default function Header() {
             {/* Wishlist - Hidden on mobile */}
             <Link
               href="/dashboard/wishlist"
+              aria-label="Wishlist"
               className="order-3 hidden md:inline-flex items-center gap-2 p-2.5 rounded-lg hover:bg-brand-primary-subtle text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors group"
             >
               <Heart className="h-5 w-5 group-hover:text-brand-primary transition-colors" />
@@ -767,7 +797,7 @@ export default function Header() {
                     onClick={() => setIsAccountMenuOpen(false)}
                     role="menuitem"
                   >
-                    {isAdmin && (user as any)?.dashboardAccess !== false ? "Admin Dashboard" : isVendor ? "Vendor Dashboard" : "Dashboard"}
+                    {isAdmin && user?.dashboardAccess !== false ? "Admin Dashboard" : isVendor ? "Vendor Dashboard" : "Dashboard"}
                   </Link>
                   <Link
                     href="/dashboard/orders"
@@ -811,7 +841,7 @@ export default function Header() {
               </div>
               <input
                 type="text"
-                placeholder="Search for products, brands and more..."
+                placeholder={marketing.text("brand", "searchHint")}
                 className="w-full pl-2 pr-3 py-3 bg-transparent focus:outline-none text-gray-800 placeholder-gray-400 text-sm touch-manipulation"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -862,7 +892,7 @@ export default function Header() {
             {/* Drawer header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <Link href="/" onClick={() => setIsMenuOpen(false)} aria-label="Home">
-                <Image src="/sara-logo.png" alt="SARA" width={374} height={100} className="h-9 w-auto object-contain brightness-0 invert" />
+                {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-9 w-auto object-contain brightness-0 invert" unoptimized />}
               </Link>
               <button
                 onClick={() => setIsMenuOpen(false)}
@@ -945,7 +975,7 @@ export default function Header() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <svg className="h-5 w-5 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-                    {isAdmin && (user as any)?.dashboardAccess !== false ? "Admin Dashboard" : isVendor ? "Vendor Dashboard" : "Dashboard"}
+                    {isAdmin && user?.dashboardAccess !== false ? "Admin Dashboard" : isVendor ? "Vendor Dashboard" : "Dashboard"}
                   </Link>
                   <Link
                     href="/dashboard"

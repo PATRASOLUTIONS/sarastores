@@ -201,7 +201,7 @@ export async function runWishlistAlerts(
       }
 
       try {
-        const token = await issueUnsubscribeToken(userId)
+        const token = await issueUnsubscribeToken(userId, "email")
         const message = buildReminderMessage(kind, {
           customerName: "there",
           productName: info.name,

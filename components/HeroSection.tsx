@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { durations, easings } from '@/lib/animations'
 import { useReducedMotion } from '@/hooks/useAnimations'
 import CategoryGlyph from '@/components/CategoryGlyph'
+import { heroSlideListSchema } from "@/lib/hero-slides"
 
 interface HeroFeature {
   type: "product" | "category" | "subcategory"
@@ -68,7 +69,7 @@ const getCachedSlides = (): HeroSlide[] | null => {
     if (cached && timestamp) {
       const cacheAge = Date.now() - parseInt(timestamp, 10)
       // Return cached data even if stale (we'll refresh in background)
-      const parsedData = JSON.parse(cached)
+      const parsedData = heroSlideListSchema.parse(JSON.parse(cached))
       if (Array.isArray(parsedData) && parsedData.length > 0) {
         return parsedData
       }
@@ -143,9 +144,9 @@ export default function HeroSection() {
       })
 
       if (response.ok) {
-        const data = await response.json()
+        const data: unknown = await response.json()
         // Filter only active slides
-        const activeSlides = (Array.isArray(data) ? data : []).filter(
+        const activeSlides = heroSlideListSchema.parse(data).filter(
           (slide: HeroSlide) => slide.active !== false
         )
 
@@ -404,7 +405,7 @@ export default function HeroSection() {
                   onClick={() => setActiveSlide(index)}
                   aria-label={`Go to slide ${index + 1}`}
                   aria-current={activeSlide === index ? 'true' : undefined}
-                  className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black/20"
+                  className="flex min-h-6 min-w-6 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black/20"
                 >
                   <span
                     className="h-2 rounded-full shadow transition-all duration-300"

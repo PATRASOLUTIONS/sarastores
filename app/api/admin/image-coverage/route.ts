@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { requireAdmin } from "@/lib/auth"
 import { handleApiError } from "@/lib/api-error"
-import { auditProductImages, summariseImageCoverage } from "@/lib/product-images"
+import { auditProductImages, summariseImageCoverage, type ProductImageInput } from "@/lib/product-images"
 
 /**
  * Image-standard coverage report for merchandising.
@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Number(params.get("limit")) || 100, 500)
     const onlyNonCompliant = params.get("nonCompliant") !== "false"
 
-    const collection = await getCollection("products")
+    const collection = await getCollection<ProductImageInput & {
+      active?: boolean; name?: string; sku?: string; slug?: string; category?: string
+    }>("products")
     const docs = await collection
       .find(
         { active: true },
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
     const summary = summariseImageCoverage(products)
 
     const audited = products
-      .map((product: any) => ({
+      .map((product) => ({
         id: product.id,
         sku: product.sku || null,
         slug: product.slug || null,
@@ -52,9 +54,9 @@ export async function GET(request: NextRequest) {
         category: product.category || null,
         ...auditProductImages(product),
       }))
-      .filter((entry: any) => (onlyNonCompliant ? !entry.compliant : true))
+      .filter((entry) => (onlyNonCompliant ? !entry.compliant : true))
       // Worst first, so the worklist is already prioritised.
-      .sort((a: any, b: any) => a.score - b.score)
+      .sort((a, b) => a.score - b.score)
       .slice(0, limit)
 
     return NextResponse.json({ success: true, summary, products: audited })

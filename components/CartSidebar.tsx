@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Image from "next/image"
+import CartProductImage from "@/components/CartProductImage"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
@@ -18,9 +18,8 @@ import {
 import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartUI } from "@/contexts/CartUIContext"
+import { useSettingsData } from "@/hooks/useSettingsData"
 import { toast } from "react-hot-toast"
-
-const FREE_DELIVERY_THRESHOLD = 5000
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -34,6 +33,7 @@ export default function CartSidebar() {
   const { user } = useAuth()
   const router = useRouter()
   const { cart, updateQuantity, removeFromCart, clearCart, isLoading } = useCart()
+  const { data: settings, error: settingsError, isLoading: settingsLoading } = useSettingsData()
 
   // Track which line item was just added so we can flash it. The
   // highlight is removed after ~1.6s.
@@ -60,8 +60,14 @@ export default function CartSidebar() {
     () => cart.reduce((n, item) => n + Number(item.quantity || 0), 0),
     [cart],
   )
-  const freeDelivery = subtotal >= FREE_DELIVERY_THRESHOLD
-  const remainingForFreeDelivery = Math.max(0, FREE_DELIVERY_THRESHOLD - subtotal)
+  const hardwareSubtotal = cart.filter((item) => item.type !== "software")
+    .reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const threshold = Number(settings?.freeShippingThreshold ?? 1000)
+  const fee = Number(settings?.shippingFee ?? 99)
+  const shippingReady = !settingsLoading && !settingsError && !!settings &&
+    Number.isFinite(threshold) && threshold >= 0 && Number.isFinite(fee) && fee >= 0
+  const freeDelivery = hardwareSubtotal === 0 || hardwareSubtotal >= threshold || fee === 0
+  const remainingForFreeDelivery = Math.max(0, threshold - hardwareSubtotal)
 
   const handleQuantity = (id: string, color: string | null, size: string | null, next: number) => {
     if (next < 1) {
@@ -143,7 +149,11 @@ export default function CartSidebar() {
             {/* Free-delivery progress */}
             {cart.length > 0 && (
               <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/60">
-                {freeDelivery ? (
+                {!shippingReady ? (
+                  <p className="text-[12px] text-gray-600">
+                    {settingsError ? "Delivery charges are unavailable; please check at checkout." : "Calculating delivery charges..."}
+                  </p>
+                ) : freeDelivery ? (
                   <p className="text-[12px] text-emerald-700 font-semibold flex items-center gap-1.5">
                     <Truck className="h-3.5 w-3.5" />
                     You qualify for FREE delivery!
@@ -154,12 +164,12 @@ export default function CartSidebar() {
                     Add <span className="font-bold text-brand-primary">{formatINR(remainingForFreeDelivery)}</span> more for FREE delivery
                   </p>
                 )}
-                <div className="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                {shippingReady && <div className="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-brand-primary to-brand-accent transition-all duration-500"
-                    style={{ width: `${Math.min(100, (subtotal / FREE_DELIVERY_THRESHOLD) * 100)}%` }}
+                    style={{ width: `${freeDelivery ? 100 : Math.min(100, (hardwareSubtotal / Math.max(1, threshold)) * 100)}%` }}
                   />
-                </div>
+                </div>}
               </div>
             )}
 
@@ -207,12 +217,10 @@ export default function CartSidebar() {
                           className="relative h-20 w-20 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden border border-gray-100"
                         >
                           {item.image ? (
-                            <Image
+                            <CartProductImage
                               src={item.image}
-                              alt={item.name}
-                              fill
-                              sizes="80px"
-                              className="object-contain p-1"
+                              name={item.name}
+                              className="h-full w-full object-contain p-1"
                             />
                           ) : (
                             <div className="flex items-center justify-center h-full text-gray-300">

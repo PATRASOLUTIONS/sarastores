@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, type SpinCouponCode } from "@/lib/spin-wheel-campaigns"
+import type { Filter } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
+import { z } from "zod"
+import { connectToDatabase } from "@/lib/mongodb"
+
+const uploadSchema = z.object({
+  prizeName: z.string().trim().min(1).max(150),
+  codes: z.array(z.string().trim().min(1).max(500)).min(1).max(10000),
+  campaignId: z.string().regex(/^[a-z0-9-]{1,80}$/).optional(),
+}).strict()
 
 // GET: List all coupon codes for a specific prize
 // POST: Add coupon codes to a specific prize
@@ -14,9 +23,9 @@ export async function GET(request: NextRequest) {
     const prizeName = searchParams.get("prizeName") || ""
     const campaignSlug = searchParams.get("campaignId") || "default"
 
-    const couponCodesCol = await getCampaignCollection(campaignSlug, "couponCodes")
+    const couponCodesCol = await getCampaignCollection<SpinCouponCode>(campaignSlug, "couponCodes")
 
-    const query: any = {}
+    const query: Filter<SpinCouponCode> = {}
     if (prizeName) query.prizeName = prizeName
 
     const codes = await couponCodesCol
@@ -25,8 +34,8 @@ export async function GET(request: NextRequest) {
       .toArray()
 
     // Group by prize
-    const grouped: Record<string, any[]> = {}
-    codes.forEach((c: any) => {
+    const grouped: Record<string, Array<Omit<SpinCouponCode, "isUsed" | "usedBy"> & { id: string; isUsed: boolean; usedBy: string | null }>> = Object.create(null)
+    codes.forEach((c) => {
       if (!grouped[c.prizeName]) grouped[c.prizeName] = []
       grouped[c.prizeName].push({
         id: c._id.toString(),
@@ -50,28 +59,20 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { prizeName, codes, campaignId } = body
-    const campaignSlug = campaignId || "default"
-
-    if (!prizeName || !codes || !Array.isArray(codes) || codes.length === 0) {
-      return NextResponse.json(
-        { error: "Prize name and an array of coupon codes are required" },
-        { status: 400 }
-      )
-    }
-
-    const collection = await getCampaignCollection(campaignSlug, "couponCodes")
+    const parsed = uploadSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: "Invalid coupon-code upload" }, { status: 400 })
+    const { prizeName, codes, campaignId } = parsed.data
+    const campaignSlug = campaignId || new URL(request.url).searchParams.get("campaignId") || "default"
+    const collection = await getCampaignCollection<SpinCouponCode>(campaignSlug, "couponCodes")
+    await collection.createIndex({ code: 1 }, { unique: true, name: "code_unique" })
 
     // Filter out duplicates
     const existingCodes = await collection.find({
-      code: { $in: codes.map((c: string) => c.trim().toUpperCase()) }
+      code: { $in: codes.map(c => c.toUpperCase()) }
     }).toArray()
-    const existingSet = new Set(existingCodes.map((c: any) => c.code))
+    const existingSet = new Set(existingCodes.map((c) => c.code))
 
-    const newCodes = codes
-      .map((c: string) => c.trim().toUpperCase())
-      .filter((c: string) => c.length > 0 && !existingSet.has(c))
+    const newCodes = [...new Set(codes.map(c => c.toUpperCase()))].filter(c => !existingSet.has(c))
 
     if (newCodes.length === 0) {
       return NextResponse.json(
@@ -88,7 +89,16 @@ export async function POST(request: NextRequest) {
       createdAt: new Date()
     }))
 
-    await collection.insertMany(docs)
+    const { client } = await connectToDatabase()
+    const session = client.startSession()
+    try {
+      await session.withTransaction(async () => {
+        const inserted = await collection.insertMany(docs, { session })
+        if (!inserted.acknowledged || inserted.insertedCount !== docs.length) throw new Error("Coupon-code upload was not fully acknowledged")
+      })
+    } finally {
+      await session.endSession()
+    }
 
     return NextResponse.json({
       success: true,
@@ -97,6 +107,7 @@ export async function POST(request: NextRequest) {
       message: `Added ${newCodes.length} coupon codes for ${prizeName}`
     })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
     console.error("Coupon codes POST error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

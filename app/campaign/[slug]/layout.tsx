@@ -2,15 +2,13 @@ import type React from "react"
 import type { Metadata } from "next"
 import { getCollection } from "@/lib/db-service"
 import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
+import { notFound } from "next/navigation"
+import { cache } from "react"
 
-async function getCampaign(slug: string) {
-  try {
-    const collection = await getCollection("campaign_pages")
-    return await collection.findOne({ slug })
-  } catch {
-    return null
-  }
-}
+const getCampaign = cache(async (slug: string) => {
+  const collection = await getCollection("campaign_pages")
+  return collection.findOne({ slug: decodeURIComponent(slug), isActive: true })
+})
 
 export async function generateMetadata({
   params,
@@ -23,6 +21,7 @@ export async function generateMetadata({
     getSiteSettings(),
     getCampaign(slug),
   ])
+  if (!campaign) notFound()
 
   const companyName = getCompanyName(settings)
   const name = campaign?.name || slug.replace(/-/g, " ")
@@ -31,16 +30,16 @@ export async function generateMetadata({
     title: `${name} | ${companyName}`,
     description:
       campaign?.description ||
-      `${name} at ${companyName} — limited-period offers on televisions, home appliances and mobiles with no-cost EMI, bank discounts and free installation.`,
-    pageUrl: `${origin}/campaign/${slug}`,
+      `Explore ${name} at ${companyName}. Browse the products selected for this campaign and check current prices and availability.`,
+    pageUrl: `${origin}/campaign/${encodeURIComponent(campaign.slug)}`,
     origin,
     companyName,
     imageUrl: campaign?.banner || undefined,
-    // An expired or missing campaign is a thin page; keep it out of the index.
-    noIndex: !campaign || campaign.isActive === false,
   })
 }
 
-export default function CampaignLayout({ children }: { children: React.ReactNode }) {
+export default async function CampaignLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  if (!await getCampaign(slug)) notFound()
   return <>{children}</>
 }

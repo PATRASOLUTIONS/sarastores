@@ -1,47 +1,23 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { RazorpayOffer, BANK_COLORS, getBorderColor } from '@/types/razorpay'
+import React from 'react'
+import { BANK_COLORS, getBorderColor } from '@/types/razorpay'
+import { applicableOffers, type LiveRazorpayOffer } from "@/lib/razorpay-offers"
+import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
 
 interface BankOffersMarqueeProps {
   className?: string
 }
 
 export default function BankOffersMarquee({ className = '' }: BankOffersMarqueeProps) {
-  const [offers, setOffers] = useState<RazorpayOffer[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { offers, isLoading, error, retry } = useRazorpayOffers()
 
-  useEffect(() => {
-    fetchOffers()
-  }, [])
-
-  const fetchOffers = async () => {
-    try {
-      setIsLoading(true)
-      const response = await fetch('/api/razorpay/offers')
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch offers')
-      }
-
-      const data = await response.json()
-      setOffers(data.items || [])
-      setError(null)
-    } catch (err) {
-      console.error('Error fetching bank offers:', err)
-      setError('Unable to load offers')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const formatOfferText = (offer: RazorpayOffer): { title: string; subtitle: string } => {
+  const formatOfferText = (offer: LiveRazorpayOffer): { title: string; subtitle: string } => {
     let title = ''
     let subtitle = offer.description
 
     if (offer.discount_percentage) {
-      title = `${offer.discount_percentage}% ${offer.type === 'instant' ? 'Instant Discount' : 'Cashback'}`
+      title = `${offer.discount_percentage}% ${offer.type === 'cashback' ? 'Cashback' : 'Discount'}`
       if (offer.max_discount) {
         subtitle = `Up to ₹${offer.max_discount.toLocaleString('en-IN')} ${offer.min_amount ? `on orders above ₹${offer.min_amount.toLocaleString('en-IN')}` : ''}`
       }
@@ -50,8 +26,8 @@ export default function BankOffersMarquee({ className = '' }: BankOffersMarqueeP
       if (offer.min_amount) {
         subtitle = `On orders above ₹${offer.min_amount.toLocaleString('en-IN')}`
       }
-    } else if (offer.type === 'emi') {
-      title = 'No Cost EMI'
+    } else if (offer.type === 'emi' || offer.payment_method === 'emi') {
+      title = offer.name
       subtitle = offer.description || 'Available on select cards'
     } else {
       title = offer.name
@@ -83,12 +59,13 @@ export default function BankOffersMarquee({ className = '' }: BankOffersMarqueeP
     )
   }
 
-  if (error || offers.length === 0) {
+  if (error) return <p role="alert" className="mb-4 text-sm text-slate-600">Bank offers are currently unavailable. <button type="button" onClick={retry} className="text-[#1560bd] underline">Retry offers</button></p>
+  if (offers.length === 0) {
     return null
   }
 
   // Filter only active offers
-  const activeOffers = offers.filter(offer => offer.active)
+  const activeOffers = applicableOffers(offers, Number.MAX_SAFE_INTEGER)
 
   if (activeOffers.length === 0) {
     return null

@@ -7,6 +7,7 @@ import CategoryProductCard from "@/components/CategoryProductCard"
 import Link from "next/link"
 import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, Star, Wind, Snowflake, Droplets, Shirt } from "lucide-react"
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import { brandProductListResponseSchema, type BrandProduct } from "@/lib/brand-landing-response"
 
 // Haier promotional banner images
 const haierBannerImages = [
@@ -70,25 +71,8 @@ const haierLifestyleImages = [
     },
 ]
 
-interface Product {
-    id: string
-    name: string
-    description?: string
-    price: number
-    image: string
-    stock?: number
-    category?: string
-    rating?: number
-    reviews?: number
-    discount?: number
-    originalPrice?: number
-    specification_images?: string
-    sku?: string
-    technical_details?: Record<string, any>
-}
-
 export default function HaierBrandPage() {
-    const [products, setProducts] = useState<Product[]>([])
+    const [products, setProducts] = useState<BrandProduct[]>([])
     const [loading, setLoading] = useState(true)
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isVisible, setIsVisible] = useState(false)
@@ -128,16 +112,16 @@ export default function HaierBrandPage() {
             try {
                 const response = await fetch("/api/products")
                 if (response.ok) {
-                    const data = await response.json()
+                    const data = brandProductListResponseSchema.parse(await response.json())
                     // Filter products by Haier manufacturer
-                    const haierProducts = data.filter((p: any) => {
+                    const haierProducts = data.filter((p) => {
                         const manufacturer = normalizeProductForSchema(p).manufacturerName || p.manufacturer || ""
                         return manufacturer.toLowerCase().includes("haier")
                     })
                     setProducts(haierProducts.slice(0, 12)) // Show up to 12 products
 
                     // Extract unique subcategories from Haier products
-                    const haierSubCategories = new Set(haierProducts.map((p: any) =>
+                    const haierSubCategories = new Set(haierProducts.map((p) =>
                         (p.subCategory || p.description || "").trim()
                     ))
 
@@ -148,6 +132,8 @@ export default function HaierBrandPage() {
                         )
                     )
                     setAvailableCategories(validCategories)
+                } else {
+                    throw new Error("Failed to load Haier products")
                 }
             } catch (error) {
                 console.error("Error fetching Haier products:", error)
@@ -212,7 +198,7 @@ export default function HaierBrandPage() {
                             </div>
 
                             <p className="text-lg md:text-xl text-white/90 mb-6 max-w-xl">
-                                Experience world-class innovation in home appliances. Discover Haier's smart technology,
+                                Experience world-class innovation in home appliances. Discover Haier&apos;s smart technology,
                                 energy-efficient solutions, and award-winning design for modern living.
                             </p>
 
@@ -298,7 +284,7 @@ export default function HaierBrandPage() {
             <section className="py-16 md:py-20 bg-white">
                 <div className="container mx-auto px-4">
                     <div className="text-center mb-12">
-                        <span className="inline-block px-4 py-2 bg-cyan-50 text-cyan-600 rounded-full text-sm font-semibold mb-4">
+                        <span className="inline-block px-4 py-2 bg-cyan-50 text-cyan-700 rounded-full text-sm font-semibold mb-4">
                             Explore Categories
                         </span>
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -356,7 +342,7 @@ export default function HaierBrandPage() {
                             Why Choose Haier?
                         </h2>
                         <p className="text-gray-600 max-w-2xl mx-auto">
-                            World's #1 brand in major appliances for 14 consecutive years
+                            World&apos;s #1 brand in major appliances for 14 consecutive years
                         </p>
                     </div>
 
@@ -397,7 +383,7 @@ export default function HaierBrandPage() {
             <section ref={productsRef} className="py-16 md:py-20 bg-white">
                 <div className="container mx-auto px-4">
                     <div className="text-center mb-12">
-                        <span className="inline-block px-4 py-2 bg-cyan-50 text-cyan-600 rounded-full text-sm font-semibold mb-4">
+                        <span className="inline-block px-4 py-2 bg-cyan-50 text-cyan-700 rounded-full text-sm font-semibold mb-4">
                             Featured Products
                         </span>
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -442,7 +428,7 @@ export default function HaierBrandPage() {
                                 Haier Products Coming Soon
                             </h3>
                             <p className="text-gray-500 mb-6">
-                                We're adding Haier products to our collection. Check back soon!
+                                We&apos;re adding Haier products to our collection. Check back soon!
                             </p>
                             <Link
                                 href="/products"
@@ -465,7 +451,7 @@ export default function HaierBrandPage() {
                                 <Star className="h-6 w-6 text-cyan-300" />
                             </div>
                             <div>
-                                <div className="font-bold text-lg">World's #1</div>
+                                <div className="font-bold text-lg">World&apos;s #1</div>
                                 <div className="text-sm text-cyan-200">Major Appliances Brand</div>
                             </div>
                         </div>

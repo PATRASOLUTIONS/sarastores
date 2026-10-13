@@ -1,208 +1,160 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAll, create, update, remove, COLLECTIONS, getCollection, normalizeId, createObjectId } from "@/lib/db-service"
-import { toMediaUrl } from "@/lib/media"
+import { ObjectId, type WithId } from "mongodb"
+import { z } from "zod"
+import { COLLECTIONS, getCollection, normalizeId, type NormalizedDocument } from "@/lib/db-service"
+import { connectToDatabase } from "@/lib/mongodb"
+import { toMediaUrl, isMediaUrl } from "@/lib/media"
 import { resolveMediaUrl } from "@/lib/media-store"
 import { requireAdmin } from "@/lib/auth"
+import { heroSlideFieldsSchema, heroSlideMutationSchema } from "@/lib/hero-slides"
+import { handleApiError } from "@/lib/api-error"
 
 const COLLECTION = COLLECTIONS.HERO_SLIDES
+type HeroDocument = z.infer<typeof heroSlideFieldsSchema> & { createdAt: Date; updatedAt: Date }
+type HeroProjection = Omit<HeroDocument, "image"> & { image: string | null; imageIsData?: boolean; imageLen?: number }
+const bulkSchema = z.object({ slides: z.array(heroSlideMutationSchema).max(100) }).strict()
+  .refine(value => {
+    const ids = value.slides.flatMap(slide => slide.id ? [slide.id.toLowerCase()] : [])
+    return new Set(ids).size === ids.length
+  }, "Duplicate slide IDs")
 
-/**
- * Projects the image blob away in MongoDB and keeps only what is needed to build
- * its media URL, so listing slides never transfers ~15 MB of base64.
- */
 const LIGHT_IMAGE_STAGES = [
-  {
-    $addFields: {
-      imageIsData: { $eq: [{ $substrCP: [{ $ifNull: ["$image", ""] }, 0, 5] }, "data:"] },
-      imageLen: { $strLenCP: { $ifNull: ["$image", ""] } },
-    },
-  },
+  { $addFields: {
+    imageIsData: { $eq: [{ $substrCP: [{ $ifNull: ["$image", ""] }, 0, 5] }, "data:"] },
+    imageLen: { $strLenCP: { $ifNull: ["$image", ""] } },
+  } },
   { $addFields: { image: { $cond: ["$imageIsData", null, "$image"] } } },
 ]
 
-function withMediaUrls(slides: Record<string, any>[]) {
-  return slides.map((slide) => {
-    const { imageIsData, imageLen, ...rest } = slide
-    const id = slide.id || slide._id?.toString?.()
-    return {
-      ...rest,
-      image: imageIsData ? `/api/media/hero-slide/${id}?v=${imageLen}` : toMediaUrl("hero-slide", id, slide.image),
-    }
-  })
+function withMediaUrls(slides: NormalizedDocument<HeroProjection>[]) {
+  return slides.map(({ imageIsData, imageLen, ...slide }) => ({
+    ...slide,
+    image: imageIsData ? `/api/media/hero-slide/${slide.id}?v=${imageLen}` : toMediaUrl("hero-slide", slide.id, slide.image),
+  }))
 }
 
-// GET: list all hero slides with caching headers
+async function readBody(request: Request): Promise<unknown> {
+  try { return await request.json() } catch { return null }
+}
+
+class SlideImageError extends Error {}
+async function restoredImage(value: string | undefined): Promise<string> {
+  const image = await resolveMediaUrl(value)
+  if (typeof image !== "string" || !image || isMediaUrl(image)) {
+    throw new SlideImageError("Slide image is missing or its stored media could not be resolved")
+  }
+  return image
+}
+
+function errorResponse(error: unknown) {
+  if (error instanceof SlideImageError) return NextResponse.json({ error: error.message }, { status: 422 })
+  return handleApiError(error, "Failed to save hero slides")
+}
+
 export async function GET() {
   try {
-    const col = await getCollection(COLLECTION)
-    const docs = await col
-      .aggregate([{ $sort: { order: 1, createdAt: 1 } }, ...LIGHT_IMAGE_STAGES])
-      .toArray()
-    const slides = withMediaUrls(normalizeId(docs))
-
-    // Create response with cache headers for faster loading
-    const response = NextResponse.json(slides)
-
-    // Cache for 5 minutes, allow serving stale content while revalidating
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-
-    return response
-  } catch (err) {
-    console.error('/api/hero-slides GET error', err)
-    return NextResponse.json({ error: 'Failed to fetch hero slides' }, { status: 500 })
+    const col = await getCollection<HeroDocument>(COLLECTION)
+    const docs = await col.aggregate<WithId<HeroProjection>>([
+      { $sort: { order: 1, createdAt: 1 } }, ...LIGHT_IMAGE_STAGES,
+    ]).toArray()
+    return NextResponse.json(withMediaUrls(normalizeId(docs)), {
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+    })
+  } catch (error) {
+    return handleApiError(error, "Failed to fetch hero slides")
   }
 }
 
-// POST: create a new hero slide
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
-
   try {
-    const body = await request.json()
-
-    // Support both single slide creation and bulk save
-    if (body.slides && Array.isArray(body.slides)) {
-      // Bulk save replaces every slide, so media URLs must be turned back into
-      // the stored image first or the bulk save wipes the images.
-      const restored = await Promise.all(
-        body.slides.map(async (slide: any) => ({
-          ...slide,
-          image: await resolveMediaUrl(slide.image),
-        })),
-      )
-
-      const col = await getCollection(COLLECTION)
-      await col.deleteMany({})
-
-      if (restored.length > 0) {
-        const slidesWithTimestamps = restored.map((slide: any, index: number) => {
-          const { id, _id, ...rest } = slide
-          return {
-            ...rest,
-            order: index,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }
+    const body = await readBody(request)
+    const bulk = bulkSchema.safeParse(body)
+    if (bulk.success) {
+      const now = new Date()
+      const restored = await Promise.all(bulk.data.slides.map(async (slide, index) => ({
+        ...heroSlideFieldsSchema.partial().parse(slide),
+        _id: slide.id ? new ObjectId(slide.id) : new ObjectId(),
+        image: await restoredImage(slide.image),
+        order: index, createdAt: now, updatedAt: now,
+      })))
+      const { client, db } = await connectToDatabase()
+      const session = client.startSession()
+      try {
+        const slides = await session.withTransaction(async () => {
+          const col = db.collection<Partial<HeroDocument>>(COLLECTION)
+          await col.deleteMany({}, { session })
+          if (restored.length) await col.insertMany(restored, { session })
+          return col.aggregate<WithId<HeroProjection>>([
+            { $sort: { order: 1 } }, ...LIGHT_IMAGE_STAGES,
+          ], { session }).toArray()
         })
-        await col.insertMany(slidesWithTimestamps)
+        return NextResponse.json({ success: true, slides: withMediaUrls(normalizeId(slides)) })
+      } finally {
+        await session.endSession()
       }
-
-      const newDocs = await col
-        .aggregate([{ $sort: { order: 1 } }, ...LIGHT_IMAGE_STAGES])
-        .toArray()
-      return NextResponse.json({ success: true, slides: withMediaUrls(normalizeId(newDocs)) })
     }
-
-    // Single slide creation
-    const { title, subtitle, cta, link, active, titlePosition, subtitlePosition, buttonPosition } = body
-    const image = await resolveMediaUrl(body.image)
-
-    if (!image) {
-      return NextResponse.json({ error: 'Image is required' }, { status: 400 })
+    const parsed = heroSlideMutationSchema.safeParse(body)
+    if (!parsed.success || !parsed.data.image) return NextResponse.json({ error: "Invalid slide input; an image is required" }, { status: 400 })
+    const fields = heroSlideFieldsSchema.partial().parse(parsed.data)
+    const image = await restoredImage(fields.image)
+    const col = await getCollection<HeroDocument>(COLLECTION)
+    const latest = await col.find({}).sort({ order: -1 }).limit(1).toArray()
+    const lastOrder = latest[0]?.order ?? -1
+    if (!Number.isFinite(lastOrder)) throw new Error("Stored slide order is invalid")
+    const now = new Date()
+    const newSlide: HeroDocument = {
+      title: fields.title || "", subtitle: fields.subtitle || "", image,
+      cta: fields.cta || "Shop Now", link: fields.link || "/products", active: fields.active !== false,
+      order: lastOrder + 1, titlePosition: fields.titlePosition || "center",
+      subtitlePosition: fields.subtitlePosition || "center", buttonPosition: fields.buttonPosition || "center",
+      createdAt: now, updatedAt: now,
     }
-
-    // Get the current max order
-    const col = await getCollection(COLLECTION)
-    const maxOrderDoc = await col.find({}).sort({ order: -1 }).limit(1).toArray()
-    const maxOrder = maxOrderDoc.length > 0 ? (maxOrderDoc[0].order || 0) + 1 : 0
-
-    const newSlide = {
-      title: title || "",
-      subtitle: subtitle || "",
-      image: image,
-      cta: cta || "Shop Now",
-      link: link || "/products",
-      active: active !== false,
-      order: maxOrder,
-      titlePosition: titlePosition || "center",
-      subtitlePosition: subtitlePosition || "center",
-      buttonPosition: buttonPosition || "center",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-
     const result = await col.insertOne(newSlide)
-    const created = await col.findOne({ _id: result.insertedId })
-
     return NextResponse.json({
-      success: true,
-      slide: withMediaUrls([normalizeId(created)])[0],
-      message: "Hero slide created successfully"
+      success: true, slide: withMediaUrls([normalizeId({ ...newSlide, _id: result.insertedId })])[0],
+      message: "Hero slide created successfully",
     })
-  } catch (err) {
-    console.error('/api/hero-slides POST error', err)
-    return NextResponse.json({ error: 'Failed to create hero slide' }, { status: 500 })
+  } catch (error) {
+    return errorResponse(error)
   }
 }
 
-// PUT: update a hero slide by id (passed in body)
 export async function PUT(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
-
   try {
-    const body = await request.json()
-    const { id, ...updateData } = body
-
-    if (!id) {
-      return NextResponse.json({ error: 'Slide ID is required' }, { status: 400 })
-    }
-
-    const col = await getCollection(COLLECTION)
-    if ("image" in updateData) {
-      updateData.image = await resolveMediaUrl(updateData.image)
-    }
-    const result = await col.updateOne(
-      { _id: createObjectId(id) },
-      {
-        $set: {
-          ...updateData,
-          updatedAt: new Date()
-        }
-      }
+    const parsed = heroSlideMutationSchema.safeParse(await readBody(request))
+    if (!parsed.success || !parsed.data.id) return NextResponse.json({ error: "Invalid slide input or ID" }, { status: 400 })
+    const update = heroSlideFieldsSchema.partial().parse(parsed.data)
+    if (update.image !== undefined) update.image = await restoredImage(update.image)
+    const col = await getCollection<HeroDocument>(COLLECTION)
+    const updated = await col.findOneAndUpdate(
+      { _id: new ObjectId(parsed.data.id) },
+      { $set: { ...update, updatedAt: new Date() } },
+      { returnDocument: "after" },
     )
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: 'Slide not found' }, { status: 404 })
-    }
-
-    const updated = await col.findOne({ _id: createObjectId(id) })
-
+    if (!updated) return NextResponse.json({ error: "Slide not found" }, { status: 404 })
     return NextResponse.json({
-      success: true,
-      slide: withMediaUrls([normalizeId(updated)])[0],
-      message: "Hero slide updated successfully"
+      success: true, slide: withMediaUrls([normalizeId(updated)])[0], message: "Hero slide updated successfully",
     })
-  } catch (err) {
-    console.error('/api/hero-slides PUT error', err)
-    return NextResponse.json({ error: 'Failed to update hero slide' }, { status: 500 })
+  } catch (error) {
+    return errorResponse(error)
   }
 }
 
-// DELETE: delete a hero slide by id (query param)
 export async function DELETE(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
-
   try {
-    const url = new URL(request.url)
-    const id = url.searchParams.get('id')
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-    }
-
-    const col = await getCollection(COLLECTION)
-    const result = await col.deleteOne({ _id: createObjectId(id) })
-
-    if (result.deletedCount === 0) {
-      return NextResponse.json({ error: 'Slide not found' }, { status: 404 })
-    }
-
+    const id = new URL(request.url).searchParams.get("id")
+    if (!id || !ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid slide ID" }, { status: 400 })
+    const col = await getCollection<HeroDocument>(COLLECTION)
+    const result = await col.deleteOne({ _id: new ObjectId(id) })
+    if (!result.deletedCount) return NextResponse.json({ error: "Slide not found" }, { status: 404 })
     return NextResponse.json({ success: true, message: "Hero slide deleted successfully" })
-  } catch (err) {
-    console.error('/api/hero-slides DELETE error', err)
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 })
+  } catch (error) {
+    return handleApiError(error, "Failed to delete hero slide")
   }
 }

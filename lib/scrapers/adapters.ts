@@ -12,8 +12,72 @@ import {
   nextData,
   toPrice,
   windowState,
+  dataRecord,
+  type JsonLdNode,
 } from "./http"
 import { emptyProduct, ScraperError, type ScrapedProduct } from "./types"
+
+interface PaiProduct {
+  title?: unknown
+  brand?: { name?: unknown }
+  upc?: unknown
+  current_price?: unknown
+  mrp?: unknown
+  parent_category?: { name?: unknown }
+  category?: { name?: unknown }
+  images?: Array<string | { image?: unknown; thumbnail_large?: unknown }>
+  description?: unknown
+  key_features?: unknown
+  average_rating?: unknown
+  total_reviews?: unknown
+  get_attributes_list?: Array<{ title?: unknown; attribute_list?: Array<{ key?: unknown; value?: unknown }> }>
+  reviews?: Array<{ rating?: unknown; title?: unknown; heading?: unknown; review?: unknown; comment?: unknown; description?: unknown }>
+}
+
+interface PaiSummary {
+  name?: unknown
+  brand?: unknown
+  sku?: unknown
+  price?: unknown
+  category?: unknown
+  image?: unknown
+  description?: unknown
+}
+
+interface LgProductInfo {
+  userFriendlyName?: unknown
+  salesModelCode?: unknown
+  modelName?: unknown
+  sku?: unknown
+  msrp?: unknown
+  categoryName?: unknown
+  subCategoryName?: unknown
+  bulletFeatures?: Array<{ bulletFeatureDesc?: unknown }>
+  largeImageAddr?: unknown
+}
+
+interface RelianceState {
+  productDetailsPage?: {
+    product?: {
+      name?: unknown
+      brand?: { name?: unknown }
+      item_code?: unknown
+      category_map?: { l2?: { name?: unknown }; l3?: { name?: unknown } }
+      categories?: Array<{ name?: unknown }>
+      description?: unknown
+      short_description?: unknown
+      highlights?: unknown[]
+      grouped_attributes?: Array<{ title?: unknown; details?: Array<{ key?: unknown; value?: unknown }> }>
+      country_of_origin?: unknown
+      medias?: Array<{ type?: unknown; url?: unknown }>
+    }
+    product_meta?: { price?: { effective?: { min?: unknown }; marked?: { min?: unknown } }; sellable?: boolean }
+  }
+}
+
+function ldBrand(node: JsonLdNode | null): unknown {
+  return typeof node?.brand === "string" ? node.brand : node?.brand?.name
+}
 
 /** Strips markup from an HTML fragment. Parsed as a fragment, because loading
  * it as a document and selecting `div` double-counts nested wrappers. */
@@ -74,7 +138,7 @@ function crumbsToTaxonomy(crumbs: string[], brand: string): { category: string; 
 
 function ldBreadcrumbs(html: string): string[] {
   return (findLdType(html, "BreadcrumbList")?.itemListElement ?? [])
-    .map((i: any) => clean(i?.name ?? i?.item?.name))
+    .map((i) => clean(i?.name ?? (typeof i?.item === "object" ? i.item?.name : undefined)))
     .filter(Boolean)
 }
 
@@ -102,18 +166,18 @@ export async function scrapePai(url: string): Promise<ScrapedProduct> {
 
   const slug = new URL(finalUrl).pathname.split("/").filter(Boolean).pop() ?? ""
   const api = slug
-    ? ((await fetchJson<any>(`https://www.paiinternational.in/api/product-detail/${slug}/`))?.data ?? null)
+    ? ((await fetchJson<{ data?: PaiProduct }>(`https://www.paiinternational.in/api/product-detail/${slug}/`))?.data ?? null)
     : null
 
   const ld = findLdType(html, "Product")
-  const summary = nextData(html)?.props?.pageProps?.productdetails ?? null
+  const summary = nextData<{ props?: { pageProps?: { productdetails?: PaiSummary } } }>(html)?.props?.pageProps?.productdetails ?? null
 
   if (!api && !ld && !summary) {
     throw new ScraperError("No product data found on the page", 422, "Check the URL points at a product-details page.")
   }
 
   product.sap.name = clean(api?.title ?? summary?.name ?? ld?.name)
-  product.sap.brand = clean(api?.brand?.name ?? summary?.brand ?? ld?.brand?.name)
+  product.sap.brand = clean(api?.brand?.name ?? summary?.brand ?? ldBrand(ld))
   product.sap.sku = clean(api?.upc ?? summary?.sku ?? ld?.sku)
   product.sap.price = toPrice(api?.current_price ?? summary?.price ?? ld?.offers?.price)
   product.externalId = product.sap.sku || null
@@ -134,7 +198,7 @@ export async function scrapePai(url: string): Promise<ScrapedProduct> {
 
   const images = new Set<string>()
   for (const img of api?.images ?? []) {
-    const src = clean(img?.image ?? img?.thumbnail_large ?? img)
+    const src = clean(typeof img === "string" ? img : img?.image ?? img?.thumbnail_large)
     if (/^https?:\/\//i.test(src)) images.add(src)
   }
   for (const src of [ld?.image, summary?.image].flat()) {
@@ -171,7 +235,7 @@ export async function scrapePai(url: string): Promise<ScrapedProduct> {
   product.sap.charDesc = specs["Model Name"] ?? specs["Model Number"] ?? ""
 
   product.reviews = (api?.reviews ?? [])
-    .map((r: any) => ({
+    .map((r) => ({
       rating: toPrice(r?.rating),
       title: clean(r?.title ?? r?.heading),
       text: htmlToText(r?.review ?? r?.comment ?? r?.description),
@@ -203,7 +267,7 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
   const product = emptyProduct("lg", finalUrl)
   const flight = flightPayload(html)
 
-  const info: any = jsonAfterKey(flight, "productInfo")
+  const info = jsonAfterKey<LgProductInfo>(flight, "productInfo")
   const ogTitle = clean($('meta[property="og:title"]').attr("content"))
 
   product.sap.brand = "LG"
@@ -233,7 +297,7 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
 
   const specs: Record<string, string> = {}
   for (const key of ["productSpecTechSpecList", "productSpecKeySpecList"]) {
-    const groups: LgSpecGroup[] = jsonAfterKey(flight, key) ?? []
+    const groups = jsonAfterKey<LgSpecGroup[]>(flight, key) ?? []
     if (!Array.isArray(groups)) continue
     for (const group of groups) {
       for (const row of group?.spec ?? []) {
@@ -247,8 +311,8 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
   }
   product.technicalDetails = specs
 
-  const bullets: any[] = jsonAfterKey(flight, "bulletFeaturesList") ?? info?.bulletFeatures ?? []
-  const features = (Array.isArray(bullets) ? bullets : []).map((f: any) => htmlToText(f?.bulletFeatureDesc)).filter(Boolean)
+  const bullets = jsonAfterKey<Array<{ bulletFeatureDesc?: unknown }>>(flight, "bulletFeaturesList") ?? info?.bulletFeatures ?? []
+  const features = (Array.isArray(bullets) ? bullets : []).map((f: { bulletFeatureDesc?: unknown }) => htmlToText(f?.bulletFeatureDesc)).filter(Boolean)
   product.features = [...new Set(features)].slice(0, 12)
 
   const images = new Set<string>()
@@ -262,7 +326,7 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
   product.images = [...images].slice(0, 12)
 
   // The dimension diagram is a spec sheet asset, not a gallery shot.
-  const dimension: any = jsonAfterKey(flight, "productSpecDimensionList")
+  const dimension = jsonAfterKey<{ imagePathName?: unknown }>(flight, "productSpecDimensionList")
   const dimensionImage = absolute("https://www.lg.com", String(dimension?.imagePathName ?? ""))
   if (dimensionImage) product.manufacturerImages = [dimensionImage]
 
@@ -270,7 +334,7 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
   // page and reads well as spec-sheet context.
   const faq = jsonLdNodes(html).find((n) => String(n?.["@type"] ?? "").toLowerCase() === "faqpage")
   const faqLines = (faq?.mainEntity ?? [])
-    .map((q: any) => `${htmlToText(q?.name)} ${htmlToText(q?.acceptedAnswer?.text)}`.trim())
+    .map((q) => `${htmlToText(q?.name)} ${htmlToText(q?.acceptedAnswer?.text)}`.trim())
     .filter(Boolean)
   if (faqLines.length) product.manufacturerInfo = faqLines.slice(0, 8).join("\n\n")
 
@@ -292,12 +356,13 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
 type LabelRow = Record<string, string>
 
 /** Flipkart's design-system rows put the key in `label_0` and the value in a later `label_N`. */
-function dlsText(node: any): string {
-  const t = node?.value?.text
+function dlsText(node: unknown): string {
+  const value = dataRecord(dataRecord(node).value)
+  const t = value.text
   if (Array.isArray(t)) return clean(t.filter((x: unknown) => typeof x === "string").join(", "))
   if (typeof t === "string") return clean(t)
   // Pricing labels are gated behind a client state rule for logged-in offers.
-  const gated = node?.value?.UNLOCKED?.value?.text ?? node?.value?.LOCKED?.value?.text
+  const gated = dataRecord(dataRecord(value.UNLOCKED).value).text ?? dataRecord(dataRecord(value.LOCKED).value).text
   return typeof gated === "string" ? clean(gated) : ""
 }
 
@@ -306,16 +371,17 @@ function dlsText(node: any): string {
  * class names in Flipkart's DOM are obfuscated and rotate, but these data keys
  * are part of their rendering contract and stay put.
  */
-function collectLabelRows(node: any, out: LabelRow[] = []): LabelRow[] {
+function collectLabelRows(node: unknown, out: LabelRow[] = []): LabelRow[] {
   if (!node || typeof node !== "object") return out
   if (Array.isArray(node)) {
     node.forEach((v) => collectLabelRows(v, out))
     return out
   }
-  const labelKeys = Object.keys(node).filter((k) => /^label_\d+$/.test(k))
+  const record = dataRecord(node)
+  const labelKeys = Object.keys(record).filter((k) => /^label_\d+$/.test(k))
   if (labelKeys.length >= 2) {
     const row: LabelRow = {}
-    for (const k of labelKeys) row[k] = dlsText(node[k])
+    for (const k of labelKeys) row[k] = dlsText(record[k])
     out.push(row)
   }
   for (const [k, v] of Object.entries(node)) {
@@ -332,7 +398,7 @@ const labelOrder = (row: LabelRow) => Object.keys(row).sort((a, b) => Number(a.s
  * per layout (`rpd_warranty_item_0` on the vertical PDP, `_5` on the horizontal
  * one), so only the prefix can be relied on.
  */
-function findByKeyPrefix(node: any, prefix: RegExp): any {
+function findByKeyPrefix(node: unknown, prefix: RegExp): unknown {
   if (!node || typeof node !== "object") return null
   if (Array.isArray(node)) {
     for (const v of node) {
@@ -353,11 +419,16 @@ function findByKeyPrefix(node: any, prefix: RegExp): any {
 }
 
 /** Reads `window.__INITIAL_STATE__` out of the served HTML. */
-function flipkartWidgets(state: any): { viewType: string; data: any }[] {
-  return (state?.multiWidgetState?.widgetsData?.slots ?? [])
-    .map((slot: any) => slot?.slotData?.widget)
+function flipkartWidgets(state: unknown): { viewType: string; data: unknown }[] {
+  const slots = dataRecord(dataRecord(dataRecord(state).multiWidgetState).widgetsData).slots
+  if (!Array.isArray(slots)) return []
+  return slots
+    .map((slot: unknown) => dataRecord(dataRecord(slot).slotData).widget)
     .filter(Boolean)
-    .map((w: any) => ({ viewType: String(w?.viewType ?? ""), data: w?.data }))
+    .map((widget: unknown) => {
+      const record = dataRecord(widget)
+      return { viewType: String(record.viewType ?? ""), data: record.data }
+    })
 }
 
 /**
@@ -383,7 +454,7 @@ export async function scrapeFlipkart(url: string): Promise<ScrapedProduct> {
   const widget = (match: RegExp) => widgets.find((w) => match.test(w.viewType))?.data
 
   product.sap.name = clean(ld?.name) || clean($("h1").first().text())
-  product.sap.brand = clean(ld?.brand?.name ?? ld?.brand)
+  product.sap.brand = clean(ldBrand(ld))
   product.sap.sku = clean(ld?.sku)
   product.sap.price = toPrice(ld?.offers?.price ?? ld?.offers?.lowPrice)
   product.externalId = product.sap.sku || null
@@ -409,8 +480,9 @@ export async function scrapeFlipkart(url: string): Promise<ScrapedProduct> {
   product.images = [...images.values()].slice(0, 12)
 
   // Breadcrumb widget: one entry per level, each rendered as its own label row.
-  const crumbs = (widget(/breadcrumb/i)?.dlsData?.horizontalListData_0?.value ?? [])
-    .map((c: any) => dlsText(c?.value?.label_0))
+  const crumbData = dataRecord(dataRecord(dataRecord(widget(/breadcrumb/i)).dlsData).horizontalListData_0).value
+  const crumbs = (Array.isArray(crumbData) ? crumbData : [])
+    .map((c: unknown) => dlsText(dataRecord(dataRecord(c).value).label_0))
     .filter(Boolean)
   const taxonomy = crumbsToTaxonomy(crumbs, product.sap.brand)
   product.sap.category = taxonomy.category || clean(ld?.category).replace(/_/g, " ")
@@ -451,7 +523,7 @@ export async function scrapeFlipkart(url: string): Promise<ScrapedProduct> {
       product.warranty = ordered[1] ?? ""
     }
 
-    const longDescription = dlsText(findByKeyPrefix(details, /^rpd_description_item_/)?.value?.label_0)
+    const longDescription = dlsText(dataRecord(dataRecord(findByKeyPrefix(details, /^rpd_description_item_/)).value).label_0)
     if (longDescription.length > product.description.length) product.description = longDescription
 
     product.manufacturerInfo = collectLabelRows(findByKeyPrefix(details, /^rpd_manufacture_layout_/))
@@ -459,7 +531,7 @@ export async function scrapeFlipkart(url: string): Promise<ScrapedProduct> {
       .map((row) => `${row.label_0}: ${row.label_1}`)
       .join("\n")
   }
-  if (clean(ld?.color) && !specs.Color) specs.Color = clean(ld.color)
+  if (clean(ld?.color) && !specs.Color) specs.Color = clean(ld?.color)
   product.technicalDetails = specs
 
   const salesPackage = specs["Sales Package"] ?? specs["In The Box"] ?? specs["In the Box"]
@@ -473,7 +545,7 @@ export async function scrapeFlipkart(url: string): Promise<ScrapedProduct> {
 
   if (Array.isArray(ld?.review)) {
     product.reviews = ld.review
-      .map((r: any) => ({
+      .map((r: NonNullable<JsonLdNode["review"]>[number]) => ({
         rating: toPrice(r?.reviewRating?.ratingValue),
         title: clean(r?.name),
         text: htmlToText(r?.reviewBody ?? r?.description),
@@ -502,7 +574,7 @@ export async function scrapeReliance(url: string): Promise<ScrapedProduct> {
   const { html, finalUrl } = await fetchHtml(url)
   const product = emptyProduct("reliance", finalUrl)
 
-  const page = windowState(html)?.productDetailsPage
+  const page = windowState<RelianceState>(html)?.productDetailsPage
   const item = page?.product
   const meta = page?.product_meta
   const ld = findLdType(html, "Product")
@@ -512,7 +584,7 @@ export async function scrapeReliance(url: string): Promise<ScrapedProduct> {
   }
 
   product.sap.name = clean(item?.name ?? ld?.name)
-  product.sap.brand = clean(item?.brand?.name ?? ld?.brand)
+  product.sap.brand = clean(item?.brand?.name ?? ldBrand(ld))
   product.sap.sku = clean(item?.item_code ?? ld?.productID)
   product.externalId = product.sap.sku || null
   product.sap.price = toPrice(meta?.price?.effective?.min ?? ld?.offers?.price)
@@ -552,7 +624,7 @@ export async function scrapeReliance(url: string): Promise<ScrapedProduct> {
       }
     }
   }
-  if (clean(item?.country_of_origin)) specs["Country of Origin"] ||= clean(item.country_of_origin)
+  if (clean(item?.country_of_origin)) specs["Country of Origin"] ||= clean(item?.country_of_origin)
   product.technicalDetails = specs
   product.manufacturerInfo = manufacturer.join("\n")
   product.sap.charDesc = specs.Model ?? specs["Model Name"] ?? specs["Model Number"] ?? ""
@@ -599,7 +671,7 @@ export async function scrapeVijaySales(url: string): Promise<ScrapedProduct> {
   }
 
   product.sap.name = clean(ld.name)
-  product.sap.brand = clean(ld?.brand?.name ?? ld?.brand)
+  product.sap.brand = clean(ldBrand(ld))
   product.sap.sku = clean(ld?.sku)
   product.externalId = product.sap.sku || null
   product.sap.price = toPrice(ld?.offers?.price ?? ld?.offers?.lowPrice)
@@ -635,7 +707,9 @@ export async function scrapeVijaySales(url: string): Promise<ScrapedProduct> {
   product.images = [...images].slice(0, 12)
 
   // Magento carries the long copy; the storefront never renders it server-side.
-  const gql = await fetchJson<any>(
+  const gql = await fetchJson<{ data?: { products?: { items?: Array<{
+    description?: { html?: unknown }; short_description?: { html?: unknown }; stock_status?: string
+  }> } } }>(
     "https://vsprod.vijaysales.com/graphql?query=" +
       encodeURIComponent(
         `{products(search:"",filter:{sku:{in:["${product.sap.sku}"]}}){items{description{html} short_description{html} stock_status}}}`,
@@ -736,7 +810,7 @@ export async function scrapeBosch(url: string): Promise<ScrapedProduct> {
     if (row?.unit) v = `${v} ${clean(row.unit)}`
     specs[k] = v
   }
-  for (const group of jsonArrayAfterKey<any>(flight, "specifications")) {
+  for (const group of jsonArrayAfterKey<{ specifications?: BoschSpecRow[] }>(flight, "specifications")) {
     for (const row of group?.specifications ?? []) addRow(row)
   }
   const overview = jsonArrayAfterKey<BoschSpecRow>(flight, "overviewSpecifications")
@@ -744,8 +818,8 @@ export async function scrapeBosch(url: string): Promise<ScrapedProduct> {
   if (clean(ld?.gtin)) specs.EAN = clean(ld.gtin)
   product.technicalDetails = specs
 
-  product.features = jsonArrayAfterKey<any>(flight, "highlights")
-    .map((h: any) => htmlToText(h?.headline?.text ?? h?.text?.text))
+  product.features = jsonArrayAfterKey<{ headline?: { text?: unknown }; text?: { text?: unknown } }>(flight, "highlights")
+    .map((h) => htmlToText(h?.headline?.text ?? h?.text?.text))
     .filter(Boolean)
     .slice(0, 12)
   // Not every model has highlight tiles; the key-spec strip is the next best thing.

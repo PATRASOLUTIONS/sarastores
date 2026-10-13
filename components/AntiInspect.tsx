@@ -56,7 +56,7 @@ export default function AntiInspect() {
     // Chrome/Edge DevTools detection via debugger timing
     const devtoolsDetector = () => {
       const start = performance.now()
-      debugger  // eslint-disable-line no-debugger
+      debugger   
       const end = performance.now()
       if (end - start > 100) {
         const noop = () => {}
@@ -82,8 +82,8 @@ export default function AntiInspect() {
     devtoolsDetector()
 
     return () => {
-      document.onkeydown = origOnKeyDown as any
-      document.oncontextmenu = origOnContextMenu as any
+      document.onkeydown = origOnKeyDown
+      document.oncontextmenu = origOnContextMenu
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [user])

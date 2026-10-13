@@ -1,23 +1,17 @@
-import type { Metadata } from "next"
 import Link from "next/link"
 import { CreditCard, RefreshCw, Percent, Tag, ShieldCheck, Truck } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import BankOffersMarquee from "@/components/BankOffersMarquee"
 import OfferShelf from "@/components/OfferShelf"
-import { getOriginFromHeaders } from "@/lib/seo-metadata"
+import { pageMetadata } from "@/lib/seo-page"
 
 export const dynamic = "force-dynamic"
 
-export async function generateMetadata(): Promise<Metadata> {
-  const origin = await getOriginFromHeaders()
-  return {
-    title: "Offers & Savings | Sara Electronics",
-    description:
-      "No-cost EMI, bank card discounts and coupon offers on televisions, home appliances and mobiles at Sara Electronics.",
-    alternates: { canonical: `${origin}/offers` },
-  }
-}
+export const generateMetadata = pageMetadata({
+  path: "/offers", title: brand => `Offers & Savings | ${brand}`,
+  description: "Explore savings, coupon offers and available payment options on electronics and appliances. Bank and EMI eligibility is confirmed at checkout.",
+})
 
 const SAVINGS = [
   {

@@ -8,7 +8,81 @@
  * existing data keeps working without migration.
  */
 import { connectToDatabase } from "@/lib/mongodb"
-import { Db, Collection, type Document } from "mongodb"
+import { Db, Collection, type Document, type Filter } from "mongodb"
+
+export interface SpinCampaign {
+  name: string
+  slug: string
+  description?: string
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface SpinPrize {
+  prizeName: string
+  emoji?: string
+  productImage?: string | null
+  total: number
+  distributed?: number
+  isActive?: boolean
+  dateRanges?: Array<{ startDate: string; endDate: string }>
+  timeSlots?: Array<{ startTime: string; endTime: string }>
+  weightMultiplier?: number
+}
+
+export interface SpinCouponCode {
+  code: string
+  prizeName: string
+  isUsed?: boolean
+  usedBy?: string | null
+  createdAt: Date
+}
+
+export interface SpinParticipant {
+  name?: string
+  phone?: string
+  email?: string
+  otpCode?: string
+  otp?: string
+  otpVerified?: boolean
+  prize?: string | null
+  couponCode?: string | null
+  store?: string
+  hasSpun?: boolean
+  createdAt: Date
+  spinDate?: Date | string | null
+}
+
+export interface SpinCoupon {
+  couponCode: string
+  prize: string
+  participantName: string
+  participantPhone: string
+  participantEmail?: string
+  store?: string
+  status: string
+  createdAt: Date | string
+}
+
+export interface SpinVisitStats {
+  _id: string
+  visits: number
+}
+
+export interface SpinParticipantStats {
+  _id: string
+  participants: number
+  spins: number
+  winners: number
+}
+
+export interface SpinCouponStats {
+  _id: string
+  total: number
+  used: number
+  unused: number
+}
 
 const CAMPAIGN_COLLECTIONS = [
   "participants",
@@ -49,9 +123,9 @@ export async function getCampaignCollection<TSchema extends Document = Document>
 }
 
 /** Get the campaigns metadata collection */
-export async function getCampaignsCollection(): Promise<Collection> {
+export async function getCampaignsCollection(): Promise<Collection<SpinCampaign>> {
   const { db } = await connectToDatabase()
-  return db.collection("spinWheelCampaigns")
+  return db.collection<SpinCampaign>("spinWheelCampaigns")
 }
 
 /** Find a campaign by slug */
@@ -61,13 +135,13 @@ export async function findCampaignBySlug(slug: string) {
 }
 
 /** List all campaigns */
-export async function listCampaigns(filter: Record<string, any> = {}) {
+export async function listCampaigns(filter: Filter<SpinCampaign> = {}) {
   const col = await getCampaignsCollection()
   return col.find(filter).sort({ createdAt: -1 }).toArray()
 }
 
 /** Default prize configuration for new campaigns */
-export const DEFAULT_PRIZES = [
+export const DEFAULT_PRIZES: SpinPrize[] = [
   { prizeName: "TV", emoji: "📺", productImage: "", total: 2, distributed: 0, isActive: true, dateRanges: [], timeSlots: [], weightMultiplier: 1 },
   { prizeName: "SPEAKER", emoji: "🔊", productImage: "", total: 10, distributed: 0, isActive: true, dateRanges: [], timeSlots: [], weightMultiplier: 2 },
   { prizeName: "₹500 VOUCHER", emoji: "🎫", productImage: "", total: 10, distributed: 0, isActive: true, dateRanges: [], timeSlots: [], weightMultiplier: 3 },
@@ -81,7 +155,7 @@ export const DEFAULT_PRIZES = [
 
 /** Seed default prizes for a new campaign */
 export async function seedCampaignPrizes(slug: string) {
-  const invCol = await getCampaignCollection(slug, "inventory")
+  const invCol = await getCampaignCollection<SpinPrize>(slug, "inventory")
   const count = await invCol.countDocuments()
   if (count === 0) {
     await invCol.insertMany(DEFAULT_PRIZES)

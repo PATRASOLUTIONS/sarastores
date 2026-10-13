@@ -5,6 +5,8 @@ import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import crypto from "crypto"
 import { RegisterSchema } from "@/lib/validation"
 import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/consent"
+import { defaultProfileAvatar } from "@/lib/profile-avatars"
+import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
 
 // Use dynamic import for email functions to prevent build-time issues
 const getEmailFunctions = async () => {
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest) {
       email: email.toLowerCase(),
       password: hashedPassword,
       role: "user",
+      avatar: defaultProfileAvatar(email.toLowerCase()),
       emailVerified: false,
       emailVerificationToken: verificationToken,
       emailVerificationExpiry: verificationExpiry,
@@ -185,6 +188,7 @@ export async function POST(request: NextRequest) {
     const userResponse = {
       id: result.insertedId.toString(),
       name: newUser.name,
+      avatar: newUser.avatar,
       email: newUser.email,
       role: newUser.role,
       emailVerified: newUser.emailVerified,
@@ -197,6 +201,7 @@ export async function POST(request: NextRequest) {
       success: true
     })
   } catch (error) {
+    if (error instanceof RateLimitUnavailableError) return handleApiError(error)
     console.error("Signup error:", error)
     return NextResponse.json({
       message: "An error occurred during signup. Please try again.",

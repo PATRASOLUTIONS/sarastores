@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
-import { getCampaignCollection, DEFAULT_PRIZES } from "@/lib/spin-wheel-campaigns"
+import { ObjectId, type Filter } from "mongodb"
+import { getCampaignCollection, DEFAULT_PRIZES, type SpinPrize, type SpinCouponStats } from "@/lib/spin-wheel-campaigns"
 import { requireAdmin } from "@/lib/auth"
+import { SpinPrizeCreateSchema, SpinPrizeUpdateSchema } from "@/lib/validation"
 
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin()
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const campaignSlug = searchParams.get("campaignId") || "default"
 
-    const collection = await getCampaignCollection(campaignSlug, "inventory")
+    const collection = await getCampaignCollection<SpinPrize>(campaignSlug, "inventory")
     const couponCodesCol = await getCampaignCollection(campaignSlug, "couponCodes")
 
     // Initialize if empty
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     const inventory = await collection.find().toArray()
 
     // Get coupon stats per prize
-    const couponStats = await couponCodesCol.aggregate([
+    const couponStats = await couponCodesCol.aggregate<SpinCouponStats>([
       {
         $group: {
           _id: "$prizeName",
@@ -36,11 +37,11 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray()
 
-    const couponMap: Record<string, any> = {}
-    couponStats.forEach((s: any) => { couponMap[s._id] = s })
+    const couponMap: Record<string, SpinCouponStats> = Object.create(null)
+    couponStats.forEach((s) => { couponMap[s._id] = s })
 
     return NextResponse.json({
-      inventory: inventory.map((item: any) => ({
+      inventory: inventory.map((item) => ({
         id: item._id.toString(),
         prizeName: item.prizeName,
         emoji: item.emoji || "🎁",
@@ -71,57 +72,29 @@ export async function PUT(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { prizeName, total, isActive, dateRanges, timeSlots, emoji, productImage, weightMultiplier, campaignId } = body
-    const campaignSlug = campaignId || "default"
+    const parsed = SpinPrizeUpdateSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: "Invalid prize data" }, { status: 400 })
+    const { prizeName, campaignId, ...updateFields } = parsed.data
+    const campaignSlug = campaignId || new URL(request.url).searchParams.get("campaignId") || "default"
 
-    if (!prizeName) {
-      return NextResponse.json(
-        { error: "Prize name is required" },
-        { status: 400 }
-      )
+    const collection = await getCampaignCollection<SpinPrize>(campaignSlug, "inventory")
+    const query: Filter<SpinPrize> = { prizeName }
+    if (updateFields.total !== undefined) {
+      query.$expr = { $lte: [{ $ifNull: ["$distributed", 0] }, updateFields.total] }
     }
-
-    const collection = await getCampaignCollection(campaignSlug, "inventory")
-
-    const updateFields: any = {}
-
-    if (total !== undefined) {
-      if (total < 0) {
-        return NextResponse.json({ error: "Total must be >= 0" }, { status: 400 })
-      }
-      const current = await collection.findOne({ prizeName })
-      if (current && total < (current.distributed || 0)) {
-        return NextResponse.json(
-          { error: `Cannot set total below distributed count (${current.distributed})` },
-          { status: 400 }
-        )
-      }
-      updateFields.total = parseInt(total)
+    const updated = await collection.findOneAndUpdate(query, { $set: updateFields }, { returnDocument: "after" })
+    if (!updated) {
+      const existing = await collection.findOne({ prizeName })
+      return NextResponse.json({ error: existing ? "Total cannot be below the current distributed count" : "Prize not found" },
+        { status: existing ? 409 : 404 })
     }
-
-    if (isActive !== undefined) updateFields.isActive = Boolean(isActive)
-    if (dateRanges !== undefined) updateFields.dateRanges = dateRanges
-    if (timeSlots !== undefined) updateFields.timeSlots = timeSlots
-    if (emoji !== undefined) updateFields.emoji = emoji
-    if (productImage !== undefined) updateFields.productImage = productImage
-    if (weightMultiplier !== undefined) updateFields.weightMultiplier = Number(weightMultiplier) || 1
-
-    if (Object.keys(updateFields).length === 0) {
-      return NextResponse.json({ error: "No fields to update" }, { status: 400 })
-    }
-
-    await collection.updateOne(
-      { prizeName },
-      { $set: updateFields },
-      { upsert: true }
-    )
 
     return NextResponse.json({
       success: true,
       message: `Updated ${prizeName}`
     })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
     console.error("Inventory PUT error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -132,35 +105,42 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
-    const body = await request.json()
-    const { prizeName, emoji, productImage, total, dateRanges, timeSlots, weightMultiplier, campaignId } = body
-    const campaignSlug = campaignId || "default"
+    const parsed = SpinPrizeCreateSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: "Invalid prize data" }, { status: 400 })
+    const { prizeName, emoji, productImage, total, isActive, dateRanges, timeSlots, weightMultiplier, campaignId } = parsed.data
+    const campaignSlug = campaignId || new URL(request.url).searchParams.get("campaignId") || "default"
 
     if (!prizeName) {
       return NextResponse.json({ error: "Prize name is required" }, { status: 400 })
     }
 
-    const collection = await getCampaignCollection(campaignSlug, "inventory")
+    const collection = await getCampaignCollection<SpinPrize>(campaignSlug, "inventory")
 
     const existing = await collection.findOne({ prizeName })
     if (existing) {
       return NextResponse.json({ error: "Prize already exists" }, { status: 409 })
     }
+    await collection.createIndex({ prizeName: 1 }, { unique: true })
 
-    await collection.insertOne({
+    const inserted = await collection.insertOne({
       prizeName,
       emoji: emoji || "🎁",
       productImage: productImage || "",
-      total: parseInt(total) || 0,
+      total,
       distributed: 0,
-      isActive: true,
+      isActive: isActive ?? true,
       dateRanges: dateRanges || [],
       timeSlots: timeSlots || [],
-      weightMultiplier: Number(weightMultiplier) || 1
+      weightMultiplier: weightMultiplier ?? 1
     })
+    if (!inserted.acknowledged) throw new Error("Prize creation was not acknowledged")
 
     return NextResponse.json({ success: true, message: `Created prize: ${prizeName}` })
   } catch (error) {
+    if (error instanceof SyntaxError) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    if (error && typeof error === "object" && "code" in error && error.code === 11000) {
+      return NextResponse.json({ error: "Prize already exists" }, { status: 409 })
+    }
     console.error("Inventory POST error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -180,27 +160,36 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Prize ID or name is required" }, { status: 400 })
     }
 
-    const collection = await getCampaignCollection(campaignSlug, "inventory")
+    if (id && !ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid prize ID" }, { status: 400 })
+    const collection = await getCampaignCollection<SpinPrize>(campaignSlug, "inventory")
 
-    let query: any = {}
+    let query: Filter<SpinPrize> = {}
     if (id) {
       query = { _id: new ObjectId(id) }
     } else if (prizeName) {
       query = { prizeName: prizeName }
     }
 
-    const prize = await collection.findOne(query)
-    if (!prize) {
-      return NextResponse.json({ error: "Prize not found" }, { status: 404 })
+    const { client } = await connectToDatabase()
+    const session = client.startSession()
+    let prize: string | undefined
+    try {
+      prize = await session.withTransaction(async () => {
+        const current = await collection.findOne(query, { session })
+        if (!current) return undefined
+        const couponCodesCol = await getCampaignCollection(campaignSlug, "couponCodes")
+        const couponsDeleted = await couponCodesCol.deleteMany({ prizeName: current.prizeName }, { session })
+        if (!couponsDeleted.acknowledged) throw new Error("Coupon deletion was not acknowledged")
+        const deleted = await collection.deleteOne({ _id: current._id }, { session })
+        if (!deleted.acknowledged || deleted.deletedCount !== 1) throw new Error("Prize deletion was not completed")
+        return current.prizeName
+      })
+    } finally {
+      await session.endSession()
     }
+    if (!prize) return NextResponse.json({ error: "Prize not found" }, { status: 404 })
 
-    // Also delete associated coupon codes
-    const couponCodesCol = await getCampaignCollection(campaignSlug, "couponCodes")
-    await couponCodesCol.deleteMany({ prizeName: prize.prizeName })
-
-    await collection.deleteOne(query)
-
-    return NextResponse.json({ success: true, message: `Deleted prize: ${prize.prizeName}` })
+    return NextResponse.json({ success: true, message: `Deleted prize: ${prize}` })
   } catch (error) {
     console.error("Inventory DELETE error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

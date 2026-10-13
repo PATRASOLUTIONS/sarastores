@@ -16,7 +16,7 @@ Load these on demand instead of re-deriving the information:
 | Security rules, OWASP findings, known holes | `.github/skills/security-review/SKILL.md` |
 | Code standards, anti-patterns, tech debt | `.github/skills/codebase-audit/SKILL.md` |
 
-Feature docs live in [docs/](docs/) — notably [docs/features/](docs/features/), [docs/partner-api/](docs/partner-api/), [docs/security/](docs/security/), [docs/spin-wheel/](docs/spin-wheel/). [FEATURES.md](FEATURES.md) is the business-facing feature catalogue.
+Feature docs live in [documents/](documents/) — notably [documents/features/](documents/features/), [documents/partner-api/](documents/partner-api/), [documents/security/](documents/security/), [documents/spin-wheel/](documents/spin-wheel/). [FEATURES.md](documents/FEATURES.md) is the business-facing feature catalogue.
 
 ## Commands
 
@@ -25,15 +25,21 @@ Feature docs live in [docs/](docs/) — notably [docs/features/](docs/features/)
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Dev server on `localhost:3000` |
-| `npx tsc --noEmit` | **The only real type check — always run after TS changes** |
-| `npm run build` | Production build. Silently ignores all TS + ESLint errors |
+| `npx tsc --noEmit` | **Explicit TypeScript check — always run after TS changes** |
+| `npm run build` | Production build with TypeScript and recommended ESLint gates enforced; verified against isolated fixtures |
+| `npm run lint` | Recommended Next.js ESLint checks; zero errors, with non-blocking warnings remaining |
+| `npm test` | 328 isolated Node.js regression tests; no live payment, email or fulfillment calls |
+| `npm run check:deployment` | Production configuration presence/syntax checks; never prints values or contacts providers |
 | `npm run seed:admin` | Create the initial admin user |
 | `npm run migrate:schema:dry` | Dry-run the canonical product-schema migration (**always before the real one**) |
 | `npm run migrate:schema` | Apply the product-schema migration |
+| `npx tsx scripts/backfill-order-ids.ts` | Read-only order-ID preview; `--apply` commits transactional batches only with operator authorization |
 
-`npm run lint` is **broken** — no ESLint config or dependency exists. Don't rely on it.
+ESLint is configured and installed. Do not disable checks to bypass failures. See [the production-readiness audit](documents/production-readiness-audit.md) for measured blockers.
 
-There is **no test framework** (no jest/vitest/playwright config, no test script). Files named `scripts/test-*` are manual smoke scripts run by hand against a live server.
+`npm test` uses the Node.js test runner. There is no Jest, Vitest or Playwright configuration. Browser/database smoke scripts require explicitly isolated local fixtures, never live customer data.
+
+The development catalogue seed requires explicit `{ "apply": true }` for transactional replacement; its default is preview. The unsupported localStorage importer is disabled and returns 410.
 
 ## Non-negotiable rules
 
@@ -43,7 +49,7 @@ There is **no test framework** (no jest/vitest/playwright config, no test script
 4. **Keep [lib/session.ts](lib/session.ts) Edge-safe.** It runs inside middleware. No `Buffer`, no `require("crypto")`, no imports — Web Crypto plus `btoa`/`atob` only. Breaking this makes every session verify as `null`.
 5. **Never import `@/lib/db`.** `connectDB()` points at database `ecommerce`; everything else uses `e-commerce-bytewise`. Use [lib/db-service.ts](lib/db-service.ts).
 6. **Never hardcode a connection string, key, or password** — including in `scripts/`. Use `process.env` with no fallback.
-7. **Run `npx tsc --noEmit`** — `next build` will not surface type errors.
+7. **Run `npx tsc --noEmit`** and `npm run build`; keep the build's TypeScript and ESLint gates enabled.
 
 ## Architecture
 
@@ -82,7 +88,7 @@ Three overlapping URL variables exist — `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_A
 
 ## Corrections to older docs
 
-[CLAUDE.md](CLAUDE.md) and several `docs/` files are stale. Verified against current code:
+[CLAUDE.md](CLAUDE.md) and several `documents/` files are stale. Verified against current code:
 
 | Claim | Reality |
 | --- | --- |
@@ -91,11 +97,13 @@ Three overlapping URL variables exist — `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_A
 | Collections `vendors`, `notifications`, `licenses`, `store_purchases`, `scrape_jobs`, `categories_test`, `orders_test` | Do not exist anywhere in code. |
 | `spin_wheel_*` collections | Real pattern is `spin_<slug>_*`, with legacy camelCase `spinWheel*` for the `default` campaign ([lib/spin-wheel-campaigns.ts](lib/spin-wheel-campaigns.ts)). |
 | `app/api/checkout/` route | Does not exist. Checkout posts to `/api/orders` and `/api/payment/*`. |
-| Abandoned-cart cron is live | Disabled — the import is commented out in [instrumentation.ts](instrumentation.ts), which still logs "✅ Cron jobs initialized successfully". `vercel.json` has no `crons` block. The 10 docs in [docs/abandoned-cart/](docs/abandoned-cart/) all describe it as working. |
+| Abandoned-cart cron is live | Disabled — the import is commented out in [instrumentation.ts](instrumentation.ts), which still logs "✅ Cron jobs initialized successfully". `vercel.json` has no `crons` block. The 10 docs in [documents/abandoned-cart/](documents/abandoned-cart/) all describe it as working. |
 | Firebase storage integration | No Firebase SDK is installed and no file-upload route exists. Only CSP/image allowlist entries reference it. |
 
 Other live bugs worth knowing: `COLLECTIONS.SLIDES` is undefined, so `GET /api/product-slides` silently returns `[]` and `POST` always 500s.
 
 ## Repo hygiene
 
-Root-level `audit-ids.js`, `inspect-*.js`, `inspect_order.js`, `exhaustive-audit.js`, `check-assignments.js`, `extract-docx.js`, `order_dump.json`, `order_debug_dump.json` are one-off debug leftovers, not part of the app. The two JSON dumps contain order data — treat as PII. `README.md` is placeholder scratch notes.
+Documentation, reports, proposals and design references are consolidated under [documents/](documents/), with an offline [document index](documents/index.html). Historical diagnostics, the DOCX helper and PDF generators now live in `documents/archive/tools/`. Keep active scripts, tests, the mobile project, framework configuration and `AGENTS.md` / `CLAUDE.md` in their conventional locations.
+
+`documents/private-artifacts/` holds local debug output, including order dumps containing PII. It is excluded from the catalogue and version control. Never publish or commit these exports. Internal documents and historical tools are excluded from Vercel uploads; none belong in `public/`. See [README.md](README.md) for the directory map.

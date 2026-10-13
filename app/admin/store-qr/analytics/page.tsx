@@ -1,7 +1,7 @@
 "use client"
 
 import { apiFetch } from "@/lib/api-client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { toast } from "react-hot-toast"
 import {
   BarChart3,
@@ -40,6 +40,7 @@ import {
 } from "recharts"
 import * as XLSX from "xlsx"
 import Link from "next/link"
+import type { StoreQrResponse } from "@/lib/store-qr"
 
 interface Overview {
   totalScans: number
@@ -47,6 +48,11 @@ interface Overview {
   activeQRCodes: number
   totalStores: number
   dateRange: string
+  lifetimeScans: number
+  retainedScans: number
+  historyComplete: boolean
+  historyLimitPerQr: number
+  totalBasis: "retained_history" | "lifetime_counter"
 }
 
 interface DailyEntry {
@@ -82,9 +88,9 @@ interface TopStore {
 interface StoreDetail extends TopStore {
   dailyScans: Array<{ date: string; count: number }>
   types: {
-    google_maps: any
-    whatsapp: any
-    instagram: any
+    google_maps: StoreQrResponse | null
+    whatsapp: StoreQrResponse | null
+    instagram: StoreQrResponse | null
   }
 }
 
@@ -125,25 +131,32 @@ export default function StoreQRAnalyticsPage() {
   const [selectedStore, setSelectedStore] = useState<StoreDetail | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeChart, setActiveChart] = useState<"daily" | "monthly">("daily")
+  const latestRequest = useRef(0)
 
   useEffect(() => {
     fetchAnalytics()
   }, [range])
 
   async function fetchAnalytics() {
+    const requestId = ++latestRequest.current
     setLoading(true)
+    setSelectedStore(null)
     try {
       const res = await apiFetch(`/api/admin/store-qr/analytics?range=${range}`)
       const json = await res.json()
+      if (requestId !== latestRequest.current) return
       if (json.success) {
         setData(json)
       } else {
+        setData(null)
         toast.error("Failed to load analytics")
       }
     } catch {
+      if (requestId !== latestRequest.current) return
+      setData(null)
       toast.error("Failed to load analytics")
     } finally {
-      setLoading(false)
+      if (requestId === latestRequest.current) setLoading(false)
     }
   }
 
@@ -162,6 +175,10 @@ export default function StoreQRAnalyticsPage() {
       { Metric: "WhatsApp Scans", Value: data.typeBreakdown.whatsapp },
       { Metric: "Instagram Scans", Value: data.typeBreakdown.instagram },
       { Metric: "Date Range", Value: data.overview.dateRange },
+      { Metric: "Total Basis", Value: data.overview.totalBasis },
+      { Metric: "Lifetime Scans", Value: data.overview.lifetimeScans },
+      { Metric: "Retained Range Scans", Value: data.overview.retainedScans },
+      { Metric: "Full History Available", Value: data.overview.historyComplete ? "Yes" : "No; last 500 scans per QR only" },
       { Metric: "Report Generated", Value: new Date().toLocaleString() },
     ]
     const wsOverview = XLSX.utils.json_to_sheet(overviewData)
@@ -310,6 +327,12 @@ export default function StoreQRAnalyticsPage() {
         </div>
       ) : (
         <>
+          <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            {range === "all" ? "Totals and store rankings use lifetime counters." : "Totals and rankings count retained scans in the selected range."}
+            {" "}Charts, type breakdowns and scan exports use only the last {data.overview.historyLimitPerQr} scans per QR.
+            {!data.overview.historyComplete && " Older scans have been discarded; historical range counts may be incomplete."}
+            {" "}Lifetime scans: {data.overview.lifetimeScans.toLocaleString()}.
+          </p>
           {/* Overview Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-xl border p-4">
@@ -321,7 +344,7 @@ export default function StoreQRAnalyticsPage() {
                   <p className="text-2xl font-bold text-gray-900">
                     {data.overview.totalScans.toLocaleString()}
                   </p>
-                  <p className="text-xs text-gray-500">Total Scans</p>
+                  <p className="text-xs text-gray-500">{range === "all" ? "Lifetime Scans" : "Retained Range Scans"}</p>
                 </div>
               </div>
             </div>
@@ -520,8 +543,8 @@ export default function StoreQRAnalyticsPage() {
                   <div className="space-y-2 mt-2">
                     {(["google_maps", "whatsapp", "instagram"] as const).map((type) => {
                       const count = data.typeBreakdown[type]
-                      const pct = data.overview.totalScans > 0
-                        ? Math.round((count / data.overview.totalScans) * 100)
+                      const pct = data.overview.retainedScans > 0
+                        ? Math.round((count / data.overview.retainedScans) * 100)
                         : 0
                       const icons = {
                         google_maps: MapPin,
@@ -725,7 +748,7 @@ export default function StoreQRAnalyticsPage() {
                       <p className="text-lg font-bold" style={{ color: TYPE_COLORS[type] }}>
                         {qr?.scanCount?.toLocaleString() || 0}
                       </p>
-                      <p className="text-xs text-gray-400">scans</p>
+                      <p className="text-xs text-gray-400">lifetime scans</p>
                     </div>
                   )
                 })}
@@ -791,7 +814,7 @@ export default function StoreQRAnalyticsPage() {
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-semibold" style={{ color: TYPE_COLORS[type] }}>
-                            {qr.scanCount?.toLocaleString() || 0} scans
+                            {qr.scanCount?.toLocaleString() || 0} lifetime scans
                           </p>
                           {qr.lastScannedAt && (
                             <p className="text-xs text-gray-400">

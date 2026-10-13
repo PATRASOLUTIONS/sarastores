@@ -13,15 +13,9 @@ import {
   listArticles,
 } from "@/lib/articles"
 import { safeJsonLd } from "@/lib/jsonld-safe"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
 
 export const revalidate = 900
-
-function getOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  )
-}
 
 export async function generateStaticParams() {
   const articles = await listArticles({ limit: 50 })
@@ -35,18 +29,23 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params
   const article = await getArticleBySlug(slug)
-  if (!article) return { title: "Article not found" }
+  if (!article) notFound()
+  const [origin, settings] = await Promise.all([getOriginFromHeaders(), getSiteSettings()])
+  const companyName = getCompanyName(settings)
+  const metadata = buildPageMetadata({
+    title: article.seoTitle || `${article.title} | ${companyName}`,
+    description: article.seoDescription || article.excerpt,
+    pageUrl: `${origin}/blog/${encodeURIComponent(article.slug)}`,
+    origin, companyName, imageUrl: article.coverImage,
+  })
 
   return {
-    title: article.seoTitle || `${article.title} — Sara Electronics`,
-    description: article.seoDescription || article.excerpt,
-    alternates: { canonical: `/blog/${article.slug}` },
+    ...metadata,
     openGraph: {
+      ...metadata.openGraph,
       type: "article",
-      title: article.seoTitle || article.title,
-      description: article.seoDescription || article.excerpt,
-      ...(article.coverImage ? { images: [article.coverImage] } : {}),
       ...(article.publishedAt ? { publishedTime: article.publishedAt } : {}),
+      ...(article.updatedAt ? { modifiedTime: article.updatedAt } : {}),
     },
   }
 }
@@ -58,7 +57,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
   if (!article) notFound()
 
   const related = await getRelatedArticles(article)
-  const jsonLd = buildArticleJsonLd(article, getOrigin())
+  const jsonLd = buildArticleJsonLd(article, await getOriginFromHeaders())
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F7F8FA]">

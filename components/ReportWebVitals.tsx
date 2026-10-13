@@ -16,6 +16,7 @@ const ANALYTICS_ENDPOINT = "/api/vitals"
 
 function postMetric(metric: WebVitalMetric) {
   if (typeof window === "undefined") return
+  if (!hasConsent("analytics")) return
   const body = JSON.stringify({
     name: metric.name,
     value: metric.value,

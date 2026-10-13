@@ -1,176 +1,48 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server"
+import { z } from "zod"
+import { handleApiError } from "@/lib/api-error"
 
-// Razorpay API credentials from environment variables
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET
+export const dynamic = "force-dynamic"
+
+const upstreamOffer = z.object({
+  id: z.string(), name: z.string().nullish(), terms: z.string().nullish(), display_text: z.string().nullish(),
+  discount_percentage: z.number().nullish(), discount_amount: z.number().nullish(), min_amount: z.number().nullish(),
+  max_discount: z.number().nullish(), payment_method: z.string().nullish(), active: z.boolean(),
+  starts_at: z.number().nullish(), ends_at: z.number().nullish(), type: z.string().nullish(),
+})
+const BANKS = ["HDFC", "ICICI", "AXIS", "SBI", "KOTAK", "PAYTM", "PHONEPE", "GPAY", "AMAZON PAY"]
 
 export async function GET() {
+  const keyId = process.env.RAZORPAY_KEY_ID
+  const secret = process.env.RAZORPAY_KEY_SECRET
+  if (!keyId || !secret) {
+    console.error("[Razorpay offers] Credentials are not configured")
+    return NextResponse.json({ error: "Bank offers are currently unavailable" }, { status: 503 })
+  }
   try {
-    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-      console.error('Razorpay credentials not configured')
-      return NextResponse.json(
-        { error: 'Razorpay credentials not configured' },
-        { status: 500 }
-      )
-    }
-
-    // Razorpay Offers API endpoint
-    const razorpayUrl = 'https://api.razorpay.com/v1/offers'
-    
-    // Create Basic Auth header
-    const authHeader = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64')
-    
-    const response = await fetch(razorpayUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${authHeader}`,
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store', // Ensure fresh data
+    const response = await fetch("https://api.razorpay.com/v1/offers", {
+      headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${secret}`).toString("base64")}` },
+      cache: "no-store", signal: AbortSignal.timeout(10000),
     })
-
     if (!response.ok) {
-      console.error('Razorpay API error:', response.status, response.statusText)
-      
-      // If API fails, return fallback offers
-      return NextResponse.json({
-        items: getFallbackOffers(),
-        count: getFallbackOffers().length,
-        source: 'fallback'
-      })
+      console.error("[Razorpay offers] Upstream request failed:", response.status)
+      return NextResponse.json({ error: "Razorpay bank offers could not be loaded. Please retry." }, { status: 502 })
     }
-
-    const data = await response.json()
-    
-    // Transform Razorpay offers to our format
-    const transformedOffers = data.items?.map((offer: any) => ({
-      id: offer.id,
-      name: offer.name || 'Special Offer',
-      description: offer.terms || offer.display_text || 'Limited time offer',
-      bank: extractBankName(offer.name || offer.display_text || ''),
-      discount_percentage: offer.discount_percentage || null,
-      discount_amount: offer.discount_amount ? offer.discount_amount / 100 : null, // Convert paise to rupees
-      min_amount: offer.min_amount ? offer.min_amount / 100 : null,
-      max_discount: offer.max_discount ? offer.max_discount / 100 : null,
-      payment_method: offer.payment_method || 'card',
-      active: offer.active,
-      starts_at: offer.starts_at,
-      ends_at: offer.ends_at,
-      type: offer.type || 'instant',
-    })) || []
-
-    return NextResponse.json({
-      items: transformedOffers.length > 0 ? transformedOffers : getFallbackOffers(),
-      count: transformedOffers.length || getFallbackOffers().length,
-      source: transformedOffers.length > 0 ? 'razorpay' : 'fallback'
+    const data = z.object({ items: z.array(upstreamOffer) }).parse(await response.json())
+    const items = data.items.map(offer => {
+      const name = offer.name || offer.display_text || "Bank offer"
+      const description = offer.terms || offer.display_text || ""
+      const text = `${name} ${description}`.toUpperCase()
+      return {
+        id: offer.id, name, description, bank: BANKS.find(bank => text.includes(bank)) || "BANK",
+        discount_percentage: offer.discount_percentage ?? null,
+        discount_amount: offer.discount_amount == null ? null : offer.discount_amount / 100,
+        min_amount: offer.min_amount == null ? null : offer.min_amount / 100,
+        max_discount: offer.max_discount == null ? null : offer.max_discount / 100,
+        payment_method: offer.payment_method || "card", active: offer.active,
+        starts_at: offer.starts_at, ends_at: offer.ends_at, type: offer.type || "instant",
+      }
     })
-
-  } catch (error) {
-    console.error('Error fetching Razorpay offers:', error)
-    
-    // Return fallback offers on error
-    return NextResponse.json({
-      items: getFallbackOffers(),
-      count: getFallbackOffers().length,
-      source: 'fallback'
-    })
-  }
-}
-
-// Extract bank name from offer text
-function extractBankName(text: string): string {
-  const bankKeywords = ['HDFC', 'ICICI', 'AXIS', 'SBI', 'KOTAK', 'PAYTM', 'PHONEPE', 'GPAY', 'AMAZON PAY']
-  const upperText = text.toUpperCase()
-  
-  for (const bank of bankKeywords) {
-    if (upperText.includes(bank)) {
-      return bank
-    }
-  }
-  
-  return 'BANK'
-}
-
-// Fallback offers if Razorpay API is unavailable
-function getFallbackOffers() {
-  return [
-    {
-      id: 'fallback_1',
-      name: 'HDFC Bank Offer',
-      description: 'Up to ₹1,500 on HDFC Bank Credit Cards',
-      bank: 'HDFC',
-      discount_percentage: 10,
-      discount_amount: null,
-      min_amount: 5000,
-      max_discount: 1500,
-      payment_method: 'card',
-      active: true,
-      type: 'instant',
-    },
-    {
-      id: 'fallback_2',
-      name: 'ICICI Bank Cashback',
-      description: 'Max ₹1,000 on ICICI Credit/Debit Cards',
-      bank: 'ICICI',
-      discount_percentage: 5,
-      discount_amount: null,
-      min_amount: 3000,
-      max_discount: 1000,
-      payment_method: 'card',
-      active: true,
-      type: 'instant',
-    },
-    {
-      id: 'fallback_3',
-      name: 'Axis Bank Discount',
-      description: 'On orders above ₹5,000 with Axis Bank',
-      bank: 'AXIS',
-      discount_percentage: null,
-      discount_amount: 500,
-      min_amount: 5000,
-      max_discount: 500,
-      payment_method: 'card',
-      active: true,
-      type: 'instant',
-    },
-    {
-      id: 'fallback_4',
-      name: 'SBI No Cost EMI',
-      description: '3/6/9 months EMI on SBI Credit Cards',
-      bank: 'SBI',
-      discount_percentage: null,
-      discount_amount: null,
-      min_amount: 5000,
-      max_discount: null,
-      payment_method: 'card',
-      active: true,
-      type: 'emi',
-    },
-    {
-      id: 'fallback_5',
-      name: 'Kotak Bank Offer',
-      description: 'Up to ₹750 on Kotak Bank Cards',
-      bank: 'KOTAK',
-      discount_percentage: 7.5,
-      discount_amount: null,
-      min_amount: 4000,
-      max_discount: 750,
-      payment_method: 'card',
-      active: true,
-      type: 'instant',
-    },
-    {
-      id: 'fallback_6',
-      name: 'Paytm Cashback',
-      description: 'On orders above ₹3,000 via Paytm',
-      bank: 'PAYTM',
-      discount_percentage: null,
-      discount_amount: 300,
-      min_amount: 3000,
-      max_discount: 300,
-      payment_method: 'wallet',
-      active: true,
-      type: 'instant',
-    },
-  ]
+    return NextResponse.json({ items, count: items.length, source: "razorpay" }, { headers: { "Cache-Control": "no-store" } })
+  } catch (error) { return handleApiError(error, "Razorpay bank offers could not be loaded. Please retry.") }
 }

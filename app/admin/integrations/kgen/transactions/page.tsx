@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { apiFetch } from "@/lib/api-client"
 import { IntegrationError, readErrorMessage } from "../integration-error"
@@ -16,7 +18,7 @@ type Txn = {
   activity?: string
   referenceID?: string
   referenceType?: string
-  metadata?: any
+  metadata?: unknown
   createdAt?: string
   updatedAt?: string
 }
@@ -59,9 +61,9 @@ export default function KGenTransactionsPage() {
       setHasMore(more)
 
       setTransactions(prev => (append ? prev.concat(txns) : txns))
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch transactions', err)
-      setError(err?.message || 'Failed to fetch transactions')
+      setError(getErrorMessage(err, 'Failed to fetch transactions'))
     } finally {
       setLoading(false)
     }
@@ -151,7 +153,8 @@ export default function KGenTransactionsPage() {
                 <td className="p-2 align-top">{t.balanceBefore != null ? `${Number(t.balanceBefore).toLocaleString('en-IN')}` : '-'}</td>
                 <td className="p-2 align-top">{t.balanceAfter != null ? `${Number(t.balanceAfter).toLocaleString('en-IN')}` : '-'}</td>
                 <td className="p-2 align-top">{t.sourceSystem || '-'}</td>
-                <td className="p-2 align-top">{t.metadata?.comment || '-'}</td>
+                <td className="p-2 align-top">{t.metadata && typeof t.metadata === "object" && "comment" in t.metadata &&
+                  typeof t.metadata.comment === "string" ? t.metadata.comment || "-" : "-"}</td>
               </tr>
             ))}
           </tbody>

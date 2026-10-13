@@ -40,7 +40,7 @@ export default function AdminSoftwarePage() {
         // Enrich products with realtime per-product available/assigned key counts
         const prods: SoftwareProduct[] = data.products
         const enriched = await Promise.all(
-          prods.map(async (p: any) => {
+          prods.map(async (p) => {
             try {
               const [availRes, assignedRes] = await Promise.all([
                 apiFetch(`/api/software/license-keys?softwareId=${encodeURIComponent(p._id)}&status=available`),

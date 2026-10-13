@@ -14,54 +14,33 @@ import HeroSection from "@/components/HeroSection"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import * as Slider from '@radix-ui/react-slider';
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import { subCategoryProductResponseSchema, type SubCategoryProductResponse } from "@/lib/product-card-response"
+import { catalogCategoryListResponseSchema, catalogSubCategoryListResponseSchema, type CatalogCategoryResponse } from "@/lib/catalog-list-response"
+import { z } from "zod"
 
-interface Product {
-  id: string
-  name: string
-  description: string
-  price: number
-  image: string
-  stock: number
-  category?: string
-  manufacturer?: string
-  manufacturerName?: string
-  color?: string
-  capacity?: string
-  images?: string[]
-  sku?: string
-  type?: string
-  raw?: any
-}
-
-interface Category {
-  id: string
-  name: string
-  description: string
-  image: string
-}
 
 const capitalizeFirstLetter = (string: string) => {
   if (!string) return '';
   return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
 }
 
-const getCanonicalMeta = (product: any) => normalizeProductForSchema(product)
-const getProductType = (product: any) => String(product?.type || getCanonicalMeta(product).subCategoryProdDesc || "")
-const getProductBrand = (product: any) => String(getCanonicalMeta(product).manufacturerName || "")
-const getProductCharDesc = (product: any) => String(getCanonicalMeta(product).charDesc || "")
-const getProductSubCategory = (product: any) => String(product?.subCategory || getCanonicalMeta(product).subCategoryProdDesc || "")
+const getCanonicalMeta = (product: SubCategoryProductResponse) => normalizeProductForSchema(product)
+const getProductType = (product: SubCategoryProductResponse) => String(product?.type || getCanonicalMeta(product).subCategoryProdDesc || "")
+const getProductBrand = (product: SubCategoryProductResponse) => String(getCanonicalMeta(product).manufacturerName || "")
+const getProductCharDesc = (product: SubCategoryProductResponse) => String(getCanonicalMeta(product).charDesc || "")
+const getProductSubCategory = (product: SubCategoryProductResponse) => String(product?.subCategory || getCanonicalMeta(product).subCategoryProdDesc || "")
 
 export default function SubCategoryPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [products, setProducts] = useState<Product[]>([])
+  const [products, setProducts] = useState<SubCategoryProductResponse[]>([])
   const [subCategoryName, setSubCategoryName] = useState<string>("")
-  const [categories, setCategories] = useState<Category[]>([])
+  const [categories, setCategories] = useState<CatalogCategoryResponse[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const params = useParams()
+  const params = useParams<{ name: string }>()
   const { cart } = useCart()
-  const subCategoryParam = params.name as string
+  const subCategoryParam = params.name
 
   // Filter state variables
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
@@ -98,39 +77,45 @@ export default function SubCategoryPage() {
 
     try {
       // Fetch all products and categories
-      const [productsResponse, categoriesResponse] = await Promise.all([
+      const [productsResponse, categoriesResponse, subCategoriesResponse] = await Promise.all([
         fetch("/api/products"),
-        fetch("/api/categories")
+        fetch("/api/categories"),
+        fetch("/api/sub-categories"),
       ])
 
       if (!productsResponse.ok) {
         throw new Error("Failed to fetch products")
       }
+      if (!categoriesResponse.ok || !subCategoriesResponse.ok) throw new Error("Failed to load category information")
 
-      const allProducts = await productsResponse.json()
-      const allCategories = await categoriesResponse.json()
+      const allProducts = z.array(subCategoryProductResponseSchema).parse(await productsResponse.json())
+      const allCategories = catalogCategoryListResponseSchema.parse(await categoriesResponse.json())
+      const subCategories = catalogSubCategoryListResponseSchema.parse(await subCategoriesResponse.json())
+      const resolvedName = subCategories.find(category => category.slug === subCategoryParam ||
+        category.name.toLowerCase() === subCatName.toLowerCase())?.name || subCatName
+      setSubCategoryName(resolvedName)
       setCategories(allCategories)
 
       // Filter products by canonical sub-category value
-      const filteredProducts = allProducts.filter((product: Product) => {
+      const filteredProducts = allProducts.filter((product) => {
         const subCategory = getProductSubCategory(product)
-        return subCategory && subCategory.toLowerCase() === subCatName.toLowerCase()
+        return subCategory && subCategory.toLowerCase() === resolvedName.toLowerCase()
       })
 
       setProducts(filteredProducts)
 
       // Extract unique values for filters
-      const uniqueTypes = [...new Set(filteredProducts.map((p: Product) => getProductType(p)).filter(Boolean))]
-      const uniqueBrands = [...new Set(filteredProducts.map((p: Product) => getProductBrand(p)).filter(Boolean))]
-      const uniqueCharDescs = [...new Set(filteredProducts.map((p: Product) => getProductCharDesc(p)).filter(Boolean))]
+      const uniqueTypes = [...new Set(filteredProducts.map((p) => getProductType(p)).filter(Boolean))]
+      const uniqueBrands = [...new Set(filteredProducts.map((p) => getProductBrand(p)).filter(Boolean))]
+      const uniqueCharDescs = [...new Set(filteredProducts.map((p) => getProductCharDesc(p)).filter(Boolean))]
 
-      setTypes(uniqueTypes as string[])
-      setBrands(uniqueBrands as string[])
-      setCharDescs(uniqueCharDescs as string[])
+      setTypes(uniqueTypes)
+      setBrands(uniqueBrands)
+      setCharDescs(uniqueCharDescs)
 
       // Set price range based on products
       if (filteredProducts.length > 0) {
-        const prices = filteredProducts.map((p: Product) => p.price)
+        const prices = filteredProducts.map((p) => p.price)
         const minPrice = Math.min(...prices)
         const maxPrice = Math.max(...prices)
         setPriceRange([minPrice, maxPrice])
@@ -181,7 +166,7 @@ export default function SubCategoryPage() {
   }
 
   // Filter products based on search term and other filters
-  const filteredProducts = products.filter((product: any) => {
+  const filteredProducts = products.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.description.toLowerCase().includes(searchTerm.toLowerCase())

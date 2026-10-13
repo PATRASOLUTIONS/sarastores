@@ -2,7 +2,7 @@ import Link from "next/link"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { pageMetadata } from "@/lib/seo-page"
-import { findMany } from "@/lib/db-service"
+import { getCollection } from "@/lib/db-service"
 import { titleCaseLabel } from "@/lib/product-display"
 
 export const revalidate = 600
@@ -82,19 +82,24 @@ const GROUPS: { title: string; links: { href: string; label: string }[] }[] = [
 
 export default async function SitemapPage() {
   // Categories come from the admin catalogue so this page never drifts from it.
+  type TaxonomyDocument = { name?: string; slug?: string; isEnabled?: boolean; active?: boolean }
+  const [categoryCollection, subCategoryCollection] = await Promise.all([
+    getCollection<TaxonomyDocument>("categories"),
+    getCollection<TaxonomyDocument>("sub_categories"),
+  ])
   const [categories, subCategories] = await Promise.all([
-    findMany("categories", {}).catch(() => []),
-    findMany("sub_categories", {}).catch(() => []),
+    categoryCollection.find({}).toArray(),
+    subCategoryCollection.find({}).toArray(),
   ])
 
-  const categoryLinks = (categories as any[])
-    .filter((c) => c?.name && !/^test\d*$/i.test(String(c.name)))
-    .map((c) => ({ href: `/category/${c.id ?? c._id}`, label: titleCaseLabel(String(c.name)) }))
+  const categoryLinks = categories
+    .filter((c) => c?.name && c.isEnabled !== false && !/^test\d*$/i.test(String(c.name)))
+    .map((c) => ({ href: `/category/${encodeURIComponent(c.slug || String(c._id))}`, label: titleCaseLabel(String(c.name)) }))
 
-  const subCategoryLinks = (subCategories as any[])
+  const subCategoryLinks = subCategories
     .filter((s) => s?.name && s?.active !== false && !/^test\d*$/i.test(String(s.name)))
     .map((s) => ({
-      href: `/products?subCategory=${encodeURIComponent(String(s.name))}`,
+      href: `/sub-category/${encodeURIComponent(String(s.name))}`,
       label: titleCaseLabel(String(s.name)),
     }))
 

@@ -1,4 +1,6 @@
 "use client"
+import { getErrorMessage } from "@/lib/utils"
+
 
 import { useRef, useState } from "react"
 import Link from "next/link"
@@ -22,6 +24,7 @@ import {
 import { bannerGradient, type SiteBanner } from "@/hooks/useBanners"
 import { useBrandImages } from "@/hooks/useBrandImages"
 import { cleanProductName } from "@/utils/cleanProductName"
+import type { CatalogProduct } from "@/utils/catalog"
 
 const isUrl = (value?: string) => !!value && /^(https?:)?\/\/|^\//.test(value)
 
@@ -47,7 +50,7 @@ export function ProductShelf({
 }: {
   title: string
   href?: string
-  products: any[]
+  products: CatalogProduct[]
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   if (products.length === 0) return null
@@ -283,9 +286,9 @@ export function MemberRow({ cards }: { cards: SiteBanner[] }) {
       setStatus("done")
       setPhone("")
       toast.success("Welcome to the SARA family!")
-    } catch (err: any) {
+    } catch (err) {
       setStatus("idle")
-      toast.error(err.message || "Could not sign you up right now")
+      toast.error(getErrorMessage(err, "Could not sign you up right now"))
     } finally {
       lock.release()
     }
@@ -329,7 +332,7 @@ export function MemberRow({ cards }: { cards: SiteBanner[] }) {
         <p className="mt-1 text-sm text-slate-600">Get exclusive offers, early access &amp; more!</p>
 
         {status === "done" ? (
-          <p className="mt-4 text-sm font-semibold text-emerald-700">You're on the list — see you soon.</p>
+          <p className="mt-4 text-sm font-semibold text-emerald-700">You&apos;re on the list — see you soon.</p>
         ) : (
           <form onSubmit={join} className="mt-4 flex max-w-sm gap-2">
             <label htmlFor="member-phone" className="sr-only">

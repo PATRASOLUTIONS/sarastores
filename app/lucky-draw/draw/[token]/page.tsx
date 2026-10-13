@@ -1,13 +1,14 @@
-import type { Metadata } from "next"
+import { pageMetadata } from "@/lib/seo-page"
 import LuckyDrawScreen from "./LuckyDrawScreen"
 
 export const dynamic = "force-dynamic"
 
 // The token is a shareable secret, so keep the screen out of search results.
-export const metadata: Metadata = {
-  title: "Lucky Draw",
-  robots: { index: false, follow: false },
-}
+export const generateMetadata = pageMetadata({
+  path: "/lucky-draw", title: brand => `Private Lucky Draw | ${brand}`,
+  description: "Open your private SARA lucky-draw link. Draw tokens and participant details are not included in search or sharing previews.",
+  noIndex: true,
+})
 
 export default async function LuckyDrawDrawPage({
   params,

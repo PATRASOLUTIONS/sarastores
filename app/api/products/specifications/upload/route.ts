@@ -3,13 +3,24 @@ import { requireAdmin } from "@/lib/auth"
 import { connectToDatabase } from "@/lib/mongodb"
 import { extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { buildSpecificationPatch, SPECIFICATIONS_COLLECTION } from "@/lib/product-specification-schema"
+import { z } from "zod"
+import { SpecificationUpdateSchema } from "@/lib/validation"
 
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
 
   try {
-    const { specifications } = await request.json()
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch (error) {
+      console.warn("Invalid specifications upload JSON:", error)
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    }
+    const parsed = z.object({ specifications: z.array(z.record(z.unknown())).min(1).max(5000) }).safeParse(body)
+    if (!parsed.success) return NextResponse.json({ error: "Provide between 1 and 5,000 specification rows" }, { status: 400 })
+    const { specifications } = parsed.data
 
     if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Received specifications upload request", { count: specifications?.length })
 
@@ -20,6 +31,7 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase()
     const productsCollection = db.collection("products")
     const specsCollection = db.collection(SPECIFICATIONS_COLLECTION)
+    await specsCollection.createIndex({ sku: 1 }, { unique: true, name: "sku_unique" })
 
     let success = 0
     let failed = 0
@@ -58,6 +70,19 @@ export async function POST(request: NextRequest) {
           errors.push(`Row skipped: Missing SKU`)
           continue
         }
+        const existing = await specsCollection.findOne({ sku: canonicalSku })
+        if (existing?.locked === true) {
+          skipped++
+          errors.push(`SKU ${canonicalSku} is locked`)
+          continue
+        }
+        const parsedMrp = mrp === undefined || mrp === null || mrp === "" ? null
+          : Number(typeof mrp === "string" ? mrp.replace(/[₹,\s]/g, "") : mrp)
+        if (parsedMrp !== null && (!Number.isFinite(parsedMrp) || parsedMrp < 0 || parsedMrp > 10000000)) {
+          failed++
+          errors.push(`SKU ${canonicalSku} has invalid MRP`)
+          continue
+        }
 
         // Find product by canonical itemno to validate and get product_id/name
         const product = await productsCollection.findOne({
@@ -87,7 +112,7 @@ export async function POST(request: NextRequest) {
           included_components,
           features,
           reviews,
-          mrp,
+          mrp: parsedMrp,
           category,
           subCategory,
           prod_desc,
@@ -115,17 +140,24 @@ export async function POST(request: NextRequest) {
         }
 
         // A spec edited here has diverged from the product record again.
-        ;(doc as any).isSynced = false
+        doc.isSynced = false
+        const { sku: documentSku, updatedAt, ...fields } = doc
+        const validated = SpecificationUpdateSchema.safeParse(fields)
+        if (!validated.success) {
+          failed++
+          errors.push(`SKU ${canonicalSku}: ${validated.error.issues[0]?.message || "Invalid specification fields"}`)
+          continue
+        }
 
         const result = await specsCollection.updateOne(
-          { sku: doc.sku },
+          { sku: documentSku, locked: { $ne: true } },
           {
-            $set: doc,
+            $set: { sku: documentSku, updatedAt, ...validated.data },
           },
           { upsert: true },
         )
 
-        const upserted = (result as any).upsertedId != null || result.matchedCount > 0
+        const upserted = result.acknowledged && (result.upsertedId != null || result.matchedCount > 0)
         if (upserted) {
           success++
         } else {

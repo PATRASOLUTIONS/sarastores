@@ -3,12 +3,13 @@
 import Link from "next/link"
 import { formatPrice } from "@/utils/formatPrice"
 import { ArrowRight, Truck, ShieldCheck, BadgeIndianRupee } from "lucide-react"
+import type { CatalogProduct } from "@/utils/catalog"
 
 /**
  * Product spotlight placed between rails, mirroring the promo banners that break
  * up long listing pages on larger storefronts.
  */
-export default function SpotlightBanner({ product }: { product: any }) {
+export default function SpotlightBanner({ product }: { product: CatalogProduct }) {
   if (!product) return null
 
   const price = Number(product.price) || 0

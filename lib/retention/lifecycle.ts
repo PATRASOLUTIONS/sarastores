@@ -413,8 +413,7 @@ export async function runLifecycleReminders(options: { dryRun?: boolean } = {}):
 
   for (const reminder of eligible) {
     try {
-      // Rotating the token per send means a leaked link expires on the next message.
-      const token = await issueUnsubscribeToken(reminder.userId)
+      const token = await issueUnsubscribeToken(reminder.userId, "email")
       const message = buildReminderMessage(reminder.kind, {
         customerName: reminder.customerName,
         productName: reminder.productName,

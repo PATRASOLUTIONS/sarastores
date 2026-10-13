@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Image from "next/image"
+import CartProductImage from "@/components/CartProductImage"
 import { AnimatePresence, motion } from "framer-motion"
 import { ShoppingCart, ChevronRight, ChevronLeft, Tag } from "lucide-react"
 import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartUI } from "@/contexts/CartUIContext"
+import { usePathname } from "next/navigation"
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -38,6 +39,7 @@ const COLLAPSE_KEY = "cartQuickAccess.collapsed"
  * the way. The collapsed state persists in localStorage.
  */
 export default function CartQuickAccess() {
+  const pathname = usePathname()
   const { user } = useAuth()
   const { cart, isLoading } = useCart()
   const { openCart } = useCartUI()
@@ -84,7 +86,7 @@ export default function CartQuickAccess() {
   }, [cart])
 
   // Visibility rule — must be logged in AND have items.
-  const visible = !!user && itemCount > 0
+  const visible = pathname !== "/dashboard" && !pathname?.startsWith("/dashboard/") && pathname !== "/checkout" && pathname !== "/thank-you" && !!user && itemCount > 0
   const previewItems = useMemo(() => cart.slice(0, 3), [cart])
 
   if (!visible) return null
@@ -200,12 +202,10 @@ export default function CartQuickAccess() {
                 className="relative h-8 w-8 rounded-md bg-gray-50 border border-gray-200 overflow-hidden hover:border-brand-primary/50 transition-colors flex-shrink-0"
               >
                 {item.image ? (
-                  <Image
+                  <CartProductImage
                     src={item.image}
-                    alt={item.name}
-                    fill
-                    sizes="32px"
-                    className="object-contain p-0.5"
+                    name={item.name}
+                    className="h-full w-full object-contain p-0.5"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-gray-300">

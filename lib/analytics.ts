@@ -11,6 +11,25 @@
 import { hasConsent } from "@/lib/consent-client"
 
 type Money = number | string
+declare global {
+  interface Window {
+    dataLayer?: unknown[]
+    gtag?: (command: "event", event: string, params: Record<string, unknown>) => void
+  }
+}
+
+interface AnalyticsProductInput {
+  id?: unknown
+  productId?: unknown
+  _id?: unknown
+  name?: unknown
+  title?: unknown
+  price?: Money | null
+  quantity?: Money | null
+  category?: string | null
+  brand?: string | null
+}
+
 export type AnalyticsItem = {
   item_id: string
   item_name: string
@@ -20,17 +39,17 @@ export type AnalyticsItem = {
   item_brand?: string | null
 }
 
-const toNumber = (v: Money | undefined): number => {
+const toNumber = (v: Money | null | undefined): number => {
   const n = typeof v === "number" ? v : Number.parseFloat(String(v ?? 0))
   return Number.isFinite(n) ? n : 0
 }
 
-export function toAnalyticsItem(raw: any, quantity?: number): AnalyticsItem {
+export function toAnalyticsItem(raw: AnalyticsProductInput, quantity?: number): AnalyticsItem {
   return {
     item_id: String(raw?.id ?? raw?.productId ?? raw?._id ?? ""),
     item_name: String(raw?.name ?? raw?.title ?? "Unknown"),
     price: toNumber(raw?.price),
-    quantity: quantity ?? toNumber(raw?.quantity) ?? 1,
+    quantity: quantity ?? (raw?.quantity == null ? 1 : toNumber(raw.quantity)),
     item_category: raw?.category ?? null,
     item_brand: raw?.brand ?? null,
   }
@@ -53,13 +72,12 @@ export function track(event: string, params: Record<string, unknown> = {}): void
   const payload = { event, ...params }
 
   try {
-    const w = window as any
-    w.dataLayer = w.dataLayer || []
-    w.dataLayer.push(payload)
+    window.dataLayer = window.dataLayer || []
+    window.dataLayer.push(payload)
     // Fires only if a GA4/gtag tag is added later.
-    if (typeof w.gtag === "function") w.gtag("event", event, params)
-  } catch {
-    // analytics must never break the page
+    if (typeof window.gtag === "function") window.gtag("event", event, params)
+  } catch (error) {
+    console.warn("[Analytics] Tag dispatch failed", error)
   }
 
   try {
@@ -69,13 +87,14 @@ export function track(event: string, params: Record<string, unknown> = {}): void
       page: window.location.pathname,
       ts: Date.now(),
     })
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon("/api/events", new Blob([body], { type: "application/json" }))
-    } else {
-      fetch("/api/events", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true }).catch(() => {})
+    const queued = navigator.sendBeacon?.("/api/events", new Blob([body], { type: "application/json" })) ?? false
+    if (!queued) {
+      fetch("/api/events", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true })
+        .then(response => { if (!response.ok) console.warn("[Analytics] Event persistence failed", { status: response.status }) })
+        .catch(error => console.warn("[Analytics] Event request failed", error))
     }
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn("[Analytics] Event dispatch failed", error)
   }
 }
 

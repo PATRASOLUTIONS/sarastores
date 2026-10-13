@@ -1,3 +1,5 @@
+
+import { getErrorMessage } from "@/lib/utils"
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { getSoftwareProductById, updateSoftwareProduct, deleteSoftwareProduct } from '@/lib/software-service'
@@ -82,10 +84,10 @@ export async function DELETE(
     }
     
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error deleting software product:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to delete software product' },
+      { success: false, error: getErrorMessage(error, 'Failed to delete software product') },
       { status: 500 }
     )
   }

@@ -8,7 +8,25 @@
  */
 
 import { getSettingsData } from "@/lib/db-service"
-import { getOriginFromHeaders } from "@/lib/seo-metadata"
+import { absoluteSeoImage, getCompanyName } from "@/lib/seo-metadata"
+import { z } from "zod"
+
+const optionalText = z.string().nullish().transform(value => value ?? undefined)
+export const storeSettingsLiteSchema = z.object({
+  storeName: optionalText, companyName: optionalText, siteName: optionalText,
+  storeDescription: optionalText, brandLogo: optionalText, email: optionalText, phone: optionalText,
+  storeEmail: optionalText, storePhone: optionalText, storeAddress: optionalText,
+  address: z.union([z.object({
+    street: optionalText, city: optionalText, state: optionalText,
+    postalCode: optionalText, country: optionalText,
+  }), z.string().transform(street => ({ street }))]).nullish().transform(value => value ?? undefined),
+  geo: z.object({ lat: z.number().finite().min(-90).max(90), lng: z.number().finite().min(-180).max(180) })
+    .nullish().transform(value => value ?? undefined),
+  openingHours: z.array(z.string()).nullish().transform(value => value ?? undefined),
+  hours: z.union([z.string(), z.array(z.string())]).nullish().transform(value => value ?? undefined),
+  socialLinks: z.array(z.string()).nullish().transform(value => value ?? undefined),
+  twitterHandle: optionalText,
+})
 
 export interface StoreSettingsLite {
   storeName?: string
@@ -27,6 +45,7 @@ export interface StoreSettingsLite {
   }
   geo?: { lat: number; lng: number }
   openingHours?: string[] // e.g. ["Mo-Sa 09:00-21:00"]
+  hours?: string | string[]
   socialLinks?: string[]
   twitterHandle?: string
 }
@@ -36,20 +55,30 @@ export async function getStoreSettings(): Promise<StoreSettingsLite | null> {
     // Goes through getSettingsData so brandLogo arrives as a media URL rather
     // than an 800 KB data URI that would be inlined into every page's JSON-LD.
     const s = await getSettingsData()
-    return (s as StoreSettingsLite) || null
-  } catch {
+    if (!s) return null
+    const parsed = storeSettingsLiteSchema.safeParse(s)
+    if (!parsed.success) {
+      console.error("[SEO] Invalid public store settings fields:", parsed.error.issues.map(issue => issue.path.join(".")))
+      return null
+    }
+    return {
+      ...parsed.data,
+      email: parsed.data.email || parsed.data.storeEmail,
+      phone: parsed.data.phone || parsed.data.storePhone,
+      address: parsed.data.address || (parsed.data.storeAddress ? { street: parsed.data.storeAddress } : undefined),
+    }
+  } catch (error) {
+    console.error("[SEO] Public store settings could not be loaded:", error instanceof Error ? error.message : "Unexpected database failure")
     return null
   }
 }
 
 export function pickStoreName(s: StoreSettingsLite | null | undefined): string {
-  return s?.storeName || s?.companyName || s?.siteName || "Sara Electronics"
+  return getCompanyName(s || null)
 }
 
 function absolutize(origin: string, value: string | undefined | null): string | undefined {
-  if (!value) return undefined
-  if (value.startsWith("http")) return value
-  return `${origin}${value.startsWith("/") ? "" : "/"}${value}`
+  return absoluteSeoImage(value, origin)
 }
 
 export interface OrganizationGraphInput {
@@ -106,13 +135,13 @@ export function buildOrganizationJsonLd({ settings, origin }: OrganizationGraphI
   return data
 }
 
-export function buildWebSiteJsonLd({ origin }: { origin: string }) {
+export function buildWebSiteJsonLd({ origin, settings }: { origin: string; settings?: StoreSettingsLite | null }) {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "@id": `${origin}#website`,
     url: origin,
-    name: pickStoreName(null),
+    name: pickStoreName(settings),
     inLanguage: "en-IN",
     publisher: { "@id": `${origin}#organization` },
     potentialAction: {
@@ -166,18 +195,11 @@ export function buildLocalBusinessJsonLd({
     }
   }
 
-  if (settings?.geo?.lat && settings?.geo?.lng) {
+  if (settings?.geo) {
     data.geo = {
       "@type": "GeoCoordinates",
       latitude: settings.geo.lat,
       longitude: settings.geo.lng,
-    }
-  } else {
-    // Fallback: Bangalore city center coordinates for "near me" queries
-    data.geo = {
-      "@type": "GeoCoordinates",
-      latitude: 12.9716,
-      longitude: 77.5946,
     }
   }
 
