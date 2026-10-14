@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCollection, createObjectId, normalizeId } from "@/lib/db-service"
 import { getEmailTemplate, getEmailSubject, getEmailTemplateId } from "@/lib/emailTemplates"
 import { sendEmail } from "@/lib/email"
-import { requireAdmin } from "@/lib/auth"
+import { requireAdmin, getSession } from "@/lib/auth"
+import { getOrderAdminScope } from "@/lib/order-access"
 import { bulkOrderUpdateRequestSchema, type BulkOrderRow } from "@/lib/bulk-order-update"
 import type { EmailData } from "@/lib/emailTemplates"
 
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response
 
   try {
+    const scope = await getOrderAdminScope(await getSession())
     const parsed = bulkOrderUpdateRequestSchema.safeParse(await request.json())
 
     if (!parsed.success) {
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if order exists
-        const existingOrder = await collection.findOne({ _id: objectId })
+        const existingOrder = await collection.findOne({ $and: [scope.filter, { _id: objectId }] })
         if (!existingOrder) {
           failed.push({ row, error: "Order not found" })
           continue
@@ -95,10 +97,11 @@ export async function POST(request: NextRequest) {
         updateData.timeline = existingTimeline
 
         // Update the order
-        await collection.updateOne({ _id: objectId }, { $set: updateData })
+        const result = await collection.updateOne({ $and: [scope.filter, { _id: objectId }] }, { $set: updateData })
+        if (result.matchedCount !== 1) throw new Error("Order no longer accessible")
 
         // Get updated order for email
-        const updatedOrder = await collection.findOne({ _id: objectId })
+        const updatedOrder = await collection.findOne({ $and: [scope.filter, { _id: objectId }] })
         if (!updatedOrder) throw new Error("Updated order could not be reloaded")
         const normalizedOrder = normalizeId(updatedOrder)
 

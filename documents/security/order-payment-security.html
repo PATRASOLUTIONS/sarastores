@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Order and payment security verification - SARA</title>
+  <style>
+    :root{color-scheme:light}body{margin:0;background:#f5f7fb;color:#18243b;font:16px/1.65 system-ui,sans-serif}main{max-width:1040px;margin:auto;padding:32px 20px}h1,h2{line-height:1.3}section{background:white;border:1px solid #dce3ee;border-radius:12px;padding:24px;margin:20px 0}.notice{border-left:5px solid #d58700;background:#fff9e9;padding:18px}.pass{color:#126132;font-weight:700}.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px}th,td{text-align:left;padding:12px;border-bottom:1px solid #dce3ee;vertical-align:top}code{font-size:.9em;overflow-wrap:anywhere}a{color:#163f9c}li{margin:9px 0}
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="../index.html">Document catalogue</a> / <a href="../payment-ui-journeys/index.html">Earlier simulated UI journeys</a></nav>
+  <h1>Order and payment security verification</h1>
+  <p>14 October 2026. Bounded source, handler and isolated database verification. No live customer records, actual payment transactions or real email deliveries were used.</p>
+  <p class="notice"><strong>Credentials alone are not a deployment guarantee.</strong> Real Razorpay, Pine Labs and Paytm UAT, public HTTPS return/webhook registration, MongoDB transaction support, SMTP delivery, monitoring and approved production smoke tests remain necessary. This is not an exhaustive penetration-test certificate.</p>
+  <section>
+    <h2>Confirmed vulnerability and remediation</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Severity</th><th>Finding</th><th>Remediation</th></tr></thead>
+      <tbody><tr><td>High, 10/10 confidence</td><td>Store-restricted order staff could read, confirm or delete another store's orders and obtain its invoice/license data. List filtering did not protect individual routes.</td><td>Shared live store authorization covers lists, detail reads, updates, deletion, invoices, license assignment and bulk mutation. Store predicates are carried into database mutations and transactional license claims. Unauthorized reads return 404 without disclosing order existence.</td></tr></tbody>
+    </table></div>
+    <p>Full administrators, explicitly all-store staff, permitted-store staff, owning customers and valid guest capability holders retain their intended access. Dashboard access alone does not grant order permissions. Revoked or deactivated accounts are rechecked from live identity records.</p>
+    <p>Private order responses and invoices use <code>Cache-Control: private, no-store</code>. Customer-facing detail responses and update acknowledgements omit guest capability hashes. Staff email copies now obey store scope and contain only an order number and total, not customer identity, addresses, license keys or payment proofs.</p>
+  </section>
+  <section>
+    <h2>Configure confirmed-order emails</h2>
+    <ol>
+      <li>Sign in as an <strong>admin or superadmin</strong>.</li>
+      <li>Open <strong>Admin &gt; Sales &gt; Order Notifications</strong>, at <code>/admin/order-notifications</code>.</li>
+      <li>Enter an authorised business email address, select <strong>Enable confirmed-order emails</strong>, and save. Reloading retrieves the persisted value.</li>
+      <li>Confirm an order in Admin Orders, or complete verified Razorpay, Pine Labs or Paytm checkout. The additional recipient receives a short confirmation summary. The original customer notifications continue.</li>
+      <li>Disable the checkbox to stop the additional recipient. Existing manager/store copies remain subject to their own authorised rules.</li>
+    </ol>
+    <p>The setting is stored in the private <code>order_notification_settings</code> collection, not public storefront settings. Its API and server-rendered page require full-admin access. Invalid emails and unexpected input fields are rejected. Saving settings does not test SMTP delivery. Pending, failed and payment-review transactions do not trigger confirmed notifications.</p>
+    <p>An atomic per-order <code>adminNotifications.confirmed</code> claim prevents repeated callbacks, concurrent requests or later status reversals from sending another admin confirmation. Paid software orders still receive their confirmation when immediate fulfillment has already changed the order to delivered. SMTP delivery does not delay hosted software fulfillment.</p>
+    <p><strong>Delivery limitation:</strong> SMTP cannot guarantee exactly-once delivery across process crashes. Delivery outcomes are recorded as <code>sending</code>, <code>sent</code> or <code>failed</code>; unexpected failures are explicitly logged. A stale <code>sending</code> record is ambiguous. An operator must inspect logs and SMTP acceptance before any manual resend; failed or ambiguous claims are not automatically retried. Settings changes do not bulk-email historical orders.</p>
+  </section>
+  <section>
+    <h2>Verification evidence</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Check</th><th>Result</th><th>Scope</th></tr></thead>
+      <tbody>
+        <tr><td>Application regressions</td><td class="pass">412 passed</td><td>Full Node.js suite, including 29 focused order/security/notification tests and 48 gateway tests.</td></tr>
+        <tr><td>Real isolated MongoDB checks</td><td class="pass">38 passed</td><td>Real signed sessions, live store revocation/deactivation, foreign-store denial, owning customer and guest capabilities, private settings persistence, notification delivery-state persistence, staff email scoping and concurrent claim deduplication. Email transport was simulated.</td></tr>
+        <tr><td>TypeScript</td><td class="pass">Passed</td><td><code>npx tsc --noEmit</code>.</td></tr>
+        <tr><td>Production build</td><td class="pass">Passed</td><td>Strict build with TypeScript and lint gates enabled, an empty read-only audit database and blocked payment/email provider boundaries. Non-blocking existing lint warnings remain.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Regression coverage rejects forged signatures, mismatched amounts/currency/merchant/order identities, browser-supplied prices, payment replay, expired/mismatched checkout capabilities and paid-review inconsistencies. Public gateway configuration does not return merchant secrets.</p>
+    <p>Reproduce focused checks with <code>node --test tests/order-security.test.mjs tests/payment-gateways.test.mjs</code>. Run <code>node scripts/audit-order-security.mjs</code> for the database checks: it requires a configured MongoDB connection, generates a new isolated audit database name, refuses unexpected collections and removes its synthetic records. It does not send email or contact payment providers.</p>
+  </section>
+  <section>
+    <h2>Remaining external gates</h2>
+    <p>Obtain the separately issued Pine Labs callback signing key and your own Paytm merchant credentials. Register the public HTTPS callbacks/webhooks with each gateway and run actual gateway UAT for success, decline, pending, delayed confirmation and replay. Configure SMTP and verify delivery to the chosen business inbox. Preserve operational monitoring for notification failures and payment-review orders.</p>
+    <p>See <a href="../operations/website-payment-gateways.md">Website payment gateways</a> for environment-variable names and provider setup. Do not use merchant credentials found in public posts or paste secrets into reports.</p>
+  </section>
+</main>
+</body>
+</html>

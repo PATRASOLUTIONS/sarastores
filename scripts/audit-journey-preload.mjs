@@ -5,8 +5,9 @@ const rawHttpRequest = http.request.bind(http)
 const publicAssetHosts = new Set(["fonts.googleapis.com", "fonts.gstatic.com", "images.unsplash.com", "m.media-amazon.com"])
 
 const database = process.env.MONGODB_DB
+const gateways = process.env.AUDIT_GATEWAY_JOURNEYS === "true"
 if (!/^ecom_sara_audit_[a-z0-9_]+$/.test(database || "") || Buffer.byteLength(database) > 38 ||
-    process.env.DB_NAME !== database || process.env.NEXT_PUBLIC_SITE_URL !== "http://localhost:3012" ||
+    process.env.DB_NAME !== database || process.env.NEXT_PUBLIC_SITE_URL !== `http://localhost:${gateways ? 3025 : 3012}` ||
     process.env.SMTP_HOST !== "127.0.0.1" || process.env.SMTP_PORT !== "1587" ||
     !process.env.RAZORPAY_KEY_ID?.startsWith("rzp_test_audit_") || !process.env.AUDIT_PROVIDER_SECRET ||
     process.env.RAZORPAY_KEY_SECRET !== process.env.AUDIT_PROVIDER_SECRET) {
@@ -19,6 +20,7 @@ MongoClient.prototype.db = function (name, options) {
 }
 
 const originalFetch = globalThis.fetch
+const providerHosts = new Set(["api.razorpay.com", ...(gateways ? ["pluraluat.v2.pinepg.in", "securestage.paytmpayments.com"] : [])])
 globalThis.fetch = (input, options) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url)
   const method = options?.method || input?.method || "GET"
@@ -29,7 +31,7 @@ globalThis.fetch = (input, options) => {
       score: 0.99,
     }))
   }
-  if (url.hostname === "api.razorpay.com") {
+  if (providerHosts.has(url.hostname)) {
     const headers = new Headers(options?.headers || input?.headers)
     headers.delete("authorization")
     headers.set("x-audit-secret", process.env.AUDIT_PROVIDER_SECRET)
@@ -54,7 +56,7 @@ for (const transport of [http, https]) {
         !new Headers(params.headers).has("authorization")) {
       return original.apply(this, arguments)
     }
-    if (host === "api.razorpay.com") {
+    if (providerHosts.has(host)) {
       return originalHttpRequest({
         ...params, hostname: "127.0.0.1", host: undefined, port: 1588, protocol: "http:",
         path: params.path || `${params.pathname}${params.search || ""}`,

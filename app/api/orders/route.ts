@@ -8,10 +8,14 @@ import { generateOrderId } from "@/lib/order-id"
 import { priceOrder, consumeOrderCoupon } from "@/lib/order-pricing"
 import { verifyRazorpayPayment } from "@/lib/razorpay"
 import { z } from "zod"
-import { ObjectId } from "mongodb"
 import { checkoutFingerprint, getCheckoutIntent, persistCheckoutOrder, CheckoutConflictError, type CheckoutIntent } from "@/lib/checkout-payment"
 import { fulfillSoftwareOrder } from "@/lib/software-fulfillment"
 import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfillment"
+import { initiateHostedCheckout, notifyHostedGuestOrder } from "@/lib/hosted-checkout"
+import { PaymentConfigurationError } from "@/lib/payment-config"
+import { PaymentProviderError } from "@/lib/hosted-payment-providers"
+import { getOrderAdminScope } from "@/lib/order-access"
+import { notifyAdminOrder } from "@/lib/order-notifications"
 
 export const dynamic = "force-dynamic"
 
@@ -117,7 +121,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
     const isAdminRole = session.user.role === "admin" || session.user.role === "superadmin"
-    const isStaff = !isAdminRole && session.user.dashboardAccess === true
+    const orderScope = await getOrderAdminScope(session)
+    const isStaff = !isAdminRole && orderScope.kind !== "none"
 
     const employeeId = isAdminRole ? request.nextUrl.searchParams.get("employeeId") : null
     const limit = request.nextUrl.searchParams.get("limit")
@@ -140,17 +145,7 @@ export async function GET(request: NextRequest) {
     let query: Record<string, unknown> = {}
     if (userId) query = { ...query, userId }
     if (isStaff) {
-      const users = await getCollection("users")
-      const user = ObjectId.isValid(session.user.id)
-        ? await users.findOne({ _id: new ObjectId(session.user.id) })
-        : await users.findOne({ email: session.user.email })
-      const storeAccess = user?.storeAccess || "none"
-      const storeIds = Array.isArray(user?.storeIds) ? user.storeIds.map(String) : []
-      if (storeAccess !== "all") {
-        query = storeAccess === "selected" && storeIds.length > 0
-          ? { ...query, "fulfilment.storeId": { $in: storeIds } }
-          : { ...query, _id: null }
-      }
+      query = { ...query, ...orderScope.filter }
     }
     if (employeeId) {
       query = {
@@ -374,7 +369,7 @@ export async function POST(request: NextRequest) {
         zipCode: z.string().optional(),
         country: z.string().optional(),
       }).optional(),
-      paymentMethod: z.enum(["cash", "cod", "cash-on-delivery", "online", "razorpay", "instore"]).optional(),
+      paymentMethod: z.enum(["cash", "cod", "cash-on-delivery", "online", "razorpay", "pinelabs", "paytm", "instore"]).optional(),
       paymentDetails: z.record(z.unknown()).optional(),
       fulfilment: z.object({
         method: z.enum(["delivery", "pickup"]),
@@ -397,6 +392,10 @@ export async function POST(request: NextRequest) {
 
     const { items, customer, shippingAddress, paymentMethod, paymentDetails } = parsed.data
     const userId = session?.user?.id ?? null
+    if (!isGuest && (paymentMethod === "pinelabs" || paymentMethod === "paytm")) {
+      const limit = await checkRateLimit(request, RATE_LIMITS.ORDERS)
+      if (!limit.success) return NextResponse.json({ error: RATE_LIMITS.ORDERS.message }, { status: 429 })
+    }
 
     // A guest order can only be traced back through the contact details, so both
     // are mandatory when there is no account behind it.
@@ -436,6 +435,7 @@ export async function POST(request: NextRequest) {
     const payableTotal = Math.max(0, total - (loyalty?.discount ?? 0))
     // An order only reaches a paid state once the payment is confirmed server-side.
     const method = paymentMethod || "cash"
+    const hosted = method === "pinelabs" || method === "paytm"
     let status = "pending"
     let paymentVerification: Record<string, unknown> = { verified: false, method }
     let checkoutIntent: CheckoutIntent | null = null
@@ -573,7 +573,17 @@ export async function POST(request: NextRequest) {
 
     newOrder.notes = orderNotes
 
+    const hostedCheckout = hosted
+      ? await initiateHostedCheckout(method, orderId, userId, { amount: payableTotal, fingerprint }, newOrder.customer)
+      : null
+    if (hostedCheckout) {
+      checkoutIntent = await getCheckoutIntent(hostedCheckout.orderId, hostedCheckout.checkoutToken, userId)
+      if (!checkoutIntent) throw new Error("Hosted checkout intent could not be persisted")
+      Object.assign(newOrder.paymentDetails, { orderId: hostedCheckout.orderId })
+    }
+
     const insertedId = await persistCheckoutOrder(newOrder, checkoutIntent, async (transaction) => {
+      if (hosted) return
       if (coupon) {
         const consumption = await consumeOrderCoupon(items, coupon, userId, transaction)
         if (!consumption.ok) throw new CheckoutConflictError(consumption.error)
@@ -586,6 +596,14 @@ export async function POST(request: NextRequest) {
       }
     })
     const result = { insertedId }
+
+    if (hostedCheckout) {
+      if (guestAccessToken) notifyHostedGuestOrder(orderId, newOrder.customer.email, guestAccessToken)
+      return NextResponse.json({
+        success: true, orderId, total: payableTotal, tax, shipping, checkout: hostedCheckout,
+        ...(guestAccessToken ? { guestAccessToken } : {}),
+      }, { headers: { "Cache-Control": "private, no-store" } })
+    }
 
     const softwareItems = validatedItems.filter((item) => item.type === 'software')
 
@@ -662,44 +680,7 @@ export async function POST(request: NextRequest) {
       // email failure should not fail order creation
     }
 
-    try {
-      const { sendEmail, getVendorOrderNotificationTemplate } = await import("@/lib/email")
-      const employeesCollection = await getCollection("employees")
-      const adminEmployees = await employeesCollection
-        .find({ dashboardAccess: true, status: "active", allowedPages: "/admin/orders" })
-        .toArray()
-
-      const adminOrder = normalizeId(orderForResponse)
-
-      if (adminEmployees && adminEmployees.length > 0) {
-        for (const emp of adminEmployees) {
-          try {
-            if (!emp.email) continue
-            const subject = `Admin Copy - New Order #${orderId}`
-            const html = getVendorOrderNotificationTemplate(adminOrder)
-            await sendEmail({ to: emp.email, subject, html })
-          } catch {
-            // per-employee email failure — non-critical
-          }
-        }
-      }
-
-      try {
-        const settingsCollection = await getCollection("settings")
-        const settingsDoc = await settingsCollection.findOne({})
-        const superAdminEmail = settingsDoc?.storeEmail
-
-        if (superAdminEmail) {
-          const subject = `Super Admin Copy - New Order #${orderId}`
-          const html = getVendorOrderNotificationTemplate(adminOrder)
-          await sendEmail({ to: superAdminEmail, subject, html })
-        }
-      } catch {
-        // super admin email failure — non-critical
-      }
-    } catch {
-      // admin email notification failure — non-critical
-    }
+    await notifyAdminOrder(insertedId, "orders", status === "confirmed" ? "confirmed" : "created")
 
     try {
       if (result.insertedId && userId) {
@@ -730,6 +711,12 @@ export async function POST(request: NextRequest) {
       ...(guestAccessToken ? { guestAccessToken } : {}),
     })
   } catch (error) {
+    if (error instanceof PaymentConfigurationError || error instanceof PaymentProviderError) {
+      console.error("[Orders POST] Hosted payment initiation failed:", error.message)
+      return NextResponse.json({ error: error instanceof PaymentConfigurationError
+        ? "Selected payment gateway is not configured or is disabled"
+        : "Payment gateway is unavailable. No payment has been confirmed." }, { status: 503 })
+    }
     if (error instanceof CheckoutConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }

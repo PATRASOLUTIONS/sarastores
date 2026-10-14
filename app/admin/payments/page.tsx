@@ -10,14 +10,17 @@ import { CreditCard, Search, DollarSign, CheckCircle, XCircle, ChevronLeft, Chev
 import { toast } from "react-hot-toast"
 
 interface Payment {
-  _id: string
-  razorpayOrderId: string
-  razorpayPaymentId: string
+  id: string
+  razorpayOrderId?: string
+  razorpayPaymentId?: string
+  providerOrderId?: string
+  providerPaymentId?: string
+  orderId?: string
   status: string
   method: string
   createdAt: string
   amount?: number
-  orderDetails?: Array<{ _id?: string; id?: string; totalAmount?: number }>
+  orderDetails?: Array<{ id?: string; orderId?: string; total?: number; totalAmount?: number }>
 }
 
 export default function PaymentsPage() {
@@ -70,7 +73,10 @@ export default function PaymentsPage() {
     const matchesSearch =
       payment.razorpayPaymentId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       payment.razorpayOrderId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment._id.toLowerCase().includes(searchTerm.toLowerCase())
+      payment.providerPaymentId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.providerOrderId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.orderId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.id.toLowerCase().includes(searchTerm.toLowerCase())
 
     // Status Filter
     const matchesStatus = filterStatus === "all" || payment.status === filterStatus
@@ -93,7 +99,7 @@ export default function PaymentsPage() {
   const totalPages = Math.ceil(filteredPayments.length / itemsPerPage)
 
   const totalAmount = payments.reduce((sum, payment) => {
-    const amount = payment.amount ?? payment.orderDetails?.[0]?.totalAmount ?? 0
+    const amount = payment.amount ?? payment.orderDetails?.[0]?.total ?? payment.orderDetails?.[0]?.totalAmount ?? 0
     return sum + amount
   }, 0)
 
@@ -237,12 +243,12 @@ export default function PaymentsPage() {
                   <tbody className="divide-y divide-gray-100 text-sm">
                     {currentItems.map((payment) => {
                       const order = payment.orderDetails?.[0]
-                      const orderObjectId = order?._id || order?.id || payment._id
-                      const amount = payment.amount ?? order?.totalAmount ?? 0
+                      const orderObjectId = payment.orderId || order?.orderId || order?.id || payment.providerOrderId || payment.razorpayOrderId
+                      const amount = payment.amount ?? order?.total ?? order?.totalAmount ?? 0
 
                       return (
-                        <tr key={payment._id} className="hover:bg-gray-50 transition-colors group">
-                          <td className="px-6 py-4 font-mono text-gray-600 select-all">{payment.razorpayPaymentId || "-"}</td>
+                        <tr key={payment.id} className="hover:bg-gray-50 transition-colors group">
+                          <td className="px-6 py-4 font-mono text-gray-600 select-all">{payment.providerPaymentId || payment.razorpayPaymentId || "-"}</td>
                           <td className="px-6 py-4 font-mono text-gray-500 text-xs">{orderObjectId || "-"}</td>
                           <td className="px-6 py-4 font-medium text-gray-900">
                             {amount > 0 ? `₹${amount.toLocaleString("en-IN")}` : <span className="text-gray-400">—</span>}

@@ -8,6 +8,7 @@ import { spawn } from "node:child_process"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { MongoClient, ObjectId } from "mongodb"
+import PaytmChecksum from "paytmchecksum"
 
 const require = createRequire(import.meta.url)
 require("@next/env").loadEnvConfig(process.cwd())
@@ -16,17 +17,25 @@ assert.match(database || "", /^ecom_sara_audit_[a-z0-9_]+$/)
 assert.ok(Buffer.byteLength(database) <= 38)
 assert.ok(process.env.MONGODB_URI)
 const secret = crypto.randomBytes(32).toString("hex")
+const gateways = process.argv[3]?.startsWith("gateways")
+const port = gateways ? 3025 : 3012
 Object.assign(process.env, {
-  MONGODB_DB: database, DB_NAME: database, NEXT_PUBLIC_SITE_URL: "http://localhost:3012",
-  NEXT_PUBLIC_APP_URL: "http://localhost:3012", NEXTAUTH_URL: "http://localhost:3012",
+  MONGODB_DB: database, DB_NAME: database, NEXT_PUBLIC_SITE_URL: `http://localhost:${port}`,
+  NEXT_PUBLIC_APP_URL: `http://localhost:${port}`, NEXTAUTH_URL: `http://localhost:${port}`,
   SMTP_HOST: "127.0.0.1", SMTP_PORT: "1587", SMTP_USER: "audit@example.invalid", SMTP_PASS: secret,
   EMAIL_FROM: "audit@example.invalid", CONTACT_ADMIN_EMAIL: "admin@example.invalid", VENDOR_EMAIL: "vendor@example.invalid",
   RAZORPAY_KEY_ID: `rzp_test_audit_${crypto.randomBytes(8).toString("hex")}`, RAZORPAY_KEY_SECRET: secret,
   AUDIT_PROVIDER_SECRET: secret, SESSION_SECRET: secret, NEXTAUTH_SECRET: secret,
   RECAPTCHA_SECRET_KEY: secret, NEXT_PUBLIC_RECAPTCHA_SITE_KEY: "audit-local-site-key", COOKIE_DOMAIN: "",
   ASKEVA_API_KEY: "", ASKEVA_API_URL: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "",
-  NEXT_DIST_DIR: ".next-audit-journey", NEXT_BUILD_CPUS: "2", RATE_LIMIT_BACKEND: "mongodb",
+  NEXT_DIST_DIR: gateways ? ".next-gateway-journeys" : ".next-audit-journey", NEXT_BUILD_CPUS: "2", RATE_LIMIT_BACKEND: "mongodb",
   NEXT_TELEMETRY_DISABLED: "1",
+  PINELABS_ENABLED: gateways ? "true" : "false", PAYTM_ENABLED: gateways ? "true" : "false", RAZORPAY_ENABLED: "true",
+  PAYMENT_DEFAULT_PROVIDER: gateways ? "pinelabs" : "razorpay",
+  PINELABS_ENVIRONMENT: "uat", PINELABS_MERCHANT_ID: "audit-local-merchant",
+  PINELABS_CLIENT_ID: "audit-local-client", PINELABS_CLIENT_SECRET: secret, PINELABS_CALLBACK_SECRET: secret,
+  PAYTM_ENVIRONMENT: "uat", PAYTM_MERCHANT_ID: "AuditLocalMerchant", PAYTM_MERCHANT_KEY: crypto.randomBytes(8).toString("hex"),
+  PAYTM_WEBSITE_NAME: "WEBSTAGING", AUDIT_GATEWAY_JOURNEYS: gateways ? "true" : "false",
 })
 const client = new MongoClient(process.env.MONGODB_URI, { maxPoolSize: 3 })
 await client.connect()
@@ -35,13 +44,14 @@ if (process.argv[3] === "cleanup") {
   assert.ok(await db.collection("settings").findOne({ _auditFixture: "customer-ui-audit-v1" }), "Missing own isolated database marker")
   for (const { name } of await db.listCollections().toArray()) {
     await db.collection(name).deleteMany({})
+    assert.equal(await db.collection(name).countDocuments({}), 0)
   }
   await client.close()
   console.log("Own isolated customer-audit records removed:", database)
   process.exit(0)
 }
 const marker = "customer-ui-audit-v1"
-const resume = ["resume", "rebuild"].includes(process.argv[3])
+const resume = ["resume", "rebuild", "gateways-resume"].includes(process.argv[3])
 if (resume) {
   assert.ok(await db.collection("settings").findOne({ _auditFixture: marker }), "Missing own isolated database marker")
   assert.equal(await db.collection("users").countDocuments({ email: { $not: /@example\.invalid$/ } }), 0, "Non-synthetic account found")
@@ -77,6 +87,49 @@ const provider = http.createServer(async (req, res) => {
     const body = raw ? JSON.parse(raw) : {}
     if (req.url === "/audit/status") return reply(res, 200, { database, orders: orders.size, payments: payments.size, messages: messages.length })
     if (req.url === "/audit/messages") return reply(res, 200, messages)
+    if (gateways && req.url === "/audit/proof" && req.method === "POST") {
+      assert.match(body.email || "", /@example\.invalid$/)
+      const user = await db.collection("users").findOne({ email: body.email })
+      assert.ok(user?.emailVerified)
+      const stored = await db.collection("orders").find({ userId: user._id.toString() }).toArray()
+      assert.equal(stored.length, 1)
+      const order = stored[0]
+      assert.equal(order.items.length, 2)
+      assert.ok(order.items.every(item => item.quantity === 1))
+      assert.deepEqual(order.items.map(item => item.name).sort(), ["Audit Fixture Television", "Audit Fixture Television Two"])
+      assert.equal(order.total, 11998)
+      assert.ok(order.paymentMethod === body.provider || (body.provider === "razorpay" && order.paymentMethod === "online"))
+      assert.equal(order.status, "confirmed")
+      assert.equal(order.paymentDetails.status, "completed")
+      const paid = await db.collection("payments").findOne({ orderId: order.orderId })
+      assert.ok(paid)
+      assert.equal(paid.amount, order.total)
+      const intent = await db.collection("checkout_intents").findOne({ orderId: order.orderId })
+      assert.equal(intent?.status, "consumed")
+      const carts = await db.collection("carts").find({ userId: user._id.toString() }).toArray()
+      assert.ok(carts.every(cart => !cart.items?.length))
+      return reply(res, 200, { orderId: order.orderId, status: order.status, paymentStatus: order.paymentDetails.status,
+        provider: body.provider, amount: order.total, currency: "INR",
+        items: order.items.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+        paymentRecord: true, intentConsumed: true, cartCleared: true, emailVerified: true })
+    }
+    if (gateways && req.url === "/audit/capture" && req.method === "POST") {
+      const order = orders.get(body.orderId)
+      assert.ok(order && order.provider === body.provider)
+      order.captured = true
+      order.paymentId = `audit_payment_${crypto.randomBytes(8).toString("hex")}`
+      let fields
+      if (order.provider === "pinelabs") {
+        fields = { order_id: order.id, status: "PROCESSED" }
+        fields.signature = crypto.createHmac("sha256", Buffer.from(secret, "hex"))
+          .update(`order_id=${order.id}&status=PROCESSED`).digest("hex")
+      } else {
+        fields = { MID: process.env.PAYTM_MERCHANT_ID, ORDERID: order.id, STATUS: "TXN_SUCCESS",
+          TXNID: order.paymentId, TXNAMOUNT: (order.amount / 100).toFixed(2) }
+        fields.CHECKSUMHASH = await PaytmChecksum.generateSignature(fields, process.env.PAYTM_MERCHANT_KEY)
+      }
+      return reply(res, 200, { callbackUrl: order.callbackUrl, fields })
+    }
     if (req.url === "/audit/payments" && req.method === "POST") {
       const order = orders.get(body.orderId)
       assert.ok(order)
@@ -86,6 +139,44 @@ const provider = http.createServer(async (req, res) => {
         razorpay_signature: crypto.createHmac("sha256", secret).update(`${order.id}|${id}`).digest("hex") })
     }
     if (req.headers["x-audit-secret"] !== secret) throw new Error("Invalid audit provider credential")
+    if (gateways && req.url === "/api/auth/v1/token") {
+      assert.equal(body.client_id, process.env.PINELABS_CLIENT_ID)
+      assert.equal(body.client_secret, secret)
+      return reply(res, 200, { access_token: "audit-local-token", expires_in: 3600 })
+    }
+    if (gateways && req.url === "/api/checkout/v1/orders") {
+      assert.ok(Number.isSafeInteger(body.order_amount?.value) && body.order_amount.value > 0)
+      assert.equal(body.callback_url, `http://localhost:${port}/api/payment/pinelabs/return`)
+      const id = `audit_pine_${crypto.randomBytes(8).toString("hex")}`
+      orders.set(id, { id, provider: "pinelabs", reference: body.merchant_order_reference,
+        amount: body.order_amount.value, callbackUrl: body.callback_url })
+      return reply(res, 200, { response_code: 200, order_id: id, redirect_url: `https://api.pluralonline.com/audit-checkout/${id}` })
+    }
+    if (gateways && req.url.startsWith("/api/pay/v1/orders/")) {
+      const order = orders.get(req.url.split("/").at(-1))
+      assert.ok(order)
+      return reply(res, 200, { data: { order_id: order.id, merchant_order_reference: order.reference,
+        merchant_id: process.env.PINELABS_MERCHANT_ID, status: order.captured ? "PROCESSED" : "CREATED",
+        order_amount: { value: order.amount, currency: "INR" },
+        payments: order.captured ? [{ id: order.paymentId, status: "PROCESSED", payment_amount: { value: order.amount, currency: "INR" } }] : [] } })
+    }
+    if (gateways && (req.url.startsWith("/theia/api/v1/initiateTransaction") || req.url === "/v3/order/status")) {
+      assert.ok(PaytmChecksum.verifySignature(JSON.stringify(body.body), process.env.PAYTM_MERCHANT_KEY, body.head.signature))
+      assert.equal(body.body.mid, process.env.PAYTM_MERCHANT_ID)
+      let result
+      if (req.url.startsWith("/theia/")) {
+        assert.equal(body.body.callbackUrl, `http://localhost:${port}/api/payment/paytm/return`)
+        const id = body.body.orderId
+        orders.set(id, { id, provider: "paytm", amount: Math.round(Number(body.body.txnAmount.value) * 100), callbackUrl: body.body.callbackUrl })
+        result = { resultInfo: { resultStatus: "S" }, txnToken: `audit_token_${crypto.randomBytes(8).toString("hex")}` }
+      } else {
+        const order = orders.get(body.body.orderId)
+        assert.ok(order)
+        result = { resultInfo: { resultStatus: order.captured ? "TXN_SUCCESS" : "PENDING" }, orderId: order.id,
+          mid: process.env.PAYTM_MERCHANT_ID, txnAmount: (order.amount / 100).toFixed(2), txnId: order.paymentId }
+      }
+      return reply(res, 200, { body: result, head: { signature: await PaytmChecksum.generateSignature(JSON.stringify(result), process.env.PAYTM_MERCHANT_KEY) } })
+    }
     if (req.url === "/v1/orders" && req.method === "POST") {
       assert.ok(Number.isSafeInteger(body.amount) && body.amount > 0)
       const order = { ...body, id: `order_audit${crypto.randomBytes(8).toString("hex")}`, entity: "order", status: "created" }
@@ -146,8 +237,11 @@ const run = args => new Promise((resolve, reject) => {
 })
 try {
   console.log("Isolated customer audit database and local providers ready:", database)
-  if (process.argv[3] === "rebuild" || !fs.existsSync(".next-audit-journey\\BUILD_ID")) await run(["build"])
-  await run(["start", "-p", "3012", "-H", "127.0.0.1"])
+  if (gateways) await run(["dev", "-p", String(port), "-H", "127.0.0.1"])
+  else {
+    if (process.argv[3] === "rebuild" || !fs.existsSync(".next-audit-journey\\BUILD_ID")) await run(["build"])
+    await run(["start", "-p", String(port), "-H", "127.0.0.1"])
+  }
 } finally {
   provider.close(); smtp.close(); await client.close()
 }

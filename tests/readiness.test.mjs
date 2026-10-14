@@ -1361,7 +1361,8 @@ function orderDetailFixture({ partner = false, conflict = false, session = { use
     },
     "@/lib/auth": { requireAdmin: async () => admin ? { ok: true, user: session?.user } :
       { ok: false, response: new Response("Forbidden", { status: 403 }) },
-      getSession: async () => session, checkAdminAuthorization: async () => ({ authorized: admin }) },
+      getSession: async () => session ? { user: { ...session.user, role: admin ? "admin" : "user" } } : null,
+      checkAdminAuthorization: async () => ({ authorized: admin }) },
     "@/lib/guest-order": { verifyGuestAccessToken: (token, hash) => token === "fixture-token" && hash === "fixture-secret" },
     "@/lib/emailTemplates": { getEmailTemplateId: status => status, getEmailSubject: () => "Fixture", getEmailTemplate: () => "Fixture" },
     "@/lib/email": { sendEmail: async () => { effects.push("email"); return { success: true } } },
@@ -4571,14 +4572,18 @@ test("bulk status updates report real email outcomes and reject malformed rows b
     customer: index === 2 ? {} : { email: `bulk-${index}@example.invalid`, name: "Fixture" },
   }]))
   let writes = 0
+  const queriedId = query => query._id ?? query.$and?.find(part => part._id)?._id
   const loader = sourceLoader({
-    "@/lib/auth": { requireAdmin: async () => ({ ok: true }) },
+    "@/lib/auth": {
+      requireAdmin: async () => ({ ok: true }),
+      getSession: async () => ({ user: { id: "fixture-admin", role: "admin" } }),
+    },
     "@/lib/db-service": {
       createObjectId: id => new ObjectId(id),
       normalizeId: row => { const { _id, ...rest } = row; return { ...rest, id: _id.toString() } },
       getCollection: async () => ({
-        findOne: async query => records.get(query._id.toString()) ?? null,
-        updateOne: async (query, update) => { writes++; Object.assign(records.get(query._id.toString()), update.$set); return { matchedCount: 1 } },
+        findOne: async query => records.get(queriedId(query).toString()) ?? null,
+        updateOne: async (query, update) => { writes++; Object.assign(records.get(queriedId(query).toString()), update.$set); return { matchedCount: 1 } },
       }),
     },
     "@/lib/emailTemplates": { getEmailTemplateId: status => status, getEmailSubject: () => "Fixture", getEmailTemplate: () => "<p>Fixture</p>" },

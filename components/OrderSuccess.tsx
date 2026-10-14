@@ -41,7 +41,9 @@ export default function OrderSuccess({ order, guestToken }: { order: OrderConfir
   const orderLink = `/order/${encodeURIComponent(order.orderId)}${tokenQuery}`
   const paymentLabel = order.paymentMethod === "cash-on-delivery" ? "Cash on Delivery" :
     order.paymentMethod === "instore" ? "In-store Purchase" :
-      ["razorpay", "online"].includes(order.paymentMethod) ? "Online Payment (Razorpay)" : order.paymentMethod
+      ["razorpay", "online"].includes(order.paymentMethod) ? "Online Payment (Razorpay)" :
+        order.paymentMethod === "pinelabs" ? "Online Payment (Pine Labs)" :
+          order.paymentMethod === "paytm" ? "Online Payment (Paytm)" : order.paymentMethod
   const journey = pickup
     ? ["Order Placed", "Payment Confirmed", "Ready for Pickup", "Collected"]
     : ["Order Placed", "Payment Confirmed", "Packed", "Shipped", "Out for Delivery", "Delivered"]

@@ -5,9 +5,11 @@ import { CheckoutQuoteSchema, quoteCheckout, createCheckoutIntent } from "@/lib/
 import { handleApiError } from "@/lib/api-error"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import type { NextRequest } from "next/server"
+import { paymentEnabled } from "@/lib/payment-config"
 
 export async function POST(request: NextRequest) {
   try {
+    if (!paymentEnabled("razorpay")) return NextResponse.json({ error: "Razorpay is disabled" }, { status: 503 })
     const limit = await checkRateLimit(request, RATE_LIMITS.ORDERS)
     if (!limit.success) return NextResponse.json({ error: RATE_LIMITS.ORDERS.message }, { status: 429 })
     const parsed = CheckoutQuoteSchema.safeParse(await request.json().catch(() => null))

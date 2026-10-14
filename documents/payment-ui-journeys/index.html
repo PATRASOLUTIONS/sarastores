@@ -1,0 +1,642 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SARA - six simulated payment UI journeys</title><style>
+  *{box-sizing:border-box}body{margin:0;font:16px/1.6 "Segoe UI",Arial,sans-serif;color:#17243b;background:#f4f7fb}
+  header{background:#0f2557;color:white;padding:32px}main{max-width:1150px;margin:auto;padding:24px}
+  a{color:#1357a5}header a{color:white}.notice{background:#fff3cf;border:2px solid #b77900;padding:20px;border-radius:8px}
+  section,article{background:white;padding:20px;border:1px solid #cbd5e1;border-radius:8px;margin:20px 0}
+  nav{display:flex;flex-wrap:wrap;gap:16px;margin:20px 0}table{border-collapse:collapse;width:100%}td,th{padding:10px;border:1px solid #cbd5e1;text-align:left}
+  .steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.steps article{margin:0}
+  img{display:block;max-width:100%;max-height:600px;margin:12px auto;border:1px solid #cbd5e1;object-fit:contain}
+  code,pre{overflow-wrap:anywhere;white-space:pre-wrap}h1,h2,h3{line-height:1.25}.pass{color:#166534}.fail{color:#b91c1c}
+  @media(max-width:700px){.steps{grid-template-columns:1fr}main{padding:12px}header{padding:20px}.table{overflow:auto}}
+  </style></head><body><header><h1>Payment UI journeys - desktop &amp; mobile</h1>
+  <p>6/6 complete simulated journeys verified on <strong>port 3025</strong>. Chrome desktop 1440 x 1000 and mobile 390 x 844 (emulated viewport/touch, not a physical device).</p>
+  <a href="../index.html">Internal document catalogue</a></header><main>
+  <div class="notice"><strong>SIMULATION, NOT REAL GATEWAY SANDBOX CERTIFICATION.</strong> SIMULATED provider boundaries; real local UI, authentication, pricing, callback verification and isolated database persistence. No real payment or live email.
+  CAPTCHA browser/server validation, email delivery and gateway SDK/hosted pages/provider API responses were replaced with local fixtures.
+  Actual registration, verification tokens, login/session cookies, product search, two-product cart, address saving, server pricing,
+  HMAC/Paytm checksum checks, provider status lookup, order/payment persistence, confirmation and cart cleanup ran in the application.</div>
+  <section><h2>Credentials and scope</h2><p>Existing local credentials were not used or changed. Runtime fixtures use random synthetic keys.
+  Real Pine Labs UAT completion remains blocked by the missing <code>PINELABS_CALLBACK_SECRET</code> signing key.
+  Real Paytm staging completion requires merchant-issued <code>PAYTM_MERCHANT_ID</code> and the 16-byte <code>PAYTM_MERCHANT_KEY</code>;
+  they are not public shared test credentials. No third-party merchant secrets were obtained.</p>
+  <p><a href="https://www.paytmpayments.com/docs/testing-integration/">Official Paytm testing guide</a> describes staging test instruments and success/failure simulations.
+  <a href="https://www.paytmpayments.com/docs/api/initiate-transaction-api/">Official Initiate Transaction API</a>,
+  <a href="https://www.paytmpayments.com/docs/api-keys/">merchant API-key documentation</a>.
+  Public test instruments do not replace onboarding/dashboard merchant keys; these journeys did not use card details.</p>
+  <p>All screenshots contain synthetic data only. External analytics/payment/CAPTCHA network requests were blocked or intercepted.
+  Browser automation uses native text input, keyboard consent, native pointer product selection, and DOM activation of actual visible form buttons.
+  Development-navigation retries were needed; completed steps were retained and failed steps re-run against the same synthetic account.
+  No business handlers or authentication/payment checks were bypassed.
+  This is development-mode functional evidence, not performance, real-bank settlement, or a full gateway failure/idempotency audit.</p></section>
+  <section><h2>Results</h2><div class="table"><table><thead><tr><th>Journey</th><th>Result</th><th>Order</th><th>Persisted total</th></tr></thead><tbody>
+  <tr><td><a href="#desktop-razorpay">desktop-razorpay</a></td><td>PASS (simulated)</td><td>SARAECOM-00100001</td><td>INR 11998.00</td></tr><tr><td><a href="#desktop-pinelabs">desktop-pinelabs</a></td><td>PASS (simulated)</td><td>SARAECOM-00100002</td><td>INR 11998.00</td></tr><tr><td><a href="#desktop-paytm">desktop-paytm</a></td><td>PASS (simulated)</td><td>SARAECOM-00100003</td><td>INR 11998.00</td></tr><tr><td><a href="#mobile-razorpay">mobile-razorpay</a></td><td>PASS (simulated)</td><td>SARAECOM-00100004</td><td>INR 11998.00</td></tr><tr><td><a href="#mobile-pinelabs">mobile-pinelabs</a></td><td>PASS (simulated)</td><td>SARAECOM-00100005</td><td>INR 11998.00</td></tr><tr><td><a href="#mobile-paytm">mobile-paytm</a></td><td>PASS (simulated)</td><td>SARAECOM-00100006</td><td>INR 11998.00</td></tr>
+  </tbody></table></div><p>Generated 2026-10-13T18:35:55.977Z. <a href="results.json">Machine-readable evidence</a>.</p></section>
+  <section><h2>Observed development-environment issues</h2><p>The Windows Next.js dev server intermittently returned
+  <code>SyntaxError: Unexpected end of JSON input</code> while loading generated manifests. It was restarted once, and affected page navigations were retried.
+  Some cart-to-checkout activations also needed a cart reload/retry. Passing final journeys below establish eventual functional completion,
+  not an error-free first attempt or production stability. These symptoms were not fixed in application code.</p>
+  <ul><li>2026-10-13T18:24:35.729Z: /login HTTP 500; retry 1.</li></ul>
+  </section>
+  <nav><a href="#desktop-razorpay">desktop-razorpay</a><a href="#desktop-pinelabs">desktop-pinelabs</a><a href="#desktop-paytm">desktop-paytm</a><a href="#mobile-razorpay">mobile-razorpay</a><a href="#mobile-pinelabs">mobile-pinelabs</a><a href="#mobile-paytm">mobile-paytm</a></nav>
+  <section id="desktop-razorpay"><h2>desktop-razorpay - 1440 x 1000</h2>
+  <p>Started 2026-10-13T17:40:59.909Z. Each screenshot was captured after the asserted UI state. Click to open full resolution.</p>
+  <p class="pass"><strong>Database verified:</strong> SARAECOM-00100001; confirmed order; completed payment;
+  two items, one each; INR 11998.00; payment record persisted; checkout intent consumed; cart cleared; account email verified.</p>
+  <div class="steps"><article><h3>1. Landing page</h3>
+  <p class="pass"><strong>PASS</strong> Open the storefront with a fresh browser state and reject optional cookies.</p>
+  
+  <p>UI path: <code>/</code></p>
+  <a href="screenshots/desktop-razorpay-01.png"><img loading="lazy" src="screenshots/desktop-razorpay-01.png" alt="desktop-razorpay: Landing page"></a>
+  </article><article><h3>2. Register account</h3>
+  <p class="pass"><strong>PASS</strong> Fill the real registration form with synthetic details and required terms/privacy consent; CAPTCHA is simulated.</p>
+  
+  <p>UI path: <code>/register</code></p>
+  <a href="screenshots/desktop-razorpay-02.png"><img loading="lazy" src="screenshots/desktop-razorpay-02.png" alt="desktop-razorpay: Register account"></a>
+  </article><article><h3>3. Submit registration</h3>
+  <p class="pass"><strong>PASS</strong> Submit Create Account and verify the application advances to email verification or its login screen.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/desktop-razorpay-03.png"><img loading="lazy" src="screenshots/desktop-razorpay-03.png" alt="desktop-razorpay: Submit registration"></a>
+  </article><article><h3>4. Verify email</h3>
+  <p class="pass"><strong>PASS</strong> Follow the real verification link captured by the local-only SMTP sink.</p>
+  
+  <p>UI path: <code>/verify-email</code></p>
+  <a href="screenshots/desktop-razorpay-04.png"><img loading="lazy" src="screenshots/desktop-razorpay-04.png" alt="desktop-razorpay: Verify email"></a>
+  </article><article><h3>5. Login form</h3>
+  <p class="pass"><strong>PASS</strong> Enter the newly registered account email/password in the real login form.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/desktop-razorpay-05.png"><img loading="lazy" src="screenshots/desktop-razorpay-05.png" alt="desktop-razorpay: Login form"></a>
+  </article><article><h3>6. Login succeeds</h3>
+  <p class="pass"><strong>PASS</strong> Submit Sign In and confirm the server session belongs to the verified synthetic user.</p>
+  
+  <p>UI path: <code>/dashboard</code></p>
+  <a href="screenshots/desktop-razorpay-06.png"><img loading="lazy" src="screenshots/desktop-razorpay-06.png" alt="desktop-razorpay: Login succeeds"></a>
+  </article><article><h3>7. Search products</h3>
+  <p class="pass"><strong>PASS</strong> Use the storefront search UI to search for Audit and verify both catalogue fixtures are returned.</p>
+  
+  <p>UI path: <code>/products</code></p>
+  <a href="screenshots/desktop-razorpay-07.png"><img loading="lazy" src="screenshots/desktop-razorpay-07.png" alt="desktop-razorpay: Search products"></a>
+  </article><article><h3>8. Select product 1</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 4,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/desktop-razorpay-08.png"><img loading="lazy" src="screenshots/desktop-razorpay-08.png" alt="desktop-razorpay: Select product 1"></a>
+  </article><article><h3>9. Add product 1 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/desktop-razorpay-09.png"><img loading="lazy" src="screenshots/desktop-razorpay-09.png" alt="desktop-razorpay: Add product 1 to cart"></a>
+  </article><article><h3>10. Select product 2</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 6,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/desktop-razorpay-10.png"><img loading="lazy" src="screenshots/desktop-razorpay-10.png" alt="desktop-razorpay: Select product 2"></a>
+  </article><article><h3>11. Add product 2 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/desktop-razorpay-11.png"><img loading="lazy" src="screenshots/desktop-razorpay-11.png" alt="desktop-razorpay: Add product 2 to cart"></a>
+  </article><article><h3>12. Two-product cart</h3>
+  <p class="pass"><strong>PASS</strong> Open the cart and verify both distinct products, quantity one each, are present.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/desktop-razorpay-12.png"><img loading="lazy" src="screenshots/desktop-razorpay-12.png" alt="desktop-razorpay: Two-product cart"></a>
+  </article><article><h3>13. Checkout</h3>
+  <p class="pass"><strong>PASS</strong> Use the cart checkout control to enter authenticated checkout.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-razorpay-13.png"><img loading="lazy" src="screenshots/desktop-razorpay-13.png" alt="desktop-razorpay: Checkout"></a>
+  </article><article><h3>14. Delivery address</h3>
+  <p class="pass"><strong>PASS</strong> Fill synthetic customer/address data and save Bangalore delivery, pincode 560001.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-razorpay-14.png"><img loading="lazy" src="screenshots/desktop-razorpay-14.png" alt="desktop-razorpay: Delivery address"></a>
+  </article><article><h3>15. Choose payment gateway</h3>
+  <p class="pass"><strong>PASS</strong> Select razorpay and verify the checkout branding matches the chosen provider.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-razorpay-15.png"><img loading="lazy" src="screenshots/desktop-razorpay-15.png" alt="desktop-razorpay: Choose payment gateway"></a>
+  </article><article><h3>16. Start simulated payment</h3>
+  <p class="pass"><strong>PASS</strong> Click Pay Now. The real app calculates the amount; only the provider boundary is simulated.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-razorpay-16.png"><img loading="lazy" src="screenshots/desktop-razorpay-16.png" alt="desktop-razorpay: Start simulated payment"></a>
+  </article><article><h3>17. Complete payment and confirmation</h3>
+  <p class="pass"><strong>PASS</strong> Click the labelled simulated success control. The real application verifies signed proof/provider status and displays the two-item order confirmation.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-razorpay-17.png"><img loading="lazy" src="screenshots/desktop-razorpay-17.png" alt="desktop-razorpay: Complete payment and confirmation"></a>
+  </article><article><h3>18. Order history</h3>
+  <p class="pass"><strong>PASS</strong> Open authenticated order history and verify the completed order is visible.</p>
+  
+  <p>UI path: <code>/dashboard/orders</code></p>
+  <a href="screenshots/desktop-razorpay-18.png"><img loading="lazy" src="screenshots/desktop-razorpay-18.png" alt="desktop-razorpay: Order history"></a>
+  </article><article><h3>19. Cart cleared and persistence verified</h3>
+  <p class="pass"><strong>PASS</strong> Reload the cart and verify it is empty; independently assert confirmed order, completed payment, consumed intent, exact paid total and two products in the isolated database.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/desktop-razorpay-19.png"><img loading="lazy" src="screenshots/desktop-razorpay-19.png" alt="desktop-razorpay: Cart cleared and persistence verified"></a>
+  </article></div></section><section id="desktop-pinelabs"><h2>desktop-pinelabs - 1440 x 1000</h2>
+  <p>Started 2026-10-13T17:52:32.055Z. Each screenshot was captured after the asserted UI state. Click to open full resolution.</p>
+  <p class="pass"><strong>Database verified:</strong> SARAECOM-00100002; confirmed order; completed payment;
+  two items, one each; INR 11998.00; payment record persisted; checkout intent consumed; cart cleared; account email verified.</p>
+  <div class="steps"><article><h3>1. Landing page</h3>
+  <p class="pass"><strong>PASS</strong> Open the storefront with a fresh browser state and reject optional cookies.</p>
+  
+  <p>UI path: <code>/</code></p>
+  <a href="screenshots/desktop-pinelabs-01.png"><img loading="lazy" src="screenshots/desktop-pinelabs-01.png" alt="desktop-pinelabs: Landing page"></a>
+  </article><article><h3>2. Register account</h3>
+  <p class="pass"><strong>PASS</strong> Fill the real registration form with synthetic details and required terms/privacy consent; CAPTCHA is simulated.</p>
+  
+  <p>UI path: <code>/register</code></p>
+  <a href="screenshots/desktop-pinelabs-02.png"><img loading="lazy" src="screenshots/desktop-pinelabs-02.png" alt="desktop-pinelabs: Register account"></a>
+  </article><article><h3>3. Submit registration</h3>
+  <p class="pass"><strong>PASS</strong> Submit Create Account and verify the application advances to email verification or its login screen.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/desktop-pinelabs-03.png"><img loading="lazy" src="screenshots/desktop-pinelabs-03.png" alt="desktop-pinelabs: Submit registration"></a>
+  </article><article><h3>4. Verify email</h3>
+  <p class="pass"><strong>PASS</strong> Follow the real verification link captured by the local-only SMTP sink.</p>
+  
+  <p>UI path: <code>/verify-email</code></p>
+  <a href="screenshots/desktop-pinelabs-04.png"><img loading="lazy" src="screenshots/desktop-pinelabs-04.png" alt="desktop-pinelabs: Verify email"></a>
+  </article><article><h3>5. Login form</h3>
+  <p class="pass"><strong>PASS</strong> Enter the newly registered account email/password in the real login form.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/desktop-pinelabs-05.png"><img loading="lazy" src="screenshots/desktop-pinelabs-05.png" alt="desktop-pinelabs: Login form"></a>
+  </article><article><h3>6. Login succeeds</h3>
+  <p class="pass"><strong>PASS</strong> Submit Sign In and confirm the server session belongs to the verified synthetic user.</p>
+  
+  <p>UI path: <code>/dashboard</code></p>
+  <a href="screenshots/desktop-pinelabs-06.png"><img loading="lazy" src="screenshots/desktop-pinelabs-06.png" alt="desktop-pinelabs: Login succeeds"></a>
+  </article><article><h3>7. Search products</h3>
+  <p class="pass"><strong>PASS</strong> Use the storefront search UI to search for Audit and verify both catalogue fixtures are returned.</p>
+  
+  <p>UI path: <code>/products</code></p>
+  <a href="screenshots/desktop-pinelabs-07.png"><img loading="lazy" src="screenshots/desktop-pinelabs-07.png" alt="desktop-pinelabs: Search products"></a>
+  </article><article><h3>8. Select product 1</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 4,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/desktop-pinelabs-08.png"><img loading="lazy" src="screenshots/desktop-pinelabs-08.png" alt="desktop-pinelabs: Select product 1"></a>
+  </article><article><h3>9. Add product 1 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/desktop-pinelabs-09.png"><img loading="lazy" src="screenshots/desktop-pinelabs-09.png" alt="desktop-pinelabs: Add product 1 to cart"></a>
+  </article><article><h3>10. Select product 2</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 6,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/desktop-pinelabs-10.png"><img loading="lazy" src="screenshots/desktop-pinelabs-10.png" alt="desktop-pinelabs: Select product 2"></a>
+  </article><article><h3>11. Add product 2 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/desktop-pinelabs-11.png"><img loading="lazy" src="screenshots/desktop-pinelabs-11.png" alt="desktop-pinelabs: Add product 2 to cart"></a>
+  </article><article><h3>12. Two-product cart</h3>
+  <p class="pass"><strong>PASS</strong> Open the cart and verify both distinct products, quantity one each, are present.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/desktop-pinelabs-12.png"><img loading="lazy" src="screenshots/desktop-pinelabs-12.png" alt="desktop-pinelabs: Two-product cart"></a>
+  </article><article><h3>13. Checkout</h3>
+  <p class="pass"><strong>PASS</strong> Use the cart checkout control to enter authenticated checkout.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-pinelabs-13.png"><img loading="lazy" src="screenshots/desktop-pinelabs-13.png" alt="desktop-pinelabs: Checkout"></a>
+  </article><article><h3>14. Delivery address</h3>
+  <p class="pass"><strong>PASS</strong> Fill synthetic customer/address data and save Bangalore delivery, pincode 560001.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-pinelabs-14.png"><img loading="lazy" src="screenshots/desktop-pinelabs-14.png" alt="desktop-pinelabs: Delivery address"></a>
+  </article><article><h3>15. Choose payment gateway</h3>
+  <p class="pass"><strong>PASS</strong> Select pinelabs and verify the checkout branding matches the chosen provider.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-pinelabs-15.png"><img loading="lazy" src="screenshots/desktop-pinelabs-15.png" alt="desktop-pinelabs: Choose payment gateway"></a>
+  </article><article><h3>16. Start simulated payment</h3>
+  <p class="pass"><strong>PASS</strong> Click Pay Now. The real app calculates the amount; only the provider boundary is simulated.</p>
+  
+  <p>UI path: <code>/audit-checkout/audit_pine_484d8c6522ec3c63</code></p>
+  <a href="screenshots/desktop-pinelabs-16.png"><img loading="lazy" src="screenshots/desktop-pinelabs-16.png" alt="desktop-pinelabs: Start simulated payment"></a>
+  </article><article><h3>17. Complete payment and confirmation</h3>
+  <p class="pass"><strong>PASS</strong> Click the labelled simulated success control. The real application verifies signed proof/provider status and displays the two-item order confirmation.</p>
+  
+  <p>UI path: <code>/thank-you</code></p>
+  <a href="screenshots/desktop-pinelabs-17.png"><img loading="lazy" src="screenshots/desktop-pinelabs-17.png" alt="desktop-pinelabs: Complete payment and confirmation"></a>
+  </article><article><h3>18. Order history</h3>
+  <p class="pass"><strong>PASS</strong> Open authenticated order history and verify the completed order is visible.</p>
+  
+  <p>UI path: <code>/dashboard/orders</code></p>
+  <a href="screenshots/desktop-pinelabs-18.png"><img loading="lazy" src="screenshots/desktop-pinelabs-18.png" alt="desktop-pinelabs: Order history"></a>
+  </article><article><h3>19. Cart cleared and persistence verified</h3>
+  <p class="pass"><strong>PASS</strong> Reload the cart and verify it is empty; independently assert confirmed order, completed payment, consumed intent, exact paid total and two products in the isolated database.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/desktop-pinelabs-19.png"><img loading="lazy" src="screenshots/desktop-pinelabs-19.png" alt="desktop-pinelabs: Cart cleared and persistence verified"></a>
+  </article></div></section><section id="desktop-paytm"><h2>desktop-paytm - 1440 x 1000</h2>
+  <p>Started 2026-10-13T18:07:57.219Z. Each screenshot was captured after the asserted UI state. Click to open full resolution.</p>
+  <p class="pass"><strong>Database verified:</strong> SARAECOM-00100003; confirmed order; completed payment;
+  two items, one each; INR 11998.00; payment record persisted; checkout intent consumed; cart cleared; account email verified.</p>
+  <div class="steps"><article><h3>1. Landing page</h3>
+  <p class="pass"><strong>PASS</strong> Open the storefront with a fresh browser state and reject optional cookies.</p>
+  
+  <p>UI path: <code>/</code></p>
+  <a href="screenshots/desktop-paytm-01.png"><img loading="lazy" src="screenshots/desktop-paytm-01.png" alt="desktop-paytm: Landing page"></a>
+  </article><article><h3>2. Register account</h3>
+  <p class="pass"><strong>PASS</strong> Fill the real registration form with synthetic details and required terms/privacy consent; CAPTCHA is simulated.</p>
+  
+  <p>UI path: <code>/register</code></p>
+  <a href="screenshots/desktop-paytm-02.png"><img loading="lazy" src="screenshots/desktop-paytm-02.png" alt="desktop-paytm: Register account"></a>
+  </article><article><h3>3. Submit registration</h3>
+  <p class="pass"><strong>PASS</strong> Submit Create Account and verify the application advances to email verification or its login screen.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/desktop-paytm-03.png"><img loading="lazy" src="screenshots/desktop-paytm-03.png" alt="desktop-paytm: Submit registration"></a>
+  </article><article><h3>4. Verify email</h3>
+  <p class="pass"><strong>PASS</strong> Follow the real verification link captured by the local-only SMTP sink.</p>
+  
+  <p>UI path: <code>/verify-email</code></p>
+  <a href="screenshots/desktop-paytm-04.png"><img loading="lazy" src="screenshots/desktop-paytm-04.png" alt="desktop-paytm: Verify email"></a>
+  </article><article><h3>5. Login form</h3>
+  <p class="pass"><strong>PASS</strong> Enter the newly registered account email/password in the real login form.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/desktop-paytm-05.png"><img loading="lazy" src="screenshots/desktop-paytm-05.png" alt="desktop-paytm: Login form"></a>
+  </article><article><h3>6. Login succeeds</h3>
+  <p class="pass"><strong>PASS</strong> Submit Sign In and confirm the server session belongs to the verified synthetic user.</p>
+  
+  <p>UI path: <code>/dashboard</code></p>
+  <a href="screenshots/desktop-paytm-06.png"><img loading="lazy" src="screenshots/desktop-paytm-06.png" alt="desktop-paytm: Login succeeds"></a>
+  </article><article><h3>7. Search products</h3>
+  <p class="pass"><strong>PASS</strong> Use the storefront search UI to search for Audit and verify both catalogue fixtures are returned.</p>
+  
+  <p>UI path: <code>/products</code></p>
+  <a href="screenshots/desktop-paytm-07.png"><img loading="lazy" src="screenshots/desktop-paytm-07.png" alt="desktop-paytm: Search products"></a>
+  </article><article><h3>8. Select product 1</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 4,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/desktop-paytm-08.png"><img loading="lazy" src="screenshots/desktop-paytm-08.png" alt="desktop-paytm: Select product 1"></a>
+  </article><article><h3>9. Add product 1 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/desktop-paytm-09.png"><img loading="lazy" src="screenshots/desktop-paytm-09.png" alt="desktop-paytm: Add product 1 to cart"></a>
+  </article><article><h3>10. Select product 2</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 6,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/desktop-paytm-10.png"><img loading="lazy" src="screenshots/desktop-paytm-10.png" alt="desktop-paytm: Select product 2"></a>
+  </article><article><h3>11. Add product 2 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/desktop-paytm-11.png"><img loading="lazy" src="screenshots/desktop-paytm-11.png" alt="desktop-paytm: Add product 2 to cart"></a>
+  </article><article><h3>12. Two-product cart</h3>
+  <p class="pass"><strong>PASS</strong> Open the cart and verify both distinct products, quantity one each, are present.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/desktop-paytm-12.png"><img loading="lazy" src="screenshots/desktop-paytm-12.png" alt="desktop-paytm: Two-product cart"></a>
+  </article><article><h3>13. Checkout</h3>
+  <p class="pass"><strong>PASS</strong> Use the cart checkout control to enter authenticated checkout.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-paytm-13.png"><img loading="lazy" src="screenshots/desktop-paytm-13.png" alt="desktop-paytm: Checkout"></a>
+  </article><article><h3>14. Delivery address</h3>
+  <p class="pass"><strong>PASS</strong> Fill synthetic customer/address data and save Bangalore delivery, pincode 560001.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-paytm-14.png"><img loading="lazy" src="screenshots/desktop-paytm-14.png" alt="desktop-paytm: Delivery address"></a>
+  </article><article><h3>15. Choose payment gateway</h3>
+  <p class="pass"><strong>PASS</strong> Select paytm and verify the checkout branding matches the chosen provider.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/desktop-paytm-15.png"><img loading="lazy" src="screenshots/desktop-paytm-15.png" alt="desktop-paytm: Choose payment gateway"></a>
+  </article><article><h3>16. Start simulated payment</h3>
+  <p class="pass"><strong>PASS</strong> Click Pay Now. The real app calculates the amount; only the provider boundary is simulated.</p>
+  
+  <p>UI path: <code>/theia/api/v1/showPaymentPage</code></p>
+  <a href="screenshots/desktop-paytm-16.png"><img loading="lazy" src="screenshots/desktop-paytm-16.png" alt="desktop-paytm: Start simulated payment"></a>
+  </article><article><h3>17. Complete payment and confirmation</h3>
+  <p class="pass"><strong>PASS</strong> Click the labelled simulated success control. The real application verifies signed proof/provider status and displays the two-item order confirmation.</p>
+  
+  <p>UI path: <code>/thank-you</code></p>
+  <a href="screenshots/desktop-paytm-17.png"><img loading="lazy" src="screenshots/desktop-paytm-17.png" alt="desktop-paytm: Complete payment and confirmation"></a>
+  </article><article><h3>18. Order history</h3>
+  <p class="pass"><strong>PASS</strong> Open authenticated order history and verify the completed order is visible.</p>
+  
+  <p>UI path: <code>/dashboard/orders</code></p>
+  <a href="screenshots/desktop-paytm-18.png"><img loading="lazy" src="screenshots/desktop-paytm-18.png" alt="desktop-paytm: Order history"></a>
+  </article><article><h3>19. Cart cleared and persistence verified</h3>
+  <p class="pass"><strong>PASS</strong> Reload the cart and verify it is empty; independently assert confirmed order, completed payment, consumed intent, exact paid total and two products in the isolated database.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/desktop-paytm-19.png"><img loading="lazy" src="screenshots/desktop-paytm-19.png" alt="desktop-paytm: Cart cleared and persistence verified"></a>
+  </article></div></section><section id="mobile-razorpay"><h2>mobile-razorpay - 390 x 844</h2>
+  <p>Started 2026-10-13T18:17:17.411Z. Each screenshot was captured after the asserted UI state. Click to open full resolution.</p>
+  <p class="pass"><strong>Database verified:</strong> SARAECOM-00100004; confirmed order; completed payment;
+  two items, one each; INR 11998.00; payment record persisted; checkout intent consumed; cart cleared; account email verified.</p>
+  <div class="steps"><article><h3>1. Landing page</h3>
+  <p class="pass"><strong>PASS</strong> Open the storefront with a fresh browser state and reject optional cookies.</p>
+  
+  <p>UI path: <code>/</code></p>
+  <a href="screenshots/mobile-razorpay-01.png"><img loading="lazy" src="screenshots/mobile-razorpay-01.png" alt="mobile-razorpay: Landing page"></a>
+  </article><article><h3>2. Register account</h3>
+  <p class="pass"><strong>PASS</strong> Fill the real registration form with synthetic details and required terms/privacy consent; CAPTCHA is simulated.</p>
+  
+  <p>UI path: <code>/register</code></p>
+  <a href="screenshots/mobile-razorpay-02.png"><img loading="lazy" src="screenshots/mobile-razorpay-02.png" alt="mobile-razorpay: Register account"></a>
+  </article><article><h3>3. Submit registration</h3>
+  <p class="pass"><strong>PASS</strong> Submit Create Account and verify the application advances to email verification or its login screen.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/mobile-razorpay-03.png"><img loading="lazy" src="screenshots/mobile-razorpay-03.png" alt="mobile-razorpay: Submit registration"></a>
+  </article><article><h3>4. Verify email</h3>
+  <p class="pass"><strong>PASS</strong> Follow the real verification link captured by the local-only SMTP sink.</p>
+  
+  <p>UI path: <code>/verify-email</code></p>
+  <a href="screenshots/mobile-razorpay-04.png"><img loading="lazy" src="screenshots/mobile-razorpay-04.png" alt="mobile-razorpay: Verify email"></a>
+  </article><article><h3>5. Login form</h3>
+  <p class="pass"><strong>PASS</strong> Enter the newly registered account email/password in the real login form.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/mobile-razorpay-05.png"><img loading="lazy" src="screenshots/mobile-razorpay-05.png" alt="mobile-razorpay: Login form"></a>
+  </article><article><h3>6. Login succeeds</h3>
+  <p class="pass"><strong>PASS</strong> Submit Sign In and confirm the server session belongs to the verified synthetic user.</p>
+  
+  <p>UI path: <code>/dashboard</code></p>
+  <a href="screenshots/mobile-razorpay-06.png"><img loading="lazy" src="screenshots/mobile-razorpay-06.png" alt="mobile-razorpay: Login succeeds"></a>
+  </article><article><h3>7. Search products</h3>
+  <p class="pass"><strong>PASS</strong> Use the storefront search UI to search for Audit and verify both catalogue fixtures are returned.</p>
+  
+  <p>UI path: <code>/products</code></p>
+  <a href="screenshots/mobile-razorpay-07.png"><img loading="lazy" src="screenshots/mobile-razorpay-07.png" alt="mobile-razorpay: Search products"></a>
+  </article><article><h3>8. Select product 1</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 4,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/mobile-razorpay-08.png"><img loading="lazy" src="screenshots/mobile-razorpay-08.png" alt="mobile-razorpay: Select product 1"></a>
+  </article><article><h3>9. Add product 1 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/mobile-razorpay-09.png"><img loading="lazy" src="screenshots/mobile-razorpay-09.png" alt="mobile-razorpay: Add product 1 to cart"></a>
+  </article><article><h3>10. Select product 2</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 6,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/mobile-razorpay-10.png"><img loading="lazy" src="screenshots/mobile-razorpay-10.png" alt="mobile-razorpay: Select product 2"></a>
+  </article><article><h3>11. Add product 2 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/mobile-razorpay-11.png"><img loading="lazy" src="screenshots/mobile-razorpay-11.png" alt="mobile-razorpay: Add product 2 to cart"></a>
+  </article><article><h3>12. Two-product cart</h3>
+  <p class="pass"><strong>PASS</strong> Open the cart and verify both distinct products, quantity one each, are present.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/mobile-razorpay-12.png"><img loading="lazy" src="screenshots/mobile-razorpay-12.png" alt="mobile-razorpay: Two-product cart"></a>
+  </article><article><h3>13. Checkout</h3>
+  <p class="pass"><strong>PASS</strong> Use the cart checkout control to enter authenticated checkout.</p>
+  <p>Required 1 cart reload/retry attempt(s) before navigation completed.</p>
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-razorpay-13.png"><img loading="lazy" src="screenshots/mobile-razorpay-13.png" alt="mobile-razorpay: Checkout"></a>
+  </article><article><h3>14. Delivery address</h3>
+  <p class="pass"><strong>PASS</strong> Fill synthetic customer/address data and save Bangalore delivery, pincode 560001.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-razorpay-14.png"><img loading="lazy" src="screenshots/mobile-razorpay-14.png" alt="mobile-razorpay: Delivery address"></a>
+  </article><article><h3>15. Choose payment gateway</h3>
+  <p class="pass"><strong>PASS</strong> Select razorpay and verify the checkout branding matches the chosen provider.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-razorpay-15.png"><img loading="lazy" src="screenshots/mobile-razorpay-15.png" alt="mobile-razorpay: Choose payment gateway"></a>
+  </article><article><h3>16. Start simulated payment</h3>
+  <p class="pass"><strong>PASS</strong> Click Pay Now. The real app calculates the amount; only the provider boundary is simulated.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-razorpay-16.png"><img loading="lazy" src="screenshots/mobile-razorpay-16.png" alt="mobile-razorpay: Start simulated payment"></a>
+  </article><article><h3>17. Complete payment and confirmation</h3>
+  <p class="pass"><strong>PASS</strong> Click the labelled simulated success control. The real application verifies signed proof/provider status and displays the two-item order confirmation.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-razorpay-17.png"><img loading="lazy" src="screenshots/mobile-razorpay-17.png" alt="mobile-razorpay: Complete payment and confirmation"></a>
+  </article><article><h3>18. Order history</h3>
+  <p class="pass"><strong>PASS</strong> Open authenticated order history and verify the completed order is visible.</p>
+  
+  <p>UI path: <code>/dashboard/orders</code></p>
+  <a href="screenshots/mobile-razorpay-18.png"><img loading="lazy" src="screenshots/mobile-razorpay-18.png" alt="mobile-razorpay: Order history"></a>
+  </article><article><h3>19. Cart cleared and persistence verified</h3>
+  <p class="pass"><strong>PASS</strong> Reload the cart and verify it is empty; independently assert confirmed order, completed payment, consumed intent, exact paid total and two products in the isolated database.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/mobile-razorpay-19.png"><img loading="lazy" src="screenshots/mobile-razorpay-19.png" alt="mobile-razorpay: Cart cleared and persistence verified"></a>
+  </article></div></section><section id="mobile-pinelabs"><h2>mobile-pinelabs - 390 x 844</h2>
+  <p>Started 2026-10-13T18:23:42.994Z. Each screenshot was captured after the asserted UI state. Click to open full resolution.</p>
+  <p class="pass"><strong>Database verified:</strong> SARAECOM-00100005; confirmed order; completed payment;
+  two items, one each; INR 11998.00; payment record persisted; checkout intent consumed; cart cleared; account email verified.</p>
+  <div class="steps"><article><h3>1. Landing page</h3>
+  <p class="pass"><strong>PASS</strong> Open the storefront with a fresh browser state and reject optional cookies.</p>
+  
+  <p>UI path: <code>/</code></p>
+  <a href="screenshots/mobile-pinelabs-01.png"><img loading="lazy" src="screenshots/mobile-pinelabs-01.png" alt="mobile-pinelabs: Landing page"></a>
+  </article><article><h3>2. Register account</h3>
+  <p class="pass"><strong>PASS</strong> Fill the real registration form with synthetic details and required terms/privacy consent; CAPTCHA is simulated.</p>
+  
+  <p>UI path: <code>/register</code></p>
+  <a href="screenshots/mobile-pinelabs-02.png"><img loading="lazy" src="screenshots/mobile-pinelabs-02.png" alt="mobile-pinelabs: Register account"></a>
+  </article><article><h3>3. Submit registration</h3>
+  <p class="pass"><strong>PASS</strong> Submit Create Account and verify the application advances to email verification or its login screen.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/mobile-pinelabs-03.png"><img loading="lazy" src="screenshots/mobile-pinelabs-03.png" alt="mobile-pinelabs: Submit registration"></a>
+  </article><article><h3>4. Verify email</h3>
+  <p class="pass"><strong>PASS</strong> Follow the real verification link captured by the local-only SMTP sink.</p>
+  
+  <p>UI path: <code>/verify-email</code></p>
+  <a href="screenshots/mobile-pinelabs-04.png"><img loading="lazy" src="screenshots/mobile-pinelabs-04.png" alt="mobile-pinelabs: Verify email"></a>
+  </article><article><h3>5. Login form</h3>
+  <p class="pass"><strong>PASS</strong> Enter the newly registered account email/password in the real login form.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/mobile-pinelabs-05.png"><img loading="lazy" src="screenshots/mobile-pinelabs-05.png" alt="mobile-pinelabs: Login form"></a>
+  </article><article><h3>6. Login succeeds</h3>
+  <p class="pass"><strong>PASS</strong> Submit Sign In and confirm the server session belongs to the verified synthetic user.</p>
+  
+  <p>UI path: <code>/dashboard</code></p>
+  <a href="screenshots/mobile-pinelabs-06.png"><img loading="lazy" src="screenshots/mobile-pinelabs-06.png" alt="mobile-pinelabs: Login succeeds"></a>
+  </article><article><h3>7. Search products</h3>
+  <p class="pass"><strong>PASS</strong> Use the storefront search UI to search for Audit and verify both catalogue fixtures are returned.</p>
+  
+  <p>UI path: <code>/products</code></p>
+  <a href="screenshots/mobile-pinelabs-07.png"><img loading="lazy" src="screenshots/mobile-pinelabs-07.png" alt="mobile-pinelabs: Search products"></a>
+  </article><article><h3>8. Select product 1</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 4,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/mobile-pinelabs-08.png"><img loading="lazy" src="screenshots/mobile-pinelabs-08.png" alt="mobile-pinelabs: Select product 1"></a>
+  </article><article><h3>9. Add product 1 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/mobile-pinelabs-09.png"><img loading="lazy" src="screenshots/mobile-pinelabs-09.png" alt="mobile-pinelabs: Add product 1 to cart"></a>
+  </article><article><h3>10. Select product 2</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 6,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/mobile-pinelabs-10.png"><img loading="lazy" src="screenshots/mobile-pinelabs-10.png" alt="mobile-pinelabs: Select product 2"></a>
+  </article><article><h3>11. Add product 2 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/mobile-pinelabs-11.png"><img loading="lazy" src="screenshots/mobile-pinelabs-11.png" alt="mobile-pinelabs: Add product 2 to cart"></a>
+  </article><article><h3>12. Two-product cart</h3>
+  <p class="pass"><strong>PASS</strong> Open the cart and verify both distinct products, quantity one each, are present.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/mobile-pinelabs-12.png"><img loading="lazy" src="screenshots/mobile-pinelabs-12.png" alt="mobile-pinelabs: Two-product cart"></a>
+  </article><article><h3>13. Checkout</h3>
+  <p class="pass"><strong>PASS</strong> Use the cart checkout control to enter authenticated checkout.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-pinelabs-13.png"><img loading="lazy" src="screenshots/mobile-pinelabs-13.png" alt="mobile-pinelabs: Checkout"></a>
+  </article><article><h3>14. Delivery address</h3>
+  <p class="pass"><strong>PASS</strong> Fill synthetic customer/address data and save Bangalore delivery, pincode 560001.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-pinelabs-14.png"><img loading="lazy" src="screenshots/mobile-pinelabs-14.png" alt="mobile-pinelabs: Delivery address"></a>
+  </article><article><h3>15. Choose payment gateway</h3>
+  <p class="pass"><strong>PASS</strong> Select pinelabs and verify the checkout branding matches the chosen provider.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-pinelabs-15.png"><img loading="lazy" src="screenshots/mobile-pinelabs-15.png" alt="mobile-pinelabs: Choose payment gateway"></a>
+  </article><article><h3>16. Start simulated payment</h3>
+  <p class="pass"><strong>PASS</strong> Click Pay Now. The real app calculates the amount; only the provider boundary is simulated.</p>
+  
+  <p>UI path: <code>/audit-checkout/audit_pine_a631c2128b03f1c9</code></p>
+  <a href="screenshots/mobile-pinelabs-16.png"><img loading="lazy" src="screenshots/mobile-pinelabs-16.png" alt="mobile-pinelabs: Start simulated payment"></a>
+  </article><article><h3>17. Complete payment and confirmation</h3>
+  <p class="pass"><strong>PASS</strong> Click the labelled simulated success control. The real application verifies signed proof/provider status and displays the two-item order confirmation.</p>
+  
+  <p>UI path: <code>/thank-you</code></p>
+  <a href="screenshots/mobile-pinelabs-17.png"><img loading="lazy" src="screenshots/mobile-pinelabs-17.png" alt="mobile-pinelabs: Complete payment and confirmation"></a>
+  </article><article><h3>18. Order history</h3>
+  <p class="pass"><strong>PASS</strong> Open authenticated order history and verify the completed order is visible.</p>
+  
+  <p>UI path: <code>/dashboard/orders</code></p>
+  <a href="screenshots/mobile-pinelabs-18.png"><img loading="lazy" src="screenshots/mobile-pinelabs-18.png" alt="mobile-pinelabs: Order history"></a>
+  </article><article><h3>19. Cart cleared and persistence verified</h3>
+  <p class="pass"><strong>PASS</strong> Reload the cart and verify it is empty; independently assert confirmed order, completed payment, consumed intent, exact paid total and two products in the isolated database.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/mobile-pinelabs-19.png"><img loading="lazy" src="screenshots/mobile-pinelabs-19.png" alt="mobile-pinelabs: Cart cleared and persistence verified"></a>
+  </article></div></section><section id="mobile-paytm"><h2>mobile-paytm - 390 x 844</h2>
+  <p>Started 2026-10-13T18:26:40.001Z. Each screenshot was captured after the asserted UI state. Click to open full resolution.</p>
+  <p class="pass"><strong>Database verified:</strong> SARAECOM-00100006; confirmed order; completed payment;
+  two items, one each; INR 11998.00; payment record persisted; checkout intent consumed; cart cleared; account email verified.</p>
+  <div class="steps"><article><h3>1. Landing page</h3>
+  <p class="pass"><strong>PASS</strong> Open the storefront with a fresh browser state and reject optional cookies.</p>
+  
+  <p>UI path: <code>/</code></p>
+  <a href="screenshots/mobile-paytm-01.png"><img loading="lazy" src="screenshots/mobile-paytm-01.png" alt="mobile-paytm: Landing page"></a>
+  </article><article><h3>2. Register account</h3>
+  <p class="pass"><strong>PASS</strong> Fill the real registration form with synthetic details and required terms/privacy consent; CAPTCHA is simulated.</p>
+  
+  <p>UI path: <code>/register</code></p>
+  <a href="screenshots/mobile-paytm-02.png"><img loading="lazy" src="screenshots/mobile-paytm-02.png" alt="mobile-paytm: Register account"></a>
+  </article><article><h3>3. Submit registration</h3>
+  <p class="pass"><strong>PASS</strong> Submit Create Account and verify the application advances to email verification or its login screen.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/mobile-paytm-03.png"><img loading="lazy" src="screenshots/mobile-paytm-03.png" alt="mobile-paytm: Submit registration"></a>
+  </article><article><h3>4. Verify email</h3>
+  <p class="pass"><strong>PASS</strong> Follow the real verification link captured by the local-only SMTP sink.</p>
+  
+  <p>UI path: <code>/verify-email</code></p>
+  <a href="screenshots/mobile-paytm-04.png"><img loading="lazy" src="screenshots/mobile-paytm-04.png" alt="mobile-paytm: Verify email"></a>
+  </article><article><h3>5. Login form</h3>
+  <p class="pass"><strong>PASS</strong> Enter the newly registered account email/password in the real login form.</p>
+  
+  <p>UI path: <code>/login</code></p>
+  <a href="screenshots/mobile-paytm-05.png"><img loading="lazy" src="screenshots/mobile-paytm-05.png" alt="mobile-paytm: Login form"></a>
+  </article><article><h3>6. Login succeeds</h3>
+  <p class="pass"><strong>PASS</strong> Submit Sign In and confirm the server session belongs to the verified synthetic user.</p>
+  
+  <p>UI path: <code>/dashboard</code></p>
+  <a href="screenshots/mobile-paytm-06.png"><img loading="lazy" src="screenshots/mobile-paytm-06.png" alt="mobile-paytm: Login succeeds"></a>
+  </article><article><h3>7. Search products</h3>
+  <p class="pass"><strong>PASS</strong> Use the storefront search UI to search for Audit and verify both catalogue fixtures are returned.</p>
+  
+  <p>UI path: <code>/products</code></p>
+  <a href="screenshots/mobile-paytm-07.png"><img loading="lazy" src="screenshots/mobile-paytm-07.png" alt="mobile-paytm: Search products"></a>
+  </article><article><h3>8. Select product 1</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 4,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/mobile-paytm-08.png"><img loading="lazy" src="screenshots/mobile-paytm-08.png" alt="mobile-paytm: Select product 1"></a>
+  </article><article><h3>9. Add product 1 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television</code></p>
+  <a href="screenshots/mobile-paytm-09.png"><img loading="lazy" src="screenshots/mobile-paytm-09.png" alt="mobile-paytm: Add product 1 to cart"></a>
+  </article><article><h3>10. Select product 2</h3>
+  <p class="pass"><strong>PASS</strong> Open the INR 6,999 synthetic television detail page.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/mobile-paytm-10.png"><img loading="lazy" src="screenshots/mobile-paytm-10.png" alt="mobile-paytm: Select product 2"></a>
+  </article><article><h3>11. Add product 2 to cart</h3>
+  <p class="pass"><strong>PASS</strong> Click the real Add to Cart control; no cart data is injected by the runner.</p>
+  
+  <p>UI path: <code>/product/audit-fixture-television-two</code></p>
+  <a href="screenshots/mobile-paytm-11.png"><img loading="lazy" src="screenshots/mobile-paytm-11.png" alt="mobile-paytm: Add product 2 to cart"></a>
+  </article><article><h3>12. Two-product cart</h3>
+  <p class="pass"><strong>PASS</strong> Open the cart and verify both distinct products, quantity one each, are present.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/mobile-paytm-12.png"><img loading="lazy" src="screenshots/mobile-paytm-12.png" alt="mobile-paytm: Two-product cart"></a>
+  </article><article><h3>13. Checkout</h3>
+  <p class="pass"><strong>PASS</strong> Use the cart checkout control to enter authenticated checkout.</p>
+  <p>Required 1 cart reload/retry attempt(s) before navigation completed.</p>
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-paytm-13.png"><img loading="lazy" src="screenshots/mobile-paytm-13.png" alt="mobile-paytm: Checkout"></a>
+  </article><article><h3>14. Delivery address</h3>
+  <p class="pass"><strong>PASS</strong> Fill synthetic customer/address data and save Bangalore delivery, pincode 560001.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-paytm-14.png"><img loading="lazy" src="screenshots/mobile-paytm-14.png" alt="mobile-paytm: Delivery address"></a>
+  </article><article><h3>15. Choose payment gateway</h3>
+  <p class="pass"><strong>PASS</strong> Select paytm and verify the checkout branding matches the chosen provider.</p>
+  
+  <p>UI path: <code>/checkout</code></p>
+  <a href="screenshots/mobile-paytm-15.png"><img loading="lazy" src="screenshots/mobile-paytm-15.png" alt="mobile-paytm: Choose payment gateway"></a>
+  </article><article><h3>16. Start simulated payment</h3>
+  <p class="pass"><strong>PASS</strong> Click Pay Now. The real app calculates the amount; only the provider boundary is simulated.</p>
+  
+  <p>UI path: <code>/theia/api/v1/showPaymentPage</code></p>
+  <a href="screenshots/mobile-paytm-16.png"><img loading="lazy" src="screenshots/mobile-paytm-16.png" alt="mobile-paytm: Start simulated payment"></a>
+  </article><article><h3>17. Complete payment and confirmation</h3>
+  <p class="pass"><strong>PASS</strong> Click the labelled simulated success control. The real application verifies signed proof/provider status and displays the two-item order confirmation.</p>
+  
+  <p>UI path: <code>/thank-you</code></p>
+  <a href="screenshots/mobile-paytm-17.png"><img loading="lazy" src="screenshots/mobile-paytm-17.png" alt="mobile-paytm: Complete payment and confirmation"></a>
+  </article><article><h3>18. Order history</h3>
+  <p class="pass"><strong>PASS</strong> Open authenticated order history and verify the completed order is visible.</p>
+  
+  <p>UI path: <code>/dashboard/orders</code></p>
+  <a href="screenshots/mobile-paytm-18.png"><img loading="lazy" src="screenshots/mobile-paytm-18.png" alt="mobile-paytm: Order history"></a>
+  </article><article><h3>19. Cart cleared and persistence verified</h3>
+  <p class="pass"><strong>PASS</strong> Reload the cart and verify it is empty; independently assert confirmed order, completed payment, consumed intent, exact paid total and two products in the isolated database.</p>
+  
+  <p>UI path: <code>/cart</code></p>
+  <a href="screenshots/mobile-paytm-19.png"><img loading="lazy" src="screenshots/mobile-paytm-19.png" alt="mobile-paytm: Cart cleared and persistence verified"></a>
+  </article></div></section>
+  <section><h2>Reproduce safely</h2><p>Use a fresh explicitly isolated database name under <code>ecom_sara_audit_</code>, never the live store database.
+  Start <code>node scripts\audit-journey-server.mjs &lt;isolated-db&gt; gateways</code>, launch a dedicated Chrome profile with debugging port 9226,
+  then run <code>node scripts\audit-gateway-browser.mjs &lt;isolated-db&gt;</code>. Ports 3025, 1587 and 1588 must be free.
+  The fixture server redirects all payment provider calls locally and refuses non-isolated DB access in the application.
+  After stopping the owned processes, run <code>node scripts\audit-journey-server.mjs &lt;isolated-db&gt; cleanup</code> to remove the marker-guarded synthetic records.</p>
+  <p>Cleanup verified: owned fixture server and isolated Chrome stopped; all records in the marker-guarded synthetic database removed and zero counts asserted. No live store records were changed. Screenshots and this report are retained.</p></section></main></body></html>

@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCollection, createObjectId } from "@/lib/db-service"
 import { jsPDF } from "jspdf"
 import autoTable, { type Table } from "jspdf-autotable"
-import { getSession, checkAdminAuthorization } from "@/lib/auth"
+import { getSession } from "@/lib/auth"
+import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const ownerId = order.userId || order.customerId
     const isOwner = !!session && !!ownerId && String(ownerId) === session.user.id
     const isGuestHolder = !ownerId && verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
-    const { authorized: isAdmin } = session ? await checkAdminAuthorization() : { authorized: false }
+    const isAdmin = orderWithinAdminScope(await getOrderAdminScope(session), order)
     if (!isOwner && !isGuestHolder && !isAdmin) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 })
     }
@@ -291,6 +292,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
+        "Cache-Control": "private, no-store",
         "Content-Disposition": `attachment; filename="Sara Mobiles and Electronics -Invoice-${order._id.toString().slice(-8).toUpperCase()}.pdf"`,
       },
     })

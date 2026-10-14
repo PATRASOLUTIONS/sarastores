@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react"
 import { CreditCard, AlertCircle, Check, ArrowLeft, ArrowRight } from "lucide-react"
 import type { IncomingItem } from "@/lib/order-pricing"
 import { RazorpayOrderResponseSchema, RazorpayVerificationResponseSchema, type RazorpayCheckoutOptions } from "@/types/razorpay"
+import { HostedCheckoutResponseSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
 
 declare global {
   interface Window {
@@ -55,6 +56,8 @@ interface PaymentGatewayProps {
   compact?: boolean
   preferredMethod?: string
   onProcessingChange?: (processing: boolean) => void
+  provider?: PaymentProvider | null
+  getHostedOrderData?: () => Record<string, unknown>
 }
 
 export default function PaymentGateway({
@@ -67,6 +70,8 @@ export default function PaymentGateway({
   compact = false,
   preferredMethod,
   onProcessingChange,
+  provider = "razorpay",
+  getHostedOrderData,
 }: PaymentGatewayProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -75,7 +80,7 @@ export default function PaymentGateway({
   useEffect(() => { onProcessingChange?.(isProcessing) }, [isProcessing, onProcessingChange])
 
   useEffect(() => {
-    if (paymentMethod === "cash-on-delivery") return
+    if (paymentMethod === "cash-on-delivery" || provider !== "razorpay") return
     // Load Razorpay script
     const script = document.createElement("script")
     script.src = "https://checkout.razorpay.com/v1/checkout.js"
@@ -89,7 +94,55 @@ export default function PaymentGateway({
     return () => {
       document.body.removeChild(script)
     }
-  }, [paymentMethod])
+  }, [paymentMethod, provider])
+
+  const handleHostedPayment = async () => {
+    try {
+      if (!provider || provider === "razorpay" || !getHostedOrderData) throw new Error("Payment gateway is unavailable")
+      // Prove that this tab can retain its capability before creating a payment.
+      sessionStorage.setItem("sara_payment_storage_check", "1")
+      sessionStorage.removeItem("sara_payment_storage_check")
+      if (sessionStorage.getItem("sara_hosted_checkout")) {
+        throw new Error("A previous payment needs confirmation. Refresh checkout before paying again.")
+      }
+      const response = await fetch("/api/orders", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...getHostedOrderData(), paymentMethod: provider }),
+      })
+      const json: unknown = await response.json()
+      if (!response.ok) {
+        const failure = json as { error?: string }
+        throw new Error(failure.error || "Payment could not be started")
+      }
+      const data = HostedCheckoutResponseSchema.parse(json)
+      sessionStorage.setItem("sara_hosted_checkout", JSON.stringify({
+        orderId: data.checkout.orderId, checkoutToken: data.checkout.checkoutToken,
+        storeOrderId: data.orderId, guestAccessToken: data.guestAccessToken,
+        total: data.total, tax: data.tax, shipping: data.shipping,
+      }))
+      if (data.guestAccessToken) localStorage.setItem(`guest_order_${data.orderId}`, data.guestAccessToken)
+      if (data.checkout.formFields) {
+        const form = document.createElement("form")
+        form.method = "POST"
+        form.action = data.checkout.redirectUrl
+        for (const [name, value] of Object.entries(data.checkout.formFields)) {
+          const input = document.createElement("input")
+          input.type = "hidden"
+          input.name = name
+          input.value = value
+          form.appendChild(input)
+        }
+        document.body.appendChild(form)
+        form.submit()
+      } else {
+        window.location.assign(data.checkout.redirectUrl)
+      }
+    } catch (error) {
+      console.error("[Checkout] Hosted payment initiation failed:", error)
+      setErrors({ form: error instanceof Error ? error.message : "Payment could not be started. Please retry." })
+      setIsProcessing(false)
+    }
+  }
 
   const handleRazorpayPayment = async () => {
     if (!razorpayLoaded) {
@@ -281,7 +334,8 @@ export default function PaymentGateway({
         return
       }
       if (paymentMethod === "cash-on-delivery") await handleCashOnDelivery()
-      else await handleRazorpayPayment()
+      else if (provider === "razorpay") await handleRazorpayPayment()
+      else await handleHostedPayment()
     } catch (error) {
       console.error("Checkout validation failed:", error)
       setErrors({ form: "Could not validate checkout. Please try again." })
@@ -311,7 +365,7 @@ export default function PaymentGateway({
           <div className="space-y-4">
             <div className="p-4 bg-gray-50 rounded-md mb-4 flex items-center">
               <CreditCard className="h-5 w-5 text-gray-500 mr-2" />
-              <span className="text-gray-700">Click &quot;Pay Now&quot; to proceed with secure online payment via Razorpay</span>
+              <span className="text-gray-700">Click &quot;Pay Now&quot; to proceed with secure online payment{provider ? ` via ${PAYMENT_PROVIDER_LABELS[provider]}` : ""}</span>
             </div>
 
             <div className="bg-blue-50 p-4 rounded-md">
@@ -338,7 +392,7 @@ export default function PaymentGateway({
 
           <button
             type="submit"
-            disabled={isProcessing || (paymentMethod !== "cash-on-delivery" && !razorpayLoaded)}
+            disabled={isProcessing || (paymentMethod !== "cash-on-delivery" && (!provider || (provider === "razorpay" && !razorpayLoaded)))}
             className={compact ? "w-full rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center" : "px-6 py-2 bg-brand-accent text-white rounded-md hover:bg-brand-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center font-semibold active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-accent/40"}
           >
             {isProcessing ? (

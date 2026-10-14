@@ -69,10 +69,32 @@ export function checkDeploymentEnvironment(env) {
   } else if (backend !== "mongodb") errors.push("RATE_LIMIT_BACKEND: explicitly choose mongodb or upstash")
   if (read("ENABLE_DEBUG_ROUTES") && read("ENABLE_DEBUG_ROUTES") !== "false") errors.push("ENABLE_DEBUG_ROUTES: must be false or unset")
 
-  if (configured("RAZORPAY_KEY_ID") && !/^rzp_live_[A-Za-z0-9]+$/.test(read("RAZORPAY_KEY_ID"))) {
-    errors.push("RAZORPAY_KEY_ID: production requires a live-mode key; sandbox testing is a separate prerequisite")
+  const gateways = ["RAZORPAY", "PINELABS", "PAYTM"]
+  for (const gateway of gateways) {
+    const flag = read(`${gateway}_ENABLED`)
+    if (flag && flag !== "true" && flag !== "false") errors.push(`${gateway}_ENABLED: use true or false`)
   }
-  configured("RAZORPAY_KEY_SECRET")
+  const enabled = gateways.filter(gateway => read(`${gateway}_ENABLED`) === "true" ||
+    (gateway === "RAZORPAY" && !read("RAZORPAY_ENABLED")))
+  if (read("PAYMENT_DEFAULT_PROVIDER") && !enabled.some(gateway => gateway.toLowerCase() === read("PAYMENT_DEFAULT_PROVIDER"))) {
+    errors.push("PAYMENT_DEFAULT_PROVIDER: must name an enabled gateway")
+  }
+  if (enabled.includes("RAZORPAY")) {
+    if (configured("RAZORPAY_KEY_ID") && !/^rzp_live_[A-Za-z0-9]+$/.test(read("RAZORPAY_KEY_ID"))) {
+      errors.push("RAZORPAY_KEY_ID: production requires a live-mode key; sandbox testing is a separate prerequisite")
+    }
+    configured("RAZORPAY_KEY_SECRET")
+  }
+  if (enabled.includes("PINELABS")) {
+    for (const name of ["PINELABS_MERCHANT_ID", "PINELABS_CLIENT_ID", "PINELABS_CLIENT_SECRET", "PINELABS_CALLBACK_SECRET"]) configured(name)
+    if (read("PINELABS_ENVIRONMENT") !== "production") errors.push("PINELABS_ENVIRONMENT: production deployment requires production")
+    if (!/^(?:[a-fA-F0-9]{2}){16,}$/.test(read("PINELABS_CALLBACK_SECRET"))) errors.push("PINELABS_CALLBACK_SECRET: use the hex callback signing key from onboarding")
+  }
+  if (enabled.includes("PAYTM")) {
+    for (const name of ["PAYTM_MERCHANT_ID", "PAYTM_MERCHANT_KEY"]) configured(name)
+    if (read("PAYTM_ENVIRONMENT") !== "production") errors.push("PAYTM_ENVIRONMENT: production deployment requires production")
+    if (Buffer.byteLength(read("PAYTM_MERCHANT_KEY")) !== 16) errors.push("PAYTM_MERCHANT_KEY: must be the 16-byte merchant key")
+  }
   for (const name of ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "RECAPTCHA_SECRET_KEY", "NEXT_PUBLIC_RECAPTCHA_SITE_KEY"]) configured(name)
   const port = Number(read("SMTP_PORT"))
   if (!Number.isInteger(port) || port < 1 || port > 65535) errors.push("SMTP_PORT: configure a valid port")

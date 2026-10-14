@@ -28,6 +28,7 @@ import { CHECKOUT_CITIES, checkoutCity } from "@/lib/checkout-region"
 import { SavedDeliveryAddressSchema, PincodeRestrictionsResponseSchema, type SavedDeliveryAddress } from "@/lib/validation"
 import OrderSuccess from "@/components/OrderSuccess"
 import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-confirmation"
+import { PaymentConfigurationSchema, HostedPaymentStatusSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
 import {
   ArrowLeft,
   ArrowRight,
@@ -156,6 +157,113 @@ export default function CheckoutPage() {
 
   const [paymentMethod, setPaymentMethod] = useState("online")
   const [paymentOption, setPaymentOption] = useState("upi")
+  const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
+  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
+  const [paymentConfigError, setPaymentConfigError] = useState("")
+  const [hostedReturn, setHostedReturn] = useState<{ orderId: string; checkoutToken: string; storeOrderId: string;
+    total: number; tax: number; shipping: number; guestAccessToken?: string } | null>(null)
+  const [hostedStatus, setHostedStatus] = useState("")
+  const [hostedRecoveryBlocked, setHostedRecoveryBlocked] = useState(false)
+  const [hostedStatusAttempt, setHostedStatusAttempt] = useState(0)
+  const hostedPurchaseReported = useRef(new Set<string>())
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch("/api/payment/config", { cache: "no-store", signal: controller.signal })
+        if (!response.ok) throw new Error("Payment gateway configuration could not be loaded.")
+        const config = PaymentConfigurationSchema.parse(await response.json())
+        setPaymentProviders(config.providers)
+        setPaymentProvider(config.defaultProvider)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Checkout] Gateway configuration failed:", error)
+        setPaymentConfigError("Online payment gateways are unavailable. Refresh this page to retry.")
+      }
+    })()
+    try {
+      const stored = sessionStorage.getItem("sara_hosted_checkout")
+      const returnedId = new URLSearchParams(window.location.search).get("paymentReturn")
+      if (stored) {
+        const saved = z.object({
+          orderId: z.string(), checkoutToken: z.string().min(20), storeOrderId: z.string(),
+          guestAccessToken: z.string().optional(),
+          total: z.number().finite().nonnegative(), tax: z.number().finite().nonnegative(), shipping: z.number().finite().nonnegative(),
+        }).parse(JSON.parse(stored))
+        if (returnedId && returnedId !== saved.orderId) throw new Error("Payment return does not match this checkout")
+        setHostedReturn(saved)
+      } else if (returnedId) {
+        setHostedRecoveryBlocked(true)
+        setHostedStatus("Payment reference is missing in this browser. Contact support before paying again.")
+      }
+    } catch (error) {
+      console.error("[Checkout] Payment recovery failed:", error)
+      setHostedRecoveryBlocked(true)
+      setHostedStatus("Payment recovery is unavailable. Contact support before paying again.")
+    }
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!hostedReturn || authLoading) return
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let checks = 0
+    const check = async () => {
+      setPaymentPending(true)
+      setHostedStatus("Confirming your previous payment. Do not pay again.")
+      try {
+        const response = await fetch("/api/payment/status", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: hostedReturn.orderId, checkoutToken: hostedReturn.checkoutToken }),
+          signal: controller.signal,
+        })
+        const json: unknown = await response.json()
+        if (!response.ok) throw new Error("Payment confirmation is unavailable. Retry before paying again.")
+        const data = HostedPaymentStatusSchema.parse(json)
+        if (data.status === "completed") {
+          sessionStorage.removeItem("sara_hosted_checkout")
+          setOrderId(data.orderId)
+          setOrderPlaced(true)
+          setHostedReturn(null)
+          if (!hostedPurchaseReported.current.has(data.orderId)) {
+            hostedPurchaseReported.current.add(data.orderId)
+            try {
+              analytics.purchase({
+                transactionId: data.orderId, value: hostedReturn.total, tax: hostedReturn.tax,
+                shipping: hostedReturn.shipping, items: cart.map(item => toAnalyticsItem(item)),
+              })
+            } catch (error) {
+              console.error("[Checkout] Hosted purchase analytics failed:", error)
+            }
+          }
+          clearCart()
+          router.replace(`/thank-you?orderId=${encodeURIComponent(data.orderId)}${hostedReturn.guestAccessToken
+            ? `&token=${encodeURIComponent(hostedReturn.guestAccessToken)}` : ""}`)
+          return
+        }
+        if (data.status === "failed") {
+          sessionStorage.removeItem("sara_hosted_checkout")
+          setHostedReturn(null)
+          setHostedStatus("The gateway confirmed that payment failed. You can retry; your cart has been kept.")
+          setPaymentPending(false)
+          router.replace("/checkout")
+          return
+        }
+        setHostedStatus(data.status === "review"
+          ? `Payment received for ${data.orderId}. Contact support for order reconciliation; do not pay again.`
+          : `Payment is still pending for ${data.orderId}. Do not pay again until its status is confirmed.`)
+        if (data.status === "pending" && ++checks < 12) timer = setTimeout(() => void check(), 5000)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Checkout] Payment confirmation failed:", error)
+        setHostedStatus(error instanceof Error ? error.message : "Payment could not be confirmed. Contact support before paying again.")
+      }
+    }
+    void check()
+    return () => { controller.abort(); if (timer) clearTimeout(timer) }
+  }, [hostedReturn, authLoading, hostedStatusAttempt, clearCart, router, cart])
 
   // Click & Pick: home delivery or collection from a SARA store.
   const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
@@ -360,7 +468,7 @@ export default function CheckoutPage() {
   // empty" while AuthContext is still hydrating, so the redirect is deferred and
   // cancelled if the cart arrives.
   useEffect(() => {
-    if (authLoading || cartLoading || orderPlaced || cart.length > 0) return
+    if (authLoading || cartLoading || orderPlaced || hostedReturn || hostedRecoveryBlocked || cart.length > 0) return
 
     const timer = setTimeout(() => {
       toast.error("Your cart is empty")
@@ -368,7 +476,7 @@ export default function CheckoutPage() {
     }, 1500)
 
     return () => clearTimeout(timer)
-  }, [authLoading, cartLoading, cart.length, orderPlaced, router])
+  }, [authLoading, cartLoading, cart.length, orderPlaced, hostedReturn, hostedRecoveryBlocked, router])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -621,15 +729,8 @@ export default function CheckoutPage() {
     }
   }
 
-  const handlePlaceOrder = async (paymentDetails?: CheckoutPaymentDetails) => {
-    if (cartError) { toast.error(cartError); return }
-    // Hard guard: a duplicate call here would create a second order.
-    if (!orderLock.acquire()) return
-    setIsProcessing(true)
-
-    try {
-      // Create order data
-      const orderData = {
+  const buildOrderData = (paymentDetails?: CheckoutPaymentDetails) => {
+      return {
         userId: user?.id,
         items: cart.map((item) => ({
           id: item.id,
@@ -718,6 +819,14 @@ export default function CheckoutPage() {
         } : null,
         status: paymentDetails?.status === "completed" ? "confirmed" : "pending",
       }
+  }
+
+  const handlePlaceOrder = async (paymentDetails?: CheckoutPaymentDetails) => {
+    if (cartError) { toast.error(cartError); return }
+    if (!orderLock.acquire()) return
+    setIsProcessing(true)
+    try {
+      const orderData = buildOrderData(paymentDetails)
 
       if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Sending order data:", orderData)
 
@@ -869,8 +978,15 @@ export default function CheckoutPage() {
             </ol>
           </div>
 
+          {hostedStatus && <div role="status" className="mb-4 rounded border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <p>{hostedStatus}</p>
+            {hostedReturn && <button type="button" className="mt-2 font-semibold underline"
+              onClick={() => setHostedStatusAttempt(value => value + 1)}>Retry payment confirmation</button>}
+            <Link href="/contact" className="ml-3 underline">Contact support</Link>
+          </div>}
+
           {/* Main Content Grid */}
-          <fieldset disabled={paymentPending || isProcessing || addressSaving} className={styles.layout}>
+          <fieldset disabled={paymentPending || !!hostedReturn || hostedRecoveryBlocked || isProcessing || addressSaving} className={styles.layout}>
             <legend className="sr-only">Checkout details and payment</legend>
             {/* Customer Details - Left side */}
             <div className={styles.detailsColumn}>
@@ -1151,7 +1267,16 @@ export default function CheckoutPage() {
                     </span>
                     Payment Method
                   </h2>
-                  <p className={styles.sectionHint}>Choose a payment method. Online options are confirmed by Razorpay.</p>
+                  <p className={styles.sectionHint}>Choose a payment method. Availability is confirmed by your selected gateway.</p>
+                  {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
+                  {!paymentConfigError && !paymentProviders.length && <p className={styles.sectionHint}>Online payments are unavailable or still loading.</p>}
+                  {paymentProviders.length > 0 && <label className="mb-3 block text-sm font-medium">
+                    Online payment gateway
+                    <select className="ml-3 rounded border p-2" value={paymentProvider || ""}
+                      onChange={event => setPaymentProvider(PaymentConfigurationSchema.shape.providers.element.parse(event.target.value))}>
+                      {paymentProviders.map(provider => <option key={provider} value={provider}>{PAYMENT_PROVIDER_LABELS[provider]}</option>)}
+                    </select>
+                  </label>}
                   <div className={styles.paymentOptions}>{PAYMENT_OPTIONS.map(({ id, label, icon: Icon }) => (
                     <label key={id} className={paymentOption === id ? styles.selectedPayment : undefined}>
                       <input type="radio" name="paymentMethod" value={id} checked={paymentOption === id} onChange={() => {
@@ -1352,9 +1477,11 @@ export default function CheckoutPage() {
                   />
                 )}
                 {paymentMethod !== "instore" ? <PaymentGateway
-                  key={paymentMethod}
+                  key={`${paymentMethod}:${paymentProvider}`}
                   compact
                   paymentMethod={paymentMethod}
+                  provider={paymentProvider}
+                  getHostedOrderData={() => buildOrderData()}
                   preferredMethod={paymentMethod === "online" ? paymentOption : undefined}
                   onProcessingChange={setPaymentPending}
                   amount={payableTotal}
@@ -1375,10 +1502,10 @@ export default function CheckoutPage() {
                 )}
               <div className={styles.securePayment}>
                 <div className={styles.secureIntro}><Shield size={40} /><div><strong>Secure Payments</strong>
-                  <p>Processed through Razorpay. SARA does not store your card details.</p>
+                  <p>Processed through {paymentProvider ? PAYMENT_PROVIDER_LABELS[paymentProvider] : "your selected gateway"}. SARA does not store your card details.</p>
                 </div></div>
                 <ul className={styles.paymentBrands}>
-                  {["Razorpay", "UPI", "VISA", "Mastercard", "RuPay"].map((label) => (
+                  {[...paymentProviders.map(provider => PAYMENT_PROVIDER_LABELS[provider]), "UPI", "VISA", "Mastercard", "RuPay"].map((label) => (
                     <li
                       key={label}
                       className={styles.paymentBrand}

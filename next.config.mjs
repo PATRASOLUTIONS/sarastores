@@ -70,7 +70,7 @@ const nextConfig = {
       "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://*.razorpay.com https://api.razorpay.com https://lux.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.facebook.com https://*.facebook.net https://*.clarity.ms https://c.bing.com https://*.shiprocket.in https://vercel.live https://nominatim.openstreetmap.org https://api.postalpincode.in",
       "frame-src 'self' https://*.razorpay.com https://api.razorpay.com https://*.youtube.com https://*.google.com https://*.googletagmanager.com",
       "frame-ancestors 'self'",
-      "form-action 'self'",
+      "form-action 'self' https://securestage.paytmpayments.com https://secure.paytmpayments.com",
       "base-uri 'self'",
       "object-src 'none'",
       // Only force HTTPS upgrades in production. On http://localhost this
