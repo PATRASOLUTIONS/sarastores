@@ -8,6 +8,8 @@ const PaymentBadge: FC<PaymentBadgeProps> = ({ method }) => {
   const getBadgeColors = () => {
     switch (method.toLowerCase()) {
       case 'razorpay':
+      case 'pinelabs':
+      case 'paytm':
         return 'bg-blue-100 text-blue-800'
       case 'instore':
         return 'bg-purple-100 text-purple-800'
@@ -18,7 +20,8 @@ const PaymentBadge: FC<PaymentBadgeProps> = ({ method }) => {
 
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getBadgeColors()}`}>
-      {method.charAt(0).toUpperCase() + method.slice(1)}
+      {method.toLowerCase() === 'pinelabs' ? 'Pine Labs' :
+        method.toLowerCase() === 'paytm' ? 'Paytm' : method.charAt(0).toUpperCase() + method.slice(1)}
     </span>
   )
 }

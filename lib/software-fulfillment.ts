@@ -21,7 +21,7 @@ interface SoftwareOrder {
   licenseKeys?: string[]
 }
 
-export async function fulfillSoftwareOrder(id: string) {
+export async function fulfillSoftwareOrder(id: string, scope: Record<string, unknown> = {}) {
   const { db, client } = await connectToDatabase()
   const orders = db.collection<SoftwareOrder>("orders")
   const session = client.startSession()
@@ -31,6 +31,7 @@ export async function fulfillSoftwareOrder(id: string) {
     await session.withTransaction(async () => {
       keys.length = 0
       order = await orders.findOneAndUpdate({
+        ...scope,
         ...(ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { orderId: id }),
         "paymentVerification.verified": true,
         status: { $nin: ["cancelled", "refunded", "returned"] },
@@ -94,7 +95,7 @@ export async function fulfillSoftwareOrder(id: string) {
     await session.endSession()
   }
   // Delivery failures do not roll back assigned inventory or invite a second assignment.
-  const fulfilled = await orders.findOne(ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { orderId: id })
+  const fulfilled = await orders.findOne({ ...scope, ...(ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { orderId: id }) })
   if (!fulfilled?.customer?.email) throw new SoftwareFulfillmentError("Assigned order could not be loaded", 500)
   const results: Array<{ sent: boolean }> = []
   for (const { key, item } of keys) {

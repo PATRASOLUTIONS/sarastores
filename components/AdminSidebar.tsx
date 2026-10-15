@@ -52,6 +52,7 @@ interface MenuItem {
   path: string
   icon: React.ReactNode
   external?: boolean
+  fullAdminOnly?: boolean
 }
 
 interface MenuSection {
@@ -84,6 +85,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Sales",
     items: [
       { name: "Orders", path: "/admin/orders", icon: <FileText className="h-5 w-5" /> },
+      { name: "Order Notifications", path: "/admin/order-notifications", icon: <MessageSquare className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Bulk Order Update", path: "/admin/orders/bulk-update", icon: <ListChecks className="h-5 w-5" /> },
       { name: "External Orders", path: "/admin/external-orders", icon: <Truck className="h-5 w-5" /> },
       { name: "Payments", path: "/admin/payments", icon: <CreditCard className="h-5 w-5" /> },
@@ -155,7 +157,7 @@ const MENU_SECTIONS: MenuSection[] = [
 export const ADMIN_MENU_PATHS: { name: string; path: string; section: string }[] = MENU_SECTIONS.flatMap(
   (section) =>
     section.items
-      .filter((i) => !i.external)
+      .filter((i) => !i.external && !i.fullAdminOnly)
       .map((i) => ({ name: i.name, path: i.path, section: section.title })),
 )
 
@@ -201,6 +203,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }: AdminSidebarProps) {
     const term = query.trim().toLowerCase()
     return MENU_SECTIONS.map((section) => {
       let items = section.items
+      if (user?.role !== "admin" && user?.role !== "superadmin") items = items.filter(i => !i.fullAdminOnly)
 
       // While the session is still resolving, leave the menu intact — narrowing it
       // first makes the whole nav flash down to one item and back on every load.

@@ -403,6 +403,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
   let persisted
   const cartClears = []
   const consumptions = []
+  const adminNotifications = []
   const transaction = { fixture: true }
   const orderPricing = {
     priceOrder: async () => priced,
@@ -425,6 +426,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
       },
     },
     "@/lib/razorpay": { verifyRazorpayPayment: async () => ({ verified, amountPaid: 100 }) },
+    "@/lib/order-notifications": { notifyAdminOrder: async (...args) => { adminNotifications.push(args); return { status: "sent" } } },
     "@/lib/db-service": {
       ...mockDb({}),
       getCollection: async (name) => ({
@@ -435,7 +437,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
     },
     "@/lib/emailTemplates": { emailTemplates: { ORDER_PENDING: { subject: "Fixture #{orderNumber}", html: () => "<p>Fixture</p>" } } },
   })
-  return { route: loader.load("app/api/orders/route.ts"), writes: () => writes, persisted: () => persisted, cartClears, consumptions, transaction }
+  return { route: loader.load("app/api/orders/route.ts"), writes: () => writes, persisted: () => persisted, cartClears, consumptions, transaction, adminNotifications }
 }
 
 const orderBody = {
@@ -497,6 +499,7 @@ test("authenticated cash checkout persists server pricing as unpaid and clears t
   assert.equal(fixture.persisted().status, "pending")
   assert.equal(fixture.persisted().paymentVerification.verified, false)
   assert.deepEqual(fixture.cartClears, ["carts"])
+  assert.equal(fixture.adminNotifications[0][2], "created")
 })
 
 for (const accepted of [true, false]) {
@@ -551,6 +554,8 @@ for (const method of ["razorpay", "instore"]) {
     assert.equal(fixture.persisted().status, "confirmed")
     assert.equal(fixture.persisted().paymentVerification.verified, true)
     assert.equal(fixture.persisted().items[0].name, "Fixture Hardware")
+    assert.equal(fixture.adminNotifications.length, 1)
+    assert.equal(fixture.adminNotifications[0][2], "confirmed")
   })
 }
 

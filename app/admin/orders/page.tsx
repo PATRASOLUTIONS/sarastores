@@ -53,6 +53,7 @@ interface Order {
     verifiedEmail?: string
     employeeId?: string
     razorpayOrderId?: string
+    orderId?: string
   }
   source?: 'direct' | 'partner'
   partnerName?: string
@@ -876,15 +877,14 @@ export default function AdminOrders() {
                             </div>
                           )}
 
-                          {/* Razorpay Online Payment Details (Direct) */}
-                          {order.paymentMethod === 'razorpay' && order.paymentDetails && (
+                          {['razorpay', 'online', 'pinelabs', 'paytm'].includes(order.paymentMethod ?? '') && order.paymentDetails && (
                             <div className="bg-blue-50 p-2 rounded-md border border-blue-100">
                               <div className="flex flex-col space-y-1">
-                                {order.paymentDetails.razorpayOrderId && (
+                                {(order.paymentDetails.orderId || order.paymentDetails.razorpayOrderId) && (
                                   <div className="text-[10px] text-gray-700 flex items-center">
-                                    <span className="font-medium min-w-20">RZP Order:</span>
+                                    <span className="font-medium min-w-20">Gateway Order:</span>
                                     <span className="ml-1 font-mono text-blue-700">
-                                      {order.paymentDetails.razorpayOrderId}
+                                      {order.paymentDetails.orderId || order.paymentDetails.razorpayOrderId}
                                     </span>
                                   </div>
                                 )}

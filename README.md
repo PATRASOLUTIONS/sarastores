@@ -55,6 +55,7 @@ Open [the offline document catalogue](documents/index.html), or a specific guide
 - [Production-readiness audit](documents/production-readiness-audit.md)
 - [Customer-journey UI audit](documents/customer-journey-ui-audit.md)
 - [Public-access and organisation notes](documents/operations/WORKSPACE_ORGANIZATION.md)
+- [Website payment gateways and environment switches](documents/operations/website-payment-gateways.md)
 
 Keep each HTML guide's adjacent asset folder when copying it. Documentation under `documents\` is **not a public website route**. It is excluded from Vercel uploads; do not copy internal reports, proposals, scripts or exports into `public\`.
 

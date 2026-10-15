@@ -2,7 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCollection, normalizeId, createObjectId } from "@/lib/db-service"
 import { getEmailTemplate, getEmailSubject, getEmailTemplateId } from "@/lib/emailTemplates"
 import { sendEmail } from "@/lib/email"
-import { requireAdmin, checkAdminAuthorization, getSession } from "@/lib/auth"
+import { requireAdmin, getSession } from "@/lib/auth"
+import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
+import { notifyAdminOrder } from "@/lib/order-notifications"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
 import { rebuildCustomerProfile, recordEvent, EARNING_STATUSES } from "@/lib/customer-profile"
 import { awardPointsForOrder, reverseOrderPoints } from "@/lib/loyalty"
@@ -70,7 +72,7 @@ export async function GET(
     const normalizedOrder = normalizeId(order)
 
     // Non-admins may only read their own order; 404 avoids confirming it exists.
-    const { authorized: isAdminUser } = session ? await checkAdminAuthorization() : { authorized: false }
+    const isAdminUser = orderWithinAdminScope(await getOrderAdminScope(session), order)
     const ownerId = normalizedOrder.userId || normalizedOrder.customerId || null
     const isOwner = !!session && !!ownerId && String(ownerId) === session.user.id
     const isGuestHolder =
@@ -155,7 +157,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ...formattedOrder, ...partnerFields })
+    return NextResponse.json({ ...formattedOrder, ...partnerFields }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (error) {
     console.error("Error getting order:", error)
     return NextResponse.json({ error: "Failed to get order" }, { status: 500 })
@@ -169,6 +171,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   try {
     const { id } = await context.params
+    const scope = await getOrderAdminScope(await getSession())
 
     if (!id) {
       return NextResponse.json({ error: "Order ID is required" }, { status: 400 })
@@ -212,6 +215,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
         return NextResponse.json({ error: "Order not found" }, { status: 404 })
       }
       isPartnerOrder = true
+    }
+
+    if (!orderWithinAdminScope(scope, existingOrder)) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 })
     }
 
     const now = new Date()
@@ -264,6 +271,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     }
 
     const updatedOrder = await collection.findOneAndUpdate({
+      ...scope.filter,
       _id: existingOrder._id,
       status: existingOrder.status ?? { $exists: false },
       updatedAt: existingOrder.updatedAt ?? { $exists: false },
@@ -312,6 +320,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       ).catch(error => console.error("Order status push failed:", error))
     }
 
+    const adminNotification = updateData.status === "confirmed"
+      ? await notifyAdminOrder(existingOrder._id, isPartnerOrder ? "partner_orders" : "orders")
+      : null
+
     // Reaching a value-realising status changes lifetime spend and tier, so refresh
     // the rollup now rather than waiting for the nightly rebuild. Never fatal.
     const customerId = String(existingOrder.userId || "")
@@ -344,7 +356,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       }
     }
 
-    return NextResponse.json({ ...normalizeId(updatedOrder), notification: { emailSent } })
+    const safeOrder = normalizeId(updatedOrder)
+    delete safeOrder.guestAccessTokenHash
+    return NextResponse.json({ ...safeOrder, notification: { emailSent, adminNotification } },
+      { headers: { "Cache-Control": "private, no-store" } })
   } catch (error) {
     console.error("Error updating order:", error)
     return NextResponse.json({ error: "Failed to update order" }, { status: 500 })
@@ -358,6 +373,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   try {
     const { id } = await context.params
+    const scope = await getOrderAdminScope(await getSession())
 
     if (!id) {
       return NextResponse.json({ error: "Order ID is required" }, { status: 400 })
@@ -371,12 +387,14 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       orderId = null
     }
 
-    const filter = orderId ? { _id: orderId } : { orderId: id }
+    const filter = { ...scope.filter, ...(orderId ? { _id: orderId } : { orderId: id }) }
+    if (scope.kind === "none") return NextResponse.json({ error: "Order not found" }, { status: 404 })
     let result = await collection.deleteOne(filter)
 
     if (result.deletedCount === 0) {
       collection = await getCollection("partner_orders")
       result = await collection.deleteOne({
+        ...scope.filter,
         $or: [
           { orderId: id },
           ...(orderId ? [{ _id: orderId }] : [])

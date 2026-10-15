@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { connectDB } from "@/lib/db"
+import { getCollection, normalizeId } from "@/lib/db-service"
 import { getRazorpayClient } from "@/lib/razorpay"
 import { checkAdminAuthorization } from "@/lib/auth"
 
@@ -10,9 +10,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: auth.error || "Admin access required" }, { status: 401 })
     }
 
-    const db = await connectDB()
-    const paymentsCollection = db.collection("payments")
-    const ordersCollection = db.collection("orders")
+    const paymentsCollection = await getCollection("payments")
 
     // Get all payments with order details
     const payments = await paymentsCollection
@@ -20,9 +18,8 @@ export async function GET(request: Request) {
         {
           $lookup: {
             from: "orders",
-            localField: "razorpayOrderId",
-            // orders store the razorpay order id in the `razorpayOrderId` field
-            foreignField: "razorpayOrderId",
+            localField: "orderId",
+            foreignField: "orderId",
             as: "orderDetails",
           },
         },
@@ -62,7 +59,10 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, payments })
+    return NextResponse.json({ success: true, payments: payments.map(payment => ({
+      ...normalizeId(payment),
+      orderDetails: normalizeId(payment.orderDetails),
+    })) }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (error) {
     console.error("Error fetching payments:", error)
     return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 })

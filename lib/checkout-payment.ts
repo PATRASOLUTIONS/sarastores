@@ -67,7 +67,7 @@ export interface CheckoutIntent {
   fingerprint: string
   amount: number
   currency: "INR"
-  method: "razorpay" | "instore"
+  method: "razorpay" | "instore" | "pinelabs" | "paytm"
   status: "created" | "verified" | "consumed"
   createdAt: Date
   expiresAt: Date
@@ -75,6 +75,8 @@ export interface CheckoutIntent {
   orderId?: string
   employeeId?: string
   employeeEmail?: string
+  merchantReference?: string
+  needsReview?: boolean
 }
 
 export async function createCheckoutIntent(
@@ -113,9 +115,10 @@ export async function persistCheckoutOrder(
   try {
     await session.withTransaction(async () => {
       if (intent) {
+        const hosted = intent.method === "pinelabs" || intent.method === "paytm"
         const claimed = await db.collection<CheckoutIntent>("checkout_intents").updateOne(
-          { _id: intent._id, status: "verified", expiresAt: { $gt: new Date() }, ...(intent.paymentId ? { paymentId: intent.paymentId } : {}) },
-          { $set: { status: "consumed", orderId: String(order.orderId) } },
+          { _id: intent._id, status: hosted ? "created" : "verified", orderId: { $exists: false }, expiresAt: { $gt: new Date() }, ...(intent.paymentId ? { paymentId: intent.paymentId } : {}) },
+          { $set: { status: hosted ? "created" : "consumed", orderId: String(order.orderId) } },
           { session },
         )
         if (!claimed.modifiedCount) throw new CheckoutConflictError("Checkout payment has already been used or expired")
@@ -124,6 +127,7 @@ export async function persistCheckoutOrder(
       if (intent?.method === "razorpay") {
         await db.collection<{ _id: string; [key: string]: unknown }>("payments").insertOne({
           _id: intent.paymentId!, razorpayOrderId: intent._id, razorpayPaymentId: intent.paymentId,
+          providerOrderId: intent._id, providerPaymentId: intent.paymentId,
           status: "completed", method: "razorpay", amount: intent.amount / 100,
           currency: intent.currency, userId: intent.userId, orderId: order.orderId, createdAt: new Date(),
         }, { session })

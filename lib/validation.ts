@@ -60,6 +60,14 @@ export const emailSchema = z.string()
   .email('Invalid email address')
   .max(255, 'Email too long');
 
+export const OrderNotificationSettingsSchema = z.object({
+  enabled: z.boolean(),
+  email: z.union([z.literal(""), emailSchema]).transform(value => value.toLowerCase()),
+}).strict().refine(value => !value.enabled || !!value.email, {
+  message: "Enter a recipient email before enabling notifications",
+  path: ["email"],
+});
+
 // Strong password
 export const passwordSchema = z.string()
   .min(8, 'Password must be at least 8 characters')

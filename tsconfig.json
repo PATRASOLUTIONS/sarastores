@@ -31,6 +31,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-payment-ui/types/**/*.ts",
+    ".next-payment-validation/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts"
   ],
