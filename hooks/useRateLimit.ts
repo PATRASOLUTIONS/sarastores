@@ -17,7 +17,8 @@ interface UseRateLimitReturn {
 }
 
 const MAX_ATTEMPTS = 3
-const LOCKOUT_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
+export const LOCKOUT_SECONDS = 60
+const LOCKOUT_DURATION = LOCKOUT_SECONDS * 1000
 
 /**
  * Hook to manage rate limiting for authentication pages

@@ -10,7 +10,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, AlertTriangle, Shield, Check, X } from "lucide-react"
-import { useRateLimit, formatRemainingTime } from "@/hooks/useRateLimit"
+import { useRateLimit, formatRemainingTime, LOCKOUT_SECONDS } from "@/hooks/useRateLimit"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import { PRIVACY_NOTICE_VERSION } from "@/lib/dpdp-config"
 import DOMPurify from "isomorphic-dompurify"
@@ -256,7 +256,7 @@ function RegisterForm() {
           })
         } else {
           setErrors({
-            general: `Too many attempts. Please try again in ${formatRemainingTime(300)}.`
+            general: `Too many attempts. Please try again in ${formatRemainingTime(LOCKOUT_SECONDS)}.`
           })
         }
       }

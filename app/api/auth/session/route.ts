@@ -48,7 +48,12 @@ export async function GET() {
 
     return NextResponse.json({ user: { ...session.user, ...profile } })
   } catch (error) {
+    // 503, not a logged-out 200. The client treats `{ user: null }` as
+    // "this session is gone" and would sign the shopper out.
     console.error("Session lookup error:", error)
-    return NextResponse.json({ user: null }, { status: 200 })
+    return NextResponse.json(
+      { user: null, message: "Session is temporarily unavailable. Please try again." },
+      { status: 503 },
+    )
   }
 }

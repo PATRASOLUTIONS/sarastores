@@ -10,7 +10,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, AlertTriangle, Shield, ShoppingCart, Zap, Headphones, BadgeCheck } from "lucide-react"
-import { useRateLimit, formatRemainingTime } from "@/hooks/useRateLimit"
+import { useRateLimit, formatRemainingTime, LOCKOUT_SECONDS } from "@/hooks/useRateLimit"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import DOMPurify from "isomorphic-dompurify"
 
@@ -113,9 +113,16 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      const success = await login(formData.email, formData.password, recaptchaToken || undefined)
-      if (success) {
+      const result = await login(formData.email, formData.password, recaptchaToken || undefined)
+      if (result === true) {
         resetAttempts()
+        return
+      }
+
+      if (result === "unavailable") {
+        setErrors({ general: "We couldn't start your session. Please try again." })
+        setIsSubmitting(false)
+        lock.release()
         return
       }
 
@@ -128,7 +135,7 @@ export default function LoginPage() {
         })
       } else {
         setErrors({
-          general: `Account temporarily locked due to multiple failed attempts. Please try again in ${formatRemainingTime(300)}.`
+          general: `Account temporarily locked due to multiple failed attempts. Please try again in ${formatRemainingTime(LOCKOUT_SECONDS)}.`
         })
       }
       setIsSubmitting(false)
