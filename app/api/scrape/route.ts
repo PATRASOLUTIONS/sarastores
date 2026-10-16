@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
-import { detectSource, resolveRedirect } from "@/lib/scrapers/http"
+import { detectSource, isShortLink, resolveRedirect } from "@/lib/scrapers/http"
+import { normalizeScraperUrl } from "@/lib/scrapers/bulk-import"
 import { ADAPTERS } from "@/lib/scrapers/adapters"
 import { ScraperError, SCRAPER_LABELS, type ScrapedProduct } from "@/lib/scrapers/types"
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const rawUrl = String(body?.url ?? "").trim()
+    const rawUrl = normalizeScraperUrl(String(body?.url ?? ""))
 
     if (!rawUrl) {
       return NextResponse.json({ success: false, error: "A product URL is required" }, { status: 400 })
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
 
     // Short links carry no product identifier, so resolve before dispatching.
     let url = rawUrl
-    if (/^(dl\.flipkart\.com|fkrt\.it)$/i.test(new URL(rawUrl).hostname.replace(/^www\./, ""))) {
+    if (isShortLink(rawUrl)) {
       url = await resolveRedirect(rawUrl)
       source = detectSource(url) ?? source
     }

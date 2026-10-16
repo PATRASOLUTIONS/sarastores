@@ -185,31 +185,58 @@ export async function fetchJson<T = unknown>(url: string, timeout = 20000): Prom
 }
 
 
-function isShortLink(url: string): boolean {
+export function isShortLink(url: string): boolean {
   try {
     const parsed = new URL(url)
     const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
-    return host === "dl.flipkart.com" || host === "fkrt.it" || /^\/s(?:\/|$)/.test(parsed.pathname)
+    if (host === "fkrt.it") return true
+    if (host === "dl.flipkart.com") return !/\/p\/[^/]+/i.test(parsed.pathname)
+    return host.endsWith("flipkart.com") && /^\/s(?:\/|$)/.test(parsed.pathname)
   } catch {
     return false
   }
 }
 
+/** A Flipkart deep link that already identifies a product, even before the www hop. */
+function canonicalFlipkartProduct(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (detectSource(parsed.toString()) !== "flipkart") return null
+  const path = parsed.pathname.replace(/^\/dl(?=\/)/i, "")
+  if (!/\/p\/[^/]+/i.test(path) && !parsed.searchParams.has("pid")) return null
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
+  if (host === "dl.flipkart.com" || host === "fkrt.it") {
+    parsed.hostname = "www.flipkart.com"
+    parsed.pathname = path
+  }
+  return parsed.toString()
+}
+
 /** A same-source product URL hidden in a short-link interstitial. */
 function embeddedProductUrl(html: string, base: string, source: ScraperSource): string | null {
+  const decoded = html.replace(/\\\//g, "/")
   const found = [
-    ...html.matchAll(/https?:\/\/[^"'\\\s<>]+/gi),
-    ...html.matchAll(/\burl=([^"'>\s]+)/gi),
+    ...decoded.matchAll(/https?:\/\/[^"'\\\s<>]+/gi),
+    ...decoded.matchAll(/\burl=([^"'>\s]+)/gi),
+    ...decoded.matchAll(/(?:href|content|location(?:\.href)?)\s*=\s*["']([^"']+)/gi),
   ].map((match) => match[1] || match[0])
+  const products: string[] = []
+  const others: string[] = []
   for (const candidate of found) {
     try {
-      const next = new URL(candidate, base).toString()
-      if (detectSource(next) === source && !isShortLink(next)) return next
+      const next = new URL(decodeURIComponent(candidate), base).toString()
+      const canonical = source === "flipkart" ? canonicalFlipkartProduct(next) : null
+      if (canonical) products.push(canonical)
+      else if (detectSource(next) === source && !isShortLink(next)) others.push(next)
     } catch {
       /* keep looking */
     }
   }
-  return null
+  return products[0] ?? others[0] ?? null
 }
 
 /** Follows a short link by reading the redirect header — far cheaper than downloading the page. */
@@ -220,10 +247,15 @@ export async function resolveRedirect(url: string): Promise<string> {
     headers: browserHeaders(),
     timeout: 25000,
   })
+  const landed = canonicalFlipkartProduct(res.finalUrl)
+  if (landed && !isShortLink(res.finalUrl)) return res.status === 200 ? res.finalUrl : landed
+  if (landed) return landed
   if (res.status !== 200) throw new ScraperError("Could not resolve short link", 422)
   if (!isShortLink(res.finalUrl)) return res.finalUrl
   const next = embeddedProductUrl(res.html, res.finalUrl, source)
   if (!next) return res.finalUrl
+  const product = canonicalFlipkartProduct(next)
+  if (product || !isShortLink(next)) return product || next
   const resolved = await fetchBoundedText(next, candidate => detectSource(candidate) === source, {
     headers: browserHeaders(),
     timeout: 25000,

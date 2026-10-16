@@ -8,7 +8,8 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useCart } from "@/hooks/useCart"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { ShoppingCart, Menu, X, Search, User, Heart, MapPin, ChevronDown, TrendingUp, Clock, Package, Zap, Gift, Download, HelpCircle, Phone } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { loginHref } from "@/lib/return-path"
 import { useAuth } from "@/contexts/AuthContext"
 import { useProductSpecImages } from '@/hooks/useProductSpecImages'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -68,6 +69,8 @@ const TRENDING_SEARCHES = [
 const RECENT_SEARCHES_KEY = "recentSearches"
 
 export default function Header() {
+  const pathname = usePathname()
+  const [returnLoginHref, setReturnLoginHref] = useState("/login")
   const { cart } = useCart()
   const { openCart } = useCartUI()
   const { data: siteSettings } = useSettingsData()
@@ -77,6 +80,10 @@ export default function Header() {
   const [categories, setCategories] = useState<Category[]>([])
   const router = useRouter()
   const { user, logout, isAdmin, isVendor } = useAuth()
+
+  useEffect(() => {
+    setReturnLoginHref(loginHref(window.location.pathname, window.location.search))
+  }, [pathname])
   const [searchQuery, setSearchQuery] = useState("")
   const { isScrolled, scrollY } = useScrollState(10)
   const [cartItemCount, setCartItemCount] = useState(0)
@@ -266,7 +273,7 @@ export default function Header() {
     if (user) {
       setIsAccountMenuOpen(!isAccountMenuOpen)
     } else {
-      router.push("/login")
+      router.push(loginHref(window.location.pathname, window.location.search))
     }
   }
 
@@ -1017,7 +1024,7 @@ export default function Header() {
                   transition={{ delay: 0.3, duration: 0.3 }}
                 >
                   <Link
-                    href="/login"
+                    href={returnLoginHref}
                     className="text-white font-semibold text-center py-3 border border-white/20 rounded-lg hover:border-brand-primary hover:bg-brand-primary/15 transition-all duration-200"
                     onClick={() => setIsMenuOpen(false)}
                   >

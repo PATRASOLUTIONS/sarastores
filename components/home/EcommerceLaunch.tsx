@@ -7,7 +7,21 @@ import { countdownParts } from "@/lib/handshake"
 
 type Phase = "cover" | "curtain" | "ribbon" | "welcome" | "done"
 
-const SEEN_PREFIX = "sara-home-launch-motion:"
+const SEEN_PREFIX = "sara-home-launch-grand:"
+const CONFETTI = [
+  { x: -140, y: -120, color: "#FF6A2C", rotate: -40 },
+  { x: 150, y: -100, color: "#F5C16C", rotate: 30 },
+  { x: -90, y: 80, color: "#FFFFFF", rotate: 20 },
+  { x: 110, y: 90, color: "#FF6A2C", rotate: -24 },
+  { x: -180, y: 10, color: "#F5C16C", rotate: 12 },
+  { x: 190, y: -20, color: "#FFFFFF", rotate: -16 },
+  { x: -40, y: -160, color: "#FF6A2C", rotate: 28 },
+  { x: 50, y: -150, color: "#F5C16C", rotate: -32 },
+  { x: -160, y: -70, color: "#FFFFFF", rotate: 18 },
+  { x: 170, y: 50, color: "#FF6A2C", rotate: -10 },
+  { x: 20, y: 140, color: "#F5C16C", rotate: 36 },
+  { x: -20, y: 150, color: "#FFFFFF", rotate: -22 },
+]
 const SPARKS = [
   { left: "12%", delay: 0.1, color: "#FF6A2C" },
   { left: "22%", delay: 0.6, color: "#F5C16C" },
@@ -72,8 +86,8 @@ export default function EcommerceLaunch({ launch }: { launch: HandshakeLaunch })
         return
       }
       setPhase("curtain")
-      curtainTimer = setTimeout(() => setPhase("ribbon"), 2200)
-      openTimer = setTimeout(openStore, 6400)
+      curtainTimer = setTimeout(() => setPhase("ribbon"), 2000)
+      openTimer = setTimeout(openStore, 8600)
     }
 
     const tick = () => {
@@ -177,24 +191,28 @@ function Curtain({ side, open, still }: { side: "left" | "right"; open: boolean;
 
 function Ribbon({ cutting, still, onEnter }: { cutting: boolean; still: boolean; onEnter: () => void }) {
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center">
-      <div className="relative h-28 w-full">
-        <RibbonHalf side="left" fall={cutting} still={still} />
-        <RibbonHalf side="right" fall={cutting} still={still} />
-        <motion.div
-          aria-hidden="true"
-          className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-[#F5C16C]"
-          initial={false}
-          animate={cutting && !still ? { y: 18, rotate: -18, opacity: 0 } : { y: 0, rotate: 0, opacity: 1 }}
-          transition={{ duration: 0.45, delay: cutting ? 0.35 : 0 }}
-        >
-          <Scissors />
-        </motion.div>
-      </div>
-      <div className="absolute bottom-10 left-0 right-0 px-6 text-center">
-        <LaunchLogos />
-        <h2 id="ecommerce-launch-title" className="mt-4 font-[family-name:var(--font-heading)] text-3xl font-bold text-white drop-shadow sm:text-5xl">
-          {still || cutting ? "Sara Stores is open" : "The curtain opens"}
+    <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
+      {cutting && !still && <ConfettiBurst />}
+      <div className="relative z-10 w-full max-w-2xl rounded-3xl bg-[#0F2557]/95 px-5 py-8 text-center text-white shadow-2xl sm:px-10">
+        <LaunchLogos celebrate={cutting && !still} />
+        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.28em] text-[#F5C16C]">
+          {cutting || still ? "Grand opening" : "The curtain opens"}
+        </p>
+        <div className="relative mx-auto mt-6 h-24 w-full max-w-lg">
+          <RibbonHalf side="left" fall={cutting} still={still} />
+          <RibbonHalf side="right" fall={cutting} still={still} />
+          <motion.div
+            aria-hidden="true"
+            className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-[#F5C16C]"
+            initial={false}
+            animate={cutting && !still ? { y: 28, rotate: -24, opacity: 0 } : { y: 0, rotate: 0, opacity: 1 }}
+            transition={{ duration: 0.45, delay: cutting ? 0.35 : 0 }}
+          >
+            <Scissors />
+          </motion.div>
+        </div>
+        <h2 id="ecommerce-launch-title" className="mt-6 font-[family-name:var(--font-heading)] text-3xl font-bold sm:text-5xl">
+          {still || cutting ? "Sara Stores is open" : "Bytewise and Sara Stores"}
         </h2>
         {still && (
           <button
@@ -206,6 +224,23 @@ function Ribbon({ cutting, still, onEnter }: { cutting: boolean; still: boolean;
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+function ConfettiBurst() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+      {CONFETTI.map((piece, index) => (
+        <motion.span
+          key={`${piece.x}-${piece.y}`}
+          className="absolute left-1/2 top-1/2 h-3 w-2 rounded-sm"
+          style={{ backgroundColor: piece.color }}
+          initial={{ x: 0, y: 0, opacity: 1, rotate: 0 }}
+          animate={{ x: piece.x, y: piece.y, opacity: 0, rotate: piece.rotate }}
+          transition={{ duration: 1.5, delay: index * 0.02, ease: "easeOut" }}
+        />
+      ))}
     </div>
   )
 }
@@ -227,27 +262,28 @@ function RibbonHalf({ side, fall, still }: { side: "left" | "right"; fall: boole
   )
 }
 
-function LaunchLogos() {
+function LaunchLogos({ celebrate = false }: { celebrate?: boolean }) {
   const reduceMotion = useReducedMotion()
   return (
     <motion.div
       className="flex items-center justify-center gap-3 sm:gap-5"
-      animate={reduceMotion ? undefined : { y: [0, -6, 0] }}
-      transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+      initial={false}
+      animate={celebrate && !reduceMotion ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+      transition={{ duration: 0.6 }}
     >
-      <span className="grid h-16 w-16 place-items-center rounded-full bg-white p-1.5 shadow-lg sm:h-20 sm:w-20">
+      <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-white p-1.5 shadow-lg sm:h-20 sm:w-20">
         <img src="/bytewise-logo.png" alt="Bytewise Consulting" className="h-full w-full object-contain" />
       </span>
       <motion.span
-        className="text-lg font-semibold text-[#FF6A2C]"
+        className="shrink-0 text-lg font-semibold text-[#FF6A2C]"
         aria-hidden="true"
         animate={reduceMotion ? undefined : { scale: [1, 1.2, 1] }}
         transition={{ duration: 1.4, repeat: Infinity }}
       >
         ×
       </motion.span>
-      <span className="grid h-16 place-items-center rounded-2xl bg-white px-3 shadow-lg sm:h-20 sm:px-4">
-        <img src="/sara-logo.png" alt="Sara Stores" className="h-8 w-auto sm:h-10" />
+      <span className="flex h-16 w-40 shrink-0 items-center justify-center rounded-2xl bg-white px-3 shadow-lg sm:h-20 sm:w-52">
+        <img src="/sara-logo.png" alt="Sara Stores" width={4422} height={1182} className="h-9 w-full object-contain sm:h-11" />
       </span>
     </motion.div>
   )

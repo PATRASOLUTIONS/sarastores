@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { loginHref } from "@/lib/return-path"
 import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { User, Menu, X, ChevronDown, ShoppingCart, LayoutDashboard } from "lucide-react"
@@ -12,12 +13,17 @@ export default function Navbar() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isClient, setIsClient] = useState(false)
   const pathname = usePathname()
+  const [returnLoginHref, setReturnLoginHref] = useState("/login")
   const { cart } = useCart()
   const { user, logout } = useAuth()
 
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  useEffect(() => {
+    setReturnLoginHref(loginHref(window.location.pathname, window.location.search))
+  }, [pathname])
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen)
@@ -141,7 +147,7 @@ export default function Navbar() {
                   ) : (
                     <>
                       <Link
-                        href="/login"
+                        href={returnLoginHref}
                         className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
                         onClick={closeMenus}
                       >
@@ -248,7 +254,7 @@ export default function Navbar() {
                   </>
                 ) : (
                   <>
-                    <Link href="/login" className="block py-2 text-gray-600" onClick={closeMenus}>
+                    <Link href={returnLoginHref} className="block py-2 text-gray-600" onClick={closeMenus}>
                       Login
                     </Link>
                     <Link href="/register" className="block py-2 text-gray-600" onClick={closeMenus}>
