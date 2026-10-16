@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
+import { detectBot, formatWait, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
 import { buildSessionPayload, verifyCredentials } from "@/lib/auth-credentials"
 import { LoginSchema } from "@/lib/validation"
@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json(
         { 
-          message: botCheck.waitTime 
-            ? `Too many login attempts. Please try again in ${Math.ceil(botCheck.waitTime / 60)} minutes.`
+          message: botCheck.waitTime
+            ? `Too many login attempts. Please try again in ${formatWait(botCheck.waitTime)}.`
             : "Request validation failed. Please try again.",
           success: false
         }, 
@@ -121,6 +121,8 @@ export async function POST(request: NextRequest) {
     // Encode the cosmetic user cookie value to avoid issues with
     // special characters and to ensure consistent behavior across
     // proxies/CDNs in production.
+    await resetRateLimit(getClientIP(request))
+
     response.cookies.set("user", encodeURIComponent(JSON.stringify(minimalUser)), {
       httpOnly: false,
       secure: isProd,
