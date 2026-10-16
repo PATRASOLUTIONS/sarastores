@@ -97,9 +97,10 @@ export default function LoginPage() {
         lock.release()
         return
       }
-      recaptchaToken = await getToken()
-      if (!recaptchaToken) {
-        setErrors({ general: recaptchaError || "Security validation failed. Please try again." })
+      try {
+        recaptchaToken = await getToken()
+      } catch (error) {
+        setErrors({ general: error instanceof Error ? error.message : "Security validation failed. Please try again." })
         lock.release()
         return
       }
@@ -233,9 +234,9 @@ export default function LoginPage() {
               </div>
             )}
 
-            {errors.general && (
+            {(errors.general || recaptchaError) && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-                <p className="text-sm text-red-700">{errors.general}</p>
+                <p className="text-sm text-red-700">{errors.general || recaptchaError}</p>
               </div>
             )}
 

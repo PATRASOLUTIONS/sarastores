@@ -117,3 +117,105 @@ test("a delayed pre-logout session response cannot restore the logged-out accoun
   assert.equal(app.render().isAuthenticated, false)
   assert.equal(app.storage.has("user"), false)
 })
+
+function registrationHarness() {
+  const states = []
+  const signups = []
+  let index = 0
+  const jsx = (type, props) => ({ type, props })
+  const page = sourceLoader({
+    react: {
+      Suspense: "suspense",
+      useState: initial => {
+        const slot = index++
+        if (!(slot in states)) states[slot] = initial
+        return [states[slot], value => { states[slot] = typeof value === "function" ? value(states[slot]) : value }]
+      },
+      useEffect() {},
+      useMemo: callback => callback(),
+    },
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "next/navigation": { useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
+    "next/link": "link",
+    "@/components/Header": "header",
+    "@/components/Footer": "footer",
+    "@/contexts/AuthContext": { useAuth: () => ({
+      isAuthenticated: false,
+      signup: async (...args) => { signups.push(args); return true },
+    }) },
+    "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
+    "@/hooks/useRateLimit": { useRateLimit: () => ({
+      attempts: 0, isLocked: false, canAttempt: true, recordAttempt() {}, resetAttempts() {},
+    }) },
+    "@/hooks/useRecaptcha": { useRecaptcha: () => ({ enabled: false, isReady: true }) },
+    "@/lib/dpdp-config": { PRIVACY_NOTICE_VERSION: "fixture-notice" },
+    "isomorphic-dompurify": { sanitize: value => value },
+  }).load("app/register/page.tsx")
+  function nodes(node) {
+    if (!node || typeof node !== "object") return []
+    if (Array.isArray(node)) return node.flatMap(nodes)
+    return [node, ...nodes(node.props?.children)]
+  }
+  const render = () => {
+    index = 0
+    return nodes(page.default().props.children.type())
+  }
+  return {
+    render, signups,
+    change(name, value) {
+      const input = render().find(node => node.type === "input" && node.props.name === name)
+      assert.ok(input, `Missing registration input: ${name}`)
+      input.props.onChange({ target: { name, type: input.props.type, value: String(value), checked: value === true } })
+    },
+    checkboxes: () => render().filter(node => node.type === "input" && node.props.type === "checkbox"),
+    submit: () => render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} }),
+  }
+}
+
+test("registration agreements start unchecked and the combined agreement selects and clears all five", () => {
+  const form = registrationHarness()
+  assert.equal(form.checkboxes().length, 5)
+  assert.ok(form.checkboxes().every(node => node.props.checked === false))
+  form.change("agreeToTerms", true)
+  assert.ok(form.checkboxes().every(node => node.props.checked === true))
+  form.change("agreeToTerms", false)
+  assert.ok(form.checkboxes().every(node => node.props.checked === false))
+})
+
+test("registration combined agreement clears both agreement errors without clearing unrelated errors", async () => {
+  const form = registrationHarness()
+  await form.submit()
+  const messages = () => form.render().filter(node => node.type === "p").map(node => node.props.children)
+  assert.ok(messages().includes("You must agree to the terms"))
+  assert.ok(messages().includes("Please confirm you have read the privacy notice"))
+  form.change("agreeToTerms", true)
+  assert.ok(!messages().includes("You must agree to the terms"))
+  assert.ok(!messages().includes("Please confirm you have read the privacy notice"))
+  assert.ok(messages().includes("Name is required"))
+})
+
+for (const optOut of [false, true]) {
+  test(`registration submits selected consent values with individual marketing opt-outs=${optOut}`, async () => {
+    const form = registrationHarness()
+    form.change("name", "Synthetic Customer")
+    form.change("email", "customer@example.invalid")
+    form.change("password", "FixturePassword123!")
+    form.change("confirmPassword", "FixturePassword123!")
+    form.change("agreeToTerms", true)
+    if (optOut) {
+      for (const name of ["marketingEmail", "marketingWhatsapp", "marketingSms"]) {
+        form.change(name, false)
+        assert.equal(form.checkboxes().find(node => node.props.name === name).props.checked, false)
+        assert.equal(form.checkboxes().find(node => node.props.name === "agreeToTerms").props.checked, true)
+        assert.equal(form.checkboxes().find(node => node.props.name === "agreePrivacyNotice").props.checked, true)
+      }
+    }
+    await form.submit()
+    assert.equal(form.signups.length, 1)
+    assert.equal(form.signups[0][7], true)
+    assert.deepEqual({ ...form.signups[0][8] }, {
+      acceptPrivacyNotice: true, marketingEmail: !optOut, marketingWhatsapp: !optOut, marketingSms: !optOut,
+      noticeVersion: "fixture-notice",
+    })
+  })
+}

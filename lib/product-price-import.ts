@@ -27,12 +27,17 @@ interface PriceProduct {
   name?: string
   price?: number
   mrp?: number | null
+  stock?: number
+  active?: boolean
   updatedAt?: Date
 }
 interface PriceRow {
   sku: string
   rowNumber: number
   price: number | null
+  mrp?: number
+  stock?: number
+  active?: boolean
   error: string
 }
 interface PricePreview {
@@ -41,6 +46,11 @@ interface PricePreview {
   mrp: number | null
   oldPrice: number | null
   newPrice: number
+  newMrp: number | null
+  oldStock: number | null
+  newStock: number | null
+  oldActive: boolean | null
+  newActive: boolean | null
   status: "valid" | "error"
   error: string
 }
@@ -64,11 +74,30 @@ function parseRows(data: Record<string, unknown>[]): { rows: PriceRow[]; ignored
     const value = row.price ?? row.Price ?? row.PRICE
     const amount = typeof value === "string" ? Number(value.replace(/[₹,\s]/g, "")) : value
     const price = priceSchema.safeParse(amount)
+    const mrpValue = row.mrp ?? row.MRP ?? row.Mrp
+    const stockValue = row.stock ?? row.Stock ?? row.STOCK
+    const activeValue = row.active ?? row.Active ?? row.ACTIVE
+    const supplied = (value: unknown) => value != null && String(value).trim() !== ""
+    const numeric = (value: unknown) => typeof value === "string" ? Number(value.replace(/[₹,\s]/g, "")) : value
+    const mrp = supplied(mrpValue) ? priceSchema.safeParse(numeric(mrpValue)) : undefined
+    const stock = numeric(stockValue)
+    const validStock = typeof stock === "number" && Number.isSafeInteger(stock) && stock >= 0 && stock <= 1000000
+    const activeText = typeof activeValue === "string" ? activeValue.trim().toLowerCase() : null
+    const hasActive = activeValue != null && (typeof activeValue !== "string" || activeValue.trim() !== "")
+    const active = activeValue === true || activeValue === 1 || ["active", "true", "1"].includes(activeText ?? "")
+      ? true
+      : activeValue === false || activeValue === 0 || ["inactive", "false", "0"].includes(activeText ?? "") ? false : undefined
     const parsed = {
       sku,
       rowNumber: index + 2,
       price: price.success ? price.data : null,
-      error: !sku ? "Missing itemno" : value == null || value === "" ? "Missing price" : !price.success ? "Price must be a positive, finite number no greater than 10,000,000" : "",
+      mrp: mrp?.success ? mrp.data : undefined,
+      stock: supplied(stockValue) && validStock ? stock : undefined,
+      active,
+      error: !sku ? "Missing itemno" : !supplied(value) ? "Missing price" : !price.success ? "Price must be a positive, finite number no greater than 10,000,000"
+        : mrp && !mrp.success ? "MRP must be a positive, finite number no greater than 10,000,000"
+        : supplied(stockValue) && !validStock ? "Stock must be a whole number between 0 and 1,000,000"
+        : hasActive && active === undefined ? "Active must be active/inactive, true/false or 1/0" : "",
     }
     if (!sku) missingSku.push(parsed)
     else {
@@ -84,23 +113,42 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
   const collection = await getCollection<PriceProduct>("products")
   const skus = rows.map(row => row.sku).filter(Boolean)
   const products = await collection.find({ $or: [{ itemno: { $in: skus } }, { sku: { $in: skus } }] }).toArray()
-  const bySku = new Map(products.map(product => [product.itemno || product.sku, product]))
+  const bySku = new Map<string, PriceProduct[]>()
+  for (const product of products) {
+    for (const key of new Set([product.itemno, product.sku].filter((value): value is string => !!value))) {
+      bySku.set(key, [...(bySku.get(key) ?? []), product])
+    }
+  }
   const updates: PricePreview[] = []
   const errors: string[] = []
   let success = 0
 
   for (const row of rows) {
-    const product = bySku.get(row.sku)
+    const matches = bySku.get(row.sku) ?? []
+    const product = matches[0]
+    const effectiveMrp = row.mrp ?? product?.mrp
     let error = row.error
     if (!error && !product) error = "Product not found"
-    if (!error && product && row.price !== null && product.mrp != null && row.price > product.mrp) error = "Price > MRP"
+    if (!error && matches.length > 1) error = "Multiple products match this itemno; reconcile before updating"
+    if (!error && effectiveMrp != null && (!Number.isFinite(effectiveMrp) || effectiveMrp < 0)) error = "Stored MRP is invalid"
+    if (!error && row.price !== null && effectiveMrp != null && row.price > effectiveMrp) error = "Price > MRP"
     if (!preview && !error && product && row.price !== null) {
       try {
         const result = await collection.findOneAndUpdate({
           _id: product._id,
-          $or: [{ mrp: { $exists: false } }, { mrp: null }, { mrp: { $gte: row.price } }],
+          price: product.price === undefined ? { $exists: false } : product.price,
+          mrp: product.mrp === undefined ? { $exists: false } : product.mrp,
+          ...(row.stock !== undefined ? { stock: product.stock === undefined ? { $exists: false } : product.stock } : {}),
+          ...(row.active !== undefined ? { active: product.active === undefined ? { $exists: false } : product.active } : {}),
+          ...(row.mrp === undefined ? { $or: [{ mrp: { $exists: false } }, { mrp: null }, { mrp: { $gte: row.price } }] } : {}),
         }, {
-          $set: { price: row.price, updatedAt: new Date() },
+          $set: {
+            price: row.price,
+            ...(row.mrp !== undefined ? { mrp: row.mrp } : {}),
+            ...(row.stock !== undefined ? { stock: row.stock } : {}),
+            ...(row.active !== undefined ? { active: row.active } : {}),
+            updatedAt: new Date(),
+          },
         }, { returnDocument: "after" })
         if (!result) error = "Product changed or price exceeds current MRP; preview again"
         else success++
@@ -117,6 +165,11 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
       mrp: product?.mrp ?? null,
       oldPrice: product?.price ?? null,
       newPrice: row.price ?? 0,
+      newMrp: effectiveMrp ?? null,
+      oldStock: product?.stock ?? null,
+      newStock: row.stock ?? product?.stock ?? null,
+      oldActive: product ? product.active === true : null,
+      newActive: product ? (row.active ?? product.active) === true : null,
       status: error ? "error" : "valid",
       error,
     })

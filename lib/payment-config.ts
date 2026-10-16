@@ -10,6 +10,13 @@ export function paymentEnabled(provider: PaymentProvider): boolean {
   return value === "true"
 }
 
+export function cashOnDeliveryEnabled(): boolean {
+  const value = process.env.COD_ENABLED
+  if (value === undefined || value === "") return true
+  if (value !== "true" && value !== "false") throw new PaymentConfigurationError("COD_ENABLED must be true or false")
+  return value === "true"
+}
+
 export function paymentConfiguration() {
   const providers = PaymentProviderSchema.options.filter(paymentEnabled)
   const requested = process.env.PAYMENT_DEFAULT_PROVIDER
@@ -17,7 +24,7 @@ export function paymentConfiguration() {
     throw new PaymentConfigurationError("PAYMENT_DEFAULT_PROVIDER must name an enabled gateway")
   }
   const defaultProvider = providers.find(provider => provider === requested) ?? providers[0] ?? null
-  return { providers, defaultProvider }
+  return { providers, defaultProvider, codEnabled: cashOnDeliveryEnabled() }
 }
 
 export function paymentSiteOrigin(): string {

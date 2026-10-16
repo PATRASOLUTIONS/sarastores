@@ -6,7 +6,7 @@ import { z } from "zod"
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiFetch } from "@/lib/api-client"
-import { CHECKOUT_CITIES } from "@/lib/checkout-region"
+import { indianStates } from "@/lib/indiaData"
 import { SavedDeliveryAddressSchema, type SavedDeliveryAddress } from "@/lib/validation"
 import styles from "./SavedAddresses.module.css"
 
@@ -144,9 +144,10 @@ export default function SavedAddresses() {
           <label>Last name<input value={draft.lastName} onChange={event => change("lastName", event.target.value)} /></label>
           <label>Mobile number<input type="tel" name="addressPhone" value={draft.phone} onChange={event => change("phone", event.target.value)} required /></label>
           <label className={styles.wide}>Street address<textarea name="savedStreet" value={draft.address} onChange={event => change("address", event.target.value)} required rows={3} /></label>
-          <label>City<select name="addressCity" value={draft.city} onChange={event => change("city", event.target.value)} required><option value="">Choose city</option>{CHECKOUT_CITIES.map(city => <option key={city}>{city}</option>)}</select></label>
+          <label>State<select name="addressState" value={draft.state} onChange={event => change("state", event.target.value)} required><option value="">Choose state</option>{indianStates.map(state => <option key={state}>{state}</option>)}</select></label>
+          <label>City<input name="addressCity" value={draft.city} onChange={event => change("city", event.target.value)} required maxLength={50} /></label>
           <label>Pincode<input name="addressPincode" value={draft.pincode} onChange={event => change("pincode", event.target.value)} required /></label>
-          <p className={styles.wide}>Delivery addresses are supported in Bangalore and Mysore, Karnataka.</p>
+          <p className={styles.wide}>Save an Indian address. Delivery availability is checked at checkout.</p>
           <button className={styles.save} type="submit">{saving ? "Saving..." : "Save Address"}</button>
         </fieldset>
       </form>}

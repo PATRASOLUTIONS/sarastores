@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getAll, create, COLLECTIONS, findOne, update, count } from "@/lib/db-service"
+import { getAll, create, COLLECTIONS, findOne, update, count, getCollection, normalizeId } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { generateProductSlug } from "@/utils/slug"
@@ -36,6 +36,13 @@ interface ProductRecord {
 // Get all products
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const fields = searchParams.get("fields")
+    const adminListing = fields === "admin" || fields === "admin-metadata"
+    if (adminListing) {
+      const guard = await requireAdmin()
+      if (!guard.ok) return guard.response
+    }
     try {
       await connectToDatabase()
     } catch (dbError) {
@@ -49,7 +56,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { searchParams } = new URL(request.url)
     const category = searchParams.get("category")
     const search = searchParams.get("search")
     const featured = searchParams.get("featured")
@@ -59,9 +65,9 @@ export async function GET(request: NextRequest) {
 
     const filter: ProductFilter = {}
     // Deactivated products are not public. Only staff may opt into seeing them.
-    const includeInactive = searchParams.get("include_inactive") === "true"
+    const includeInactive = adminListing || (searchParams.get("include_inactive") === "true"
       ? await isAdmin()
-      : false
+      : false)
 
     if (category && category !== "") {
       filter.category = category
@@ -112,7 +118,7 @@ export async function GET(request: NextRequest) {
       Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, MAX_LIMIT) : DEFAULT_LIMIT
     const skip = Number.isFinite(parsedSkip) && parsedSkip > 0 ? parsedSkip : 0
 
-    const options: { limit?: number; skip?: number; projection?: Record<string, 1> } = {
+    const options: { limit?: number; skip?: number; projection?: Record<string, 1 | { $slice: number }> } = {
       limit: effectiveLimit,
       skip,
     }
@@ -120,7 +126,7 @@ export async function GET(request: NextRequest) {
     // `fields=card` serves listing pages: every field a product card renders and
     // nothing else. Omitting `raw`, `description` and `technical_details` cuts the
     // payload by roughly an order of magnitude on a full-catalogue fetch.
-    if (searchParams.get("fields") === "card") {
+    if (fields === "card") {
       options.projection = {
         slug: 1, name: 1, price: 1, mrp: 1, image: 1, stock: 1,
         category: 1, subCategory: 1, brand: 1,
@@ -131,9 +137,32 @@ export async function GET(request: NextRequest) {
         "raw.MRP": 1, "raw.mrp": 1, "raw.M.R.P": 1,
       }
     }
+    if (adminListing) {
+      options.projection = {
+        slug: 1, sku: 1, itemno: 1, itemNo: 1, name: 1,
+        price: 1, mrp: 1, stock: 1, image: 1, images: { $slice: 1 },
+        category: 1, groupName: 1, itemCategory: 1,
+        manufacturerName: 1, manufacturer_name: 1,
+        color: 1, subCategory: 1, prod_desc: 1, capacity: 1, ean: 1,
+        active: 1, trusted: 1, updatedAt: 1, char_desc: 1, raw: 1,
+        ...(fields === "admin-metadata" ? { description: 1 } : {}),
+      }
+    }
 
-    const products = await getAll(COLLECTIONS.PRODUCTS, filter, options)
-    const total = await count(COLLECTIONS.PRODUCTS, filter)
+    let products: ProductRecord[]
+    let total: number
+    if (adminListing) {
+      const collection = await getCollection(COLLECTIONS.PRODUCTS)
+      const [documents, matchedCount] = await Promise.all([
+        collection.find(filter, { projection: options.projection }).sort({ _id: 1 }).skip(skip).limit(effectiveLimit).toArray(),
+        collection.countDocuments(filter),
+      ])
+      products = normalizeId(documents)
+      total = matchedCount
+    } else {
+      products = await getAll(COLLECTIONS.PRODUCTS, filter, options)
+      total = await count(COLLECTIONS.PRODUCTS, filter)
+    }
 
     // Native clients cannot run the React helpers the web uses to derive MRP,
     // discount, rating, badge and EMI, so they ask for them precomputed.

@@ -120,18 +120,26 @@ function RegisterForm() {
           ALLOWED_ATTR: []
         })
 
+    const isAgreementToggle = type === "checkbox" && name === "agreeToTerms"
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : sanitizedValue,
+      ...(isAgreementToggle ? {
+        agreeToTerms: checked,
+        agreePrivacyNotice: checked,
+        marketingEmail: checked,
+        marketingWhatsapp: checked,
+        marketingSms: checked,
+      } : {
+        [name]: type === "checkbox" ? checked : sanitizedValue,
+      }),
     }))
 
-    if (errors[name]) {
-      setErrors((prev) => {
-        const newErrors = { ...prev }
-        delete newErrors[name]
-        return newErrors
-      })
-    }
+    setErrors((prev) => {
+      const newErrors = { ...prev }
+      delete newErrors[name]
+      if (isAgreementToggle) delete newErrors.agreePrivacyNotice
+      return newErrors
+    })
   }
 
   const passwordChecks = useMemo(() => {
@@ -179,7 +187,6 @@ function RegisterForm() {
       newErrors.agreeToTerms = "You must agree to the terms"
     }
 
-    // Informed consent (Section 6(1)) is its own act, separate from the Terms.
     if (!formData.agreePrivacyNotice) {
       newErrors.agreePrivacyNotice = "Please confirm you have read the privacy notice"
     }
@@ -208,9 +215,10 @@ function RegisterForm() {
         lock.release()
         return
       }
-      recaptchaToken = await getToken()
-      if (!recaptchaToken) {
-        setErrors({ general: recaptchaError || "Security validation failed. Please try again." })
+      try {
+        recaptchaToken = await getToken()
+      } catch (error) {
+        setErrors({ general: error instanceof Error ? error.message : "Security validation failed. Please try again." })
         lock.release()
         return
       }
@@ -353,9 +361,9 @@ function RegisterForm() {
               </div>
             )}
 
-            {errors.general && (
+            {(errors.general || recaptchaError) && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-                <p className="text-sm text-red-600">{errors.general}</p>
+                <p className="text-sm text-red-600">{errors.general || recaptchaError}</p>
               </div>
             )}
 
@@ -555,6 +563,13 @@ function RegisterForm() {
                   <span className="text-sm text-brand-text-secondary leading-snug">
                     I agree to the{" "}
                     <Link href="/terms-and-conditions" className="font-medium text-[#1560BD] hover:underline">Terms and Conditions</Link>
+                    , consent to the account and order processing described in the{" "}
+                    <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">Privacy Notice</Link>
+                    , and opt in to optional offers by email, WhatsApp and SMS.
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Checking this selects all options below; unchecking it clears them. You can turn off optional
+                      offers individually and still create your account.
+                    </span>
                   </span>
                 </label>
                 {errors.agreeToTerms && <p className="text-sm text-red-600">{errors.agreeToTerms}</p>}

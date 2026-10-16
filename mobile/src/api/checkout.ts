@@ -11,6 +11,12 @@ import { Platform } from "react-native"
 import { api } from "@/api/client"
 import type { CartItem } from "@/api/types"
 
+export async function getCashOnDeliveryEnabled(): Promise<boolean> {
+  const config = await api.get<{ codEnabled: boolean }>("/api/payment/config")
+  if (typeof config.codEnabled !== "boolean") throw new Error("Payment configuration is unavailable. Please try again.")
+  return config.codEnabled
+}
+
 /**
  * Loaded on demand: `react-native-razorpay` is a native module with no web
  * binding, so importing it at module scope breaks any bundle that includes

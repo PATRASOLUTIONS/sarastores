@@ -7,7 +7,7 @@
     "dev": "next dev",
     "dev:3005": "next dev -p 3005",
     "lint": "eslint .",
-    "test": "node --test tests/audit.test.mjs tests/marketing-migration.test.mjs tests/readiness.test.mjs tests/auth-client-session.test.mjs tests/payment-gateways.test.mjs tests/order-security.test.mjs",
+    "test": "node --test tests/audit.test.mjs tests/marketing-migration.test.mjs tests/readiness.test.mjs tests/auth-client-session.test.mjs tests/recaptcha.test.mjs tests/payment-gateways.test.mjs tests/pincode-management.test.mjs tests/order-security.test.mjs tests/bulk-catalog-import.test.mjs",
     "start": "next start",
     "check:deployment": "node scripts/check-deployment-env.mjs",
     "migrate:schema:dry": "node scripts/migrate-canonical-product-schema.mjs --dry-run",

@@ -13,14 +13,26 @@ Set these **server-side** variables in `.env.local` or the deployment environmen
 RAZORPAY_ENABLED=true
 PINELABS_ENABLED=true
 PAYTM_ENABLED=false
+COD_ENABLED=true
 PAYMENT_DEFAULT_PROVIDER=pinelabs
 ```
 
-Only enabled gateways appear in the website selector. Enable one to show only
-that gateway, or enable multiple to let the shopper choose. Boolean values must
+Only enabled gateways appear as **logo radio cards** at checkout. The separate
+UPI/card/net-banking/EMI/wallet choices are not shown on SARA: the selected gateway
+presents its available payment methods. `COD_ENABLED=true` shows Cash on Delivery;
+`COD_ENABLED=false` hides it and rejects new COD orders server-side, including
+legacy `cash`/`cod` aliases and requests that omit the payment method. The flag
+also controls the mobile COD choice. It defaults to `true` when unset for
+backwards compatibility; use an explicit value in production. Invalid values
+fail configuration checks rather than silently enabling COD.
+COD is hidden while configuration is loading or unavailable. In-store purchase
+remains independent. When no online gateway is enabled, checkout selects COD if
+enabled, otherwise in-store purchase.
+Enable one gateway to show only that gateway, or enable multiple to let the shopper choose. Boolean values must
 be exactly `true` or `false`; the default provider must be enabled. If the default
-is unset, the first enabled gateway is selected (Razorpay, Pine Labs, Paytm).
-All three can be disabled to keep only COD/in-store purchases available.
+is unset, the first enabled gateway is selected (**Pine Labs**, Razorpay, Paytm).
+An explicit `PAYMENT_DEFAULT_PROVIDER` overrides that preference.
+All three can be disabled to keep only enabled offline purchases available.
 Restart the local server or redeploy after changing environment variables.
 Flags stop **new** payment attempts; verification of already-started payments
 continues. Keep the old credentials/environment until outstanding payments settle.
@@ -30,13 +42,43 @@ that endpoint; mobile Pine Labs/Paytm selection is not implemented yet.
 
 Razorpay continues to use `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.
 
+### Production configuration
+
+Use [`.env.production.example`](../../.env.production.example) as the deployment
+checklist. It includes all three provider flags, Pine Labs as the default, and
+the production credential fields for each gateway. The template contains no
+usable credentials: replace required placeholders using secure, provider-issued
+values and keep unconfigured gateways disabled. Existing UAT credentials must
+not be relabelled as production credentials.
+
+Configure Vercel **Production** environment variables explicitly; local `.env`
+changes do not update Vercel. Keep Preview/UAT values scoped separately and
+redeploy after changes. `NEXT_PUBLIC_*` settings are included at build time.
+Run `npm run check:deployment` for secret-safe syntax/presence checks. A passing
+check does **not** prove live credential validity, callback registration,
+reCAPTCHA domain approval, SMTP delivery or MongoDB transaction/index readiness.
+
+Before enabling live Pine Labs payments, obtain the production MID, OAuth pair,
+and confirmed hexadecimal hosted-return signing key; register the return and
+webhook URLs below and complete provider-approved payment tests. A blank callback
+key blocks Pine Labs initiation even if the gateway flag is enabled.
+
+Provider logos are served locally from `public/payment-gateways/`, using assets
+from the providers' official sites:
+[Pine Labs](https://plcorp-cdn.pinelabs.com/2025/03/pinelabs-logo.svg),
+[Razorpay](https://razorpay.com/assets/razorpay-logo.svg), and
+[Paytm](https://pwebassets.paytm.com/commonwebassets/paytmweb/header/images/logo.svg).
+
 ## Pine Labs
 
 Configure `PINELABS_ENVIRONMENT=uat`, `PINELABS_MERCHANT_ID`,
 `PINELABS_CLIENT_ID`, `PINELABS_CLIENT_SECRET`, and `PINELABS_CALLBACK_SECRET`.
-The callback secret is the **separate hexadecimal signing key** issued by Pine
-Labs onboarding, **not** the OAuth client secret. Request it from support if it
-was not supplied. Never paste credentials into this document.
+`PINELABS_CALLBACK_SECRET` is this application's name for the **hexadecimal
+`secret_key`** used to verify hosted-checkout return signatures. Pine Labs'
+[hosted integration guide](https://www.pinelabs.com/docs/online-payments/checkout-options/checkout-hosted/checkout-hosted-integration.md)
+section 4.2 says onboarding supplies that key. Ask support which key applies to
+your account; do not assume the supplied OAuth client secret is also the signing
+key or generate your own substitute. Never paste credentials into this document.
 
 The API base is `https://pluraluat.v2.pinepg.in` in UAT and
 `https://api.pluralpay.in` when `PINELABS_ENVIRONMENT=production`.
@@ -52,8 +94,12 @@ the public HTTPS `NEXT_PUBLIC_SITE_URL`:
 Subscribe to `ORDER_PROCESSED`, `ORDER_FAILED`, and `PAYMENT_FAILED`. The
 integration uses `pre_auth=false`: `AUTHORIZED` is **not** a paid order.
 The signed return is verified using sorted callback fields and HMAC-SHA256.
-Pine's documented webhooks do not specify a signing scheme: their contents are
-treated only as a hint to fetch the order with server OAuth credentials. No
+This implementation treats Pine webhook contents only as a hint to fetch the
+order with server OAuth credentials. Pine's current
+[webhook signing guide](https://www.pinelabs.com/docs/online-payments/developer-tools/developer-tools-webhooks/webhook-signature-verification.md)
+describes a separate header-verification flow; it is not implemented here.
+Confirm the provider's webhook-verification requirements before go-live; the
+hosted-return hexadecimal key must not be assumed to be its webhook key. No
 payload-supplied status, amount, merchant, or payment ID is trusted. Apply the
 current provider IP allowlist at your trusted network/firewall boundary, not
 using an arbitrary caller-supplied forwarded-IP header.

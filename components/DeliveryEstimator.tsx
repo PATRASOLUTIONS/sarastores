@@ -5,6 +5,7 @@ import { stores } from "@/lib/store-data"
 import { analytics } from "@/lib/analytics"
 import { Truck, MapPin, CheckCircle, XCircle, Calendar } from "lucide-react"
 import { PincodeRestrictionsResponseSchema } from "@/lib/validation"
+import { isPincodeAllowed } from "@/lib/pincode-policy"
 
 export default function DeliveryEstimator() {
     const [pincode, setPincode] = useState("")
@@ -51,18 +52,7 @@ export default function DeliveryEstimator() {
             if (!res.ok) throw new Error("Failed to fetch delivery rules")
 
             const data = PincodeRestrictionsResponseSchema.parse(await res.json())
-            const { blockedPincodes, allowedPincodes, mode } = data
-
-            const isBlocked = blockedPincodes.some(p => (typeof p === "string" ? p : p.pincode) === pinToCheck)
-            const isAllowed = allowedPincodes.some(p => (typeof p === "string" ? p : p.pincode) === pinToCheck)
-
-            let canDeliver = true
-
-            if (mode === 'blocked' && isBlocked) canDeliver = false
-            if (mode === 'allowed' && !isAllowed) canDeliver = false
-            if (mode === 'both') {
-                if (isBlocked || !isAllowed) canDeliver = false
-            }
+            const canDeliver = isPincodeAllowed(data, pinToCheck)
 
             if (!canDeliver) {
                 setResult({ deliverable: false, message: "Sorry, we do not deliver to this pincode." })

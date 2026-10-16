@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import crypto from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
 import PaytmChecksum from "paytmchecksum"
 import { NextRequest } from "next/server.js"
 import { sourceLoader } from "./source-loader.mjs"
@@ -38,7 +40,7 @@ test("gateway switches preserve Razorpay by default, select enabled providers an
   loader.env.PINELABS_ENABLED = "true"
   loader.env.PAYTM_ENABLED = "true"
   loader.env.PAYMENT_DEFAULT_PROVIDER = "paytm"
-  assert.equal(config.paymentConfiguration().providers.join(","), "razorpay,pinelabs,paytm")
+  assert.equal(config.paymentConfiguration().providers.join(","), "pinelabs,razorpay,paytm")
   assert.equal(config.paymentConfiguration().defaultProvider, "paytm")
   loader.env.PAYTM_ENABLED = "false"
   assert.throws(() => config.paymentConfiguration(), /enabled gateway/)
@@ -55,10 +57,23 @@ test("configuration endpoint returns only non-secret gateway choices", async () 
   const loader = sourceLoader({}, { env })
   const response = await loader.load("app/api/payment/config/route.ts").GET()
   const data = await response.json()
-  assert.deepEqual(data, { providers: ["razorpay", "pinelabs", "paytm"], defaultProvider: "razorpay" })
+  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true })
   assert.match(response.headers.get("cache-control"), /no-store/)
   for (const value of [key, pineKey, env.PINELABS_CLIENT_SECRET]) assert.equal(JSON.stringify(data).includes(value), false)
 })
+
+for (let mask = 0; mask < 8; mask++) {
+  test(`gateway flags expose exactly the enabled providers and prefer Pine Labs (combination ${mask})`, () => {
+    const order = ["pinelabs", "razorpay", "paytm"]
+    const switches = Object.fromEntries(order.map((provider, index) => [
+      `${provider.toUpperCase()}_ENABLED`, mask & (1 << index) ? "true" : "false",
+    ]))
+    const config = sourceLoader({}, { env: switches }).load("lib/payment-config.ts").paymentConfiguration()
+    const expected = order.filter((_, index) => mask & (1 << index))
+    assert.deepEqual(Array.from(config.providers), expected)
+    assert.equal(config.defaultProvider, expected[0] ?? null)
+  })
+}
 
 test("disabled Razorpay refuses new checkout without calling the provider", async () => {
   let calls = 0
@@ -416,6 +431,21 @@ test("production preflight checks only enabled gateways and rejects missing or U
   assert.equal(liveErrors.some(error => /^PINELABS|^PAYTM/.test(error)), false)
 })
 
+test("production template includes explicit gateway flags and placeholder live credentials", () => {
+  const template = fs.readFileSync(path.resolve(".env.production.example"), "utf8")
+  for (const setting of [
+    "RAZORPAY_ENABLED=true", "PINELABS_ENABLED=true", "PAYTM_ENABLED=false",
+    "PAYMENT_DEFAULT_PROVIDER=pinelabs", "PINELABS_ENVIRONMENT=production", "PAYTM_ENVIRONMENT=production",
+  ]) {
+    assert.ok(template.split(/\r?\n/).includes(setting), `Missing production setting: ${setting}`)
+  }
+  for (const key of ["PINELABS_MERCHANT_ID", "PINELABS_CLIENT_ID", "PINELABS_CLIENT_SECRET", "PINELABS_CALLBACK_SECRET"]) {
+    assert.match(template, new RegExp(`^${key}="<[^>]+>"$`, "m"))
+  }
+  assert.match(template, /^PAYTM_MERCHANT_ID=$/m)
+  assert.match(template, /^PAYTM_MERCHANT_KEY=$/m)
+})
+
 for (const provider of ["pinelabs", "paytm"]) {
   test(`${provider} order initiation persists a server-priced pending order before redirect without consuming rewards or fulfilling`, async () => {
     let persisted
@@ -564,6 +594,234 @@ function findElement(element, type) {
   }
   return null
 }
+
+function elements(element) {
+  if (!element || typeof element !== "object") return []
+  if (Array.isArray(element)) return element.flatMap(elements)
+  return [element, ...elements(element.props?.children)]
+}
+
+test("checkout logo cards show only enabled gateways and keep offline choices independently selectable", () => {
+  const options = sourceLoader({ "next/image": "provider-image" }).load("components/CheckoutPaymentOptions.tsx")
+  const selected = []
+  for (const codEnabled of [true, false]) {
+   for (const providers of [[], ["pinelabs"], ["razorpay", "paytm"], ["pinelabs", "razorpay", "paytm"]]) {
+     const choices = [...providers, ...(codEnabled ? ["cash-on-delivery"] : []), "instore"]
+     for (const choice of [null, ...choices]) {
+       const tree = options.default({ providers, codEnabled, selected: choice, onChange: value => selected.push(value) })
+       const radios = elements(tree).filter(node => node.type === "input")
+       assert.deepEqual(radios.map(node => node.props.value), choices)
+       assert.equal(radios.filter(node => node.props.checked).length, choice === null ? 0 : 1)
+       for (const radio of radios) {
+         assert.equal(radio.props.checked, radio.props.value === choice)
+         radio.props.onChange()
+         assert.equal(selected.at(-1), radio.props.value)
+       }
+     }
+   }
+  }
+  for (const provider of ["pinelabs", "razorpay", "paytm"]) {
+    const logo = options.PaymentProviderLogo({ provider })
+    assert.equal(logo.props.src, `/payment-gateways/${provider}.svg`)
+    assert.ok(logo.props.alt)
+    assert.ok(logo.props.width > 0 && logo.props.height > 0)
+    const asset = fs.readFileSync(path.resolve("public", "payment-gateways", `${provider}.svg`), "utf8")
+    assert.match(asset, /^<svg\b/)
+    assert.doesNotMatch(asset, /<(?:script|foreignObject|image)\b/i)
+  }
+})
+
+function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") {
+  const states = []
+  const effects = []
+  const errors = []
+  let index = 0
+  let mounted = false
+  const slot = initial => {
+    const current = index++
+    if (!(current in states)) states[current] = initial
+    return current
+  }
+  const loader = sourceLoader({
+    react: {
+      useState: initial => {
+        const current = slot(initial)
+        return [states[current], value => { states[current] = typeof value === "function" ? value(states[current]) : value }]
+      },
+      useRef: initial => states[slot({ current: initial })],
+      useEffect: effect => { if (!mounted) effects.push(effect) },
+    },
+    "./checkout.module.css": {},
+    "next/link": "link",
+    "next/navigation": { useRouter: () => ({ push() {}, replace() {} }) },
+    "@/components/Header": "header",
+    "@/components/Footer": "footer",
+    "@/components/PaymentGateway": "payment-gateway",
+    "@/components/CheckoutPaymentOptions": { default: "checkout-options", PaymentProviderLogo: "provider-logo", __esModule: true },
+    "@/components/InStorePurchase": "in-store",
+    "@/components/FulfilmentSelector": "fulfilment",
+    "@/components/LoyaltyRedeemer": "loyalty",
+    "@/components/CartProductImage": "product-image",
+    "@/components/OrderSuccess": "order-success",
+    "@/hooks/useCart": { useCart: () => ({
+      cart: [{ id: "fixture-product", type: "software", name: "Synthetic Product", price: 118, quantity: 1 }],
+      clearCart() {}, removeFromCart() {}, refreshItemPrices() {}, isLoading: false,
+    }) },
+    "@/contexts/AuthContext": { useAuth: () => ({ user: null, isLoading: false }) },
+    "@/hooks/useSettingsData": { useSettingsData: () => ({ data: { shippingFee: 99, freeShippingThreshold: 1000 }, isLoading: false }) },
+    "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
+    "@/lib/analytics": { analytics: { beginCheckout() {} }, toAnalyticsItem: item => item },
+    "react-hot-toast": { toast: { error: message => errors.push(message) } },
+  }, {
+    fetch: async url => {
+      if (url === "/api/blocked-pincodes") return Response.json({ mode: deliveryMode, blockedPincodes: ["400001"], allowedPincodes: [] })
+      assert.equal(url, "/api/payment/config")
+      return fail ? Response.json({ error: "Configuration unavailable" }, { status: 503 }) : Response.json(config)
+    },
+    context: {
+      sessionStorage: { getItem: () => null },
+      window: { location: { search: "" } },
+      console: { ...console, error: (...args) => errors.push(args) },
+    },
+  })
+  const page = loader.load("app/checkout/page.tsx")
+  const render = () => { index = 0; return page.default() }
+  render()
+  mounted = true
+  for (const effect of effects) effect()
+  return { render, errors }
+}
+
+for (const mode of ["all", "blocked"]) {
+  test(`checkout nationwide address controls and delivery validation follow mode=${mode}`, async () => {
+    const fixture = checkoutOptionsFixture({ providers: ["pinelabs"], defaultProvider: "pinelabs", codEnabled: false }, false, mode)
+    await new Promise(setImmediate)
+    const fields = () => elements(fixture.render())
+    fields().find(node => node.type === "button" && node.props.children === "Continue as guest").props.onClick()
+    const stateField = () => fields().find(node => node.type === "select" && node.props.id === "state")
+    assert.equal(elements(stateField()).some(node => node.type === "option" && node.props.value === "Maharashtra"), mode === "all")
+    assert.equal(fields().find(node => node.props?.id === "city").type, mode === "all" ? "input" : "select")
+    for (const [name, value] of Object.entries({
+      firstName: "Synthetic", email: "fixture@example.invalid", phone: "9876543210",
+      address: "Synthetic Test Street", state: "Maharashtra", city: "Mumbai", pincode: "400001",
+    })) {
+      const input = fields().find(node => node.props?.id === name)
+      input.props.onChange({ target: { name, value } })
+    }
+    const gateway = findElement(fixture.render(), "payment-gateway").props
+    assert.equal(await gateway.beforePayment(), mode === "all", JSON.stringify(fixture.errors))
+    if (mode === "blocked") assert.ok(fixture.errors.some(error => String(error).includes("Bangalore and Mysore")), JSON.stringify(fixture.errors))
+  })
+}
+
+test("checkout uses the server default, switches provider handoff, and preserves COD/in-store choices", async () => {
+  const config = { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true }
+  const fixture = checkoutOptionsFixture(config)
+  await new Promise(setImmediate)
+  const options = () => findElement(fixture.render(), "checkout-options").props
+  assert.deepEqual(Array.from(options().providers), config.providers)
+  assert.equal(options().selected, "pinelabs")
+  for (const provider of config.providers) {
+    options().onChange(provider)
+    const gateway = findElement(fixture.render(), "payment-gateway").props
+    assert.equal(options().selected, provider)
+    assert.equal(gateway.provider, provider)
+    assert.equal(gateway.paymentMethod, "online")
+    assert.equal(Object.hasOwn(gateway, "preferredMethod"), false)
+  }
+  options().onChange("cash-on-delivery")
+  assert.equal(options().selected, "cash-on-delivery")
+  assert.equal(findElement(fixture.render(), "payment-gateway").props.paymentMethod, "cash-on-delivery")
+  options().onChange("instore")
+  assert.equal(findElement(fixture.render(), "payment-gateway"), null)
+  assert.ok(findElement(fixture.render(), "in-store"))
+  options().onChange("pinelabs")
+  assert.equal(findElement(fixture.render(), "payment-gateway").props.provider, "pinelabs")
+})
+
+for (const fail of [false, true]) {
+  test(`checkout never invents an online gateway when none are available (configuration failure=${fail})`, async () => {
+    const fixture = checkoutOptionsFixture({ providers: [], defaultProvider: null, codEnabled: true }, fail)
+    await new Promise(setImmediate)
+    const options = findElement(fixture.render(), "checkout-options").props
+    assert.equal(options.providers.length, 0)
+    assert.equal(options.selected, fail ? "instore" : "cash-on-delivery")
+    assert.equal(options.codEnabled, !fail)
+    if (fail) assert.equal(fixture.errors.length, 1)
+    options.onChange("cash-on-delivery")
+    if (fail) {
+      assert.equal(findElement(fixture.render(), "payment-gateway"), null)
+      assert.ok(findElement(fixture.render(), "in-store"))
+    } else {
+      assert.equal(findElement(fixture.render(), "payment-gateway").props.paymentMethod, "cash-on-delivery")
+    }
+  })
+}
+
+for (const providers of [[], ["pinelabs"]]) {
+  test(`disabled COD stays unavailable and selects a valid alternative (gateways=${providers.length})`, async () => {
+    const fixture = checkoutOptionsFixture({ providers, defaultProvider: providers[0] ?? null, codEnabled: false })
+    assert.equal(findElement(fixture.render(), "checkout-options").props.codEnabled, false, "Hidden until configuration loads")
+    await new Promise(setImmediate)
+    const options = () => findElement(fixture.render(), "checkout-options").props
+    assert.equal(options().codEnabled, false)
+    assert.equal(options().selected, providers[0] ?? "instore")
+    options().onChange("cash-on-delivery")
+    assert.equal(options().selected, providers[0] ?? "instore")
+    assert.ok(!elements(fixture.render()).some(node => typeof node.props?.children === "string" &&
+      node.props.children.includes("Choose cash on delivery")))
+  })
+}
+
+test("COD configuration is strict, returned by the public endpoint, and checked by deployment preflight", async () => {
+  const loader = sourceLoader({}, { env: { COD_ENABLED: "false" } })
+  const config = loader.load("lib/payment-config.ts")
+  assert.equal(config.cashOnDeliveryEnabled(), false)
+  assert.equal((await (await loader.load("app/api/payment/config/route.ts").GET()).json()).codEnabled, false)
+  loader.env.COD_ENABLED = "true"
+  assert.equal(config.cashOnDeliveryEnabled(), true)
+  delete loader.env.COD_ENABLED
+  assert.equal(config.cashOnDeliveryEnabled(), true, "Retain existing deployments when unset")
+  loader.env.COD_ENABLED = "yes"
+  assert.throws(() => config.cashOnDeliveryEnabled(), /COD_ENABLED must be true or false/)
+  assert.equal((await loader.load("app/api/payment/config/route.ts").GET()).status, 500)
+  assert.ok(checkDeploymentEnvironment({ COD_ENABLED: "yes" }).some(error => error.startsWith("COD_ENABLED:")))
+  assert.ok(!checkDeploymentEnvironment({ COD_ENABLED: "false" }).some(error => error.startsWith("COD_ENABLED:")))
+})
+
+for (const method of ["cash", "cod", "cash-on-delivery", undefined]) {
+  test(`disabled COD blocks new ${method ?? "implicit cash"} orders before pricing or persistence`, async () => {
+    let pricingCalls = 0
+    const loader = sourceLoader({
+      "@/lib/auth": { getSession: async () => ({ user: { id: "fixture-user" } }) },
+      "@/lib/order-pricing": { priceOrder: async () => { pricingCalls++; return { ok: false, error: "Fixture pricing reached" } } },
+    }, { env: { COD_ENABLED: "false" } })
+    const route = loader.load("app/api/orders/route.ts")
+    const body = { items: [{ id: "fixture", quantity: 1 }], customer: request.customer, paymentMethod: method }
+    const response = await route.POST(post(body))
+    assert.equal(response.status, 403)
+    assert.match((await response.json()).error, /Cash on Delivery is currently unavailable/)
+    assert.equal(pricingCalls, 0)
+    loader.env.COD_ENABLED = "true"
+    const enabledResponse = await route.POST(post(body))
+    assert.equal(enabledResponse.status, 400)
+    assert.equal((await enabledResponse.json()).error, "Fixture pricing reached")
+    assert.equal(pricingCalls, 1)
+  })
+}
+
+test("native checkout reads the same COD flag and rejects malformed configuration", async () => {
+  let value = { codEnabled: false }
+  const mobile = sourceLoader({
+    "react-native": { Platform: { OS: "android" } },
+    "@/api/client": { api: { get: async path => { assert.equal(path, "/api/payment/config"); return value } } },
+  }).load("mobile/src/api/checkout.ts")
+  assert.equal(await mobile.getCashOnDeliveryEnabled(), false)
+  value = { codEnabled: true }
+  assert.equal(await mobile.getCashOnDeliveryEnabled(), true)
+  value = { codEnabled: "false" }
+  await assert.rejects(mobile.getCashOnDeliveryEnabled(), /Payment configuration is unavailable/)
+})
 
 for (const provider of ["pinelabs", "paytm"]) {
   test(`browser ${provider} checkout saves a recovery capability before navigating and does not load Razorpay`, async () => {

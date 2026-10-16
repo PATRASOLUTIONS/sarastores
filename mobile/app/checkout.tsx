@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native"
-import { PaymentCancelledError, placeOrder, type CheckoutCustomer } from "@/api/checkout"
+import { getCashOnDeliveryEnabled, PaymentCancelledError, placeOrder, type CheckoutCustomer } from "@/api/checkout"
 import { SignInRequired } from "@/components/States"
 import { StoreHeader } from "@/components/StoreHeader"
 import { useAuth } from "@/auth/context"
@@ -52,6 +52,19 @@ export default function CheckoutScreen() {
   })
   const [paymentMethod, setPaymentMethod] = useState<"online" | "cash">("online")
   const [busy, setBusy] = useState(false)
+  const [codEnabled, setCodEnabled] = useState(false)
+  const [paymentConfigError, setPaymentConfigError] = useState("")
+
+  useEffect(() => {
+    let active = true
+    getCashOnDeliveryEnabled()
+      .then(enabled => { if (active) setCodEnabled(enabled) })
+      .catch(error => {
+        console.error("[Checkout] Payment configuration failed:", error)
+        if (active) setPaymentConfigError("Cash on Delivery availability could not be loaded. Please reopen checkout to retry.")
+      })
+    return () => { active = false }
+  }, [])
 
   // Signing in happens from this screen, so `user` is usually null when the
   // state above is initialised. Fill in what we learn, without overwriting typing.
@@ -137,12 +150,13 @@ export default function CheckoutScreen() {
 
           <View style={[styles.card, { backgroundColor: tokens.surfaceRaised, borderColor: tokens.border }]}>
             <Text style={[styles.sectionTitle, { color: tokens.textPrimary }]}>Payment method</Text>
+            {paymentConfigError ? <Text accessibilityRole="alert" style={{ color: tokens.textSecondary }}>{paymentConfigError}</Text> : null}
             {(
               [
                 { key: "online", label: "Pay online", note: "UPI, card, net banking, wallets" },
                 { key: "cash", label: "Cash on delivery", note: "Pay when your order arrives" },
               ] as const
-            ).map((option) => (
+            ).filter(option => option.key !== "cash" || codEnabled).map((option) => (
               <Pressable
                 key={option.key}
                 style={[

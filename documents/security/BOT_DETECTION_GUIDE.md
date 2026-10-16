@@ -107,10 +107,25 @@ if (suspiciousAgents.some(agent => userAgent.toLowerCase().includes(agent))) {
 1. Get reCAPTCHA keys from [Google reCAPTCHA](https://www.google.com/recaptcha/admin)
 2. Add to `.env`:
    ```env
-   RECAPTCHA_SITE_KEY=your_site_key_here
+   RECAPTCHA_ENABLED=true
+   NEXT_PUBLIC_RECAPTCHA_SITE_KEY=your_site_key_here
    RECAPTCHA_SECRET_KEY=your_secret_key_here
    ```
-3. Frontend integration (optional - ready to implement)
+3. Register your deployed hostname (and `localhost` for local testing) for the
+   same **reCAPTCHA v3** key pair. Arbitrary strings and v2 keys will not work.
+
+`RECAPTCHA_ENABLED=false` skips Google script loading and server token verification,
+even if keys remain configured. Rate limiting, honeypot, timestamp and user-agent
+checks remain active. Disabling CAPTCHA reduces bot protection; production should
+normally use `true`. Restart the server after changing environment variables.
+
+Login and registration read the same runtime setting from `/api/auth/config`
+(no-store); only the public site key is returned. `true` requires both keys and
+a valid token. Missing keys or an invalid flag fail closed with HTTP 503.
+If the flag is unset, configured keys enable CAPTCHA for backwards compatibility.
+Registration verifies each single-use token once. Native app login retains its
+existing token-optional contract. Script/config failures are shown on the form
+instead of leaving an unexplained disabled submit button.
 
 **Verification**:
 ```typescript

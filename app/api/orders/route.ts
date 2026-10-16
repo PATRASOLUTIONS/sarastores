@@ -12,7 +12,7 @@ import { checkoutFingerprint, getCheckoutIntent, persistCheckoutOrder, CheckoutC
 import { fulfillSoftwareOrder } from "@/lib/software-fulfillment"
 import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfillment"
 import { initiateHostedCheckout, notifyHostedGuestOrder } from "@/lib/hosted-checkout"
-import { PaymentConfigurationError } from "@/lib/payment-config"
+import { cashOnDeliveryEnabled, PaymentConfigurationError } from "@/lib/payment-config"
 import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
@@ -391,6 +391,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { items, customer, shippingAddress, paymentMethod, paymentDetails } = parsed.data
+    const method = paymentMethod || "cash"
+    if (["cash", "cod", "cash-on-delivery"].includes(method) && !cashOnDeliveryEnabled()) {
+      return NextResponse.json({ error: "Cash on Delivery is currently unavailable. Please choose another payment method." }, { status: 403 })
+    }
     const userId = session?.user?.id ?? null
     if (!isGuest && (paymentMethod === "pinelabs" || paymentMethod === "paytm")) {
       const limit = await checkRateLimit(request, RATE_LIMITS.ORDERS)
@@ -434,7 +438,6 @@ export async function POST(request: NextRequest) {
 
     const payableTotal = Math.max(0, total - (loyalty?.discount ?? 0))
     // An order only reaches a paid state once the payment is confirmed server-side.
-    const method = paymentMethod || "cash"
     const hosted = method === "pinelabs" || method === "paytm"
     let status = "pending"
     let paymentVerification: Record<string, unknown> = { verified: false, method }

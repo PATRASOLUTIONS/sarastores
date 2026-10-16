@@ -11,6 +11,7 @@ import { analytics, toAnalyticsItem } from "@/lib/analytics"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { cleanProductName } from "@/utils/cleanProductName"
 import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/PaymentGateway"
+import CheckoutPaymentOptions, { PaymentProviderLogo } from "@/components/CheckoutPaymentOptions"
 import InStorePurchase from "@/components/InStorePurchase"
 import FulfilmentSelector, {
   type FulfilmentMethod,
@@ -25,6 +26,8 @@ import { z } from "zod"
 import styles from "./checkout.module.css"
 import CartProductImage from "@/components/CartProductImage"
 import { CHECKOUT_CITIES, checkoutCity } from "@/lib/checkout-region"
+import { indianStates } from "@/lib/indiaData"
+import { isDeliveryRegionAllowed, isPincodeAllowed, type PincodeRestrictions } from "@/lib/pincode-policy"
 import { SavedDeliveryAddressSchema, PincodeRestrictionsResponseSchema, type SavedDeliveryAddress } from "@/lib/validation"
 import OrderSuccess from "@/components/OrderSuccess"
 import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-confirmation"
@@ -36,27 +39,16 @@ import {
   Truck,
   Shield,
   CheckCircle,
-  Package,
   User,
   MapPin,
   Phone,
   Mail,
   Trash2,
-  Smartphone, Landmark, Wallet, Store, Home, Pencil, Headphones, Tag,
+  Store, Home, Pencil, Headphones, Tag,
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 const CHECKOUT_TRACKER = ["Address", "Delivery", "Payment", "Review & Place Order"]
-const PAYMENT_OPTIONS = [
-  { id: "upi", label: "UPI (Google Pay, PhonePe, Paytm etc.)", icon: Smartphone },
-  { id: "card", label: "Credit / Debit Card", icon: CreditCard },
-  { id: "netbanking", label: "Net Banking", icon: Landmark },
-  { id: "emi", label: "EMI (subject to bank eligibility)", icon: CreditCard },
-  { id: "wallet", label: "Wallets", icon: Wallet },
-  { id: "cash-on-delivery", label: "COD (Cash on Delivery)", icon: Package },
-  { id: "instore", label: "In-store Purchase", icon: Store },
-]
-
 const EMPTY_CUSTOMER = {
   firstName: "", lastName: "", email: "", phone: "", address: "",
   city: "", state: "Karnataka", pincode: "", country: "India", employeeId: "",
@@ -155,11 +147,17 @@ export default function CheckoutPage() {
     return () => controller.abort()
   }, [catalogueIds, catalogueAttempt, refreshItemPrices])
 
-  const [paymentMethod, setPaymentMethod] = useState("online")
-  const [paymentOption, setPaymentOption] = useState("upi")
+  const [paymentMethod, setPaymentMethod] = useState<"online" | "cash-on-delivery" | "instore">("online")
   const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
   const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
+  const [codEnabled, setCodEnabled] = useState(false)
   const [paymentConfigError, setPaymentConfigError] = useState("")
+  const [paymentConfigLoading, setPaymentConfigLoading] = useState(true)
+  const [pincodeRules, setPincodeRules] = useState<PincodeRestrictions | null>(null)
+  const [pincodeRulesLoading, setPincodeRulesLoading] = useState(true)
+  const [pincodeRulesError, setPincodeRulesError] = useState("")
+  const [pincodeRulesAttempt, setPincodeRulesAttempt] = useState(0)
+  const nationwideDelivery = pincodeRules?.mode === "all"
   const [hostedReturn, setHostedReturn] = useState<{ orderId: string; checkoutToken: string; storeOrderId: string;
     total: number; tax: number; shipping: number; guestAccessToken?: string } | null>(null)
   const [hostedStatus, setHostedStatus] = useState("")
@@ -169,17 +167,45 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const controller = new AbortController()
+    setPincodeRulesLoading(true)
+    setPincodeRulesError("")
+    void (async () => {
+      try {
+        const response = await fetch("/api/blocked-pincodes", { cache: "no-store", signal: controller.signal })
+        if (!response.ok) throw new Error("Delivery configuration could not be loaded")
+        const rules = PincodeRestrictionsResponseSchema.parse(await response.json())
+        if (!controller.signal.aborted) setPincodeRules(rules)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Checkout] Delivery configuration failed:", error)
+        setPincodeRules(null)
+        setPincodeRulesError("Delivery availability could not be loaded. Retry before choosing your delivery address.")
+      } finally {
+        if (!controller.signal.aborted) setPincodeRulesLoading(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [pincodeRulesAttempt])
+
+  useEffect(() => {
+    const controller = new AbortController()
     void (async () => {
       try {
         const response = await fetch("/api/payment/config", { cache: "no-store", signal: controller.signal })
         if (!response.ok) throw new Error("Payment gateway configuration could not be loaded.")
         const config = PaymentConfigurationSchema.parse(await response.json())
+        if (controller.signal.aborted) return
         setPaymentProviders(config.providers)
         setPaymentProvider(config.defaultProvider)
+        setCodEnabled(config.codEnabled)
+        if (!config.defaultProvider) setPaymentMethod(config.codEnabled ? "cash-on-delivery" : "instore")
       } catch (error) {
         if (controller.signal.aborted) return
         console.error("[Checkout] Gateway configuration failed:", error)
         setPaymentConfigError("Online payment gateways are unavailable. Refresh this page to retry.")
+        setPaymentMethod("instore")
+      } finally {
+        if (!controller.signal.aborted) setPaymentConfigLoading(false)
       }
     })()
     try {
@@ -379,6 +405,7 @@ export default function CheckoutPage() {
       setProfileLoading(false)
       return
     }
+    if (pincodeRulesLoading) return
 
     const controller = new AbortController()
     const loadProfile = async () => {
@@ -390,8 +417,8 @@ export default function CheckoutPage() {
         if (!result.success || result.data.id !== accountId) throw new Error("Invalid account details received.")
         if (controller.signal.aborted) return
         const profile = result.data
-        const city = checkoutCity(profile.address?.city || "")
-        const supportedAddress = !profile.address?.state || profile.address.state.trim().toLowerCase() === "karnataka"
+        const city = checkoutCity(profile.address?.city || "") || (nationwideDelivery ? profile.address?.city?.trim() || "" : "")
+        const supportedAddress = nationwideDelivery || !profile.address?.state || profile.address.state.trim().toLowerCase() === "karnataka"
         if (profile.address?.street && (!supportedAddress || !city) && editedCustomerFields.current.size === 0) {
           setAddressNotice("Your saved address is outside our current delivery area. Please enter an address in Bangalore or Mysore, Karnataka, or choose store pickup.")
         }
@@ -399,7 +426,8 @@ export default function CheckoutPage() {
         const savedDetails = {
           firstName, lastName: lastName.join(" "), email: profile.email, phone: profile.phone || "",
           address: supportedAddress && city ? profile.address?.street || "" : "", city,
-          state: "Karnataka", pincode: supportedAddress && city ? profile.address?.zip || "" : "",
+          state: nationwideDelivery ? profile.address?.state || "Karnataka" : "Karnataka",
+          pincode: supportedAddress && city ? profile.address?.zip || "" : "",
           country: "India",
         }
         setCustomerData((previous) => ({
@@ -418,7 +446,7 @@ export default function CheckoutPage() {
     }
     void loadProfile()
     return () => controller.abort()
-  }, [accountId, profileAttempt])
+  }, [accountId, profileAttempt, pincodeRulesLoading, nationwideDelivery])
 
   useEffect(() => {
     setSavedAddresses([])
@@ -615,11 +643,6 @@ export default function CheckoutPage() {
 
     // Pincode and serviceability only matter when we are delivering.
     if (isPickup) return true
-    if (customerData.state !== "Karnataka" || !CHECKOUT_CITIES.includes(customerData.city)) {
-      toast.error("Delivery is currently available only in Bangalore and Mysore, Karnataka.")
-      return false
-    }
-
     // Validate pincode
     const pincodeRegex = /^[0-9]{6}$/
     if (!pincodeRegex.test(customerData.pincode)) {
@@ -629,46 +652,16 @@ export default function CheckoutPage() {
 
     // Check pincode restrictions
     try {
-      const res = await fetch("/api/blocked-pincodes")
+      const res = await fetch("/api/blocked-pincodes", { cache: "no-store" })
       if (!res.ok) throw new Error("Delivery verification failed")
       const data = PincodeRestrictionsResponseSchema.parse(await res.json())
-      const mode = data.mode || "blocked"
-
-      // Extract pincode strings from objects
-      const blockedPincodesArray = Array.isArray(data.blockedPincodes)
-        ? data.blockedPincodes.map((entry) => typeof entry === 'string' ? entry : entry.pincode)
-        : []
-      const allowedPincodesArray = Array.isArray(data.allowedPincodes)
-        ? data.allowedPincodes.map((entry) => typeof entry === 'string' ? entry : entry.pincode)
-        : []
-
-      if (mode === "blocked") {
-        // Blocked mode: Check if pincode is in blocked list
-        if (blockedPincodesArray.includes(customerData.pincode)) {
-          toast.error("Sorry, we do not deliver to this pincode.")
-          return false
-        }
-      } else if (mode === "allowed") {
-        // Allowed mode: Check if pincode is in allowed list
-        if (!allowedPincodesArray.includes(customerData.pincode)) {
-          toast.error("Sorry, we do not deliver to this pincode.")
-          return false
-        }
-      } else if (mode === "both") {
-        // Both mode: Pincode must be in allowed list AND not in blocked list
-        const isAllowed = allowedPincodesArray.includes(customerData.pincode)
-        const isBlocked = blockedPincodesArray.includes(customerData.pincode)
-
-        if (isBlocked) {
-          // Show specific message for blocked pincodes in both mode
-          toast.error("Sorry, we cannot deliver to this pincode. Many orders from this area have been returned, so delivery is currently unavailable.")
-          return false
-        }
-
-        if (!isAllowed) {
-          toast.error("Sorry, we do not deliver to this pincode.")
-          return false
-        }
+      if (!isDeliveryRegionAllowed(data.mode, customerData.city, customerData.state)) {
+        toast.error("Delivery is currently available only in Bangalore and Mysore, Karnataka.")
+        return false
+      }
+      if (!isPincodeAllowed(data, customerData.pincode)) {
+        toast.error("Sorry, we do not deliver to this pincode.")
+        return false
       }
     } catch (e) {
       toast.error("Could not verify pincode delivery. Please try again.")
@@ -1073,7 +1066,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  <fieldset hidden={!editingAddress} disabled={addressSaving}>
+                  <fieldset hidden={!editingAddress} disabled={addressSaving || pincodeRulesLoading}>
                   {user && !isPickup && <label className="mb-4 block text-sm font-medium text-gray-700">
                     Address label
                     <select aria-label="Address label" value={addressType} onChange={event => setAddressType(event.target.value as SavedDeliveryAddress["type"])}
@@ -1186,14 +1179,19 @@ export default function CheckoutPage() {
                             required
                           >
                             <option value="">Select State</option>
-                            <option value="Karnataka">Karnataka</option>
+                            {(nationwideDelivery ? indianStates : ["Karnataka"]).map(state => <option key={state} value={state}>{state}</option>)}
                           </select>
                         </div>
                         <div>
                           <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
                             City *
                           </label>
-                          <select
+                          {nationwideDelivery ? <input
+                            type="text" id="city" name="city" value={customerData.city} onChange={handleInputChange}
+                            maxLength={50} disabled={!customerData.state} placeholder="Enter your city or town"
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#1560BD] focus:outline-none disabled:bg-gray-100"
+                            required
+                          /> : <select
                             id="city"
                             name="city"
                             value={customerData.city}
@@ -1210,7 +1208,7 @@ export default function CheckoutPage() {
                                 {city}
                               </option>
                             ))}
-                          </select>
+                          </select>}
                         </div>
                         <div>
                           <label htmlFor="pincode" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1253,10 +1251,13 @@ export default function CheckoutPage() {
                   deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
                   <div className={styles.deliveryNotice}><Truck size={34} /><div>
                     <small>{isPickup ? "Store pickup" : "Home delivery service area"}</small>
-                    <strong>{isPickup ? pickupStore?.name || "Choose a SARA store" : "Bangalore & Mysore"}</strong>
+                    <strong>{isPickup ? pickupStore?.name || "Choose a SARA store" : nationwideDelivery ? "All India" : "Bangalore & Mysore"}</strong>
                     <p>{isPickup ? "We'll let you know when your order is ready." : "Delivery timing confirmed after your order."}</p>
                   </div><ul><li><CheckCircle size={13} />Pincode checked before payment</li><li><CheckCircle size={13} />Secure online payments</li><li><CheckCircle size={13} />Pickup confirmed after your order</li></ul></div>
                 </FulfilmentSelector>
+                {!isPickup && pincodeRulesLoading && <p role="status" className={styles.sectionHint}>Loading delivery availability...</p>}
+                {!isPickup && pincodeRulesError && <p role="alert" className="mt-3 text-sm text-red-700">{pincodeRulesError} <button type="button"
+                  onClick={() => setPincodeRulesAttempt(value => value + 1)} className="underline">Retry delivery availability</button></p>}
               </section>
 
               {(
@@ -1267,24 +1268,23 @@ export default function CheckoutPage() {
                     </span>
                     Payment Method
                   </h2>
-                  <p className={styles.sectionHint}>Choose a payment method. Availability is confirmed by your selected gateway.</p>
+                  <p className={styles.sectionHint}>Choose a payment gateway, then select UPI, cards or another available option on its secure checkout.</p>
                   {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
-                  {!paymentConfigError && !paymentProviders.length && <p className={styles.sectionHint}>Online payments are unavailable or still loading.</p>}
-                  {paymentProviders.length > 0 && <label className="mb-3 block text-sm font-medium">
-                    Online payment gateway
-                    <select className="ml-3 rounded border p-2" value={paymentProvider || ""}
-                      onChange={event => setPaymentProvider(PaymentConfigurationSchema.shape.providers.element.parse(event.target.value))}>
-                      {paymentProviders.map(provider => <option key={provider} value={provider}>{PAYMENT_PROVIDER_LABELS[provider]}</option>)}
-                    </select>
-                  </label>}
-                  <div className={styles.paymentOptions}>{PAYMENT_OPTIONS.map(({ id, label, icon: Icon }) => (
-                    <label key={id} className={paymentOption === id ? styles.selectedPayment : undefined}>
-                      <input type="radio" name="paymentMethod" value={id} checked={paymentOption === id} onChange={() => {
-                        setPaymentOption(id)
-                        setPaymentMethod(id === "instore" || id === "cash-on-delivery" ? id : "online")
-                      }} /><Icon size={20} /><span>{label}</span>
-                    </label>
-                  ))}</div>
+                  {paymentConfigLoading && <p role="status" className={styles.sectionHint}>Loading online payment gateways...</p>}
+                  {!paymentConfigLoading && !paymentConfigError && !paymentProviders.length &&
+                    <p className={styles.sectionHint}>Online payments are currently unavailable. {codEnabled
+                      ? "Choose cash on delivery or in-store purchase." : "Choose in-store purchase."}</p>}
+                  <CheckoutPaymentOptions providers={paymentProviders} codEnabled={codEnabled}
+                    selected={paymentMethod === "online" ? paymentProvider : paymentMethod}
+                    onChange={choice => {
+                      if (choice === "cash-on-delivery" || choice === "instore") {
+                        if (choice === "cash-on-delivery" && !codEnabled) return
+                        setPaymentMethod(choice)
+                      } else {
+                        setPaymentProvider(choice)
+                        setPaymentMethod("online")
+                      }
+                    }} />
 
                   {/* In-store Purchase Verification */}
                   {paymentMethod === "instore" && (
@@ -1482,7 +1482,6 @@ export default function CheckoutPage() {
                   paymentMethod={paymentMethod}
                   provider={paymentProvider}
                   getHostedOrderData={() => buildOrderData()}
-                  preferredMethod={paymentMethod === "online" ? paymentOption : undefined}
                   onProcessingChange={setPaymentPending}
                   amount={payableTotal}
                   beforePayment={validateCheckout}
@@ -1502,18 +1501,17 @@ export default function CheckoutPage() {
                 )}
               <div className={styles.securePayment}>
                 <div className={styles.secureIntro}><Shield size={40} /><div><strong>Secure Payments</strong>
-                  <p>Processed through {paymentProvider ? PAYMENT_PROVIDER_LABELS[paymentProvider] : "your selected gateway"}. SARA does not store your card details.</p>
+                  <p>{paymentMethod === "cash-on-delivery" ? "Pay when your order is delivered."
+                    : paymentMethod === "instore" ? "Your purchase is verified with the store."
+                    : `Processed through ${paymentProvider ? PAYMENT_PROVIDER_LABELS[paymentProvider] : "your selected gateway"}. SARA does not store your card details.`}</p>
                 </div></div>
-                <ul className={styles.paymentBrands}>
-                  {[...paymentProviders.map(provider => PAYMENT_PROVIDER_LABELS[provider]), "UPI", "VISA", "Mastercard", "RuPay"].map((label) => (
-                    <li
-                      key={label}
-                      className={styles.paymentBrand}
-                    >
-                      {label === "Mastercard" ? <span className={styles.mastercard} role="img" aria-label="Mastercard"><i /><i /></span> : label}
+                {paymentProviders.length > 0 && <ul className={styles.paymentBrands} aria-label="Enabled payment gateways">
+                  {paymentProviders.map(provider => (
+                    <li key={provider}>
+                      <PaymentProviderLogo provider={provider} className="h-6 w-24 object-contain" />
                     </li>
                   ))}
-                </ul>
+                </ul>}
               </div>
               </div>
 
