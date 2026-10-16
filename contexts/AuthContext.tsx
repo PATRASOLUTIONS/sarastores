@@ -72,6 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true)
   const authEpoch = useRef(0)
   const loginInProgress = useRef(false)
+  const loginGraceUntil = useRef(0)
   const logoutRequest = useRef<AbortController | null>(null)
   const router = useRouter()
   const SESSION_TIMEOUT = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
@@ -410,14 +411,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.fetch = patchedFetch as typeof window.fetch
 
     const onAuthExpired = () => {
-      if (loginInProgress.current) return
+      if (loginInProgress.current || Date.now() < loginGraceUntil.current) return
       // A single 401 is not proof the session is gone. Wishlist, profile and
       // cart calls race the new cookie, and a busy database used to answer
       // 401 for a token that was still valid. Confirm with the session
       // endpoint before clearing the cookie — that call is what was signing
       // everyone out while they were trying to log in.
       void (async () => {
-        if (loginInProgress.current) return
+        if (loginInProgress.current || Date.now() < loginGraceUntil.current) return
         try {
           const res = await originalFetch("/api/auth/session", {
             cache: "no-store",
@@ -429,7 +430,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {
           return
         }
-        if (loginInProgress.current) return
+        if (loginInProgress.current || Date.now() < loginGraceUntil.current) return
         authEpoch.current++
         setUser((currentUser) => {
           if (!currentUser) return currentUser
@@ -487,6 +488,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return "rejected"
       }
 
+      // The password was accepted and the cookie was set. Ignore stray 401s
+      // from the admin dashboard's first requests while that cookie settles.
+      loginGraceUntil.current = Date.now() + 20000
       authEpoch.current++
       const epoch = authEpoch.current
 
@@ -517,15 +521,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })()
 
       if (epoch !== authEpoch.current) return "unavailable"
-      if (!sessionUser) return "unavailable"
+      // A slow session read must not discard a login that already set the
+      // cookie. The login response user is enough to enter the dashboard.
+      const signedIn = sessionUser ?? (data.user?.id ? data.user as User : null)
+      if (!signedIn) return "unavailable"
 
       localStorage.setItem("user", JSON.stringify({
-        id: sessionUser.id,
-        role: sessionUser.role,
+        id: signedIn.id,
+        role: signedIn.role,
       }))
       localStorage.setItem("loginTime", Date.now().toString())
       localStorage.setItem("lastActivityTime", Date.now().toString())
-      setUser(sessionUser)
+      setUser(signedIn)
 
       const redirectPath = localStorage.getItem("redirectAfterLogin")
       localStorage.removeItem("redirectAfterLogin")
@@ -545,10 +552,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      if (sessionUser.role === "admin" || sessionUser.role === "superadmin") {
+      const isStaff = signedIn.role === "admin" || signedIn.role === "superadmin" || signedIn.dashboardAccess === true
+      if (isStaff) {
         toast.success("Admin login successful!")
-        navigateTo("/admin/dashboard")
-      } else if (sessionUser.role === "vendor") {
+        const adminPath = safeRedirectPath?.startsWith("/admin") ? safeRedirectPath : "/admin/dashboard"
+        window.location.assign(adminPath)
+      } else if (signedIn.role === "vendor") {
         toast.success("Vendor login successful!")
         navigateTo("/vendor/dashboard")
       } else if (safeRedirectPath && safeRedirectPath !== "/login" && safeRedirectPath !== "/register") {

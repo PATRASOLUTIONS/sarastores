@@ -11,11 +11,10 @@ export async function GET() {
     const session = await getSession()
 
     if (!session?.user) {
-      // 200 + user:null (instead of 401) so the client can call this endpoint
-      // freely during hydration without throwing on a non-OK response, and
-      // to make the call safely cacheable as "no logged-in user" without
-      // any HTTP caching layer accidentally treating 401 as a permanent state.
-      return NextResponse.json({ user: null }, { status: 200 })
+      // 200 + user:null (instead of 401) so hydration can read "logged out"
+      // without the client treating the response as an expired session.
+      // private, no-store stops a cached logged-out body from sticking after login.
+      return NextResponse.json({ user: null }, { status: 200, headers: { "Cache-Control": "private, no-store" } })
     }
 
     // The signed token only carries identity + role. Profile fields live in the
@@ -46,7 +45,10 @@ export async function GET() {
       console.warn("[Session] Profile lookup failed", lookupError)
     }
 
-    return NextResponse.json({ user: { ...session.user, ...profile } })
+    return NextResponse.json(
+      { user: { ...session.user, ...profile } },
+      { headers: { "Cache-Control": "private, no-store" } },
+    )
   } catch (error) {
     // 503, not a logged-out 200. The client treats `{ user: null }` as
     // "this session is gone" and would sign the shopper out.

@@ -36,16 +36,19 @@ export default function LoginPage() {
 
   const { enabled: recaptchaEnabled, isReady: recaptchaReady, error: recaptchaError, getToken } = useRecaptcha("login")
 
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams?.get("redirect") || "/"
 
   useEffect(() => {
-    if (isAuthenticated && !isSubmitting) {
-      router.push(redirectTo)
-    }
-  }, [isAuthenticated, isSubmitting, router, redirectTo])
+    if (!isAuthenticated || isSubmitting) return
+    const staff = user?.role === "admin" || user?.role === "superadmin" || user?.dashboardAccess === true
+    const destination = staff
+      ? (redirectTo.startsWith("/admin") ? redirectTo : "/admin/dashboard")
+      : redirectTo
+    router.push(destination)
+  }, [isAuthenticated, isSubmitting, router, redirectTo, user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target

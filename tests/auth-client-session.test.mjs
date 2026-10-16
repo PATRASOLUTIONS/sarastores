@@ -186,6 +186,16 @@ test("login keeps the new session when a follow-up request is unauthorized", asy
   assert.equal(calls.some(call => call.startsWith("POST /api/auth/logout")), false)
 })
 
+test("password reset mail is branded Sara Stores and links to the live site", () => {
+  const email = sourceLoader().load("lib/email.ts")
+  assert.equal(email.storefrontOrigin(), "https://sarastores.com")
+  const html = email.buildPasswordResetEmail("https://sarastores.com/reset-password?token=fixture")
+  assert.match(html, /Sara Stores/)
+  assert.match(html, /https:\/\/sarastores\.com\/reset-password\?token=fixture/)
+  assert.equal(/bytewise/i.test(html), false)
+  assert.match(email.saraMailFrom(), /^Sara Stores </)
+})
+
 test("a delayed pre-logout session response cannot restore the logged-out account", async () => {
   const app = harness({ deferSession: true })
   app.render().logout()
