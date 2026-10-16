@@ -4,6 +4,7 @@ import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/sessi
 import { buildSessionPayload, verifyCredentials } from "@/lib/auth-credentials"
 import { LoginSchema } from "@/lib/validation"
 import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
+import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     const { email, password } = parsed.data
 
     // Bot detection for login endpoint
-    const botCheck = await detectBot(request, body)
+    const botCheck = await detectBot(request, body, { requireRecaptcha: true })
     if (botCheck.isBot) {
       console.warn('Bot detected on login:', {
         reason: botCheck.reason,
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
-    if (error instanceof RateLimitUnavailableError) return handleApiError(error)
+    if (error instanceof RateLimitUnavailableError || error instanceof RecaptchaConfigurationError) return handleApiError(error)
     console.error("Login error:", error)
     return NextResponse.json({ message: "An error occurred during login. Please try again." }, { status: 500 })
   }

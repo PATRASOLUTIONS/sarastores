@@ -7,6 +7,7 @@ import { RegisterSchema } from "@/lib/validation"
 import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/consent"
 import { defaultProfileAvatar } from "@/lib/profile-avatars"
 import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
+import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
 
 // Use dynamic import for email functions to prevent build-time issues
 const getEmailFunctions = async () => {
@@ -20,10 +21,9 @@ const getEmailFunctions = async () => {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { website, formTimestamp, recaptchaToken } = body
 
     // Bot detection - CRITICAL SECURITY CHECK
-    const botCheck = await detectBot(request, body)
+    const botCheck = await detectBot(request, body, { requireRecaptcha: true })
     if (botCheck.isBot) {
       console.warn('Bot detected:', {
         reason: botCheck.reason,
@@ -41,19 +41,6 @@ export async function POST(request: NextRequest) {
         },
         { status: 429 }
       )
-    }
-
-    // Verify reCAPTCHA token if provided
-    if (recaptchaToken && process.env.RECAPTCHA_SECRET_KEY) {
-      const verifyRes = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`,
-      });
-      const verifyData = await verifyRes.json();
-      if (!verifyData.success) {
-        return NextResponse.json({ error: 'reCAPTCHA verification failed' }, { status: 400 });
-      }
     }
 
     const parsed = RegisterSchema.safeParse(body)
@@ -201,7 +188,7 @@ export async function POST(request: NextRequest) {
       success: true
     })
   } catch (error) {
-    if (error instanceof RateLimitUnavailableError) return handleApiError(error)
+    if (error instanceof RateLimitUnavailableError || error instanceof RecaptchaConfigurationError) return handleApiError(error)
     console.error("Signup error:", error)
     return NextResponse.json({
       message: "An error occurred during signup. Please try again.",

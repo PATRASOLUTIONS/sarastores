@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { checkoutCity } from './checkout-region';
 import { isDpdpComplaint } from './complaintTypes';
+import { indianStates } from './indiaData';
 
 // ============================================
 // Common Validators
@@ -21,11 +22,31 @@ export const phoneSchema = z.string()
 export const pincodeSchema = z.string()
   .regex(/^\d{6}$/, 'Invalid pincode. Must be 6 digits');
 
-export const PincodeRestrictionsResponseSchema = z.object({
-  mode: z.enum(['blocked', 'allowed', 'both']).optional().default('blocked'),
-  blockedPincodes: z.array(z.union([z.string(), z.object({ pincode: z.string() })])).optional().default([]),
-  allowedPincodes: z.array(z.union([z.string(), z.object({ pincode: z.string() })])).optional().default([]),
+export const PincodeModeSchema = z.enum(['blocked', 'allowed', 'both', 'all']);
+export const PincodeListTypeSchema = z.enum(['allowed', 'blocked']);
+export const PincodeEntrySchema = z.object({
+  pincode: pincodeSchema,
+  name: z.string().trim().max(200).default(''),
+  state: z.string().trim().max(100).default(''),
+}).strict();
+const StoredPincodeSchema = z.object({
+  pincode: z.string(),
+  name: z.string().optional(),
+  state: z.string().optional(),
+  addedAt: z.string().optional(),
 });
+export const PincodeRestrictionsResponseSchema = z.object({
+  mode: PincodeModeSchema.optional().default('blocked'),
+  blockedPincodes: z.array(z.union([z.string(), StoredPincodeSchema])).optional().default([]),
+  allowedPincodes: z.array(z.union([z.string(), StoredPincodeSchema])).optional().default([]),
+});
+export const PincodeMutationSchema = PincodeEntrySchema.extend({ listType: PincodeListTypeSchema });
+export const PincodeModeMutationSchema = z.object({ mode: PincodeModeSchema }).strict();
+export const DeletePincodeSchema = z.union([
+  z.object({ pincode: pincodeSchema, listType: PincodeListTypeSchema }).strict(),
+  z.object({ pincodes: z.array(pincodeSchema).min(1).max(20000), listType: PincodeListTypeSchema }).strict(),
+  z.object({ clear: z.literal(true), listType: PincodeListTypeSchema }).strict(),
+]);
 
 export const InStoreOrderShortcutListSchema = z.array(z.object({
   paymentMethod: z.string().nullish(),
@@ -540,9 +561,10 @@ export const SavedDeliveryAddressSchema = AddressSchema.pick({
   address: z.string().trim().min(10, 'Address must be at least 10 characters').max(200),
   phone: z.string().trim().pipe(phoneSchema),
   pincode: z.string().trim().pipe(pincodeSchema),
-  city: z.string().transform(checkoutCity).refine(Boolean, 'Choose Bangalore or Mysore'),
-  state: z.string().trim().refine(value => value.toLowerCase() === 'karnataka', 'Delivery is available in Karnataka only')
-    .transform(() => 'Karnataka'),
+  city: z.string().trim().min(2, 'City is required').max(50).transform(value => checkoutCity(value) || value),
+  state: z.string().trim()
+    .transform(value => indianStates.find(state => state.toLowerCase() === value.toLowerCase()) || value)
+    .refine(value => indianStates.includes(value), 'Choose a valid Indian state or union territory'),
   country: z.literal('India').default('India'),
 });
 

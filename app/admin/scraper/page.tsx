@@ -19,6 +19,7 @@ import {
 import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
 import SelectWithAdd from "@/components/admin/SelectWithAdd"
+import BulkScraperImport from "@/components/admin/BulkScraperImport"
 import { SAP_OWNED_FIELDS, SCRAPER_LABELS, type ScraperSource } from "@/lib/scrapers/types"
 import { z } from "zod"
 
@@ -64,7 +65,9 @@ const SOURCE_HINTS: { source: ScraperSource; example: string }[] = [
 
 function detectSource(url: string): ScraperSource | null {
   try {
-    const host = new URL(url.trim()).hostname.toLowerCase().replace(/^www\./, "")
+    const parsed = new URL(url.trim())
+    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.port) return null
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
     if (/(^|\.)(amazon\.(in|com)|amzn\.(in|to))$/.test(host)) return "amazon"
     if (/(^|\.)(flipkart\.com|fkrt\.it)$/.test(host)) return "flipkart"
     if (/(^|\.)paiinternational\.in$/.test(host)) return "pai"
@@ -76,6 +79,17 @@ function detectSource(url: string): ScraperSource | null {
     /* not a URL yet */
   }
   return null
+}
+
+async function fetchScrapedProduct(url: string): Promise<ScrapedProduct> {
+  const source = detectSource(url)
+  if (!source) throw new Error("That link is not from a supported source")
+  const response = await apiFetch(source === "amazon" ? "/api/scrape-amazon" : "/api/scrape", {
+    method: "POST", json: source === "amazon" ? { url, saveToDatabase: false } : { url },
+  })
+  const body = await response.json()
+  if (!response.ok || !body.success) throw new Error([body.error || "Could not fetch product", body.hint].filter(Boolean).join(". "))
+  return source === "amazon" ? normaliseAmazon(body.product, url) : body.product
 }
 
 /** Amazon keeps its own tuned endpoint; everything else goes through /api/scrape. */
@@ -218,24 +232,13 @@ export default function AdminScraperPage() {
     setError(null)
     setProduct(null)
     try {
-      const endpoint = source === "amazon" ? "/api/scrape-amazon" : "/api/scrape"
-      const res = await apiFetch(endpoint, {
-        method: "POST",
-        json: source === "amazon" ? { url, saveToDatabase: false } : { url },
-      })
-      const body = await res.json()
-      if (!res.ok || !body?.success) {
-        setError({ message: body?.error || "Could not fetch the product", hint: body?.hint })
-        return
-      }
-      const next =
-        source === "amazon" ? normaliseAmazon(body.product, url) : (body.product as ScrapedProduct)
+      const next = await fetchScrapedProduct(url)
       next.sap.sku = sku.trim()
       setProduct(next)
       setStep("review")
       toast.success(`Fetched from ${SCRAPER_LABELS[source]}`)
-    } catch {
-      setError({ message: "Could not reach the scraper" })
+    } catch (cause) {
+      setError({ message: cause instanceof Error ? cause.message : "Could not reach the scraper" })
     } finally {
       setBusy(false)
     }
@@ -398,6 +401,8 @@ export default function AdminScraperPage() {
           sheet in one step.
         </p>
       </div>
+
+      <BulkScraperImport fetchProduct={fetchScrapedProduct} supportedUrl={url => detectSource(url) !== null} />
 
       <ol className="flex flex-wrap items-center gap-2 text-sm">
         {(

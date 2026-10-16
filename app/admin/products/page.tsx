@@ -1,6 +1,7 @@
 "use client"
 
 import { apiFetch } from "@/lib/api-client"
+import { buildActiveProductPriceSheet, fetchAllAdminProducts, type AdminProductResponse } from "@/lib/admin-products-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
@@ -66,14 +67,7 @@ interface Category {
 
 type ProductSortField = Exclude<keyof Product, "raw">
 
-type ProductApiResponse = Omit<Partial<Product>, "price" | "stock"> & {
-  id: string
-  price?: number | string
-  stock?: number | string
-  images?: string[]
-  manufacturer_name?: string
-  prod_desc?: string
-}
+type ProductApiResponse = AdminProductResponse
 
 interface PricePreview {
   sku: string
@@ -81,6 +75,11 @@ interface PricePreview {
   mrp: number | null
   oldPrice: number | null
   newPrice: number
+  newMrp: number | null
+  oldStock: number | null
+  newStock: number | null
+  oldActive: boolean | null
+  newActive: boolean | null
   status: string
   error?: string
 }
@@ -156,6 +155,7 @@ export default function AdminProducts() {
   } | null>(null)
   const [previewData, setPreviewData] = useState<PricePreview[] | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [isPriceExporting, setIsPriceExporting] = useState(false)
   const [updatingActiveIds, setUpdatingActiveIds] = useState<string[]>([])
   const [activatingAll, setActivatingAll] = useState(false)
   const [isAutoSaving, setIsAutoSaving] = useState(false)
@@ -267,20 +267,11 @@ export default function AdminProducts() {
     try {
       // Fetch unique categories directly from products data (category column from metadata)
       console.log("[Admin Products] 📡 Fetching unique categories from products...")
-      const [productsResponse, categoriesResponse] = await Promise.all([
-        apiFetch("/api/products?include_inactive=true"),
+      const [productsData, categoriesResponse] = await Promise.all([
+        fetchAllAdminProducts(),
         apiFetch("/api/categories")
       ])
-      console.log("[Admin Products] 📥 Products response status:", productsResponse.status)
-
-      if (!productsResponse.ok) {
-        const errorData = await productsResponse.json()
-        console.error("[Admin Products] ❌ Products fetch for categories failed:", errorData)
-        throw new Error(errorData.details || errorData.error || "Failed to fetch products for categories")
-      }
-
-      const productsData = await productsResponse.json()
-      const normalizedProducts = Array.isArray(productsData) ? productsData.map(normalizeAdminProduct) : []
+      const normalizedProducts = productsData.map(normalizeAdminProduct)
 
       // Get category lookup map (id -> name) from categories collection
       const categoryLookup: Record<string, string> = {}
@@ -335,16 +326,8 @@ export default function AdminProducts() {
     setAllProductsLoaded(false)
 
     try {
-      const url = "/api/products?include_inactive=true"
-
-      console.log("[Admin Products] 📡 Fetching all products:", url)
-      const response = await apiFetch(url, { cache: 'no-store' })
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.details || errorData.error || "Failed to fetch products")
-      }
-      const allData = await response.json()
-      const normalizedAllData = Array.isArray(allData) ? allData.map(normalizeAdminProduct) : []
+      const allData = await fetchAllAdminProducts()
+      const normalizedAllData = allData.map(normalizeAdminProduct)
       setProducts(normalizedAllData)
 
       try {
@@ -687,11 +670,7 @@ export default function AdminProducts() {
       toast.loading("Fetching all products from database...", { id: "metadata-export" })
 
       // Fetch all products from the database
-      const response = await apiFetch("/api/products?include_inactive=true&limit=100000", { cache: 'no-store' })
-      if (!response.ok) {
-        throw new Error("Failed to fetch products from database")
-      }
-      const allProducts: ProductApiResponse[] = await response.json()
+      const allProducts = await fetchAllAdminProducts(true)
 
       if (!allProducts || allProducts.length === 0) {
         toast.error("No products found in database", { id: "metadata-export" })
@@ -774,16 +753,35 @@ export default function AdminProducts() {
     }
   }
 
+  const downloadPriceTemplate = async () => {
+    if (isPriceExporting) return
+    setIsPriceExporting(true)
+    try {
+      const rows = buildActiveProductPriceSheet(await fetchAllAdminProducts())
+      const XLSX = await import("xlsx")
+      const book = XLSX.utils.book_new()
+      const sheet = XLSX.utils.json_to_sheet(rows)
+      sheet["!cols"] = [22, 16, 16, 12, 16].map(wch => ({ wch }))
+      XLSX.utils.book_append_sheet(book, sheet, "Active Products")
+      XLSX.writeFile(book, "active-products-price-mrp-stock.xlsx")
+      toast.success(`Downloaded ${rows.length} customer-visible products`)
+    } catch (cause) {
+      console.error("[Price Import] Template failed", cause)
+      toast.error(cause instanceof Error ? cause.message : "Could not download active products")
+    } finally {
+      setIsPriceExporting(false)
+    }
+  }
+
   const handlePriceUpdate = async (preview = true) => {
+    if (isPreviewLoading) return
     console.log("[Admin Products] 💰 Price update requested, preview:", preview)
     if (!priceUpdateFile) {
-      console.log("[Admin Products] ❌ No file selected")
       alert("Please select a file first")
       return
     }
-
     try {
-      if (preview) setIsPreviewLoading(true)
+      setIsPreviewLoading(true)
       console.log("[Admin Products] 📄 File selected:", priceUpdateFile.name, "Size:", priceUpdateFile.size, "bytes")
       const formData = new FormData()
       formData.append("file", priceUpdateFile)
@@ -803,6 +801,7 @@ export default function AdminProducts() {
       }
 
       if (preview) {
+        setGoogleSheetId("")
         setPreviewData(result.updates)
         setIsPreviewLoading(false)
         setShowPriceUpdateModal(false)
@@ -814,12 +813,13 @@ export default function AdminProducts() {
         setShowPreviewModal(false)
         setShowPriceUpdateModal(true) // Show result in main modal? Or just alert. Let's keep it simple.
         await fetchProducts()
-        alert(`Price update completed!\nSuccess: ${result.success}\nFailed: ${result.failed}`)
+        alert(`Price/MRP/stock/visibility update completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\n${(result.errors || []).slice(0, 10).join("\n")}`)
       }
 
     } catch (error) {
       console.error("[Admin Products] ❌ Error updating prices:", error)
       alert(error instanceof Error ? error.message : "Failed to update prices")
+    } finally {
       setIsPreviewLoading(false)
     }
   }
@@ -828,6 +828,7 @@ export default function AdminProducts() {
   // (Bulk MRP upload handled via ExcelUpload component)
 
   const handleGoogleSheetSync = async (preview = true) => {
+    if (isPreviewLoading || isSyncingGoogle) return
     console.log("[Admin Products] 📊 Google Sheet Sync requested, preview:", preview)
     if (!googleSheetId) {
       alert("Please enter a Google Sheet ID")
@@ -854,6 +855,7 @@ export default function AdminProducts() {
       }
 
       if (preview) {
+        setPriceUpdateFile(null)
         setPreviewData(result.updates)
         setIsPreviewLoading(false)
         setShowPriceUpdateModal(false)
@@ -864,7 +866,7 @@ export default function AdminProducts() {
         setShowPreviewModal(false)
         setShowPriceUpdateModal(true)
         await fetchProducts()
-        alert(`Sync completed!\nSuccess: ${result.success}\nFailed: ${result.failed}`)
+        alert(`Sync completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\n${(result.errors || []).slice(0, 10).join("\n")}`)
       }
 
     } catch (error) {
@@ -1488,7 +1490,7 @@ export default function AdminProducts() {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 h-10">
-                  Upload an Excel file (.xlsx) containing updated prices.
+                  Download customer-visible products, edit their values, then upload price, MRP, stock and visibility updates.
                 </p>
 
                 <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 shadow-sm">
@@ -1496,10 +1498,18 @@ export default function AdminProducts() {
                   <div className="space-y-1 opacity-80">
                     <p>• Col 1: <strong>itemno</strong> (SKU)</p>
                     <p>• Col 2: <strong>price</strong> (New Price)</p>
+                    <p>• Col 3: <strong>mrp</strong> (optional; blank keeps current MRP)</p>
+                    <p>• Col 4: <strong>stock</strong> (optional; 0 marks out of stock)</p>
+                    <p>• Col 5: <strong>active</strong> (active / inactive; optional)</p>
+                    <p>Price must not exceed the new/current MRP. Blank stock keeps current stock.</p>
+                    <p>Active shows the product to customers; inactive hides it. Blank active keeps current visibility.</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
+                  <button type="button" onClick={downloadPriceTemplate} disabled={isPriceExporting || isPreviewLoading || isSyncingGoogle} className="text-sm font-semibold text-blue-700 underline disabled:opacity-50">
+                    {isPriceExporting ? "Downloading..." : "Download active products Excel"}
+                  </button>
                   <input
                     type="file"
                     accept=".xlsx,.xls"
@@ -1628,9 +1638,9 @@ export default function AdminProducts() {
       {/* Separate Preview Modal */}
       {showPreviewModal && previewData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-6xl w-full mx-4 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">Preview Bulk Price Changes</h3>
+              <h3 className="text-xl font-semibold text-gray-900">Preview Bulk Product Changes</h3>
               <button onClick={() => {
                 setShowPreviewModal(false)
                 setShowPriceUpdateModal(true) // Go back
@@ -1640,15 +1650,17 @@ export default function AdminProducts() {
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col">
-              <div className="overflow-y-auto border rounded-lg flex-1">
+              <div className="overflow-auto border rounded-lg flex-1">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Item No</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Name</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">MRP</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">MRP (old → new)</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Old Price</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">New Price</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Stock (old → new)</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Customer visibility (old → new)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Status</th>
                     </tr>
                   </thead>
@@ -1657,15 +1669,19 @@ export default function AdminProducts() {
                       <tr key={idx} className={item.status === 'error' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'}>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.sku}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 truncate max-w-[200px]" title={item.name}>{item.name}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-500">{item.mrp !== null ? `₹${item.mrp}` : '-'}</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-500">{item.mrp ?? '-'} → {item.newMrp ?? '-'}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-500">{item.oldPrice !== null ? `₹${item.oldPrice}` : '-'}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900 font-medium">
                           ₹{item.newPrice}
-                          {item.oldPrice !== null && (
+                          {item.oldPrice !== null && item.oldPrice > 0 && (
                             <span className={`ml-1 text-xs ${item.newPrice > item.oldPrice ? 'text-green-600' : 'text-red-600'}`}>
                               ({((item.newPrice - item.oldPrice) / item.oldPrice * 100).toFixed(1)}%)
                             </span>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">{item.oldStock ?? '-'} → {item.newStock ?? '-'}</td>
+                        <td className="px-4 py-3 text-sm text-center">
+                          {item.oldActive === null ? '-' : item.oldActive ? 'Active' : 'Inactive'} → {item.newActive === null ? '-' : item.newActive ? 'Active' : 'Inactive'}
                         </td>
                         <td className="px-4 py-3 text-sm text-center">
                           {item.status === 'error' ? (
@@ -1707,7 +1723,7 @@ export default function AdminProducts() {
                     if (priceUpdateFile) handlePriceUpdate(false)
                     else if (googleSheetId) handleGoogleSheetSync(false)
                   }}
-                  disabled={isSyncingGoogle || isPreviewLoading}
+                  disabled={isSyncingGoogle || isPreviewLoading || !previewData.some(item => item.status === 'valid')}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   {isSyncingGoogle || isPreviewLoading ? 'Processing Updates...' : 'Confirm & Update'}

@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-export const PaymentProviderSchema = z.enum(["razorpay", "pinelabs", "paytm"])
+export const PaymentProviderSchema = z.enum(["pinelabs", "razorpay", "paytm"])
 export type PaymentProvider = z.infer<typeof PaymentProviderSchema>
 export type HostedPaymentProvider = Exclude<PaymentProvider, "razorpay">
 
@@ -13,6 +13,7 @@ export const PAYMENT_PROVIDER_LABELS: Record<PaymentProvider, string> = {
 export const PaymentConfigurationSchema = z.object({
   providers: z.array(PaymentProviderSchema),
   defaultProvider: PaymentProviderSchema.nullable(),
+  codEnabled: z.boolean(),
 })
 
 export const HostedCheckoutResponseSchema = z.object({

@@ -14,6 +14,7 @@ import { createSessionToken } from "@/lib/session"
 import { ACCESS_TOKEN_TTL_SECONDS, issueRefreshToken, type DeviceInfo } from "@/lib/refresh-tokens"
 import { LoginSchema } from "@/lib/validation"
 import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
+import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
 
 export const dynamic = "force-dynamic"
 
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
       { headers: { "Cache-Control": "private, no-store" } },
     )
   } catch (error) {
-    if (error instanceof RateLimitUnavailableError) return handleApiError(error)
+    if (error instanceof RateLimitUnavailableError || error instanceof RecaptchaConfigurationError) return handleApiError(error)
     console.error("[v1/auth/login] error", error)
     return NextResponse.json({ error: "An error occurred during login." }, { status: 500 })
   }

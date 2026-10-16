@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
 
 export class RateLimitUnavailableError extends Error {
   constructor() {
@@ -10,7 +11,7 @@ export class RateLimitUnavailableError extends Error {
 export function handleApiError(error: unknown, message?: string) {
   console.error("API Error:", error)
 
-  if (error instanceof RateLimitUnavailableError) {
+  if (error instanceof RateLimitUnavailableError || error instanceof RecaptchaConfigurationError) {
     return NextResponse.json(
       { error: error.message, success: false },
       { status: 503, headers: { "Retry-After": "60" } },

@@ -70,6 +70,9 @@ export function checkDeploymentEnvironment(env) {
   if (read("ENABLE_DEBUG_ROUTES") && read("ENABLE_DEBUG_ROUTES") !== "false") errors.push("ENABLE_DEBUG_ROUTES: must be false or unset")
 
   const gateways = ["RAZORPAY", "PINELABS", "PAYTM"]
+  if (read("COD_ENABLED") && read("COD_ENABLED") !== "true" && read("COD_ENABLED") !== "false") {
+    errors.push("COD_ENABLED: use true or false")
+  }
   for (const gateway of gateways) {
     const flag = read(`${gateway}_ENABLED`)
     if (flag && flag !== "true" && flag !== "false") errors.push(`${gateway}_ENABLED: use true or false`)
@@ -95,7 +98,13 @@ export function checkDeploymentEnvironment(env) {
     if (read("PAYTM_ENVIRONMENT") !== "production") errors.push("PAYTM_ENVIRONMENT: production deployment requires production")
     if (Buffer.byteLength(read("PAYTM_MERCHANT_KEY")) !== 16) errors.push("PAYTM_MERCHANT_KEY: must be the 16-byte merchant key")
   }
-  for (const name of ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "RECAPTCHA_SECRET_KEY", "NEXT_PUBLIC_RECAPTCHA_SITE_KEY"]) configured(name)
+  for (const name of ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"]) configured(name)
+  const recaptchaFlag = read("RECAPTCHA_ENABLED")
+  if (recaptchaFlag && recaptchaFlag !== "true" && recaptchaFlag !== "false") errors.push("RECAPTCHA_ENABLED: use true or false")
+  if (recaptchaFlag !== "false") {
+    configured("RECAPTCHA_SECRET_KEY")
+    configured("NEXT_PUBLIC_RECAPTCHA_SITE_KEY")
+  }
   const port = Number(read("SMTP_PORT"))
   if (!Number.isInteger(port) || port < 1 || port > 65535) errors.push("SMTP_PORT: configure a valid port")
   const from = read("EMAIL_FROM").match(/<([^>]+)>$/)?.[1] ?? read("EMAIL_FROM")

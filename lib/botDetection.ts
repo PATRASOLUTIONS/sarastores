@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store'
 import { z } from 'zod'
+import { getRecaptchaConfiguration, isRecaptchaEnabled } from '@/lib/recaptcha-config'
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000 // 15 minutes
 const MAX_REQUESTS_PER_WINDOW = 5 // 5 signup attempts per 15 minutes per IP
@@ -86,7 +87,8 @@ export async function verifyRecaptcha(token: string, secretKey: string): Promise
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: `secret=${secretKey}&response=${token}`,
+      body: new URLSearchParams({ secret: secretKey, response: token }),
+      signal: AbortSignal.timeout(10000),
     })
     
     if (!response.ok) throw new Error(`reCAPTCHA returned HTTP ${response.status}`)
@@ -135,7 +137,7 @@ export async function detectBot(request: NextRequest, body: {
   website?: unknown
   formTimestamp?: unknown
   recaptchaToken?: unknown
-}): Promise<{
+}, options: { requireRecaptcha?: boolean } = {}): Promise<{
   isBot: boolean
   reason?: string
   waitTime?: number
@@ -177,14 +179,20 @@ export async function detectBot(request: NextRequest, body: {
     }
   }
   
-  // 5. Verify reCAPTCHA if token is provided
-  if (body.recaptchaToken && process.env.RECAPTCHA_SECRET_KEY) {
-    if (typeof body.recaptchaToken !== 'string') {
+  // Native clients keep their token-optional contract; website forms require CAPTCHA when enabled.
+  const enabled = options.requireRecaptcha ? getRecaptchaConfiguration().enabled : isRecaptchaEnabled()
+  if (enabled && (options.requireRecaptcha || body.recaptchaToken)) {
+    if (typeof body.recaptchaToken !== 'string' || !body.recaptchaToken.trim()) {
       return { isBot: true, reason: 'Invalid reCAPTCHA token' }
+    }
+    const secret = process.env.RECAPTCHA_SECRET_KEY
+    if (!secret) {
+      getRecaptchaConfiguration()
+      return { isBot: true, reason: 'reCAPTCHA is unavailable' }
     }
     const recaptchaResult = await verifyRecaptcha(
       body.recaptchaToken,
-      process.env.RECAPTCHA_SECRET_KEY
+      secret
     )
     
     if (!recaptchaResult.success) {
