@@ -33,6 +33,26 @@ test("scraper Excel template round-trips with all requested columns", () => {
   assert.equal(parsed[0].itemno, "REFSAM1187")
 })
 
+test("flipkart short links are accepted from plain cells, bare hosts and excel hyperlinks", async () => {
+  const { validateScraperRows, normalizeScraperUrl } = sourceLoader().load("lib/scrapers/bulk-import.ts")
+  const supported = url => /(^|\.)flipkart\.com$|fkrt\.it$/.test(new URL(url).hostname.replace(/^www\./, ""))
+  const link = "https://dl.flipkart.com/s/ZunNveuuuN"
+  const direct = validateScraperRows([{ ...row, "product link": link }], supported)
+  assert.equal(direct.issues.length, 0)
+  assert.equal(direct.rows[0].url, link)
+  const bare = validateScraperRows([{ ...row, "product link": "dl.flipkart.com/s/ZunNveuuuN" }], supported)
+  assert.equal(bare.rows[0].url, link)
+  assert.equal(normalizeScraperUrl('=HYPERLINK("https://dl.flipkart.com/s/ZunNveuuuN","Open")'), link)
+
+  const queue = queueHarness(async () => { throw new Error("Upload must not scrape") }, supported)
+  await queue.upload({
+    rows: [{ ...row, itemno: "FK1", "product link": "Open" }],
+    hyperlink: link,
+  })
+  assert.equal(queue.error(), "")
+  assert.equal(queue.items()[0].row.url, link)
+})
+
 test("scraper rows validate required metadata, aliases, duplicates and exact 500-row limit", () => {
   const { parseScraperRows } = sourceLoader().load("lib/scrapers/bulk-import.ts")
   assert.equal(parseScraperRows([{ ...row, "product link": row.url }])[0].url, row.url)
@@ -336,6 +356,18 @@ function queueHarness(fetchProduct, supportedUrl = () => true) {
       XLSX.utils.sheet_add_json(sheet, [sheetRows[1]], { origin: "A4", skipHeader: true })
     }
     if (options.sparseExtra) XLSX.utils.sheet_add_json(sheet, [{ ...row, itemno: "EXTRA" }], { origin: "A1000", skipHeader: true })
+    if (options.hyperlink) {
+      const range = XLSX.utils.decode_range(sheet["!ref"])
+      let linkColumn = range.s.c
+      for (let column = range.s.c; column <= range.e.c; column++) {
+        const header = sheet[XLSX.utils.encode_cell({ r: range.s.r, c: column })]
+        if (header?.v === "product link") linkColumn = column
+      }
+      const address = XLSX.utils.encode_cell({ r: range.s.r + 1, c: linkColumn })
+      sheet[address].v = "Open"
+      sheet[address].w = "Open"
+      sheet[address].l = { Target: options.hyperlink }
+    }
     XLSX.utils.book_append_sheet(book, sheet, "Scraper")
     const array = XLSX.write(book, { type: "array", bookType: "xlsx" })
     const input = elements(render()).find(element => element.type === "input")

@@ -2815,6 +2815,11 @@ test("Bounded source fetch follows relative redirects, stops loops and rejects n
   assert.equal(requests.length, 2)
   mode = "loop"
   await assert.rejects(http.resolveRedirect("https://amzn.in/start"), /invalid redirect chain/)
+  const short = sourceLoader({ axios: { get: async url => url.includes("/s/")
+    ? { status: 200, data: '<a href="https://www.flipkart.com/samsung-fridge/p/itm123?pid=ABC">Open</a>', headers: {} }
+    : { status: 200, data: "<h1>Product</h1>", headers: {} },
+  } }).load("lib/scrapers/http.ts")
+  assert.equal(await short.resolveRedirect("https://dl.flipkart.com/s/ZunNveuuuN"), "https://www.flipkart.com/samsung-fridge/p/itm123?pid=ABC")
   mode = "object"
   await assert.rejects(http.fetchHtml("https://amazon.in/start"), /did not return text/)
 })

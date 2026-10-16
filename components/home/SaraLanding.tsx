@@ -15,6 +15,8 @@ import { MarketingSection, MarketingSections } from "@/components/marketing/Mark
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { catalogProductListResponseSchema } from "@/utils/catalog"
 import { homeSubCategoryListResponseSchema, homeBrandListResponseSchema, homeStoreListResponseSchema } from "@/lib/catalog-list-response"
+import type { HandshakeLaunch } from "@/lib/handshake"
+import EcommerceLaunch from "@/components/home/EcommerceLaunch"
 
 const TTL = 5 * 60 * 1000
 const TIMEOUT = 25000
@@ -53,7 +55,7 @@ function parseProducts(data: unknown): HomeProduct[] {
   })
 }
 
-export default function SaraLanding() {
+export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunch | null }) {
   const marketing = useMarketingContent("home")
   const [products, setProducts] = useState<HomeProduct[]>([])
   const [subCategories, setSubCategories] = useState<Record<string, unknown>[]>([])
@@ -143,6 +145,7 @@ export default function SaraLanding() {
       <Header />
       <main id="main-content" className={styles.homepage}>
         {!marketing.enabled("hero") && <h1 className="sr-only">SARA Electronics</h1>}
+        {launch ? <EcommerceLaunch launch={launch} /> : null}
         <MarketingSections page="home">
           <MarketingSection page="home" section="hero"><LandingHero products={products} sideBanners={duoBanners} /></MarketingSection>
           <MarketingSection page="home" section="benefits"><HomepageBenefits storeCount={storeCount} /></MarketingSection>

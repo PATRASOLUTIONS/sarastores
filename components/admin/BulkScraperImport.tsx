@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
-import { MAX_SCRAPER_IMPORT_BYTES, scraperColumnField, validateScraperRows, SCRAPER_TEMPLATE, type ScraperImportRow } from "@/lib/scrapers/bulk-import"
+import { MAX_SCRAPER_IMPORT_BYTES, scraperColumnField, sheetCellLink, validateScraperRows, SCRAPER_TEMPLATE, type ScraperImportRow } from "@/lib/scrapers/bulk-import"
 import type { ScrapedProduct } from "@/lib/scrapers/types"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -101,6 +101,25 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
       if (!sheet) throw new Error("Spreadsheet has no worksheet")
       if (sheet["!fullref"]) throw new Error("Spreadsheet exceeds 500 rows; remove extra rows before uploading")
       const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false })
+      const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null
+      if (range) {
+        const headers = new Map<number, string>()
+        for (let column = range.s.c; column <= range.e.c; column++) {
+          const header = sheet[XLSX.utils.encode_cell({ r: range.s.r, c: column })]
+          headers.set(column, String(header?.v ?? ""))
+        }
+        for (const row of data) {
+          const excelRow = typeof row.__rowNum__ === "number" ? row.__rowNum__ : null
+          if (excelRow == null) continue
+          for (const [column, header] of headers) {
+            if (scraperColumnField(header) !== "url") continue
+            const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c: column })]
+            const link = sheetCellLink(cell)
+            const current = String(row[header] ?? "")
+            if (link && !/^https?:\/\//i.test(current.trim())) row[header] = link
+          }
+        }
+      }
       const columns = Array.from(new Set(data.flatMap(row => Object.keys(row))))
       const present = new Set(columns.map(scraperColumnField))
       for (const column of Object.keys(SCRAPER_TEMPLATE[0])) {

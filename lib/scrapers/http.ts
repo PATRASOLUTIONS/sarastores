@@ -121,6 +121,11 @@ export async function fetchBoundedText(
       } catch {
         throw new ScraperError("Source returned an invalid redirect", 422)
       }
+      const setCookie = response.headers["set-cookie"]
+      const cookies = (Array.isArray(setCookie) ? setCookie : typeof setCookie === "string" ? [setCookie] : [])
+        .map((value) => value.split(";")[0]?.trim())
+        .filter((value): value is string => !!value)
+      if (cookies.length) options = { ...options, headers: { ...options.headers, Cookie: cookies.join("; ") } }
       continue
     }
     if (typeof response.data !== "string") throw new ScraperError("Source did not return text", 422)
@@ -180,6 +185,33 @@ export async function fetchJson<T = unknown>(url: string, timeout = 20000): Prom
 }
 
 
+function isShortLink(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
+    return host === "dl.flipkart.com" || host === "fkrt.it" || /^\/s(?:\/|$)/.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
+/** A same-source product URL hidden in a short-link interstitial. */
+function embeddedProductUrl(html: string, base: string, source: ScraperSource): string | null {
+  const found = [
+    ...html.matchAll(/https?:\/\/[^"'\\\s<>]+/gi),
+    ...html.matchAll(/\burl=([^"'>\s]+)/gi),
+  ].map((match) => match[1] || match[0])
+  for (const candidate of found) {
+    try {
+      const next = new URL(candidate, base).toString()
+      if (detectSource(next) === source && !isShortLink(next)) return next
+    } catch {
+      /* keep looking */
+    }
+  }
+  return null
+}
+
 /** Follows a short link by reading the redirect header — far cheaper than downloading the page. */
 export async function resolveRedirect(url: string): Promise<string> {
   const source = detectSource(url)
@@ -189,7 +221,15 @@ export async function resolveRedirect(url: string): Promise<string> {
     timeout: 25000,
   })
   if (res.status !== 200) throw new ScraperError("Could not resolve short link", 422)
-  return res.finalUrl
+  if (!isShortLink(res.finalUrl)) return res.finalUrl
+  const next = embeddedProductUrl(res.html, res.finalUrl, source)
+  if (!next) return res.finalUrl
+  const resolved = await fetchBoundedText(next, candidate => detectSource(candidate) === source, {
+    headers: browserHeaders(),
+    timeout: 25000,
+  })
+  if (resolved.status !== 200) throw new ScraperError("Could not resolve short link", 422)
+  return isShortLink(resolved.finalUrl) ? next : resolved.finalUrl
 }
 
 /** Every JSON-LD node on the page, flattened through `@graph`. */

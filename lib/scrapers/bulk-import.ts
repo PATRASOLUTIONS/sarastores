@@ -28,6 +28,29 @@ const COLUMN_FIELDS: Record<string, keyof ScraperImportRow> = {
   itemno: "itemno", itemnumber: "itemno", sku: "itemno",
   name: "name", category: "category", subcategory: "subCategory",
   chardesc: "charDesc", brand: "brand", productlink: "url", url: "url",
+  shortlink: "url", link: "url",
+}
+
+/** Pulls a marketplace URL out of pasted text, a bare host, or an Excel HYPERLINK formula. */
+export function normalizeScraperUrl(value: string): string {
+  const cleaned = value.replace(/[\u0000-\u001F\u200B-\u200D\uFEFF]/g, " ").trim()
+  const fromFormula = cleaned.match(/HYPERLINK\(\s*"([^"]+)"/i)?.[1]
+  const embedded = (fromFormula || cleaned).match(/https?:\/\/[^\s<>"']+/i)?.[0]
+  let url = (embedded || cleaned).replace(/[),.;]+$/, "")
+  if (!/^https?:\/\//i.test(url)) {
+    const bare = url.match(/^(?:www\.)?(?:dl\.flipkart\.com|flipkart\.com|fkrt\.it|amzn\.(?:in|to)|amazon\.(?:in|com))\/\S+/i)
+    if (bare) url = `https://${bare[0].replace(/^www\./i, "www.")}`
+  }
+  return url
+}
+
+export function sheetCellLink(cell: { l?: { Target?: unknown }; f?: unknown } | undefined): string | null {
+  const target = cell?.l?.Target
+  if (typeof target === "string" && /^https?:\/\//i.test(target.trim())) return normalizeScraperUrl(target)
+  const formula = typeof cell?.f === "string" ? cell.f : ""
+  const match = formula.match(/HYPERLINK\(\s*"([^"]+)"/i)
+  if (match && /^https?:\/\//i.test(match[1])) return normalizeScraperUrl(match[1])
+  return null
 }
 const normalizeColumn = (column: string) => column.toLowerCase().replace(/[\s_-]/g, "")
 
@@ -73,7 +96,7 @@ export function validateScraperRows(
       subCategory: fields.subcategory,
       charDesc: fields.chardesc ?? "",
       brand: fields.brand,
-      url: fields.productlink || fields.url,
+      url: normalizeScraperUrl(fields.productlink || fields.url || fields.shortlink || fields.link || ""),
     }
     const result = ScraperImportRowSchema.safeParse(candidate)
     if (!result.success) {
