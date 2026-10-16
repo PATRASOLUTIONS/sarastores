@@ -4,6 +4,7 @@ import type React from "react"
 import { createContext, useContext, useState, useEffect, useRef } from "react"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
+import { destinationAfterLogin, loginHref, safeReturnPath } from "@/lib/return-path"
 
 export interface User {
   id: string
@@ -454,11 +455,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) {
       // Store current page to redirect back after login.
       // Only allow relative paths to prevent open-redirect attacks.
-      const currentPath = window.location.pathname
-      if (currentPath && currentPath.startsWith('/') && !currentPath.startsWith('//') && !currentPath.match(/^https?:/)) {
-        localStorage.setItem("redirectAfterLogin", currentPath)
-      }
-      router.push("/login")
+      const currentPath = safeReturnPath(`${window.location.pathname}${window.location.search}`)
+      if (currentPath) localStorage.setItem("redirectAfterLogin", currentPath)
+      router.push(loginHref(window.location.pathname, window.location.search))
       return false
     }
     return true
@@ -536,37 +535,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const redirectPath = localStorage.getItem("redirectAfterLogin")
       localStorage.removeItem("redirectAfterLogin")
-      const safeRedirectPath =
-        redirectPath &&
-        redirectPath.startsWith("/") &&
-        !redirectPath.startsWith("//") &&
-        !redirectPath.match(/^https?:/)
-          ? redirectPath
-          : null
-
-      const navigateTo = (url: string) => {
-        if (process.env.NODE_ENV === "production") {
-          window.location.assign(url)
-        } else {
-          router.push(url)
-        }
-      }
-
+      const destination = destinationAfterLogin(signedIn, redirectPath)
       const isStaff = signedIn.role === "admin" || signedIn.role === "superadmin" || signedIn.dashboardAccess === true
-      if (isStaff) {
-        toast.success("Admin login successful!")
-        const adminPath = safeRedirectPath?.startsWith("/admin") ? safeRedirectPath : "/admin/dashboard"
-        window.location.assign(adminPath)
-      } else if (signedIn.role === "vendor") {
-        toast.success("Vendor login successful!")
-        navigateTo("/vendor/dashboard")
-      } else if (safeRedirectPath && safeRedirectPath !== "/login" && safeRedirectPath !== "/register") {
-        toast.success("Login successful!")
-        navigateTo(safeRedirectPath)
-      } else {
-        toast.success("Login successful!")
-        navigateTo("/dashboard")
-      }
+      toast.success(isStaff ? "Admin login successful!" : signedIn.role === "vendor" ? "Vendor login successful!" : "Login successful!")
+      window.location.assign(destination)
 
       return true
     } catch (error) {

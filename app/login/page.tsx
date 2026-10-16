@@ -4,13 +4,14 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, AlertTriangle, Shield, ShoppingCart, Zap, Headphones, BadgeCheck } from "lucide-react"
 import { useRateLimit, formatRemainingTime, LOCKOUT_SECONDS } from "@/hooks/useRateLimit"
+import { destinationAfterLogin, safeReturnPath } from "@/lib/return-path"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import DOMPurify from "isomorphic-dompurify"
 
@@ -37,18 +38,31 @@ export default function LoginPage() {
   const { enabled: recaptchaEnabled, isReady: recaptchaReady, error: recaptchaError, getToken } = useRecaptcha("login")
 
   const { login, isAuthenticated, user } = useAuth()
-  const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams?.get("redirect") || "/"
+  const redirectTo = safeReturnPath(searchParams?.get("redirect"))
 
   useEffect(() => {
-    if (!isAuthenticated || isSubmitting) return
-    const staff = user?.role === "admin" || user?.role === "superadmin" || user?.dashboardAccess === true
-    const destination = staff
-      ? (redirectTo.startsWith("/admin") ? redirectTo : "/admin/dashboard")
-      : redirectTo
-    router.push(destination)
-  }, [isAuthenticated, isSubmitting, router, redirectTo, user])
+    const fromQuery = safeReturnPath(searchParams?.get("redirect"))
+    if (fromQuery) {
+      localStorage.setItem("redirectAfterLogin", fromQuery)
+      return
+    }
+    if (localStorage.getItem("redirectAfterLogin")) return
+    try {
+      const referrer = new URL(document.referrer)
+      if (referrer.origin === window.location.origin) {
+        const fromPage = safeReturnPath(`${referrer.pathname}${referrer.search}`)
+        if (fromPage) localStorage.setItem("redirectAfterLogin", fromPage)
+      }
+    } catch {
+      // A missing or foreign referrer just uses the role home after login.
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!isAuthenticated || isSubmitting || !user) return
+    window.location.assign(destinationAfterLogin(user, redirectTo || localStorage.getItem("redirectAfterLogin")))
+  }, [isAuthenticated, isSubmitting, redirectTo, user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -109,9 +123,7 @@ export default function LoginPage() {
       }
     }
 
-    if (redirectTo && redirectTo !== "/" && redirectTo.startsWith("/")) {
-      localStorage.setItem("redirectAfterLogin", redirectTo)
-    }
+    if (redirectTo) localStorage.setItem("redirectAfterLogin", redirectTo)
 
     setIsSubmitting(true)
 

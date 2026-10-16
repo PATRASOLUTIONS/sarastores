@@ -2820,6 +2820,8 @@ test("Bounded source fetch follows relative redirects, stops loops and rejects n
     : { status: 200, data: "<h1>Product</h1>", headers: {} },
   } }).load("lib/scrapers/http.ts")
   assert.equal(await short.resolveRedirect("https://dl.flipkart.com/s/ZunNveuuuN"), "https://www.flipkart.com/samsung-fridge/p/itm123?pid=ABC")
+  const buried = sourceLoader({ axios: { get: async () => ({ status: 200, headers: {}, data: '<a href="https://www.flipkart.com/">Home</a><a href="https://dl.flipkart.com/dl/samsung-fridge/p/itm123?pid=ABC">Open</a>' }) } }).load("lib/scrapers/http.ts")
+  assert.equal(await buried.resolveRedirect("https://dl.flipkart.com/s/ZunNveuuuN"), "https://www.flipkart.com/samsung-fridge/p/itm123?pid=ABC")
   mode = "object"
   await assert.rejects(http.fetchHtml("https://amazon.in/start"), /did not return text/)
 })

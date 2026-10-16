@@ -21,6 +21,7 @@ import { apiFetch } from "@/lib/api-client"
 import SelectWithAdd from "@/components/admin/SelectWithAdd"
 import BulkScraperImport from "@/components/admin/BulkScraperImport"
 import { SAP_OWNED_FIELDS, SCRAPER_LABELS, type ScraperSource } from "@/lib/scrapers/types"
+import { normalizeScraperUrl } from "@/lib/scrapers/bulk-import"
 import { z } from "zod"
 
 interface ScrapedProduct {
@@ -65,7 +66,7 @@ const SOURCE_HINTS: { source: ScraperSource; example: string }[] = [
 
 function detectSource(url: string): ScraperSource | null {
   try {
-    const parsed = new URL(url.trim())
+    const parsed = new URL(normalizeScraperUrl(url))
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.port) return null
     const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
     if (/(^|\.)(amazon\.(in|com)|amzn\.(in|to))$/.test(host)) return "amazon"
@@ -232,7 +233,7 @@ export default function AdminScraperPage() {
     setError(null)
     setProduct(null)
     try {
-      const next = await fetchScrapedProduct(url)
+      const next = await fetchScrapedProduct(normalizeScraperUrl(url))
       next.sap.sku = sku.trim()
       setProduct(next)
       setStep("review")
