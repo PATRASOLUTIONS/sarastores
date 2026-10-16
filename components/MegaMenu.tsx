@@ -64,6 +64,12 @@ function priceBandHref(categoryName: string, band: (typeof PRICE_BANDS)[number])
   return `/products?${params.toString()}`
 }
 
+function categoryHref(categoryName: string): string {
+  return /^mobiles?$/i.test(categoryName)
+    ? "/products?subCategory=Mobile&availability=in"
+    : `/products?category=${encodeURIComponent(categoryName)}`
+}
+
 /** Sub-category documents reference their parent under several key names. */
 function parentKeyOf(subCategory: SubCategory): string {
   return String(
@@ -95,10 +101,15 @@ export default function MegaMenu() {
       if (categoryRes.status === "fulfilled" && categoryRes.value.ok) {
         const data = await categoryRes.value.json().catch(() => [])
         if (Array.isArray(data)) {
+          const visibleCategories = data.filter(
+            (c: Category) =>
+              c.isEnabled !== false &&
+              !/^test\d*$/i.test(String(c.name || "").trim()) &&
+              !/^small appliance$/i.test(String(c.name || "").trim()) &&
+              !/^mobiles?$/i.test(String(c.name || "").trim()),
+          )
           setCategories(
-            data
-              .filter((c: Category) => c.isEnabled !== false && !/^test\d*$/i.test(String(c.name || "").trim()))
-              .slice(0, 12),
+            [{ id: "Mobile", name: "Mobiles" }, ...visibleCategories].slice(0, 12),
           )
         }
       }
@@ -184,7 +195,7 @@ export default function MegaMenu() {
                   onMouseLeave={scheduleClose}
                 >
                   <Link
-                    href={`/products?category=${encodeURIComponent(category.name)}`}
+                    href={categoryHref(category.name)}
                     className={`flex items-center gap-1 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors ${
                       isOpen ? "text-brand-primary" : "text-gray-700 hover:text-brand-primary"
                     }`}
@@ -222,7 +233,7 @@ export default function MegaMenu() {
                             </ul>
                           ) : (
                             <Link
-                              href={`/products?category=${encodeURIComponent(category.name)}`}
+                              href={categoryHref(category.name)}
                               className="text-sm text-gray-700 hover:text-brand-primary hover:underline"
                             >
                               Browse all {titleCaseLabel(category.name)}
@@ -275,7 +286,7 @@ export default function MegaMenu() {
                           )}
 
                           <Link
-                            href={`/products?category=${encodeURIComponent(category.name)}`}
+                            href={categoryHref(category.name)}
                             className="mt-4 inline-block text-sm font-semibold text-brand-primary hover:underline"
                           >
                             View all {titleCaseLabel(category.name)} →

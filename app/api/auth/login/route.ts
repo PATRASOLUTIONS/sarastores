@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const { email, password } = parsed.data
 
     // Bot detection for login endpoint
-    const botCheck = await detectBot(request, body, { requireRecaptcha: true })
+    const botCheck = await detectBot(request, body, { requireRecaptcha: true, skipRateLimit: true })
     if (botCheck.isBot) {
       console.warn('Bot detected on login:', {
         reason: botCheck.reason,
@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!email || !password) {
-      return NextResponse.json({ message: "Email and password are required" }, { status: 400 })
+    if (!email) {
+      return NextResponse.json({ message: "Email is required" }, { status: 400 })
     }
 
     // Fail fast and loudly if the signing secret is misconfigured. Without

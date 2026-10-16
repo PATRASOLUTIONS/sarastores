@@ -142,14 +142,14 @@ export async function detectBot(request: NextRequest, body: {
   website?: unknown
   formTimestamp?: unknown
   recaptchaToken?: unknown
-}, options: { requireRecaptcha?: boolean } = {}): Promise<{
+}, options: { requireRecaptcha?: boolean; skipRateLimit?: boolean } = {}): Promise<{
   isBot: boolean
   reason?: string
   waitTime?: number
 }> {
   // 1. Check rate limit
   const clientIP = getClientIP(request)
-  if (await isRateLimited(clientIP)) {
+  if (!options.skipRateLimit && await isRateLimited(clientIP)) {
     const waitTime = await getRateLimitResetTime(clientIP)
     return {
       isBot: true,

@@ -9,8 +9,7 @@ import Link from "next/link"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
-import { Eye, EyeOff, Mail, Lock, ArrowLeft, AlertTriangle, Shield, ShoppingCart, Zap, Headphones, BadgeCheck } from "lucide-react"
-import { useRateLimit, formatRemainingTime, LOCKOUT_SECONDS } from "@/hooks/useRateLimit"
+import { Eye, EyeOff, Mail, Lock, ArrowLeft, Shield, ShoppingCart, Zap, Headphones, BadgeCheck } from "lucide-react"
 import { destinationAfterLogin, safeReturnPath } from "@/lib/return-path"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import DOMPurify from "isomorphic-dompurify"
@@ -25,15 +24,6 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const lock = useSubmitLock()
   const [focusedField, setFocusedField] = useState<string | null>(null)
-
-  const {
-    attempts,
-    isLocked,
-    remainingTime,
-    recordAttempt,
-    resetAttempts,
-    canAttempt
-  } = useRateLimit('login_attempts')
 
   const { enabled: recaptchaEnabled, isReady: recaptchaReady, error: recaptchaError, getToken } = useRecaptcha("login")
 
@@ -87,22 +77,12 @@ export default function LoginPage() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address"
     }
-    if (!formData.password) {
-      newErrors.password = "Password is required"
-    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (isLocked || !canAttempt) {
-      setErrors({
-        general: `Too many failed attempts. Please try again in ${formatRemainingTime(remainingTime)}.`
-      })
-      return
-    }
 
     if (!validateForm()) return
     if (!lock.acquire()) return
@@ -129,10 +109,7 @@ export default function LoginPage() {
 
     try {
       const result = await login(formData.email, formData.password, recaptchaToken || undefined)
-      if (result === true) {
-        resetAttempts()
-        return
-      }
+      if (result === true) return
 
       if (result === "unavailable") {
         setErrors({ general: "We couldn't start your session. Please try again." })
@@ -141,23 +118,11 @@ export default function LoginPage() {
         return
       }
 
-      recordAttempt()
-      const remainingAttempts = 3 - (attempts + 1)
-
-      if (remainingAttempts > 0) {
-        setErrors({
-          general: `Invalid credentials. ${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining before temporary lockout.`
-        })
-      } else {
-        setErrors({
-          general: `Account temporarily locked due to multiple failed attempts. Please try again in ${formatRemainingTime(LOCKOUT_SECONDS)}.`
-        })
-      }
+      setErrors({ general: "Invalid email or password." })
       setIsSubmitting(false)
       lock.release()
     } catch (error) {
       console.error("Login error:", error)
-      recordAttempt()
       setErrors({ general: "An error occurred. Please try again later." })
       setIsSubmitting(false)
       lock.release()
@@ -233,28 +198,6 @@ export default function LoginPage() {
                   </Link>
                 </p>
               </div>
-
-            {/* Alerts */}
-            {isLocked && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-red-800">Account temporarily locked</p>
-                  <p className="text-sm text-red-600 mt-0.5">
-                    Too many failed attempts. Try again in {formatRemainingTime(remainingTime)}.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {!isLocked && attempts > 0 && (
-              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-                <Shield className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-amber-700">
-                  {3 - attempts} attempt{3 - attempts !== 1 ? 's' : ''} remaining before temporary lockout.
-                </p>
-              </div>
-            )}
 
             {(errors.general || recaptchaError) && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
@@ -343,15 +286,10 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || isLocked || !canAttempt || (recaptchaEnabled && !recaptchaReady)}
+                disabled={isSubmitting || (recaptchaEnabled && !recaptchaReady)}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1560BD] text-[14px] font-bold text-white transition-colors hover:bg-[#0F2557] focus:outline-none focus:ring-2 focus:ring-[#1560BD]/40 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isLocked ? (
-                  <>
-                    <Lock className="h-4 w-4" />
-                    Locked ({formatRemainingTime(remainingTime)})
-                  </>
-                ) : isSubmitting ? (
+                {isSubmitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                     Signing in...

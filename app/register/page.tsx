@@ -2,55 +2,17 @@
 
 import type React from "react"
 
-import { useState, useEffect, useMemo, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
-import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, AlertTriangle, Shield, Check, X } from "lucide-react"
-import { useRateLimit, formatRemainingTime, LOCKOUT_SECONDS } from "@/hooks/useRateLimit"
+import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Shield, Check } from "lucide-react"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import { PRIVACY_NOTICE_VERSION } from "@/lib/dpdp-config"
 import DOMPurify from "isomorphic-dompurify"
-
-function PasswordStrength({ password }: { password: string }) {
-  const strength = useMemo(() => {
-    let score = 0
-    if (password.length >= 8) score++
-    if (password.length >= 12) score++
-    if (/[A-Z]/.test(password)) score++
-    if (/[a-z]/.test(password)) score++
-    if (/\d/.test(password)) score++
-    if (/[^A-Za-z0-9]/.test(password)) score++
-    return Math.min(score, 4)
-  }, [password])
-
-  if (!password) return null
-
-  const labels = ["Weak", "Fair", "Good", "Strong"]
-  const colors = ["bg-red-500", "bg-orange-500", "bg-amber-500", "bg-green-500"]
-  const textColors = ["text-red-700", "text-orange-700", "text-amber-700", "text-green-700"]
-
-  return (
-    <div className="mt-2">
-      <div className="flex gap-1.5 mb-1">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-              i < strength ? colors[strength - 1] : "bg-gray-200"
-            }`}
-          />
-        ))}
-      </div>
-      <p className={`text-xs font-medium ${textColors[strength - 1]}`}>
-        {labels[strength - 1]}
-      </p>
-    </div>
-  )
-}
 
 export default function RegisterPage() {
   return (
@@ -81,15 +43,6 @@ function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const lock = useSubmitLock()
   const [focusedField, setFocusedField] = useState<string | null>(null)
-
-  const {
-    attempts,
-    isLocked,
-    remainingTime,
-    recordAttempt,
-    resetAttempts,
-    canAttempt
-  } = useRateLimit('register_attempts')
 
   const { enabled: recaptchaEnabled, isReady: recaptchaReady, error: recaptchaError, getToken } = useRecaptcha("signup")
 
@@ -142,16 +95,6 @@ function RegisterForm() {
     })
   }
 
-  const passwordChecks = useMemo(() => {
-    const p = formData.password
-    return [
-      { label: "At least 8 characters", met: p.length >= 8 },
-      { label: "One uppercase letter", met: /[A-Z]/.test(p) },
-      { label: "One lowercase letter", met: /[a-z]/.test(p) },
-      { label: "One number", met: /\d/.test(p) },
-    ]
-  }, [formData.password])
-
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
 
@@ -167,19 +110,7 @@ function RegisterForm() {
       newErrors.email = "Please enter a valid email"
     }
 
-    if (!formData.password) {
-      newErrors.password = "Password is required"
-    } else if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters"
-    } else if (formData.password.length > 128) {
-      newErrors.password = "Password must be less than 128 characters"
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-      newErrors.password = "Password must contain uppercase, lowercase, and a number"
-    }
-
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your password"
-    } else if (formData.password !== formData.confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match"
     }
 
@@ -197,13 +128,6 @@ function RegisterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (isLocked || !canAttempt) {
-      setErrors({
-        general: `Too many failed attempts. Please try again in ${formatRemainingTime(remainingTime)}.`
-      })
-      return
-    }
 
     if (!validateForm()) return
     if (!lock.acquire()) return
@@ -245,24 +169,12 @@ function RegisterForm() {
         }
       )
       if (success) {
-        resetAttempts()
         router.push("/login")
       } else {
-        recordAttempt()
-        const remainingAttempts = 3 - (attempts + 1)
-        if (remainingAttempts > 0) {
-          setErrors({
-            general: `Registration failed. ${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining.`
-          })
-        } else {
-          setErrors({
-            general: `Too many attempts. Please try again in ${formatRemainingTime(LOCKOUT_SECONDS)}.`
-          })
-        }
+        setErrors({ general: "Could not create your account. Please try again." })
       }
     } catch (error) {
       console.error("Registration error:", error)
-      recordAttempt()
       setErrors({ general: "An error occurred. Please try again later." })
     } finally {
       lock.release()
@@ -338,28 +250,6 @@ function RegisterForm() {
                   </Link>
                 </p>
               </div>
-
-            {/* Alerts */}
-            {isLocked && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-red-800">Registration temporarily locked</p>
-                  <p className="text-sm text-red-600 mt-0.5">
-                    Too many failed attempts. Try again in {formatRemainingTime(remainingTime)}.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {!isLocked && attempts > 0 && (
-              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-                <Shield className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-amber-700">
-                  {3 - attempts} attempt{3 - attempts !== 1 ? 's' : ''} remaining before temporary lockout.
-                </p>
-              </div>
-            )}
 
             {(errors.general || recaptchaError) && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
@@ -471,28 +361,6 @@ function RegisterForm() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {errors.password && <p className="mt-1.5 text-[12px] text-red-600">{errors.password}</p>}
-
-                {/* Password Strength */}
-                <PasswordStrength password={formData.password} />
-
-                {/* Password Requirements */}
-                {formData.password && (
-                  <div className="mt-3 grid grid-cols-2 gap-1.5">
-                    {passwordChecks.map((check) => (
-                      <div key={check.label} className="flex items-center gap-1.5">
-                        {check.met ? (
-                          <Check className="h-3.5 w-3.5 text-green-500" />
-                        ) : (
-                          <X className="h-3.5 w-3.5 text-gray-300" />
-                        )}
-                        <span className={`text-xs ${check.met ? 'text-green-700' : 'text-brand-text-secondary'}`}>
-                          {check.label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div>
@@ -646,15 +514,10 @@ function RegisterForm() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || isLocked || !canAttempt || (recaptchaEnabled && !recaptchaReady)}
+                disabled={isSubmitting || (recaptchaEnabled && !recaptchaReady)}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1560BD] text-[14px] font-bold text-white transition-colors hover:bg-[#0F2557] focus:outline-none focus:ring-2 focus:ring-[#1560BD]/40 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isLocked ? (
-                  <>
-                    <Lock className="h-4 w-4" />
-                    Locked ({formatRemainingTime(remainingTime)})
-                  </>
-                ) : isSubmitting ? (
+                {isSubmitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                     Creating account...

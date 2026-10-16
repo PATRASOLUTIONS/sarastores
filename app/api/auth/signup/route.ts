@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Bot detection - CRITICAL SECURITY CHECK
-    const botCheck = await detectBot(request, body, { requireRecaptcha: true })
+    const botCheck = await detectBot(request, body, { requireRecaptcha: true, skipRateLimit: true })
     if (botCheck.isBot) {
       console.warn('Bot detected:', {
         reason: botCheck.reason,
