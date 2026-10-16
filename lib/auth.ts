@@ -55,22 +55,26 @@ async function getBearerToken(): Promise<string | undefined> {
  * single source of truth for authorization.
  */
 export async function getSession(): Promise<AuthSession | null> {
+  let token: string | undefined;
   try {
-    let token = await getBearerToken();
+    token = await getBearerToken();
     if (!token) {
       const cookieStore = await cookies();
       token = cookieStore.get(SESSION_COOKIE)?.value;
     }
-    const payload = await verifySessionToken(token);
-    if (!payload) return null;
-    const user = await getAuthenticatedUserById(payload.id);
-    if (!user || user.sessionVersion !== (payload.sessionVersion ?? 0)) return null;
-    if (!['user', 'vendor', 'admin', 'superadmin'].includes(user.role)) return null;
-    return { user: { ...user, role: user.role as AuthSession['user']['role'] } };
   } catch (error) {
+    // Cookie access outside a request is logged-out. A later database failure
+    // must not be collapsed into the same result: callers would return 401 and
+    // the browser would clear a session that is still valid.
     console.error('[Auth] Session verification error:', error);
     return null;
   }
+  const payload = await verifySessionToken(token);
+  if (!payload) return null;
+  const user = await getAuthenticatedUserById(payload.id);
+  if (!user || user.sessionVersion !== (payload.sessionVersion ?? 0)) return null;
+  if (!['user', 'vendor', 'admin', 'superadmin'].includes(user.role)) return null;
+  return { user: { ...user, role: user.role as AuthSession['user']['role'] } };
 }
 
 /**

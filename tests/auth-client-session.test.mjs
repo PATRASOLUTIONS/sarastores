@@ -109,6 +109,93 @@ test("focus and storage changes revalidate the cookie instead of trusting a cach
   assert.equal(app.render().isAuthenticated, false)
   assert.equal(app.render().isAdmin, false)
 })
+test("login keeps the new session when a follow-up request is unauthorized", async () => {
+  const calls = []
+  const toasts = []
+  const sessionUser = { ...user }
+  let sessionVisible = false
+  const storage = new Map()
+  const localStorage = {
+    getItem: key => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key),
+  }
+  const listeners = new Map()
+  const states = []
+  let index = 0
+  let mounted = false
+  const response = async (url, init) => {
+    const href = typeof url === "string" ? url : url instanceof URL ? url.toString() : url?.url || ""
+    calls.push(`${init?.method || "GET"} ${href}`)
+    if (href === "/api/auth/login") {
+      sessionVisible = true
+      return Response.json({ user: sessionUser })
+    }
+    if (href === "/api/auth/session") return Response.json({ user: sessionVisible ? sessionUser : null })
+    if (href === "/api/auth/logout") return Response.json({ success: true })
+    if (href.startsWith("/api/")) return Response.json({ error: "Authentication required" }, { status: 401 })
+    throw new Error(`Unexpected isolated auth request: ${href}`)
+  }
+  const window = {
+    fetch: response,
+    location: { pathname: "/login", href: "/login", assign() {} },
+    addEventListener: (name, fn) => listeners.set(name, fn),
+    removeEventListener: name => listeners.delete(name),
+  }
+  const document = {
+    hidden: false, visibilityState: "visible",
+    addEventListener: (name, fn) => listeners.set(name, fn),
+    removeEventListener: name => listeners.delete(name),
+  }
+  const react = {
+    createContext: () => ({ Provider: "context" }),
+    useContext: () => undefined,
+    useState: initial => {
+      const slot = index++
+      if (!(slot in states)) states[slot] = initial
+      return [states[slot], value => { states[slot] = typeof value === "function" ? value(states[slot]) : value }]
+    },
+    useRef: initial => {
+      const slot = index++
+      if (!(slot in states)) states[slot] = { current: initial }
+      return states[slot]
+    },
+    useEffect: effect => { if (!mounted) effects.push(effect) },
+  }
+  const effects = []
+  const provider = sourceLoader({
+    react,
+    "react/jsx-runtime": { jsx: (_type, props) => props },
+    "react-hot-toast": { toast: { error: message => toasts.push(message), success() {} } },
+    "next/navigation": { useRouter: () => ({ push() {} }) },
+  }, { fetch: response, context: { window, document, localStorage } }).load("contexts/AuthContext.tsx")
+  const render = () => { index = 0; return provider.AuthProvider({ children: null }).value }
+  render()
+  mounted = true
+  for (const effect of effects) effect()
+  const result = await render().login("customer@example.invalid", "FixturePassword123!")
+  assert.equal(result, true)
+  assert.equal(render().isAuthenticated, true)
+  assert.equal(render().user.id, sessionUser.id)
+  assert.equal(calls.some(call => call.includes("/api/users/")), false)
+  assert.equal(calls.some(call => call.startsWith("POST /api/auth/logout")), false)
+  await window.fetch("/api/wishlist?userId=synthetic-customer")
+  await flush()
+  assert.equal(render().isAuthenticated, true)
+  assert.equal(toasts.some(message => String(message).toLowerCase().includes("session has expired")), false)
+  assert.equal(calls.some(call => call.startsWith("POST /api/auth/logout")), false)
+})
+
+test("password reset mail is branded Sara Stores and links to the live site", () => {
+  const email = sourceLoader().load("lib/email.ts")
+  assert.equal(email.storefrontOrigin(), "https://sarastores.com")
+  const html = email.buildPasswordResetEmail("https://sarastores.com/reset-password?token=fixture")
+  assert.match(html, /Sara Stores/)
+  assert.match(html, /https:\/\/sarastores\.com\/reset-password\?token=fixture/)
+  assert.equal(/bytewise/i.test(html), false)
+  assert.match(email.saraMailFrom(), /^Sara Stores </)
+})
+
 test("a delayed pre-logout session response cannot restore the logged-out account", async () => {
   const app = harness({ deferSession: true })
   app.render().logout()

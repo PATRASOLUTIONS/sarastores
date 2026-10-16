@@ -7,10 +7,9 @@
  */
 
 import bcrypt from "bcryptjs"
+import { ObjectId, type Collection, type Document, type WithId } from "mongodb"
 import { connectToDatabase } from "@/lib/mongodb"
 import type { SessionPayload } from "@/lib/session"
-import { getById } from "@/lib/db-service"
-import type { Collection, WithId } from "mongodb"
 import { z } from "zod"
 
 export interface AuthenticatedUser {
@@ -108,28 +107,33 @@ export async function verifyCredentials(email: string, password: string): Promis
  * refresh token.
  */
 export async function getAuthenticatedUserById(userId: string): Promise<AuthenticatedUser | null> {
-  try {
-    const record = await getById("users", userId)
-    if (!record) return null
-    const user = authUserRecordSchema.parse(record)
-    if (user.status === "inactive" || user.status === "deleted") return null
-    return {
-      id: record.id,
-      name: user.name,
-      email: user.email,
-      role: user.role || "user",
-      emailVerified: user.emailVerified || false,
-      createdAt: user.createdAt,
-      avatar: user.avatar || null,
-      phone: user.phone || null,
-      address: user.address || null,
-      dashboardAccess: !!user.dashboardAccess,
-      allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
-      sessionVersion: user.sessionVersion ?? 0,
-    }
-  } catch (error) {
-    console.error("[Auth] Failed to load user for refresh", error)
-    return null
+  // Connection failures must throw. Swallowing them as "no such user" made a
+  // busy database look like a logged-out session, and refresh then revoked the
+  // token family. A missing or inactive account is the only null result.
+  if (!userId) return null
+  const { db } = await connectToDatabase()
+  const users = db.collection<Document & { _id: ObjectId | string }>("users")
+  let record = ObjectId.isValid(userId) ? await users.findOne({ _id: new ObjectId(userId) }) : null
+  if (!record) record = await users.findOne({ _id: userId })
+  if (!record) record = await users.findOne({ id: userId })
+  if (!record) return null
+  const parsed = authUserRecordSchema.safeParse(record)
+  if (!parsed.success) return null
+  const user = parsed.data
+  if (user.status === "inactive" || user.status === "deleted") return null
+  return {
+    id: record._id.toString(),
+    name: user.name,
+    email: user.email,
+    role: user.role || "user",
+    emailVerified: user.emailVerified || false,
+    createdAt: user.createdAt,
+    avatar: user.avatar || null,
+    phone: user.phone || null,
+    address: user.address || null,
+    dashboardAccess: !!user.dashboardAccess,
+    allowedPages: Array.isArray(user.allowedPages) ? user.allowedPages : [],
+    sessionVersion: user.sessionVersion ?? 0,
   }
 }
 

@@ -42,6 +42,71 @@ const transporter = nodemailer.createTransport({
   },
 })
 
+/** Public storefront origin used in customer emails. */
+export function storefrontOrigin(): string {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || ""
+  try {
+    const url = new URL(configured)
+    if (url.protocol === "https:" && (url.hostname === "sarastores.com" || url.hostname.endsWith(".sarastores.com"))) {
+      return url.origin
+    }
+  } catch {
+    // Fall through to the live store.
+  }
+  return "https://sarastores.com"
+}
+
+export function saraMailFrom(): string {
+  const raw = process.env.EMAIL_FROM || "noreply@sarastores.com"
+  const address = raw.match(/<([^>]+)>/)?.[1] || raw.trim()
+  return `Sara Stores <${address}>`
+}
+
+/** Transactional password-reset email. Not a marketing message. */
+export function buildPasswordResetEmail(resetUrl: string): string {
+  const safeUrl = escapeHtml(resetUrl)
+  const year = new Date().getFullYear()
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only">
+<title>Reset your Sara Stores password</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2f7;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Reset your Sara Stores password. This link expires in 1 hour.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:24px 12px;">
+<tr><td align="center">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:14px;overflow:hidden;">
+    <tr><td style="background:#0F2557;padding:28px 32px;text-align:center;">
+      <div style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#FF6A2C;font-weight:bold;">Sara Stores</div>
+      <h1 style="margin:10px 0 0;font-family:Arial,sans-serif;font-size:26px;line-height:32px;color:#ffffff;">Reset your password</h1>
+    </td></tr>
+    <tr><td style="padding:32px;font-family:Arial,sans-serif;font-size:15px;line-height:24px;color:#1f2937;">
+      <p style="margin:0 0 14px;">Hello,</p>
+      <p style="margin:0 0 14px;">We received a request to reset the password for your Sara Stores account. The button below opens a secure page on sarastores.com. The link expires in 1 hour.</p>
+      <p style="margin:0;">If you did not ask for this, you can ignore this email. Your password will stay the same.</p>
+    </td></tr>
+    <tr><td align="center" style="padding:4px 32px 8px;">
+      <a href="${safeUrl}" style="display:inline-block;background:#0F2557;color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 36px;border-radius:8px;">Reset password</a>
+    </td></tr>
+    <tr><td style="padding:18px 32px 8px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#64748b;">
+      Or copy this link into your browser:<br>
+      <a href="${safeUrl}" style="color:#1560BD;word-break:break-all;">${safeUrl}</a>
+    </td></tr>
+    <tr><td style="padding:8px 32px 28px;font-family:Arial,sans-serif;font-size:13px;line-height:20px;color:#92400e;">
+      For your security, this link can be used once and expires in 1 hour.
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:20px 32px;text-align:center;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#94a3b8;">
+      Sara Stores<br>
+      <a href="https://sarastores.com/" style="color:#64748b;text-decoration:none;">sarastores.com</a><br><br>
+      © ${year} Sara Stores. All rights reserved.
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -66,7 +131,7 @@ export async function sendEmail({
     }
     
     const mailOptions: Mail.Options = {
-      from: process.env.EMAIL_FROM,
+      from: saraMailFrom(),
       to,
       subject,
       html,

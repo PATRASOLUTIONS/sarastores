@@ -4275,7 +4275,7 @@ test("credential verification retains service failure, inactive-user rejection a
   let updates = 0
   const loader = sourceLoader({
     "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: () => ({
-      findOne: async query => query.email === record.email ? record : null,
+      findOne: async query => query.email === record.email || String(query._id) === String(record._id) ? record : null,
       updateOne: async query => { assert.equal(query._id, record._id); updates++ },
     }) } }) },
     "@/lib/db-service": { getById: async () => ({ ...record, id: record._id.toString() }) },
@@ -4289,6 +4289,9 @@ test("credential verification retains service failure, inactive-user rejection a
   assert.equal(result.user.sessionVersion, 3)
   assert.equal(Object.hasOwn(result.user, "password"), false)
   assert.equal(updates, 1)
+  const loaded = await credentials.getAuthenticatedUserById(record._id.toString())
+  assert.equal(loaded.email, record.email)
+  assert.equal(loaded.sessionVersion, 3)
   record.status = "inactive"
   assert.equal((await credentials.verifyCredentials(record.email, password)).status, 403)
   assert.equal(await credentials.getAuthenticatedUserById(record._id.toString()), null)
@@ -4297,6 +4300,7 @@ test("credential verification retains service failure, inactive-user rejection a
     "@/lib/mongodb": { connectToDatabase: async () => { throw new Error("Fixture database outage") } },
   }).load("lib/auth-credentials.ts")
   assert.equal((await outage.verifyCredentials(record.email, password)).status, 503)
+  await assert.rejects(() => outage.getAuthenticatedUserById(record._id.toString()), /Fixture database outage/)
 })
 
 test("Google signup races cannot authenticate a newly disabled account or write consent", async () => {

@@ -45,7 +45,7 @@ export interface SignupDpdpFields {
 interface AuthContextType {
   user: User | null
   isLoading: boolean
-    login: (email: string, password: string, recaptchaToken?: string) => Promise<boolean>
+    login: (email: string, password: string, recaptchaToken?: string) => Promise<true | "rejected" | "unavailable">
     signup: (name: string, email: string, password: string, honeypot?: string, formTimestamp?: number, recaptchaToken?: string, confirmPassword?: string, acceptTerms?: boolean, dpdp?: SignupDpdpFields) => Promise<boolean>
   logout: () => void
   isAuthenticated: boolean
@@ -71,6 +71,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const authEpoch = useRef(0)
+  const loginInProgress = useRef(false)
+  const loginGraceUntil = useRef(0)
+  const logoutRequest = useRef<AbortController | null>(null)
   const router = useRouter()
   const SESSION_TIMEOUT = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   const ACTIVITY_TIMEOUT = 12 * 60 * 60 * 1000 // 12 hours of inactivity
@@ -176,12 +179,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
-  const invalidateSession = (reason?: "expired" | "inactive" | "missing-cookie", notify = false) => {
-    clearClientAuthState()
+  const cancelPendingLogout = () => {
+    logoutRequest.current?.abort()
+    logoutRequest.current = null
+  }
 
-    fetch("/api/auth/logout", { method: "POST" }).catch((err) => {
+  const requestLogout = () => {
+    cancelPendingLogout()
+    const controller = new AbortController()
+    logoutRequest.current = controller
+    fetch("/api/auth/logout", { method: "POST", signal: controller.signal }).catch((err) => {
+      if (err instanceof DOMException && err.name === "AbortError") return
       console.error("Error clearing expired session:", err)
     })
+  }
+
+  const invalidateSession = (reason?: "expired" | "inactive" | "missing-cookie", notify = false) => {
+    clearClientAuthState()
+    requestLogout()
 
     if (!notify) {
       return
@@ -396,22 +411,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.fetch = patchedFetch as typeof window.fetch
 
     const onAuthExpired = () => {
-      authEpoch.current++
-      // Use functional setState to read the *current* user without making
-      // this effect re-subscribe on every user change. We also clear local
-      // state and call the server-side logout to drop the (invalid) cookie
-      // for any subsequent same-tab requests. The throttling in
-      // `patchedFetch` already prevents loops even if /api/auth/logout
-      // itself were to 401.
-      setUser((currentUser) => {
-        if (!currentUser) return currentUser
-        clearStoredAuth()
-        fetch("/api/auth/logout", { method: "POST" }).catch(() => {
-          // best-effort — the cookie is already invalid server-side
+      if (loginInProgress.current || Date.now() < loginGraceUntil.current) return
+      // A single 401 is not proof the session is gone. Wishlist, profile and
+      // cart calls race the new cookie, and a busy database used to answer
+      // 401 for a token that was still valid. Confirm with the session
+      // endpoint before clearing the cookie — that call is what was signing
+      // everyone out while they were trying to log in.
+      void (async () => {
+        if (loginInProgress.current || Date.now() < loginGraceUntil.current) return
+        try {
+          const res = await originalFetch("/api/auth/session", {
+            cache: "no-store",
+            credentials: "same-origin",
+          })
+          if (!res.ok) return
+          const data = await res.json().catch(() => null)
+          if (data?.user) return
+        } catch {
+          return
+        }
+        if (loginInProgress.current || Date.now() < loginGraceUntil.current) return
+        authEpoch.current++
+        setUser((currentUser) => {
+          if (!currentUser) return currentUser
+          clearStoredAuth()
+          requestLogout()
+          toast.error("Your session has expired. Please log in again.")
+          return null
         })
-        toast.error("Your session has expired. Please log in again.")
-        return null
-      })
+      })()
     }
 
     window.addEventListener("auth:expired", onAuthExpired)
@@ -436,11 +464,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true
   }
 
-  const login = async (email: string, password: string, recaptchaToken?: string): Promise<boolean> => {
+  const login = async (email: string, password: string, recaptchaToken?: string): Promise<true | "rejected" | "unavailable"> => {
     setIsLoading(true)
+    loginInProgress.current = true
+    // A slow logout from an older tab timeout must not land after this login
+    // and wipe the cookie that was just issued.
+    cancelPendingLogout()
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
@@ -450,54 +484,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json()
 
       if (!response.ok) {
-        toast.error(data.message || "Login failed")
-        return false
+        toast.error(data.message || data.error || "Login failed")
+        return "rejected"
       }
 
+      // The password was accepted and the cookie was set. Ignore stray 401s
+      // from the admin dashboard's first requests while that cookie settles.
+      loginGraceUntil.current = Date.now() + 20000
       authEpoch.current++
-      // Store minimal user data in localStorage (id + role only).
-      // Full user profile is fetched from the server on page load.
-      localStorage.setItem("user", JSON.stringify({
-        id: data.user.id,
-        role: data.user.role,
-      }))
-      localStorage.setItem('loginTime', Date.now().toString())
-      localStorage.setItem('lastActivityTime', Date.now().toString())
-      setUser(data.user)
+      const epoch = authEpoch.current
 
-      try {
-        if (data.user?.id) {
-          const r = await fetch(`/api/users/${data.user.id}`)
-          if (r.ok) {
-            const full = await r.json().catch(()=>null)
-            if (full) {
-              setUser(full)
-              localStorage.setItem('user', JSON.stringify({
-                id: full.id,
-                role: full.role,
-              }))
+      // Do not publish `user` or call /api/users yet. Those requests run before
+      // the new cookie is visible, come back 401, and the global handler then
+      // logs the shopper out with "session expired".
+      const sessionUser = await (async (): Promise<User | null> => {
+        const isProd = process.env.NODE_ENV === "production"
+        const maxWait = isProd ? 8000 : 5000
+        const start = Date.now()
+        while (Date.now() - start < maxWait) {
+          if (epoch !== authEpoch.current) return null
+          try {
+            const res = await fetch("/api/auth/session", {
+              cache: "no-store",
+              credentials: "same-origin",
+            })
+            if (res.ok) {
+              const body = await res.json().catch(() => null)
+              if (body?.user?.id) return body.user as User
             }
+          } catch {
+            // Cookie not visible yet, or the session store blipped. Retry.
           }
+          await new Promise((r) => setTimeout(r, 200))
         }
-      } catch (e) {
-        console.warn('Failed to fetch full user after login', e)
-      }
+        return null
+      })()
 
-      // Check for redirect path (validate it's a safe relative URL)
+      if (epoch !== authEpoch.current) return "unavailable"
+      // A slow session read must not discard a login that already set the
+      // cookie. The login response user is enough to enter the dashboard.
+      const signedIn = sessionUser ?? (data.user?.id ? data.user as User : null)
+      if (!signedIn) return "unavailable"
+
+      localStorage.setItem("user", JSON.stringify({
+        id: signedIn.id,
+        role: signedIn.role,
+      }))
+      localStorage.setItem("loginTime", Date.now().toString())
+      localStorage.setItem("lastActivityTime", Date.now().toString())
+      setUser(signedIn)
+
       const redirectPath = localStorage.getItem("redirectAfterLogin")
       localStorage.removeItem("redirectAfterLogin")
       const safeRedirectPath =
         redirectPath &&
-        redirectPath.startsWith('/') &&
-        !redirectPath.startsWith('//') &&
+        redirectPath.startsWith("/") &&
+        !redirectPath.startsWith("//") &&
         !redirectPath.match(/^https?:/)
           ? redirectPath
           : null
 
-      // Helper to navigate. In production use a full page load so the
-      // authoritative, httpOnly session cookie from the login response is
-      // guaranteed to be included in subsequent server-side requests. In
-      // development we can keep SPA navigation for speed.
       const navigateTo = (url: string) => {
         if (process.env.NODE_ENV === "production") {
           window.location.assign(url)
@@ -506,52 +552,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Wait for the server-side session to be available. Some hosting/CDN
-      // configurations may delay Set-Cookie propagation; poll for up to
-      // 8 seconds in production (5s in dev) before proceeding to improve
-      // reliability. The server route is the authoritative source: if the
-      // httpOnly session cookie was set, /api/auth/session will return the
-      // user; if not, the cookie has not propagated yet and we keep polling.
-      const waitForServerSession = async (timeout?: number, interval = 200) => {
-        const isProd = process.env.NODE_ENV === "production"
-        const maxWait = typeof timeout === "number" ? timeout : isProd ? 8000 : 5000
-        const start = Date.now()
-        while (Date.now() - start < maxWait) {
-          try {
-            const res = await fetch("/api/auth/session", {
-              cache: "no-store",
-              credentials: "same-origin",
-            })
-            if (res.ok) {
-              const j = await res.json().catch(() => null)
-              if (j && j.user) return true
-            }
-          } catch (e) {
-            // ignore and retry
-          }
-          await new Promise((r) => setTimeout(r, interval))
-        }
-        return false
-      }
-
-      const sessionReady = await waitForServerSession()
-
-      // Redirect based on user role or stored path
-      if (data.user.role === "admin") {
+      const isStaff = signedIn.role === "admin" || signedIn.role === "superadmin" || signedIn.dashboardAccess === true
+      if (isStaff) {
         toast.success("Admin login successful!")
-        if (!sessionReady) toast.error("Server session not yet visible; continuing anyway.")
-        navigateTo("/admin/dashboard")
-      } else if (data.user.role === "vendor") {
+        const adminPath = safeRedirectPath?.startsWith("/admin") ? safeRedirectPath : "/admin/dashboard"
+        window.location.assign(adminPath)
+      } else if (signedIn.role === "vendor") {
         toast.success("Vendor login successful!")
-        if (!sessionReady) toast.error("Server session not yet visible; continuing anyway.")
         navigateTo("/vendor/dashboard")
       } else if (safeRedirectPath && safeRedirectPath !== "/login" && safeRedirectPath !== "/register") {
         toast.success("Login successful!")
-        if (!sessionReady) toast.error("Server session not yet visible; continuing anyway.")
         navigateTo(safeRedirectPath)
       } else {
         toast.success("Login successful!")
-        if (!sessionReady) toast.error("Server session not yet visible; continuing anyway.")
         navigateTo("/dashboard")
       }
 
@@ -559,8 +572,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error("Login error:", error)
       toast.error("Login failed. Please try again.")
-      return false
+      return "rejected"
     } finally {
+      loginInProgress.current = false
       setIsLoading(false)
     }
   }
@@ -657,14 +671,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     clearClientAuthState()
+    const controller = new AbortController()
+    cancelPendingLogout()
+    logoutRequest.current = controller
 
-    // Clear cookies by making a request to a logout endpoint
-    fetch("/api/auth/logout", { method: "POST" })
-      .catch((err) => console.error("Error during logout:", err))
+    fetch("/api/auth/logout", { method: "POST", signal: controller.signal })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        console.error("Error during logout:", err)
+      })
       .finally(() => {
+        if (logoutRequest.current !== controller) return
         toast.success("Logged out successfully")
         router.push("/")
-        // Force a full page reload to ensure all state is cleared
         window.location.href = "/"
       })
   }

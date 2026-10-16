@@ -10,7 +10,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, AlertTriangle, Shield, ShoppingCart, Zap, Headphones, BadgeCheck } from "lucide-react"
-import { useRateLimit, formatRemainingTime } from "@/hooks/useRateLimit"
+import { useRateLimit, formatRemainingTime, LOCKOUT_SECONDS } from "@/hooks/useRateLimit"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import DOMPurify from "isomorphic-dompurify"
 
@@ -36,16 +36,19 @@ export default function LoginPage() {
 
   const { enabled: recaptchaEnabled, isReady: recaptchaReady, error: recaptchaError, getToken } = useRecaptcha("login")
 
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams?.get("redirect") || "/"
 
   useEffect(() => {
-    if (isAuthenticated && !isSubmitting) {
-      router.push(redirectTo)
-    }
-  }, [isAuthenticated, isSubmitting, router, redirectTo])
+    if (!isAuthenticated || isSubmitting) return
+    const staff = user?.role === "admin" || user?.role === "superadmin" || user?.dashboardAccess === true
+    const destination = staff
+      ? (redirectTo.startsWith("/admin") ? redirectTo : "/admin/dashboard")
+      : redirectTo
+    router.push(destination)
+  }, [isAuthenticated, isSubmitting, router, redirectTo, user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -113,9 +116,16 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      const success = await login(formData.email, formData.password, recaptchaToken || undefined)
-      if (success) {
+      const result = await login(formData.email, formData.password, recaptchaToken || undefined)
+      if (result === true) {
         resetAttempts()
+        return
+      }
+
+      if (result === "unavailable") {
+        setErrors({ general: "We couldn't start your session. Please try again." })
+        setIsSubmitting(false)
+        lock.release()
         return
       }
 
@@ -128,7 +138,7 @@ export default function LoginPage() {
         })
       } else {
         setErrors({
-          general: `Account temporarily locked due to multiple failed attempts. Please try again in ${formatRemainingTime(300)}.`
+          general: `Account temporarily locked due to multiple failed attempts. Please try again in ${formatRemainingTime(LOCKOUT_SECONDS)}.`
         })
       }
       setIsSubmitting(false)

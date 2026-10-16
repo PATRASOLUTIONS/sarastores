@@ -76,6 +76,15 @@ for (const [label, current, version, expected] of [
   })
 }
 
+test("a database outage during session lookup is not reported as logged out", async () => {
+  const loader = sourceLoader({
+    "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
+    "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => user },
+    "@/lib/auth-credentials": { getAuthenticatedUserById: async () => { throw new Error("Fixture database outage") } },
+  })
+  await assert.rejects(() => loader.load("lib/auth.ts").getSession(), /Fixture database outage/)
+})
+
 test("server authorization uses live roles instead of stale signed privileges", async () => {
   const loader = sourceLoader({
     "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
