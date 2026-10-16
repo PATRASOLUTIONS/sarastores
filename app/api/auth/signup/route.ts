@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import bcrypt from "bcryptjs"
-import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
+import { detectBot, formatWait, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import crypto from "crypto"
 import { RegisterSchema } from "@/lib/validation"
 import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/consent"
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           message: botCheck.waitTime
-            ? `Too many attempts. Please try again in ${Math.ceil(botCheck.waitTime / 60)} minutes.`
+            ? `Too many attempts. Please try again in ${formatWait(botCheck.waitTime)}.`
             : "Request validation failed. Please try again.",
           success: false
         },

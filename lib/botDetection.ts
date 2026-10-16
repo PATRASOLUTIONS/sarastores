@@ -3,10 +3,15 @@ import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-
 import { z } from 'zod'
 import { getRecaptchaConfiguration, isRecaptchaEnabled } from '@/lib/recaptcha-config'
 
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000 // 15 minutes
-const MAX_REQUESTS_PER_WINDOW = 5 // 5 signup attempts per 15 minutes per IP
+const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 5 // 5 login or signup attempts per minute per IP
 
 const keyFor = (identifier: string) => `auth:attempts:${identifier}`
+
+export function formatWait(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / 60))
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`
+}
 
 /**
  * Get client IP address from request

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { detectBot, getClientIP, resetRateLimit } from "@/lib/botDetection"
+import { detectBot, formatWait, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import { buildSessionPayload, verifyCredentials } from "@/lib/auth-credentials"
 import { createSessionToken } from "@/lib/session"
 import { ACCESS_TOKEN_TTL_SECONDS, issueRefreshToken, type DeviceInfo } from "@/lib/refresh-tokens"
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: botCheck.waitTime
-            ? `Too many login attempts. Try again in ${Math.ceil(botCheck.waitTime / 60)} minutes.`
+            ? `Too many login attempts. Try again in ${formatWait(botCheck.waitTime)}.`
             : "Request validation failed.",
         },
         { status: 429 },
