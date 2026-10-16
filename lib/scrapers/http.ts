@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from "axios"
 import * as cheerio from "cheerio"
 import { ScraperError, type ScraperSource } from "./types"
+import { normalizeScraperUrl } from "./bulk-import"
 import { z } from "zod"
 
 const offerSchema = z.object({ price: z.unknown().optional(), lowPrice: z.unknown().optional(), availability: z.unknown().optional() }).passthrough()
@@ -112,8 +113,12 @@ export async function fetchBoundedText(
       transformResponse: [(value: string) => value],
     })
     if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location: unknown = response.headers.location
-      if (typeof location !== "string" || !location || hop === 5) {
+      const headerLocation: unknown = response.headers.location
+      const header = Array.isArray(headerLocation) ? headerLocation[0] : headerLocation
+      const location = typeof header === "string" && header
+        ? header
+        : jsonRedirectUrl(typeof response.data === "string" ? response.data : "", current)
+      if (!location || hop === 5) {
         throw new ScraperError("Source returned an invalid redirect chain", 422)
       }
       try {
@@ -216,6 +221,26 @@ function canonicalFlipkartProduct(url: string): string | null {
   return parsed.toString()
 }
 
+/** Flipkart's short-link service often returns the next URL in JSON, including on error statuses. */
+function jsonRedirectUrl(body: string, base: string): string | null {
+  let target = ""
+  try {
+    const parsed: unknown = JSON.parse(body)
+    const record = dataRecord(parsed)
+    const response = dataRecord(record.RESPONSE)
+    target = typeof response.redirectUrl === "string" ? response.redirectUrl : typeof record.redirectUrl === "string" ? record.redirectUrl : ""
+  } catch {
+    target = body.match(/"redirectUrl"\s*:\s*"([^"]+)"/)?.[1]?.replace(/\\\//g, "/") ?? ""
+  }
+  if (!target) return null
+  try {
+    const next = new URL(target, base).toString()
+    return detectSource(next) ? next : null
+  } catch {
+    return null
+  }
+}
+
 /** A same-source product URL hidden in a short-link interstitial. */
 function embeddedProductUrl(html: string, base: string, source: ScraperSource): string | null {
   const decoded = html.replace(/\\\//g, "/")
@@ -239,29 +264,44 @@ function embeddedProductUrl(html: string, base: string, source: ScraperSource): 
   return products[0] ?? others[0] ?? null
 }
 
+const SHORT_LINK_HINT = "Paste the full product page link from the browser address bar."
+
+function resolvedShortLink(html: string, finalUrl: string, source: ScraperSource, status: number): string | null {
+  const landed = source === "flipkart" ? canonicalFlipkartProduct(finalUrl) : null
+  if (landed && !isShortLink(finalUrl)) return status === 200 ? finalUrl : landed
+  if (!isShortLink(finalUrl) && status === 200) return finalUrl
+  const labeled = jsonRedirectUrl(html, finalUrl)
+  const fromLabel = labeled && source === "flipkart" ? canonicalFlipkartProduct(labeled) || (!isShortLink(labeled) ? labeled : null) : labeled
+  if (fromLabel && detectSource(fromLabel) === source) return source === "flipkart" ? canonicalFlipkartProduct(fromLabel) || fromLabel : fromLabel
+  const embedded = embeddedProductUrl(html, finalUrl, source)
+  if (!embedded) return landed
+  return source === "flipkart" ? canonicalFlipkartProduct(embedded) || embedded : embedded
+}
+
 /** Follows a short link by reading the redirect header — far cheaper than downloading the page. */
 export async function resolveRedirect(url: string): Promise<string> {
-  const source = detectSource(url)
+  const start = normalizeScraperUrl(url)
+  const source = detectSource(start)
   if (!source) throw new ScraperError("Unsupported short link", 400)
-  const res = await fetchBoundedText(url, candidate => detectSource(candidate) === source, {
-    headers: browserHeaders(),
-    timeout: 25000,
-  })
-  const landed = canonicalFlipkartProduct(res.finalUrl)
-  if (landed && !isShortLink(res.finalUrl)) return res.status === 200 ? res.finalUrl : landed
-  if (landed) return landed
-  if (res.status !== 200) throw new ScraperError("Could not resolve short link", 422)
-  if (!isShortLink(res.finalUrl)) return res.finalUrl
-  const next = embeddedProductUrl(res.html, res.finalUrl, source)
-  if (!next) return res.finalUrl
-  const product = canonicalFlipkartProduct(next)
-  if (product || !isShortLink(next)) return product || next
-  const resolved = await fetchBoundedText(next, candidate => detectSource(candidate) === source, {
-    headers: browserHeaders(),
-    timeout: 25000,
-  })
-  if (resolved.status !== 200) throw new ScraperError("Could not resolve short link", 422)
-  return isShortLink(resolved.finalUrl) ? next : resolved.finalUrl
+  let failure: ScraperError | null = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetchBoundedText(start, candidate => detectSource(candidate) === source, {
+        headers: browserHeaders(),
+        timeout: 25000,
+      })
+      const resolved = resolvedShortLink(res.html, res.finalUrl, source, res.status)
+      if (resolved) return resolved
+      failure = new ScraperError("Could not resolve short link", 422, SHORT_LINK_HINT)
+      if (![408, 425, 429, 500, 502, 503, 504].includes(res.status)) break
+    } catch (error) {
+      if (error instanceof ScraperError && !/timed out|invalid redirect|resolve short link/i.test(error.message)) throw error
+      failure = error instanceof ScraperError ? error : new ScraperError("Could not resolve short link", 422, SHORT_LINK_HINT)
+      if (error instanceof ScraperError && /invalid redirect/i.test(error.message)) break
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)))
+  }
+  throw failure ?? new ScraperError("Could not resolve short link", 422, SHORT_LINK_HINT)
 }
 
 /** Every JSON-LD node on the page, flattened through `@graph`. */

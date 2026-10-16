@@ -2,6 +2,20 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { sourceLoader } from "./source-loader.mjs"
 
+test("a Flipkart short link is resolved from the JSON body when HTTP status is not 200", async () => {
+  const body = JSON.stringify({
+    STATUS_CODE: 503,
+    RESPONSE: { redirectUrl: "https://dl.flipkart.com/dl/samsung-fridge/p/itm123?pid=ABC" },
+  })
+  const http = sourceLoader({
+    axios: { get: async () => ({ status: 503, data: body, headers: {} }) },
+  }).load("lib/scrapers/http.ts")
+  assert.equal(
+    await http.resolveRedirect("https://dl.flipkart.com/s/ZunNveuuuN"),
+    "https://www.flipkart.com/samsung-fridge/p/itm123?pid=ABC",
+  )
+})
+
 test("pasted Flipkart short links are resolved before the product scrape", async () => {
   const http = sourceLoader().load("lib/scrapers/http.ts")
   const seen = []
