@@ -249,9 +249,15 @@ export default function Header() {
         const response = await fetch("/api/categories")
         if (response.ok) {
           const data = await response.json()
-          // Filter only enabled categories (isEnabled !== false)
-          const enabledCategories = data.filter((cat: Category) => cat.isEnabled !== false)
-          setCategories(enabledCategories)
+          const enabledCategories = Array.isArray(data)
+            ? data.filter(
+                (cat: Category) =>
+                  cat.isEnabled !== false &&
+                  !/^small appliance$/i.test(String(cat.name || "").trim()) &&
+                  !/^mobiles?$/i.test(String(cat.name || "").trim()),
+              )
+            : []
+          setCategories([{ id: "Mobile", name: "Mobiles" }, ...enabledCategories])
         }
       } catch (error) {
         console.error("Error fetching categories:", error)
@@ -320,7 +326,11 @@ export default function Header() {
   }
 
   const handleCategoryClick = (categoryId: string) => {
-    router.push(`/products?category=${categoryId}`)
+    router.push(
+      /^mobiles?$/i.test(categoryId)
+        ? "/products?subCategory=Mobile&availability=in"
+        : `/products?category=${encodeURIComponent(categoryId)}`,
+    )
   }
 
   const getDashboardLink = () => {

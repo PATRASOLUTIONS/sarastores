@@ -434,13 +434,13 @@ export const LicenseKeyFilterSchema = z.object({
 
 export const LoginSchema = z.object({
   email: emailSchema,
-  password: z.string().min(1, 'Password is required'),
+  password: z.string(),
   rememberMe: z.boolean().optional(),
 });
 
 export const RegisterSchema = z.object({
   email: emailSchema,
-  password: passwordSchema,
+  password: z.string(),
   confirmPassword: z.string(),
   name: nameSchema,
   // Not collected at signup; the checkout form captures it.

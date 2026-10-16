@@ -196,7 +196,8 @@ export default function ProductsPage() {
     setOfferTab(searchParams.size > 0 ? "all-products" : "all-offers")
     setMinDiscount(0)
     setMinRating(0)
-    setAvailability("all")
+    const availabilityFromUrl = searchParams.get("availability")
+    setAvailability(availabilityFromUrl === "in" || availabilityFromUrl === "out" ? availabilityFromUrl : "all")
 
     const sortFromUrl = searchParams.get("sort")
     setSortBy(sortFromUrl || "relevance")

@@ -30,7 +30,7 @@ export type HomeCategory = { label: string; image: string; href: string; match: 
 export type HomeBrand = { name: string; logo?: string; href: string }
 
 export const HOME_CATEGORIES: HomeCategory[] = [
-  { label: "Mobiles", image: "mobiles", match: /mobile|smartphone|iphone/i, href: "/products?q=mobile" },
+  { label: "Mobiles", image: "mobiles", match: /mobile|smartphone|iphone/i, href: "/products?subCategory=Mobile&availability=in" },
   { label: "Laptops", image: "laptops", match: /laptop|notebook/i, href: "/products?q=laptop" },
   { label: "Televisions", image: "televisions", match: /television|\btv\b|panel/i, href: "/products?q=television" },
   { label: "Refrigerators", image: "refrigerators", match: /refrigerator|fridge/i, href: "/products?q=refrigerator" },
