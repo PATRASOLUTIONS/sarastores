@@ -87,10 +87,8 @@ export default function NewProductAdvertisementPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
-          <Link href="/admin/product-advertisements">
-            <button className="mr-4 p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+          <Link href="/admin/product-advertisements" className="inline-block mr-4 p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100">
+            <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Create New Product Advertisement</h1>
@@ -307,13 +305,11 @@ export default function NewProductAdvertisementPage() {
 
             {/* Submit Button */}
             <div className="flex justify-end space-x-4 pt-6 border-t">
-              <Link href="/admin/product-advertisements">
-                <button
-                  type="button"
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
+              <Link
+                href="/admin/product-advertisements"
+                className="inline-block px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
               </Link>
               <button
                 type="submit"

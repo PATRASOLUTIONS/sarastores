@@ -39,7 +39,7 @@ The development-only catalogue seed defaults to preview; `{ "apply": true }` exp
 
 ## 2. Non-negotiable rules
 
-1. **Every route handler guards itself.** [middleware.ts](middleware.ts) *does* enforce roles (see §4), but it is prefix-based and silently misses new paths. Only 77 of 219 route files currently call a guard. Always call `requireUser()` / `requireAdmin()` / `requireVendor()` from [lib/auth.ts](lib/auth.ts) inside the handler.
+1. **Every route handler guards itself.** [middleware.ts](middleware.ts) *does* enforce roles (see §4), but it is prefix-based and silently misses new paths, so a route outside those prefixes is open by default. Always call `requireUser()` / `requireAdmin()` / `requireFullAdmin()` / `requireVendor()` from [lib/auth.ts](lib/auth.ts) inside the handler. Every mutating route does this today; [tests/route-guards.test.mjs](tests/route-guards.test.mjs) fails the suite if a new one does not, and carries the reasoned allowlist of the genuinely public ones.
 2. **Derive identity from the session, never from the request.** `userId`, `vendorId`, `partnerId` come from `getSession()` / `getCurrentUserId()` or the authenticated API key — never from `request.json()`, `searchParams`, or a route param.
 3. **Recompute all money server-side.** Client-supplied `price`, `subtotal`, `total`, `discount` are display hints only. Use `computeOrderPricing()` from [lib/order-pricing.ts](lib/order-pricing.ts), which re-reads products, software and coupons from MongoDB before any Razorpay order or order document is created.
 4. **Keep [lib/session.ts](lib/session.ts) dependency-free.** It runs inside Edge middleware. Web Crypto (`crypto.subtle`), `TextEncoder`, `btoa`/`atob` only — no `Buffer`, no `require("crypto")`, no imports. Breaking this makes every session verify as `null` everywhere.
@@ -114,7 +114,7 @@ Matches `/api/:path*`, `/admin/:path*`, `/account/:path*`, `/vendor/:path*`, `/d
 | `/admin` | [app/admin/layout.tsx](app/admin/layout.tsx) | ✅ Server. `export const dynamic = "force-dynamic"`, `await getSession()`, redirect to `/login?redirect=/admin`, then requires `admin`/`superadmin`/`dashboardAccess`. Renders `AdminClientShell`. |
 | `/dashboard` | [app/dashboard/layout.tsx](app/dashboard/layout.tsx) | ✅ Server. `getSession()` → `redirect()`. |
 | `/account` | [app/account/layout.tsx](app/account/layout.tsx) | ✅ Server gate + client shell. **Copy this pattern for new privileged areas.** |
-| `/vendor` | [app/vendor/layout.tsx](app/vendor/layout.tsx) | ❌ `"use client"` — `useAuth()` + `useEffect` redirect only. The one remaining client-only gate; real enforcement is per API route. |
+| `/vendor` | [app/vendor/layout.tsx](app/vendor/layout.tsx) | ✅ Server. `force-dynamic`, `await getSession()`, redirect to `/login?redirect=/vendor`, then requires `vendor`/`admin`/`superadmin` — the same set as `requireVendor()`. Renders `VendorClientShell`, which is now presentation only. |
 
 ---
 
@@ -164,7 +164,7 @@ The `settings` document holds ~900 KB of base64 images. `getSettingsData()` runs
 - **mongodb.ts / db-service.ts / db.ts** — see §5.
 - **api-error.ts** — `handleApiError(error, message?)` → `{ error, success: false }` 500. Used in 42 route files.
 - **api-client.ts** — `apiFetch()` for admin/dashboard/account client calls; sets `credentials: "include"` so httpOnly cookies survive CDN/proxy hops, and normalises JSON/error handling.
-- **validation.ts** — Zod schemas: `phoneSchema`, `pincodeSchema`, `emailSchema`, `passwordSchema`, `simplePasswordSchema`, `nameSchema`, `urlSchema`, `priceSchema`, `quantitySchema`, `LoginSchema`, `RegisterSchema`, `ForgotPasswordSchema`, `ResetPasswordSchema`, `ChangePasswordSchema`, `UpdateProfileSchema`, `UpdateConsentSchema`, `UnsubscribeSchema`, `AddressSchema`, `ProductVariantSchema`, `CreateProductSchema`, `UpdateProductSchema`, `OrderItemSchema`, `CreateOrderSchema`, `UpdateOrderStatusSchema`, `ReviewSchema`, `ContactFormSchema`, `ComplaintSchema`. **Only ~5 routes import from here** — several others define inline schemas. New write routes must use it.
+- **validation.ts** — Zod schemas: `phoneSchema`, `pincodeSchema`, `emailSchema`, `passwordSchema`, `simplePasswordSchema`, `nameSchema`, `urlSchema`, `priceSchema`, `quantitySchema`, `LoginSchema`, `RegisterSchema`, `ForgotPasswordSchema`, `ResetPasswordSchema`, `ChangePasswordSchema`, `UpdateProfileSchema`, `UpdateConsentSchema`, `UnsubscribeSchema`, `AddressSchema`, `ProductVariantSchema`, `CreateProductSchema`, `UpdateProductSchema`, `OrderItemSchema`, `CreateOrderSchema`, `UpdateOrderStatusSchema`, `ReviewSchema`, `ContactFormSchema`, `ComplaintSchema`, `SpinOtpRequestSchema`. Many routes define inline Zod schemas instead of importing from here; 88 of the 137 body-reading routes validate one way or the other. New write routes must validate, and should reuse these schemas rather than redefining field rules.
 
 ### Commerce
 - **order-pricing.ts** — `computeOrderPricing()`: loads products + software from Mongo, applies GST, shipping (free above a configurable threshold), coupon discounts. Returns `PricingSuccess | PricingError`. Authoritative.
@@ -228,7 +228,7 @@ The `settings` document holds ~900 KB of base64 images. `getSettingsData()` runs
 
 **Software** `/api/software/*`, `/api/software/license-keys/*`, `/api/software-licenses`.
 
-**Vendor** `/api/vendor/products` and `/api/vendor/products/[id]` — currently rely on the middleware vendor check; add `requireVendor()` when you touch them.
+**Vendor** `/api/vendor/products` and `/api/vendor/products/[id]` — every method calls `requireVendor()` in the handler.
 
 **Partner API v1** `/api/v1/partner/*` (16 routes) — `register`, `api-keys/domains`, `orders` (+ `[orderId]`, `cancel`, `status/[id]`, `razorpay/create`, `razorpay/verify`), `products` (+ `[productId]`, `specifications`, `stock-check`), `wallet` (`balance`, `transactions`, `payouts`, `payout`, `bank-accounts`). Bypasses middleware entirely; authenticated by API key with its own rate limiting and CORS. Docs at [app/partner-api-docs](app/partner-api-docs), tester at [app/partner-api-test](app/partner-api-test) (admin-gated).
 
@@ -322,15 +322,17 @@ Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Polic
 | Issue | Detail |
 | --- | --- |
 | Post-order cart cleanup | The audit corrected order cleanup to use `carts`, matching the shopping data layer. |
-| Guard coverage | Only 77 of 219 route files call a `lib/auth.ts` guard. The middleware policy table covers most gaps today, but any new path outside those prefixes is unprotected by default. |
-| Unguarded debug/test routes | `/api/debug/session`, `/api/debug/cookie`, `/api/test-db`, `/api/test-connection`, `/api/test-product-update`, `/api/debug-categories` have no auth. |
-| `/vendor` gating | Client-only; anonymous users receive the HTML shell before the redirect fires. Convert to the `/account` server-gate pattern. |
-| Validation | ~5 routes use [lib/validation.ts](lib/validation.ts); most write routes accept unvalidated JSON. |
-| `@/lib/db` importers | 10 files (payment verify, payments, product SKU, scrape-amazon, scraped-products, software-licenses, advertisements `[id]`, both partner Razorpay routes). Migrate them to `db-service`. |
-| Rate limiting | In-memory only; resets on every cold start. Needs Redis. |
-| Build safety | TypeScript and recommended ESLint gates are enforced; all 328 isolated regression tests, the strict local production build and current local configuration preflight pass. Non-blocking lint warnings and external deployment gates remain. See [the audit](documents/production-readiness-audit.md). |
-| Image allowlist | [next.config.mjs](next.config.mjs) `remotePatterns` ends with a catch-all `hostname: "**"`, which defeats the point of the allowlist. |
-| Firebase | Referenced in CSP, preconnects and the image allowlist, but no Firebase SDK is installed and no upload route exists. |
+| Guard coverage | **Closed.** Measured across all 257 route files: 183 mutate state, and every one of those identifies its caller. The 22 that are anonymous are so by design (login cannot require a session; public forms and telemetry have no caller to identify) and are listed with a reason in [tests/route-guards.test.mjs](tests/route-guards.test.mjs), which fails if a new mutating route appears without a guard or a justification. Rule 1 in §2 still applies to new code — the middleware policy table matches by prefix and silently misses new paths. |
+| Production CSP | `script-src` still carries `unsafe-inline`. Hashes are impossible (Next's inline `self.__next_f.push(...)` payload differs per page) and a nonce must be generated per request, but 93 of 160 pages are statically prerendered, so there is no request to attach one to. Shipping a nonce blanks those pages. Closing it means making them dynamic and giving up their caching — a rendering-model decision, not a config change. Reasoning is recorded above the directive in [next.config.mjs](next.config.mjs). |
+| Anonymous write surfaces | Every endpoint that persists a document for an unauthenticated caller now carries a request budget: `/api/vitals`, `/api/events`, `/api/consent/tracking`, `/api/spin-wheel/track`, `/api/spin-wheel/otp/send`. The OTP budget is keyed on the caller *and* the phone number — per-phone alone let someone walk a list of numbers, spending a real WhatsApp message and email on each. |
+| `/vendor` gating | **Closed.** [app/vendor/layout.tsx](app/vendor/layout.tsx) is now a server gate (`force-dynamic`, `await getSession()`, `redirect()`) matching `requireVendor()`'s role set; `vendor-client-shell.tsx` is presentation only. |
+| Unguarded debug/test routes | **Closed.** `debug-categories`, `debug-product`, `test-db`, `test-connection` and `test-product-update` no longer exist. `/api/debug` returns 404 outside development and reports only booleans. The rest call an admin guard. |
+| Validation | 88 of the 137 routes that read a request body validate it. The 49 that do not are admin-only, where the caller is already trusted; run `node scripts/audit-body-validation.mjs` for the current list. New write routes must use [lib/validation.ts](lib/validation.ts). |
+| `@/lib/db` importers | **Closed.** Nothing imports `@/lib/db`; the module remains only as a deprecated shim. |
+| Rate limiting | **Closed.** [lib/rate-limit-store.ts](lib/rate-limit-store.ts) defaults to MongoDB in production, *throws* if `memory` is configured there, fails closed in every backend, and keeps a TTL index on `resetAt`. Upstash is supported via `RATE_LIMIT_BACKEND=upstash`. |
+| Build safety | TypeScript and recommended ESLint gates are enforced; the isolated regression suite, the strict local production build and the local configuration preflight pass. Non-blocking lint warnings and external deployment gates remain. See [the audit](documents/production-readiness-audit.md). |
+| Image allowlist | **Closed.** The catch-all `hostname: "**"` is gone from [next.config.mjs](next.config.mjs). |
+| Firebase | Referenced in CSP and preconnects, but no Firebase SDK is installed and no upload route exists. |
 
 ---
 

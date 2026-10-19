@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer"
 import type Mail from "nodemailer/lib/mailer"
-import jsPDF from "jspdf"
+import { generateInvoicePDF as renderInvoicePDF } from "@/lib/invoice-pdf"
 import { escapeHtml } from "@/lib/html"
 export { escapeHtml } from "@/lib/html"
 
@@ -107,20 +107,88 @@ export function buildPasswordResetEmail(resetUrl: string): string {
 </body></html>`
 }
 
+/**
+ * Derive a readable plain-text part from an HTML email.
+ *
+ * Every message must carry a text alternative: HTML-only mail is scored as
+ * spam by most filters, and it is all a screen reader or a text client has to
+ * work with. Generating it here means no template can forget one.
+ */
+export function htmlToPlainText(html: string): string {
+  return html
+    // Drop anything that is not content.
+    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // Keep link targets, which are otherwise lost entirely.
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => {
+      const label = text.replace(/<[^>]+>/g, "").trim()
+      return label && !label.includes(href) ? `${label} (${href})` : href
+    })
+    // Structural tags become line breaks so the result is not one long line.
+    .replace(/<(br|\/p|\/div|\/tr|\/h[1-6]|\/li)\s*\/?>/gi, "\n")
+    .replace(/<\/t[dh]>/gi, "\t")
+    .replace(/<li\b[^>]*>/gi, "  - ")
+    .replace(/<[^>]+>/g, "")
+    // Unescape the entities the templates introduced.
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Collapse the whitespace the markup left behind.
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+/**
+ * Inject preheader text — the preview line inboxes show next to the subject.
+ * Without it they fall back to whatever markup comes first, which is usually
+ * "View this email in your browser" or nothing at all.
+ */
+export function withPreheader(html: string, preheader: string): string {
+  if (!preheader) return html
+  const block =
+    `<div style="display:none;max-height:0;overflow:hidden;opacity:0;` +
+    `mso-hide:all;font-size:1px;line-height:1px;color:transparent;">` +
+    `${escapeHtml(preheader)}` +
+    // Padding stops the client from pulling body copy into the preview.
+    `${"&#8203;&nbsp;".repeat(40)}</div>`
+  return /<body[^>]*>/i.test(html)
+    ? html.replace(/(<body[^>]*>)/i, `$1${block}`)
+    : block + html
+}
+
 export async function sendEmail({
   to,
   subject,
   html,
+  text,
+  preheader,
   attachments,
+  listUnsubscribe,
 }: {
   to: string
   subject: string
   html: string
+  /** Overrides the text part. Generated from `html` when omitted. */
+  text?: string
+  /** Inbox preview line. */
+  preheader?: string
   attachments?: Array<{
     filename: string
     content: Buffer | string
     contentType?: string
   }>
+  /**
+   * Unsubscribe URL for non-transactional mail. Gmail and Outlook expect the
+   * header on bulk mail and penalise senders that omit it; transactional mail
+   * (receipts, password resets) must leave it unset.
+   */
+  listUnsubscribe?: string
 }) {
   try {
     if (process.env.NODE_ENV === "development") {
@@ -130,15 +198,26 @@ export async function sendEmail({
       console.log(`  Attachments: ${attachments ? attachments.length : 0}`)
     }
     
+    const body = preheader ? withPreheader(html, preheader) : html
+
     const mailOptions: Mail.Options = {
       from: saraMailFrom(),
       to,
       subject,
-      html,
+      html: body,
+      text: text ?? htmlToPlainText(body),
     }
 
     if (attachments && attachments.length > 0) {
       mailOptions.attachments = attachments
+    }
+
+    if (listUnsubscribe) {
+      mailOptions.headers = {
+        "List-Unsubscribe": `<${listUnsubscribe}>`,
+        // Declares one-click support, which Gmail requires from bulk senders.
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      }
     }
 
     const result = await transporter.sendMail(mailOptions)
@@ -438,234 +517,28 @@ export function getVendorOrderNotificationTemplate(order: OrderEmailInput) {
   `
 }
 
+/**
+ * Tax invoice for an order, as a PDF buffer.
+ *
+ * The implementation lives in lib/invoice-pdf.ts; this wrapper adapts the
+ * order shape used by the email templates.
+ */
 export function generateInvoicePDF(order: InvoiceEmailInput): Buffer {
-  const html = `<!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Invoice</title>
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          padding: 20px;
-        }
-        .container {
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-        .header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 20px;
-        }
-        .logo {
-          width: 100px;
-          height: 100px;
-          border: 1px solid #000;
-        }
-        .details {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-        }
-        .address {
-          margin-bottom: 10px;
-        }
-        .items-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 20px;
-        }
-        .items-table th, .items-table td {
-          padding: 10px;
-          text-align: left;
-          border-bottom: 1px solid #000;
-        }
-        .items-table th {
-          background-color: #e5e7eb;
-        }
-        .items-table tr:nth-child(even) {
-          background-color: #f5f5f5;
-        }
-        .summary {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          margin-top: 20px;
-        }
-        .summary-item {
-          margin-bottom: 10px;
-        }
-        .summary-item span {
-          font-weight: bold;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="logo">
-            <img src="${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || ""}/sara-logo.png" alt="SARA" width="140">
-          </div>
-          <div class="details">
-            <div class="address">
-              <p>Shipto Inc.</p>
-              <p>123 Main Street</p>
-              <p>City, State, ZIP</p>
-            </div>
-            <div>
-              <p>Order #${order.id}</p>
-              <p>Date: ${new Date().toLocaleDateString()}</p>
-            </div>
-          </div>
-        </div>
-        <table class="items-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Qty</th>
-              <th>Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${order.items.map((item) => `
-              <tr>
-                <td>${escapeHtml(item.name)}</td>
-                <td>${item.quantity}</td>
-                <td>₹${item.price.toLocaleString("en-IN")}</td>
-                <td>₹${(item.price * item.quantity).toLocaleString("en-IN")}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="summary">
-          <div class="summary-item">
-            <span>Subtotal:</span>
-            <span>₹${order.subtotal.toLocaleString("en-IN")}</span>
-          </div>
-          <div class="summary-item">
-            <span>Tax:</span>
-            <span>₹${order.taxAmount.toLocaleString("en-IN")}</span>
-          </div>
-          <div class="summary-item">
-            <span>Total Amount:</span>
-            <span>₹${order.total.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>`;
-
-  const doc = new jsPDF()
-  const pageWidth = doc.internal.pageSize.getWidth()
-  doc.html(html, {
-    callback: function (doc) {
-      doc.save("invoice.pdf");
-    },
-    x: 10,
-    y: 10,
-    width: pageWidth - 20,
-  });
-
-  // Apply some professional styling
-  doc.setLineWidth(1)
-  doc.line(20, 70, pageWidth - 20, 70)
-  doc.setFontSize(15)
-  doc.setFont("helvetica", "bold")
-  doc.setFillColor(240, 240, 240)
-  doc.setTextColor(20, 20, 20)
-  doc.rect(20, 67, pageWidth - 40, 25, "F")
-  doc.text("INVOICE", 25, 77)
-
-  // Simple header - matches email template style
-  doc.setFontSize(20)
-  doc.setFont("helvetica", "bold")
-  doc.text("INVOICE", 20, 30)
-
-  // Company info - simple and clean
-  doc.setFontSize(10)
-  doc.setFont("helvetica", "normal")
-  doc.text("Sara Mobiles and Electronics ", 20, 45)
-  doc.text("123 Business Street, Mumbai, Maharashtra 400001", 20, 55)
-  doc.text("India | Phone: +91 78920 51553 | Email: sales.systechdigital@gmail.com", 20, 65)
-
-  // Invoice details - right aligned, simple
-  doc.setFontSize(10)
-  doc.text(`Invoice #: ${order.id}`, pageWidth - 20, 45, { align: "right" })
-  doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`, pageWidth - 20, 55, { align: "right" })
-  doc.text(`Status: ${order.status}`, pageWidth - 20, 65, { align: "right" })
-
-  // Customer info section
-  let y = 85
-  doc.setFontSize(11)
-  doc.setFont("helvetica", "bold")
-  doc.text("Bill To:", 20, y)
-  y += 15
-
-  doc.setFontSize(10)
-  doc.setFont("helvetica", "normal")
-  doc.text(`${escapeHtml(order.customer.firstName)} ${escapeHtml(order.customer.lastName)}`, 20, y)
-  y += 12
-  doc.text(escapeHtml(order.customer.email), 20, y)
-  y += 12
-  if (order.customer.phone) {
-    doc.text(`Phone: ${escapeHtml(order.customer.phone)}`, 20, y)
-    y += 12
-  }
-  doc.text(escapeHtml(order.customer.address), 20, y)
-  y += 12
-  doc.text(`${escapeHtml(order.customer.city)}, ${escapeHtml(order.customer.state)} ${escapeHtml(order.customer.zipCode)}`, 20, y)
-  y += 12
-  doc.text(escapeHtml(order.customer.country), 20, y)
-  y += 20
-
-  // Order items - simple list format
-  doc.setFontSize(11)
-  doc.setFont("helvetica", "bold")
-  doc.text("Order Items:", 20, y)
-  y += 15
-
-  doc.setFontSize(9)
-  doc.setFont("helvetica", "normal")
-  order.items.forEach((item, index) => {
-    doc.text(`${index + 1}. ${escapeHtml(item.name)}`, 20, y)
-    doc.text(`Qty: ${item.quantity} × ₹${item.price.toLocaleString("en-IN")}`, 20, y + 5)
-    doc.text(`₹${(item.price * item.quantity).toLocaleString("en-IN")}`, pageWidth - 20, y, { align: "right" })
-    y += 15
+  return renderInvoicePDF({
+    id: order.id,
+    createdAt: order.createdAt,
+    status: order.status,
+    items: order.items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+    customer: order.customer,
+    subtotal: order.subtotal,
+    // Both field names exist on this type; taxAmount is the invoice-facing one.
+    taxAmount: order.taxAmount ?? order.tax,
+    shipping: order.shipping,
+    total: order.total,
+    paymentMethod: order.paymentMethod,
   })
-
-  y += 10
-
-  // Summary - simple and clean
-  doc.setFontSize(10)
-  doc.setFont("helvetica", "normal")
-  const summaryX = pageWidth - 80
-  doc.text(`Subtotal: ₹${order.subtotal.toLocaleString("en-IN")}`, summaryX, y)
-  y += 12
-  doc.text(`Tax (18% GST): ₹${order.tax.toLocaleString("en-IN")}`, summaryX, y)
-  y += 12
-  doc.text(`Shipping: ₹${order.shipping.toLocaleString("en-IN")}`, summaryX, y)
-  y += 15
-
-  // Total - highlighted simply
-  doc.setFillColor(240, 240, 240)
-  doc.rect(summaryX - 5, y - 3, 75, 12, 'F')
-
-  doc.setFontSize(11)
-  doc.setFont("helvetica", "bold")
-  doc.text(`Total: ₹${order.total.toLocaleString("en-IN")}`, summaryX, y + 4)
-
-  // Footer - simple and centered
-  y += 30
-  doc.setFontSize(8)
-  doc.setFont("helvetica", "normal")
-  doc.text("Thank you for your business!", 20, y)
-  doc.text("For any queries, please contact us at sales.systechdigital@gmail.com", 20, y + 10)
-
-  return Buffer.from(doc.output('arraybuffer'))
 }

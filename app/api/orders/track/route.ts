@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 const STATUS_MAP: Record<string, { key: string; label: string }> = {
   pending: { key: "ordered", label: "Order Placed" },
@@ -86,6 +87,16 @@ function buildTimeline(order: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Order IDs are sequential, so an unthrottled lookup is a walkable index of
+    // every order on the platform.
+    const limit = await checkRateLimit(request, { windowMs: 60_000, maxRequests: 15 })
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: "Too many tracking requests. Please try again shortly." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfter ?? 60) } },
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const orderId = searchParams.get("orderId")
     if (!orderId) {
@@ -139,13 +150,19 @@ export async function GET(request: NextRequest) {
     conditions.push({ _id: clean } as Record<string, unknown>)
     conditions.push({ orderNumber: clean })
 
-    // Email or phone lookup
-    if (clean.includes("@")) {
-      conditions.push({ "customer.email": clean })
-    }
-    if (/^\d{10}$/.test(clean)) {
-      conditions.push({ "customer.phone": clean })
-    }
+    /*
+     * Deliberately no lookup by customer email or phone.
+     *
+     * This endpoint is unauthenticated, so matching on those fields let anyone
+     * who knew a shopper's email address or mobile number read back their order
+     * ID, tracking number, carrier, status and destination city. An email
+     * address is not a secret and is not proof of ownership.
+     *
+     * Order IDs are sequential (SARAECOM-<seq> from the counters collection),
+     * so they are not sufficient on their own either — which is exactly why
+     * /api/orders/[id] requires a session or the guest capability token minted
+     * at checkout. What is returned here is limited to shipment progress.
+     */
 
     // Single query with $or instead of 15+ sequential findOne() calls
     let order = await orders.findOne({ $or: conditions })
@@ -158,7 +175,7 @@ export async function GET(request: NextRequest) {
     if (!order) {
       return NextResponse.json({
         error: "Order not found. Please check your order ID and try again.",
-        hint: "Try entering: the order ID from your confirmation email (with or without #), Razorpay payment ID (pay_...), or your registered email/phone.",
+        hint: "Enter the order ID from your confirmation email (with or without #) or the payment ID (pay_...). Tracking by email or phone is not supported.",
       }, { status: 404 })
     }
 

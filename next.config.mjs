@@ -52,9 +52,29 @@ const nextConfig = {
   async headers() {
     const isProd = process.env.NODE_ENV === 'production'
 
-    // In development, Next.js loads scripts via webpack HMR from /_next/static/
-    // without nonces, so strict-dynamic blocks them entirely. Only apply the
-    // hardened CSP in production; dev uses a relaxed script-src to keep HMR alive.
+    /*
+     * In development, Next.js loads scripts via webpack HMR from /_next/static/
+     * without nonces, so strict-dynamic blocks them entirely. Only apply the
+     * hardened CSP in production; dev uses a relaxed script-src to keep HMR alive.
+     *
+     * Why 'unsafe-inline' is still here in production
+     * -----------------------------------------------
+     * Removing it requires a per-request nonce, because Next.js streams the RSC
+     * payload through inline `self.__next_f.push(...)` scripts whose content
+     * differs on every page — so hashes cannot cover them, only a nonce can.
+     *
+     * A nonce has to be generated per request in middleware, which means the
+     * page must be rendered per request. 93 of this app's 160 pages are
+     * statically prerendered at build time; their inline scripts are baked into
+     * the HTML and cannot carry a nonce that matches a header generated later.
+     * Adding a nonce globally would therefore blank every one of those pages.
+     *
+     * Closing this properly is a rendering-model decision — moving the
+     * storefront to dynamic rendering, with the latency and cost that implies —
+     * not a header change. Do not add a nonce here without making that call
+     * first. The directives below are deliberately strict everywhere else so
+     * this stays the only weak link.
+     */
     const scriptSrc = isProd
       ? "script-src 'self' 'unsafe-inline' https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googletagmanager.com https://*.google-analytics.com https://*.razorpay.com https://*.facebook.net https://*.clarity.ms https://checkout.razorpay.com https://va.vercel-scripts.com https://vercel.live"
       : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.googletagmanager.com https://*.google-analytics.com https://*.razorpay.com https://*.facebook.net https://*.clarity.ms https://checkout.razorpay.com https://va.vercel-scripts.com https://vercel.live"
@@ -91,6 +111,13 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Content-Security-Policy', value: csp },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Severs the window.opener relationship so a page this site opens —
+          // or one that opens this site — cannot reach into its window object.
+          // "allow-popups" rather than plain "same-origin" because the Razorpay
+          // checkout and Google OAuth both run in popups that must stay usable.
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+          // Stops legacy Flash/PDF crossdomain.xml policies being honoured.
+          { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self), payment=(self "https://api.razorpay.com"), interest-cohort=()' },
         ],
       },

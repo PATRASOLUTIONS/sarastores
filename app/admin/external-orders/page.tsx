@@ -115,9 +115,7 @@ export default function ExternalOrdersPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">External Orders</h1>
         <div className="flex items-center gap-2">
-          <Link href="/admin/orders">
-            <button className="px-3 py-2 rounded bg-gray-100">Back to Orders</button>
-          </Link>
+          <Link href="/admin/orders" className="px-3 py-2 rounded bg-gray-100">Back to Orders</Link>
           <button onClick={() => fetchPage()} className="px-3 py-2 rounded bg-white border flex items-center gap-2">
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>

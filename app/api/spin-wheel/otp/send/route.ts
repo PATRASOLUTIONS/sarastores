@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createHash, randomInt } from "node:crypto"
 import { sendOtpEmail, sendWhatsAppOTP } from "@/lib/spin-wheel-notifications"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, resolveCampaignSlug } from "@/lib/spin-wheel-campaigns"
 import { SpinOtpRequestSchema } from "@/lib/validation"
 import { rateLimitHit } from "@/lib/rate-limit-store"
+import { clientAddress } from "@/lib/client-address"
 import { handleApiError } from "@/lib/api-error"
 
 export const maxDuration = 15
@@ -13,7 +14,20 @@ export async function POST(request: NextRequest) {
     const parsed = SpinOtpRequestSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: "Valid phone, email and name are required" }, { status: 400 })
     const { phone, email, name, senderNumber, campaignId } = parsed.data
-    const campaignSlug = campaignId || "default"
+    const campaignSlug = resolveCampaignSlug(campaignId)
+    if (!campaignSlug) return NextResponse.json({ error: "Unknown campaign" }, { status: 400 })
+
+    /*
+     * Each send costs a real WhatsApp message and a real email. The per-phone
+     * budget below stops one number being bombarded, but on its own it lets a
+     * caller walk a list of numbers and spend three messages on each. This
+     * bounds what any single caller can spend, whoever they claim to be.
+     */
+    const perCaller = await rateLimitHit(`spin-otp-ip:${clientAddress(request)}`, 10, 15 * 60 * 1000)
+    if (perCaller.limited) {
+      return NextResponse.json({ error: "Too many OTP requests. Please try again after some time." }, { status: 429 })
+    }
+
     const otpCol = await getCampaignCollection(campaignSlug, "otps")
     const participantsCol = await getCampaignCollection(campaignSlug, "participants")
     if (await participantsCol.findOne({ $or: [{ phone }, { email }] })) {

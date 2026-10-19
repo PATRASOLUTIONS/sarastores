@@ -288,7 +288,11 @@ async function authorizeRequest(request: NextRequest) {
       return NextResponse.next()
     }
 
-    if (!user || user.role !== "vendor") {
+    // Matches requireVendor() in lib/auth.ts and the /vendor layout, so an
+    // admin is not bounced from a portal both of those admit.
+    const isVendorUser =
+      user?.role === "vendor" || user?.role === "admin" || user?.role === "superadmin"
+    if (!isVendorUser) {
       const isHtml = request.headers.get("accept")?.includes("text/html")
       if (request.method === "GET" && isHtml) {
         return NextResponse.next()

@@ -115,11 +115,9 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center mb-6">
-        <Link href="/admin/customers">
-          <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center mr-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Customers
-          </button>
+        <Link href="/admin/customers" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center mr-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Customers
         </Link>
         <h1 className="text-2xl font-semibold">Customer Details</h1>
       </div>
@@ -271,9 +269,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
                             <div className="text-sm text-gray-900">₹{order.total.toFixed(2)}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <Link href={`/admin/orders/${order.id}`}>
-                              <button className="text-indigo-600 hover:text-indigo-900">View</button>
-                            </Link>
+                            <Link href={`/admin/orders/${order.id}`} className="text-indigo-600 hover:text-indigo-900">View</Link>
                           </td>
                         </tr>
                       ))}

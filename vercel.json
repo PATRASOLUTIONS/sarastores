@@ -2,15 +2,8 @@
   "headers": [
     {
       "source": "/api/v1/partner/(.*)",
+      "comment": "CORS is decided per-request in lib/partner/auth.ts, which reflects only an allowlisted Origin. A static Allow-Origin: * here combined with Allow-Credentials: true would let any site make credentialed calls to this surface, so neither header is set at the platform layer.",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
         {
           "key": "Access-Control-Allow-Methods",
           "value": "GET, POST, PUT, DELETE, OPTIONS, PATCH"
@@ -139,28 +132,12 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/rebuild-profiles",
+      "path": "/api/cron/daily/maintenance",
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/cron/segment-customers",
-      "schedule": "30 1 * * *"
-    },
-    {
-      "path": "/api/cron/cart-recovery",
+      "path": "/api/cron/daily/outreach",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/wishlist-alerts",
-      "schedule": "30 4 * * *"
-    },
-    {
-      "path": "/api/cron/lifecycle-reminders",
-      "schedule": "30 5 * * *"
-    },
-    {
-      "path": "/api/cron/data-retention",
-      "schedule": "0 2 * * *"
     }
   ]
 }

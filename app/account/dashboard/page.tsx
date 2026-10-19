@@ -57,10 +57,8 @@ export default function UserDashboard() {
     return (
       <div className="text-center py-12">
         <h2 className="text-2xl font-bold mb-4">Please log in to view your dashboard</h2>
-        <Link href="/login?redirect=/account/dashboard">
-          <button className="bg-maroon-800 text-white px-6 py-3 rounded-lg hover:bg-maroon-900 transition-colors">
-            Login
-          </button>
+        <Link href="/login?redirect=/account/dashboard" className="inline-block bg-maroon-800 text-white px-6 py-3 rounded-lg hover:bg-maroon-900 transition-colors">
+          Login
         </Link>
       </div>
     )
@@ -131,10 +129,8 @@ export default function UserDashboard() {
                       <p className="text-gray-600 mb-4">
                         You haven&apos;t placed any orders yet. Start shopping to see your orders here.
                       </p>
-                      <Link href="/products">
-                        <button className="bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
-                          Browse Products
-                        </button>
+                      <Link href="/products" className="inline-block bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
+                        Browse Products
                       </Link>
                     </div>
                   ) : (
@@ -185,11 +181,9 @@ export default function UserDashboard() {
 
                           <div className="flex justify-between items-center">
                             <p className="font-semibold">Total: ₹{order.total.toLocaleString("en-IN")}</p>
-                            <Link href={`/account/orders/${order.id}`}>
-                              <button className="text-brand-primary hover:text-brand-primary-hover flex items-center">
-                                View Details
-                                <ChevronRight className="h-4 w-4 ml-1" />
-                              </button>
+                            <Link href={`/account/orders/${order.id}`} className="text-brand-primary hover:text-brand-primary-hover flex items-center">
+                              View Details
+                              <ChevronRight className="h-4 w-4 ml-1" />
                             </Link>
                           </div>
                         </div>
@@ -212,10 +206,8 @@ export default function UserDashboard() {
                     </div>
                     <h3 className="text-lg font-semibold mb-2">No recently viewed products</h3>
                     <p className="text-gray-600 mb-4">Browse our products to see your history here.</p>
-                    <Link href="/products">
-                      <button className="bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
-                        Browse Products
-                      </button>
+                    <Link href="/products" className="inline-block bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
+                      Browse Products
                     </Link>
                   </div>
                 </div>
@@ -279,10 +271,8 @@ export default function UserDashboard() {
                       </div>
                       <h3 className="text-lg font-semibold mb-2">No address saved</h3>
                       <p className="text-gray-600 mb-4">Add an address for faster checkout.</p>
-                      <Link href="/account/addresses/new">
-                        <button className="bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
-                          Add Address
-                        </button>
+                      <Link href="/account/addresses/new" className="inline-block bg-maroon-800 text-white px-4 py-2 rounded-md hover:bg-maroon-900 transition-colors">
+                        Add Address
                       </Link>
                     </div>
                   )}

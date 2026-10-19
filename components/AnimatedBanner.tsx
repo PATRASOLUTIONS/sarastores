@@ -109,11 +109,9 @@ export default function AnimatedBanner({ isLoading = false }: AnimatedBannerProp
             </span>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">{banner.title}</h2>
             <p className="text-blue-100 mb-8 max-w-lg">{banner.description}</p>
-            <Link href={banner.buttonLink}>
-              <button className="group bg-white text-blue-800 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors flex items-center">
-                {banner.buttonText}
-                <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-              </button>
+            <Link href={banner.buttonLink} className="group bg-white text-blue-800 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors flex items-center">
+              {banner.buttonText}
+              <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
             </Link>
           </div>
           <div className="md:w-1/3 p-6">

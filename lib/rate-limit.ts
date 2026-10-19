@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store';
 import { handleApiError, RateLimitUnavailableError } from '@/lib/api-error';
+import { clientAddress } from '@/lib/client-address';
 
 // Types
 interface RateLimitConfig {
@@ -100,18 +101,9 @@ export const RATE_LIMITS = {
  * Get client identifier from request
  */
 function getClientIdentifier(request: NextRequest): string {
-  // Try to get real IP from various headers
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  const cfConnectingIp = request.headers.get('cf-connecting-ip');
-  
-  // Use first IP from x-forwarded-for if multiple
-  const ip = cfConnectingIp || 
-             realIp || 
-             (forwardedFor ? forwardedFor.split(',')[0].trim() : null) ||
-             'unknown';
-  
-  return ip;
+  // Only platform-written or proxy-appended values; see lib/client-address.ts
+  // for why the client-supplied headers are not trusted here.
+  return clientAddress(request);
 }
 
 /**

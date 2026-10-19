@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import { randomBytes } from "crypto"
 import { connectToDatabase } from "@/lib/mongodb"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, resolveCampaignSlug } from "@/lib/spin-wheel-campaigns"
 
 export const maxDuration = 15 // Allow 15s for Vercel serverless
 
@@ -8,7 +9,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { phone, otp, campaignId } = body
-    const campaignSlug = campaignId || "default"
+    const campaignSlug = resolveCampaignSlug(campaignId)
+    if (!campaignSlug) {
+      return NextResponse.json({ error: "Invalid campaign" }, { status: 400 })
+    }
 
     if (!phone || !otp) {
       return NextResponse.json(
@@ -88,10 +92,8 @@ export async function POST(request: NextRequest) {
 }
 
 function generateVerificationToken(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-  let token = ""
-  for (let i = 0; i < 32; i++) {
-    token += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return token
+  // This token is the bearer credential that proves OTP verification, so it
+  // has to be unguessable. Math.random() is a seeded PRNG whose future output
+  // can be reconstructed from observed values; randomBytes is a CSPRNG.
+  return randomBytes(24).toString("base64url")
 }

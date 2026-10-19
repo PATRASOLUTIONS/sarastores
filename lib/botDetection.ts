@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store'
 import { z } from 'zod'
 import { getRecaptchaConfiguration, isRecaptchaEnabled } from '@/lib/recaptcha-config'
+import { clientAddress } from '@/lib/client-address'
 
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
 const MAX_REQUESTS_PER_WINDOW = 5 // 5 login or signup attempts per minute per IP
@@ -17,26 +18,7 @@ export function formatWait(seconds: number): string {
  * Get client IP address from request
  */
 export function getClientIP(request: NextRequest): string {
-  // Try various headers that might contain the real IP
-  const forwarded = request.headers.get('x-forwarded-for')
-  const realIP = request.headers.get('x-real-ip')
-  const cfConnectingIP = request.headers.get('cf-connecting-ip') // Cloudflare
-  
-  if (forwarded) {
-    // x-forwarded-for can contain multiple IPs, get the first one
-    return forwarded.split(',')[0].trim()
-  }
-  
-  if (realIP) {
-    return realIP.trim()
-  }
-  
-  if (cfConnectingIP) {
-    return cfConnectingIP.trim()
-  }
-  
-  // Fallback to a generic identifier
-  return 'unknown'
+  return clientAddress(request)
 }
 
 /**

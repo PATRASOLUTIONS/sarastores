@@ -1024,11 +1024,9 @@ export default function AdminProducts() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 w-full">
           {/* <div className="w-full">
-            <Link href="/admin/products/new">
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center w-40 min-w-[8rem]">
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Product
-              </button>
+            <Link href="/admin/products/new" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center w-40 min-w-[8rem]">
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Product
             </Link>
           </div> */}
 
@@ -1287,10 +1285,8 @@ export default function AdminProducts() {
                         </p>
                         <p className="text-gray-500 mb-4">Start by adding products or importing sample data.</p>
                         <div className="space-x-2">
-                          <Link href="/admin/products/new">
-                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
-                              Add Product
-                            </button>
+                          <Link href="/admin/products/new" className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                            Add Product
                           </Link>
                           <button
                             onClick={handleSeedDatabase}
@@ -1391,15 +1387,11 @@ export default function AdminProducts() {
 
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <Link href={`/product/${product.slug || product.id}`}>
-                              <button className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50" title="View on storefront">
-                                <Eye className="h-4 w-4" />
-                              </button>
+                            <Link href={`/product/${product.slug || product.id}`} className="inline-block rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50" title="View on storefront">
+                              <Eye className="h-4 w-4" />
                             </Link>
-                            <Link href={`/admin/products/${product.id}/edit`}>
-                              <button className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50" title="Edit product">
-                                <Edit className="h-4 w-4" />
-                              </button>
+                            <Link href={`/admin/products/${product.id}/edit`} className="inline-block rounded-lg p-1.5 text-blue-600 hover:bg-blue-50" title="Edit product">
+                              <Edit className="h-4 w-4" />
                             </Link>
                             <button
                               onClick={() => handleDelete(product.id)}

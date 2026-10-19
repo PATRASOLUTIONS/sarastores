@@ -7,6 +7,15 @@ import { normalizeId } from '@/lib/db-service'
 import { handleApiError } from '@/lib/api-error'
 import { AddLicenseKeysSchema, RevokeLicenseKeySchema, LicenseKeyFilterSchema } from '@/lib/validation'
 import type { StoredLicenseKey } from '@/types/software'
+import { timingSafeEqual } from 'crypto'
+
+/** Constant-time secret comparison; differing lengths short-circuit safely. */
+function secretsMatch(provided: unknown, expected: string): boolean {
+  if (typeof provided !== 'string') return false
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 type OrderDate = Date | string | number
 interface LicenseOrder {
@@ -159,7 +168,10 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ success: false, error: 'Server not configured for revoke operation' }, { status: 500 })
       }
 
-      if (!providedPassword || providedPassword !== revokePassword) {
+      // Compared in constant time so response latency cannot be used to
+      // recover the secret character by character, matching how lib/session.ts
+      // and the eXlr8 webhook verify their secrets.
+      if (!secretsMatch(providedPassword, revokePassword)) {
         return NextResponse.json({ success: false, error: 'Invalid password' }, { status: 401 })
       }
 

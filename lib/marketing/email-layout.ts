@@ -24,12 +24,21 @@ export const THEMES: Record<string, BrandTheme> = {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://sarastores.com"
 
-export function withEmailUnsubscribe(html: string, token: string): string {
+/**
+ * The canonical unsubscribe URL for a token. Shared so the link in the body and
+ * the `List-Unsubscribe` header can never drift apart.
+ */
+export function unsubscribeUrl(token: string): string {
   if (!token) throw new Error("An email unsubscribe token is required")
   const link = new URL("/api/unsubscribe", SITE)
   if (link.protocol !== "https:" && link.protocol !== "http:") throw new Error("Marketing site URL must use HTTP(S)")
   link.searchParams.set("token", token)
   link.searchParams.set("channel", "email")
+  return link.href
+}
+
+export function withEmailUnsubscribe(html: string, token: string): string {
+  const link = new URL(unsubscribeUrl(token))
   const personalized = html.replace(/\{\{\s*unsubscribeToken\s*\}\}/gi, () => encodeURIComponent(token))
   if (html.includes(`${SITE}/api/unsubscribe?token={{unsubscribeToken}}`)) return personalized
   const footer = `<p style="font-family:Arial,sans-serif;font-size:12px;color:#64748b;text-align:center;"><a href="${link.href.replace(/&/g, "&amp;")}">Unsubscribe from marketing emails</a></p>`
@@ -53,7 +62,29 @@ export type BlockOptions = {
 export const COUPON_SLOT = "<!--COUPON_SLOT-->"
 
 function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    // Quotes matter: several of these values land inside HTML attributes, where
+    // an unescaped quote closes the attribute early.
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/**
+ * Escape a URL for use in an `href`, rejecting schemes that can execute script.
+ * Campaign CTA targets are set by staff in the admin UI, not by the public, but
+ * a mistyped or pasted `javascript:` URL should fail safe rather than ship.
+ */
+function safeHref(raw: string, fallback: string): string {
+  try {
+    const url = new URL(raw, SITE)
+    if (url.protocol !== "https:" && url.protocol !== "http:") return esc(fallback)
+    return esc(url.href)
+  } catch {
+    return esc(fallback)
+  }
 }
 
 /**
@@ -88,7 +119,7 @@ export function applyCoupon(
 
 /** Builds a complete, client-safe promotional email. */
 export function renderEmail(o: BlockOptions): string {
-  const href = o.ctaHref || `${SITE}/products`
+  const href = safeHref(o.ctaHref || `${SITE}/products`, `${SITE}/products`)
   const bullets = (o.bullets ?? [])
     .map(
       (b) =>

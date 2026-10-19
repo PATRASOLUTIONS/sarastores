@@ -301,10 +301,8 @@ export default function AdminCustomers() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link href={`/admin/customers/${customer.id}`}>
-                          <button className="text-indigo-600 hover:text-indigo-900">
-                            <Eye className="h-4 w-4" />
-                          </button>
+                        <Link href={`/admin/customers/${customer.id}`} className="text-indigo-600 hover:text-indigo-900">
+                          <Eye className="h-4 w-4" />
                         </Link>
                       </td>
                     </tr>

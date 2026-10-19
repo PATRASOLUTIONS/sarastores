@@ -11,11 +11,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { handleApiError } from "@/lib/api-error"
+import { withRateLimit } from "@/lib/rate-limit"
 import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/consent"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(request: NextRequest) {
+export const POST = withRateLimit(async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== "object") {
@@ -50,4 +51,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return handleApiError(error, "Failed to record tracking consent")
   }
-}
+  /*
+   * Failing to record a consent decision is a compliance problem, so this
+   * budget is deliberately loose: it exists to bound abuse by orders of
+   * magnitude, not to police legitimate traffic. A single office or carrier NAT
+   * can put many first-time visitors behind one address — a back-to-back test
+   * run exhausted a 60/minute budget on its own — while 120 still caps one
+   * caller far below what it takes to inflate the ledger meaningfully.
+   */
+}, { windowMs: 60 * 1000, maxRequests: 120, message: "Too many consent updates." })

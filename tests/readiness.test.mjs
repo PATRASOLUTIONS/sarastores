@@ -28,6 +28,13 @@ test("production preflight rejects missing, placeholder, insecure and mismatched
   assert.deepEqual(checkDeploymentEnvironment({
     ...env, MONGODB_URI: "mongodb://synthetic:fixture@one.example.net:27017,two.example.net:27017/?tls=true&replicaSet=rs0",
   }), [])
+  // A scoped partner allowlist and an acknowledged Cloudflare front both pass.
+  assert.deepEqual(checkDeploymentEnvironment({
+    ...env,
+    PARTNER_ALLOWED_ORIGINS: "https://partner.example.net, *.partner.example.net",
+    TRUST_CLOUDFLARE_IP: "true",
+    CLOUDFLARE_PROXY_CONFIRMED: "locked to Cloudflare IP ranges",
+  }), [])
   for (const change of [
     { SESSION_SECRET: "short" }, { CRON_SECRET: "<secret>" },
     { MONGODB_URI: "mongodb://host/" }, { MONGODB_URI: "mongodb+srv://synthetic:fixture@cluster.example.net/?tlsInsecure=true" },
@@ -35,6 +42,12 @@ test("production preflight rejects missing, placeholder, insecure and mismatched
     { ENABLE_DEBUG_ROUTES: "true" }, { RATE_LIMIT_BACKEND: "memory" },
     { RAZORPAY_KEY_ID: "rzp_test_fixture" }, { SMTP_PORT: "0" },
     { DPDP_GRIEVANCE_OFFICER_EMAIL: "invalid" },
+    // Partner CORS reflects these origins with credentials attached.
+    { PARTNER_ALLOWED_ORIGINS: "*" }, { PARTNER_ALLOWED_ORIGINS: "*.com" },
+    { PARTNER_ALLOWED_ORIGINS: "http://partner.example.net" },
+    { PARTNER_ALLOWED_ORIGINS: "https://partner.example.net/callback" },
+    // Trusting a client-settable header hands out a fresh rate-limit bucket.
+    { TRUST_CLOUDFLARE_IP: "yes" }, { TRUST_CLOUDFLARE_IP: "true" },
   ]) {
     const errors = checkDeploymentEnvironment({ ...env, ...change })
     assert.ok(errors.length > 0)
@@ -3586,13 +3599,16 @@ test("spin OTP delivery reports actual accepted channels and invalidates only it
   let saved
   const deleted = []
   const loader = sourceLoader({
-    "@/lib/spin-wheel-campaigns": { getCampaignCollection: async (campaign, kind) => {
-      assert.equal(campaign, "default")
-      return kind === "participants" ? { findOne: async () => null } : {
-        updateOne: async (query, update) => { saved = update; assert.equal(query.phone, "9876543210"); assert.equal(update.$unset.verificationToken, "") },
-        deleteOne: async query => deleted.push(query),
-      }
-    } },
+    "@/lib/spin-wheel-campaigns": {
+      resolveCampaignSlug: value => (value === undefined || value === null || value === "" ? "default" : null),
+      getCampaignCollection: async (campaign, kind) => {
+        assert.equal(campaign, "default")
+        return kind === "participants" ? { findOne: async () => null } : {
+          updateOne: async (query, update) => { saved = update; assert.equal(query.phone, "9876543210"); assert.equal(update.$unset.verificationToken, "") },
+          deleteOne: async query => deleted.push(query),
+        }
+      },
+    },
     "@/lib/spin-wheel-notifications": {
       sendOtpEmail: async () => { if (mailThrows) throw new Error("Fixture rejected promise"); return { success: mail } },
       sendWhatsAppOTP: async () => ({ success: whatsapp }),
@@ -3621,17 +3637,28 @@ test("spin OTP delivery reports actual accepted channels and invalidates only it
 
 test("spin OTP limits count resend requests independently of the upserted challenge and validate before work", async () => {
   let hits = 0
+  let callerHits = 0
   let writes = 0
   const loader = sourceLoader({
-    "@/lib/spin-wheel-campaigns": { getCampaignCollection: async () => ({
-      findOne: async () => null,
-      updateOne: async () => { writes++ },
-    }) },
+    "@/lib/spin-wheel-campaigns": {
+      resolveCampaignSlug: value => (value === undefined || value === null || value === "" ? "default" : null),
+      getCampaignCollection: async () => ({
+        findOne: async () => null,
+        updateOne: async () => { writes++ },
+      }),
+    },
     "@/lib/spin-wheel-notifications": { sendOtpEmail: async () => ({ success: true }), sendWhatsAppOTP: async () => ({ success: false }) },
+    // Two budgets apply per send: one bounding the caller, one bounding how
+    // often a single phone number can be messaged.
     "@/lib/rate-limit-store": { rateLimitHit: async (key, limit, window) => {
+      assert.equal(window, 15 * 60 * 1000)
+      if (key.startsWith("spin-otp-ip:")) {
+        assert.equal(limit, 10)
+        callerHits++
+        return { limited: false }
+      }
       assert.equal(key.includes("9876543210"), false)
       assert.equal(limit, 3)
-      assert.equal(window, 15 * 60 * 1000)
       return { limited: ++hits > 3 }
     } },
   })
@@ -3640,10 +3667,14 @@ test("spin OTP limits count resend requests independently of the upserted challe
   const input = { phone: "9876543210", email: "fixture@example.invalid", name: "Fixture" }
   assert.equal((await post({ ...input, phone: 9876543210 })).status, 400)
   assert.equal((await post({ ...input, campaignId: "../settings" })).status, 400)
+  // Neither budget is consumed by input that never reaches any work.
   assert.equal(hits, 0)
+  assert.equal(callerHits, 0)
   for (let index = 0; index < 3; index++) assert.equal((await post(input)).status, 200)
   assert.equal((await post(input)).status, 429)
   assert.equal(writes, 3)
+  // The caller budget is checked on every send that gets past validation.
+  assert.equal(callerHits, 4)
 })
 
 test("public spin prize endpoint exposes display fields only, never seeds and rejects inactive or unknown campaigns", async () => {
@@ -4333,7 +4364,7 @@ test("partner authentication wrapper retains promised route params, permissions 
   let allowed = true
   const loader = sourceLoader({
     "@/lib/partner/api-keys": { validateAPIKey: async value => value === "fixture" ? key : null, hasPermission: () => allowed },
-    "@/lib/partner/rate-limit": { checkPartnerRateLimit: () => ({ allowed: true }) },
+    "@/lib/partner/rate-limit": { checkPartnerRateLimit: async () => ({ allowed: true }) },
     "@/lib/db-service": { getCollection: async () => ({ findOne: async () => partner, updateOne: async () => ({ matchedCount: 1 }) }) },
   })
   const { withPartnerAuth } = loader.load("lib/partner/auth.ts")
@@ -4344,15 +4375,23 @@ test("partner authentication wrapper retains promised route params, permissions 
     assert.equal((await context.params).id, "fixture-item")
     return Response.json({ success: true })
   }, ["products:read"])
-  const request = () => new NextRequest("https://fixture.invalid/api/v1/partner/products/fixture-item", { headers: { authorization: "Bearer fixture", origin: "https://client.invalid" } })
+  const request = (origin = "https://client.invalid") => new NextRequest("https://fixture.invalid/api/v1/partner/products/fixture-item", { headers: { authorization: "Bearer fixture", origin } })
   const response = await handler(request(), { params: Promise.resolve({ id: "fixture-item" }) })
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("access-control-allow-methods"), "GET, PATCH")
-  assert.equal(response.headers.get("access-control-allow-origin"), "https://client.invalid")
+  // An origin outside the allowlist gets no Allow-Origin at all. Reflecting it
+  // alongside Allow-Credentials: true would let any website read this partner
+  // data, and middleware.ts skips this surface entirely.
+  assert.equal(response.headers.get("access-control-allow-origin"), null)
+  assert.equal(response.headers.get("access-control-allow-credentials"), null)
+  assert.equal(response.headers.get("vary"), "Origin")
   assert.ok(response.headers.get("x-request-id"))
+  const allowlisted = await handler(request("http://localhost:3000"), { params: Promise.resolve({ id: "fixture-item" }) })
+  assert.equal(allowlisted.headers.get("access-control-allow-origin"), "http://localhost:3000")
+  assert.equal(allowlisted.headers.get("access-control-allow-credentials"), "true")
   allowed = false
   assert.equal((await handler(request(), { params: Promise.resolve({ id: "fixture-item" }) })).status, 403)
-  assert.equal(handlerCalls, 1)
+  assert.equal(handlerCalls, 2)
 })
 
 test("bot checks reject malformed timestamps and reCAPTCHA replies without contacting real providers", async () => {

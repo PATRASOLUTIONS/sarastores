@@ -714,7 +714,7 @@ export default function TrackOrderPage() {
               </button>
             </form>
             <p className="text-gray-400 text-sm mt-4 text-center">
-              Enter your order ID from the confirmation email (with or without #), Razorpay payment ID (pay_...), or your registered email/phone.
+              Enter your order ID from the confirmation email (with or without #) or your Razorpay payment ID (pay_...).
             </p>
           </div>
           <div className="absolute bottom-0 left-0 right-0">

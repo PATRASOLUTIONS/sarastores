@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { randomBytes } from "crypto"
+import { getCampaignCollection, resolveCampaignSlug } from "@/lib/spin-wheel-campaigns"
 
 export const maxDuration = 15 // Allow 15s for Vercel serverless
 
@@ -8,7 +9,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { name, phone, email, store, verificationToken, senderNumber, campaignId } = body
-    const campaignSlug = campaignId || "default"
+    const campaignSlug = resolveCampaignSlug(campaignId)
+    if (!campaignSlug) {
+      return NextResponse.json({ error: "Invalid campaign" }, { status: 400 })
+    }
 
     // Validation
     if (!name || !phone || !email) {
@@ -79,16 +83,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create participant
+    /*
+     * The spin token is what proves, at spin time, that the caller is the
+     * person who completed OTP verification. The OTP record is deleted below,
+     * so without this the spin endpoint has nothing left to check and any
+     * party holding a participant id could consume that person's single spin
+     * and claim their coupon. ObjectIds embed a timestamp and a counter, so
+     * they are only semi-unguessable and are not a credential.
+     */
+    const spinToken = randomBytes(24).toString("base64url")
+
+    // Create participant. The free-text fields are capped because they are
+    // stored verbatim and nothing upstream bounds their length.
     const participant = {
-      name: name.trim(),
+      name: String(name).trim().slice(0, 120),
       phone: cleanPhone,
       email: email.trim().toLowerCase(),
-      store: store || "direct",
-      senderNumber: senderNumber || null, // Store sender number for later win notification
+      store: String(store || "direct").trim().slice(0, 120),
+      // Store sender number for later win notification.
+      senderNumber: senderNumber ? String(senderNumber).trim().slice(0, 20) : null,
       otpCode: otpRecord.otp,
       otpVerified: true,
       otpVerifiedAt: otpRecord.verifiedAt || new Date(),
+      spinToken,
       hasSpun: false,
       prize: null,
       couponCode: null,
@@ -104,6 +121,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       participantId: result.insertedId.toString(),
+      spinToken,
       message: "Registration successful! You can now spin the wheel."
     })
   } catch (error) {

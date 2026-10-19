@@ -32,10 +32,8 @@ export default function AccountPage() {
     return (
       <div className="text-center py-12">
         <h2 className="text-2xl font-bold mb-4">Please log in to view your account</h2>
-        <Link href="/login?redirect=/account">
-          <button className="bg-maroon-800 text-white px-6 py-3 rounded-lg hover:bg-maroon-900 transition-colors">
-            Login
-          </button>
+        <Link href="/login?redirect=/account" className="inline-block bg-maroon-800 text-white px-6 py-3 rounded-lg hover:bg-maroon-900 transition-colors">
+          Login
         </Link>
       </div>
     )

@@ -157,8 +157,10 @@ export async function GET(request: NextRequest) {
     })
 
     const minimalUser = { id: userId, email: user.email, role: userRole }
+    // See the login route: nothing reads this from script, so httpOnly costs
+    // nothing and keeps the user's email and role out of reach of an XSS.
     response.cookies.set("user", encodeURIComponent(JSON.stringify(minimalUser)), {
-      httpOnly: false,
+      httpOnly: true,
       secure: isProd,
       sameSite: "lax",
       maxAge: SESSION_MAX_AGE,

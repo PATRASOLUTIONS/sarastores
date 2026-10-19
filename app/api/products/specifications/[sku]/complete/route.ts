@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { normalizeId } from "@/lib/db-service"
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ sku: string }> }) {
   try {
@@ -16,14 +17,14 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ sk
       return NextResponse.json({ error: "Specifications not found for SKU" }, { status: 404 })
     }
 
-    // Return the entire document as-is (all fields from the collection)
-    return NextResponse.json(completeSpec)
+    // Every field, but with the raw _id swapped for a string id like the rest
+    // of the API — clients are never shown _id.
+    return NextResponse.json(normalizeId(completeSpec))
   } catch (error) {
     console.error("ByteWise Testing Point Error fetching complete product specifications by SKU:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch complete specifications", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 },
-    )
+    // Logged above rather than returned: this endpoint is public and driver
+    // errors name hosts and collections.
+    return NextResponse.json({ error: "Failed to fetch complete specifications" }, { status: 500 })
   }
 }
 

@@ -43,11 +43,11 @@ The development catalogue seed requires explicit `{ "apply": true }` for transac
 
 ## Non-negotiable rules
 
-1. **Never rely on [middleware.ts](middleware.ts) for authorization.** For `/api/admin/*` it only checks *that a session exists*, then calls `NextResponse.next()`. Every route handler must independently call `requireUser()` / `requireAdmin()` / `requireVendor()` from [lib/auth.ts](lib/auth.ts). ~99 of 197 route files currently violate this — do not copy them.
+1. **Never rely on [middleware.ts](middleware.ts) for authorization.** It *does* check roles for `/api/admin/*` and carries a path+method policy table for the rest, but it matches by prefix, so any new path outside those prefixes is open by default. Every route handler must independently call `requireUser()` / `requireAdmin()` / `requireFullAdmin()` / `requireVendor()` from [lib/auth.ts](lib/auth.ts). Every mutating route does this today; [tests/route-guards.test.mjs](tests/route-guards.test.mjs) fails if a new one does not.
 2. **Derive identity from the session, never from the request.** `userId`, `vendorId`, `partnerId` come from `getSession()` or the authenticated API key — never from `request.json()`, `searchParams`, or a route param.
 3. **Recompute all money server-side.** Client-supplied `price`, `subtotal`, `total`, `discount` are display hints only. Look up products and coupons from MongoDB before creating a Razorpay order or an order document.
 4. **Keep [lib/session.ts](lib/session.ts) Edge-safe.** It runs inside middleware. No `Buffer`, no `require("crypto")`, no imports — Web Crypto plus `btoa`/`atob` only. Breaking this makes every session verify as `null`.
-5. **Never import `@/lib/db`.** `connectDB()` points at database `ecommerce`; everything else uses `e-commerce-bytewise`. Use [lib/db-service.ts](lib/db-service.ts).
+5. **Never import `@/lib/db`.** It is a deprecated shim that now delegates to `connectToDatabase()`, so it reaches the same `e-commerce-bytewise` database — but nothing imports it any more and new code must not reintroduce it. Use [lib/db-service.ts](lib/db-service.ts).
 6. **Never hardcode a connection string, key, or password** — including in `scripts/`. Use `process.env` with no fallback.
 7. **Run `npx tsc --noEmit`** and `npm run build`; keep the build's TypeScript and ESLint gates enabled.
 
@@ -56,7 +56,7 @@ The development catalogue seed requires explicit `{ "apply": true }` for transac
 Request flow: browser → Edge [middleware.ts](middleware.ts) → route handler or server layout → `lib/` → MongoDB.
 
 - **Middleware** matches `/api/:path*`, `/admin/*`, `/account/*`, `/vendor/*`, `/dashboard/*`, `/partner-api-test`. It skips `/api/v1/partner/*` entirely (that surface has its own API-key auth + CORS in [lib/partner/auth.ts](lib/partner/auth.ts)). It lets page HTML/RSC through by design — do not add a redirect for `/admin` HTML, it reintroduces a documented RSC race.
-- **Page gating is inconsistent.** [app/dashboard/layout.tsx](app/dashboard/layout.tsx) and [app/account/layout.tsx](app/account/layout.tsx) are true server gates (`await getSession()` → `redirect()`). [app/admin/layout.tsx](app/admin/layout.tsx) and [app/vendor/layout.tsx](app/vendor/layout.tsx) are `"use client"` and gate only in the browser. Follow the `account` pattern (server layout + client shell) for new privileged areas.
+- **Page gating is uniform now.** `/admin`, `/account`, `/dashboard` and `/vendor` all use server layouts that `await getSession()` and `redirect()`, with a client shell for presentation. Follow that pattern (server layout + client shell) for new privileged areas.
 - **Runtime:** everything is Node.js serverless except [app/og/route.tsx](app/og/route.tsx) (`runtime = "edge"`) and middleware. `serverExternalPackages` and the webpack `alias: false` list in [next.config.mjs](next.config.mjs) keep MongoDB out of the browser bundle — don't remove them.
 - **Auth:** custom HMAC-SHA256 signed cookie. `next-auth` is installed but **unused** at runtime; `authOptions` in [lib/auth.ts](lib/auth.ts) is a stub and [app/auth/signin/page.tsx](app/auth/signin/page.tsx) is dead code. Roles: `user`, `vendor`, `admin`, `superadmin`, plus optional `dashboardAccess` / `allowedPages` claims.
 
@@ -71,9 +71,9 @@ Scoped rules live in `.github/instructions/` and load automatically for the rele
 Quick summary:
 
 - **Data access:** `lib/db-service.ts` (`getAll`, `getById`, `create`, `getCollection`, `normalizeId`, `COLLECTIONS`). Always `normalizeId` before returning — clients see a string `id`, never `_id`.
-- **Validation:** Zod schemas in [lib/validation.ts](lib/validation.ts) with `safeParse`. Currently only 3 files use it; new write routes must.
+- **Validation:** Zod with `safeParse`, reusing the schemas in [lib/validation.ts](lib/validation.ts) rather than redefining field rules. 88 of the 137 body-reading routes validate; `node scripts/audit-body-validation.mjs` lists the rest.
 - **Errors:** return `{ error: string }` with a correct status; wrap unexpected throws in `handleApiError` from [lib/api-error.ts](lib/api-error.ts). Partner routes use `createSuccessResponse` / `createErrorResponse` from [lib/partner/auth.ts](lib/partner/auth.ts) instead.
-- **Next 15 params are a Promise:** `context: { params: Promise<{ id: string }> }` then `await context.params`. 21 route files still use the Next 14 sync form — don't copy them.
+- **Next 15 params are a Promise:** `context: { params: Promise<{ id: string }> }` then `await context.params`. Every route file uses this form; none still use the Next 14 sync signature.
 - **Toasts:** `react-hot-toast` only. `sonner` is installed but imported zero times.
 - **Dark mode is disabled** (`forcedTheme="light"` in [app/providers.tsx](app/providers.tsx)) — `dark:` variants will not fire.
 - **Client API calls** in admin/dashboard/account go through `apiFetch` from [lib/api-client.ts](lib/api-client.ts) (sends cookies).
@@ -100,7 +100,9 @@ Three overlapping URL variables exist — `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_A
 | Abandoned-cart cron is live | Disabled — the import is commented out in [instrumentation.ts](instrumentation.ts), which still logs "✅ Cron jobs initialized successfully". `vercel.json` has no `crons` block. The 10 docs in [documents/abandoned-cart/](documents/abandoned-cart/) all describe it as working. |
 | Firebase storage integration | No Firebase SDK is installed and no file-upload route exists. Only CSP/image allowlist entries reference it. |
 
-Other live bugs worth knowing: `COLLECTIONS.SLIDES` is undefined, so `GET /api/product-slides` silently returns `[]` and `POST` always 500s.
+`COLLECTIONS.SLIDES` is defined as `"product_slides"` and `/api/product-slides` works — the claim that it was undefined is also stale.
+
+The one genuinely open security item is the production CSP: `script-src` keeps `unsafe-inline` because a nonce must be per-request and 93 of 160 pages are statically prerendered. See §11 of [CLAUDE.md](CLAUDE.md) and the comment above the directive in [next.config.mjs](next.config.mjs).
 
 ## Repo hygiene
 

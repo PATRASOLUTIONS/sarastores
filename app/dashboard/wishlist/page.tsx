@@ -72,10 +72,8 @@ export default function WishlistPage() {
             </div>
             <h3 className="text-xl font-semibold mb-2">Your wishlist is empty</h3>
             <p className="text-gray-600 mb-6">Save items you like to your wishlist and they&apos;ll appear here.</p>
-            <Link href="/products">
-              <button className="px-6 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-primary-hover transition-colors active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-primary/40">
-                Explore Products
-              </button>
+            <Link href="/products" className="inline-block px-6 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-primary-hover transition-colors active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-primary/40">
+              Explore Products
             </Link>
           </div>
         ) : (
@@ -208,13 +206,8 @@ function WishlistCard({
               <span className="hidden sm:inline">Add to cart</span>
             </button>
 
-            <Link href={`/product/${product.slug || product.id}`} className="flex-shrink-0">
-              <button
-                className="p-2.5 bg-white/95 text-gray-700 border border-border rounded-lg hover:bg-brand-primary-subtle hover:text-brand-primary transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:ring-offset-2"
-                aria-label="View product details"
-              >
-                <ExternalLink className="h-4 w-4" />
-              </button>
+            <Link href={`/product/${product.slug || product.id}`} className="flex-shrink-0 p-2.5 bg-white/95 text-gray-700 border border-border rounded-lg hover:bg-brand-primary-subtle hover:text-brand-primary transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:ring-offset-2" aria-label="View product details">
+              <ExternalLink className="h-4 w-4" />
             </Link>
           </div>
         </div>

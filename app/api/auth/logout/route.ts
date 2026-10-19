@@ -18,7 +18,7 @@ export async function POST() {
 
     // Clear the authoritative session cookie and the cosmetic user cookie
     response.cookies.set(SESSION_COOKIE, "", { httpOnly: true, ...domainOpt, ...expire })
-    response.cookies.set("user", "", { httpOnly: false, ...domainOpt, ...expire })
+    response.cookies.set("user", "", { httpOnly: true, ...domainOpt, ...expire })
 
     return response
   } catch (error) {

@@ -19,18 +19,44 @@ function getAllowedOrigins(): string[] {
     'https://www.sarastores.com',
     'https://saramobiles.com',
     'https://www.saramobiles.com',
-    'http://localhost:3000',
-    'http://localhost:3001',
   ];
+
+  /*
+   * The loopback origins are for local development only. In production they
+   * would let any page a victim happens to be serving on their own machine
+   * make credentialed calls to the live partner API.
+   */
+  if (process.env.NODE_ENV !== 'production') {
+    defaultOrigins.push('http://localhost:3000', 'http://localhost:3001');
+  }
 
   // Add origins from environment variable
   const envOrigins = process.env.PARTNER_ALLOWED_ORIGINS;
-  if (envOrigins) {
-    const additionalOrigins = envOrigins.split(',').map(o => o.trim()).filter(Boolean);
+  if (!envOrigins) return defaultOrigins;
+
+  const additionalOrigins = envOrigins.split(',').map(o => o.trim()).filter(Boolean);
+  if (process.env.NODE_ENV !== 'production') {
     return [...defaultOrigins, ...additionalOrigins];
   }
 
-  return defaultOrigins;
+  /*
+   * Entries reach this list straight from deployment configuration and are
+   * reflected back with Allow-Credentials, so a development value promoted to
+   * production would hand out authenticated access. Plain HTTP cannot be a
+   * trusted partner origin, and a wildcard has to name a real parent domain
+   * rather than a public suffix like *.com. npm run check:deployment reports
+   * the same entries before a release; this is the runtime backstop for when
+   * that check is skipped.
+   */
+  const safeForProduction = additionalOrigins.filter(origin => {
+    if (origin.startsWith('*.')) return origin.slice(2).split('.').length >= 2;
+    return origin.startsWith('https://');
+  });
+  for (const rejected of additionalOrigins.filter(o => !safeForProduction.includes(o))) {
+    console.error(`PARTNER_ALLOWED_ORIGINS: ignoring "${rejected}" — production requires an https origin or a *.domain.tld wildcard`);
+  }
+
+  return [...defaultOrigins, ...safeForProduction];
 }
 
 /**
@@ -41,46 +67,53 @@ const ALLOWED_ORIGINS = getAllowedOrigins();
 /**
  * Get CORS headers for partner API responses
  */
-export function getCorsHeaders(origin?: string | null, allowedMethods?: string[]): Record<string, string> {
-  // Allow specific origins or fallback to * for API access
-  let allowedOrigin = '*';
-  
-  if (origin) {
-    // Check if the origin is in the allowed list
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      allowedOrigin = origin;
-    } else {
-      // Check for wildcard subdomain matches (e.g., *.example.com)
-      const isWildcardMatch = ALLOWED_ORIGINS.some(allowed => {
-        if (allowed.startsWith('*.')) {
-          const baseDomain = allowed.slice(2);
-          const originHost = origin.replace(/^https?:\/\//, '').split(':')[0];
-          return originHost === baseDomain || originHost.endsWith('.' + baseDomain);
-        }
-        return false;
-      });
-      
-      if (isWildcardMatch) {
-        allowedOrigin = origin;
-      } else {
-        // Allow any origin for API key authenticated requests
-        allowedOrigin = origin;
-      }
-    }
-  }
+function isCorsOriginAllowed(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
 
+  // Wildcard subdomain entries, e.g. *.example.com
+  return ALLOWED_ORIGINS.some(allowed => {
+    if (!allowed.startsWith('*.')) return false;
+    const baseDomain = allowed.slice(2);
+    const originHost = origin.replace(/^https?:\/\//, '').split(':')[0];
+    return originHost === baseDomain || originHost.endsWith('.' + baseDomain);
+  });
+}
+
+export function getCorsHeaders(origin?: string | null, allowedMethods?: string[]): Record<string, string> {
   const methods = allowedMethods && allowedMethods.length > 0 
     ? allowedMethods.join(', ') 
     : 'GET, POST, PUT, DELETE, OPTIONS, PATCH';
-  
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
+
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': methods,
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Request-ID, X-Partner-ID, User-Agent',
-    'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400', // 24 hours cache for preflight
     'Access-Control-Expose-Headers': 'X-Request-Id, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset',
+    // The response varies by Origin, so caches must not serve one origin's
+    // response to another.
+    Vary: 'Origin',
   };
+
+  /*
+   * Only a known origin is reflected, and credentials are only ever allowed
+   * alongside a specific origin.
+   *
+   * Reflecting an arbitrary Origin while setting Allow-Credentials: true is
+   * the one CORS combination browsers do honour, and it would let any website
+   * make credentialed calls to /api/v1/partner/* and read the replies. This
+   * surface is also skipped by middleware.ts, so there is no second line of
+   * defence behind it.
+   *
+   * An unknown origin gets no Allow-Origin header at all: API-key callers
+   * (server-to-server, curl, mobile) send no Origin and are unaffected, while
+   * a browser on an unapproved site is blocked by the same-origin policy.
+   */
+  if (origin && isCorsOriginAllowed(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  }
+
+  return headers;
 }
 
 /**
@@ -299,7 +332,7 @@ export async function authenticatePartnerRequest(
     
     // Check rate limit
     const endpoint = new URL(request.url).pathname;
-    const rateLimitResult = checkPartnerRateLimit(apiKey.id, apiKey.tier, endpoint);
+    const rateLimitResult = await checkPartnerRateLimit(apiKey.id, apiKey.tier, endpoint);
     
     if (!rateLimitResult.allowed) {
       return {

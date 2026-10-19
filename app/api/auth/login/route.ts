@@ -18,8 +18,14 @@ export async function POST(request: NextRequest) {
     }
     const { email, password } = parsed.data
 
-    // Bot detection for login endpoint
-    const botCheck = await detectBot(request, body, { requireRecaptcha: true, skipRateLimit: true })
+    // Bot detection for login endpoint.
+    //
+    // The per-IP counter must stay on. reCAPTCHA is the only other control
+    // here, and isRecaptchaEnabled() returns false whenever RECAPTCHA_ENABLED
+    // is not "true" — which would leave credential stuffing against bcrypt
+    // hashes completely unthrottled. The success path below already calls
+    // resetRateLimit(), which only makes sense if the counter is incremented.
+    const botCheck = await detectBot(request, body, { requireRecaptcha: true })
     if (botCheck.isBot) {
       console.warn('Bot detected on login:', {
         reason: botCheck.reason,
@@ -123,8 +129,11 @@ export async function POST(request: NextRequest) {
     // proxies/CDNs in production.
     await resetRateLimit(getClientIP(request))
 
+    // httpOnly even though this cookie is cosmetic: nothing in the codebase
+    // reads it from script (AuthContext calls /api/auth/session instead), so
+    // leaving it script-readable only hands an XSS the user's email and role.
     response.cookies.set("user", encodeURIComponent(JSON.stringify(minimalUser)), {
-      httpOnly: false,
+      httpOnly: true,
       secure: isProd,
       sameSite: "lax",
       maxAge: SESSION_MAX_AGE,

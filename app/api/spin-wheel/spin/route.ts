@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import { randomInt, timingSafeEqual } from "crypto"
 import { sendSpinWheelEmail, sendWhatsAppWinNotification } from "@/lib/spin-wheel-notifications"
-import { getCampaignCollection } from "@/lib/spin-wheel-campaigns"
+import { getCampaignCollection, resolveCampaignSlug } from "@/lib/spin-wheel-campaigns"
 
 export const maxDuration = 15
+
+/** Constant-time token comparison; length is compared first and leaks nothing. */
+function tokensMatch(provided: unknown, expected: string): boolean {
+  if (typeof provided !== "string") return false
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 interface Prize {
   prizeName: string
@@ -53,8 +62,11 @@ function isPrizeAvailable(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { participantId, campaignId } = body
-    const campaignSlug = campaignId || "default"
+    const { participantId, campaignId, spinToken } = body
+    const campaignSlug = resolveCampaignSlug(campaignId)
+    if (!campaignSlug) {
+      return NextResponse.json({ error: "Invalid campaign" }, { status: 400 })
+    }
 
     if (!participantId) {
       return NextResponse.json(
@@ -77,6 +89,19 @@ export async function POST(request: NextRequest) {
 
     if (!participant) {
       return NextResponse.json({ error: "Participant not found" }, { status: 404 })
+    }
+
+    /*
+     * Prove the caller is the registrant before spending their spin.
+     *
+     * Participants registered before spin tokens existed have no stored token;
+     * they keep working so an in-flight campaign is not broken by this change.
+     */
+    if (participant.spinToken && !tokensMatch(spinToken, participant.spinToken)) {
+      return NextResponse.json(
+        { error: "Invalid spin token. Please register again." },
+        { status: 403 }
+      )
     }
 
     if (participant.hasSpun) {
@@ -141,7 +166,19 @@ export async function POST(request: NextRequest) {
 
     if (weightedPool.length > 0) {
       const totalWeight = weightedPool.reduce((sum, p) => sum + p.weight, 0)
-      const randomValue = Math.random() * totalWeight
+
+      /*
+       * This draw hands out real coupons, so it must not be predictable.
+       * Math.random() is a seeded PRNG whose internal state can be
+       * reconstructed from a modest number of observed outputs, which would
+       * let someone time their spin to land on the prize they want.
+       * lib/lucky-draw.ts uses randomInt for exactly this reason.
+       *
+       * Weights are fractional (weightMultiplier), so draw a uniform fraction
+       * rather than an index. randomInt requires a span below 2**48.
+       */
+      const UNIFORM_SPAN = 2 ** 47
+      const randomValue = (randomInt(UNIFORM_SPAN) / UNIFORM_SPAN) * totalWeight
 
       let cumulativeWeight = 0
       selectedPrize = weightedPool[0].prizeName

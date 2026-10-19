@@ -157,9 +157,8 @@ export async function GET(request: NextRequest) {
     )
   } catch (error) {
     console.error("ByteWise Testing Point Error fetching specifications:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch specifications", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 },
-    )
+    // The message is logged above, not returned: driver and connection errors
+    // name hosts and collections, and this endpoint is public.
+    return NextResponse.json({ error: "Failed to fetch specifications" }, { status: 500 })
   }
 }

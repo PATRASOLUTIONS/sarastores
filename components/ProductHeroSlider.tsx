@@ -101,11 +101,9 @@ export default function ProductHeroSlider() {
           <ShoppingBag className="h-16 w-16 mx-auto mb-4 opacity-50" />
           <h2 className="text-3xl font-bold mb-2">Welcome to Our Store</h2>
           <p className="text-blue-100 mb-6">Discover amazing products at great prices</p>
-          <Link href="/products">
-            <button className="bg-white text-blue-800 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors inline-flex items-center">
-              Shop Now
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </button>
+          <Link href="/products" className="bg-white text-blue-800 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors inline-flex items-center">
+            Shop Now
+            <ArrowRight className="ml-2 h-5 w-5" />
           </Link>
         </div>
       </div>
@@ -174,11 +172,9 @@ export default function ProductHeroSlider() {
 
                   {/* CTA Button */}
                   {ad.ctaText && ad.ctaLink && (
-                    <Link href={ad.ctaLink}>
-                      <button className="bg-white text-gray-900 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 inline-flex items-center shadow-lg">
-                        {ad.ctaText}
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </button>
+                    <Link href={ad.ctaLink} className="bg-white text-gray-900 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 inline-flex items-center shadow-lg">
+                      {ad.ctaText}
+                      <ArrowRight className="ml-2 h-5 w-5" />
                     </Link>
                   )}
                 </div>

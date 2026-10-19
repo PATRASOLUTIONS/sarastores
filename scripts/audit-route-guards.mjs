@@ -1,68 +1,76 @@
-#!/usr/bin/env node
 /**
- * Static security audit: which API routes defend themselves, and which are
- * relying entirely on middleware.ts to be safe.
+ * List mutating API routes that never establish who the caller is.
  *
- * Usage: node scripts/audit-route-guards.mjs
+ * middleware.ts carries a path+method policy table that covers most of the API,
+ * but it matches by prefix, so a path outside those prefixes is open by
+ * default. CLAUDE.md's rule 1 is that every handler guards itself regardless.
+ *
+ * A route counts as guarded if it calls one of the auth helpers, authenticates
+ * a partner API key, verifies a cron secret, or verifies a payment-provider
+ * webhook signature. Reported routes mutate state with none of those.
  */
-import { readdirSync, statSync, readFileSync } from "node:fs"
-import { join, dirname, relative } from "node:path"
-import { fileURLToPath } from "node:url"
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
-const API = join(ROOT, "app", "api")
+import fs from "node:fs"
+import path from "node:path"
 
-function walk(dir) {
+const API_ROOT = path.resolve("app/api")
+const MUTATING = ["POST", "PUT", "PATCH", "DELETE"]
+
+const GUARDS = [
+  // lib/auth.ts
+  /requireAdmin\s*\(/,
+  /requireFullAdmin\s*\(/,
+  /requireUser\s*\(/,
+  /requireVendor\s*\(/,
+  /checkAdminAuthorization\s*\(/,
+  /getCurrentUser\s*\(/,
+  /getCurrentUserId\s*\(/,
+  /getSession\s*\(/,
+  /isAdmin\s*\(/,
+  // Non-session callers: cron, partner API keys, mobile and guest tokens.
+  /requireCron\s*\(/,
+  /withPartnerAuth\s*[(<]/,
+  /authenticatePartner\s*\(/,
+  /validateAPIKey\s*\(/,
+  /verifyGuestAccessToken\s*\(/,
+  /verifyPendingSignupToken\s*\(/,
+  /verifyAccessToken\s*\(/,
+  // Webhooks authenticate by signature rather than by session.
+  /verifyWebhookSignature|verifyRazorpaySignature|verifyPartnerPayment|createHmac\s*\(|timingSafeEqual\s*\(/,
+]
+
+function routeFiles(dir) {
   const out = []
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name)
-    if (statSync(p).isDirectory()) out.push(...walk(p))
-    else if (name === "route.ts" || name === "route.tsx") out.push(p)
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...routeFiles(full))
+    else if (entry.name === "route.ts" || entry.name === "route.tsx") out.push(full)
   }
   return out
 }
 
-const GUARDS = /requireAdmin|requireUser|requireVendor|checkAdminAuthorization|requireCron|getSession|getCurrentUserId|authenticatePartner|verifyApiKey/
-const WRITE_METHODS = /export\s+(async\s+)?(function|const)\s+(POST|PUT|PATCH|DELETE)/
+const files = routeFiles(API_ROOT)
+const unguarded = []
 
-const files = walk(API)
-const rows = files.map((f) => {
-  const src = readFileSync(f, "utf8")
-  const route = "/" + relative(join(ROOT, "app"), dirname(f)).replace(/\\/g, "/")
-  return {
-    route,
-    guarded: GUARDS.test(src),
-    hasWrite: WRITE_METHODS.test(src),
-    isPartner: route.startsWith("/api/v1/partner"),
-    isCron: route.startsWith("/api/cron"),
-    isDebug: /\/(debug|test-|seed-|migrate|clear_database|direct-update)/.test(route),
-    isAdmin: route.startsWith("/api/admin") || /\/admin\//.test(route),
-  }
-})
+for (const file of files) {
+  const source = fs.readFileSync(file, "utf8")
+  const methods = MUTATING.filter(m => new RegExp(`export\\s+(?:async\\s+)?(?:function|const)\\s+${m}\\b`).test(source))
+  if (methods.length === 0) continue
+  if (GUARDS.some(pattern => pattern.test(source))) continue
 
-const unguarded = rows.filter((r) => !r.guarded)
-const unguardedWrites = unguarded.filter((r) => r.hasWrite)
-const unguardedAdmin = unguarded.filter((r) => r.isAdmin)
-const unguardedDebug = rows.filter((r) => r.isDebug && !r.guarded)
-
-console.log(`\n  ROUTE GUARD AUDIT — ${files.length} API route files\n`)
-console.log(`  guarded in-handler : ${rows.length - unguarded.length}`)
-console.log(`  NOT guarded        : ${unguarded.length}`)
-console.log(`  ...of those, with a write method (POST/PUT/PATCH/DELETE): ${unguardedWrites.length}`)
-console.log(`  ...of those, under an admin path                        : ${unguardedAdmin.length}`)
-console.log(`  unguarded debug/seed/test routes                        : ${unguardedDebug.length}`)
-
-if (unguardedAdmin.length) {
-  console.log(`\n  ADMIN ROUTES WITH NO IN-HANDLER GUARD (middleware is the only thing stopping you):`)
-  for (const r of unguardedAdmin) console.log(`    ${r.hasWrite ? "W" : " "}  ${r.route}`)
+  unguarded.push({
+    route: "/" + path.relative(path.resolve("app"), path.dirname(file)).split(path.sep).join("/"),
+    file: path.relative(process.cwd(), file).split(path.sep).join("/"),
+    methods,
+  })
 }
 
-if (unguardedDebug.length) {
-  console.log(`\n  UNGUARDED DEBUG / SEED / TEST ROUTES:`)
-  for (const r of unguardedDebug) console.log(`    ${r.hasWrite ? "W" : " "}  ${r.route}`)
-}
+const mutating = files.filter(f => {
+  const source = fs.readFileSync(f, "utf8")
+  return MUTATING.some(m => new RegExp(`export\\s+(?:async\\s+)?(?:function|const)\\s+${m}\\b`).test(source))
+}).length
 
-console.log(`\n  UNGUARDED WRITE ROUTES (first 40):`)
-for (const r of unguardedWrites.slice(0, 40)) console.log(`       ${r.route}`)
-if (unguardedWrites.length > 40) console.log(`       ... and ${unguardedWrites.length - 40} more`)
-console.log("")
+console.log(`${files.length} route files, ${mutating} of them mutating, ${unguarded.length} mutating with no caller identity:\n`)
+for (const r of unguarded.sort((a, b) => a.route.localeCompare(b.route))) {
+  console.log(`  ${r.methods.join(",").padEnd(18)} ${r.route}`)
+}

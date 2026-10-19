@@ -4,28 +4,9 @@
  * Tier-based rate limiting for partner API endpoints
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { PartnerAPIKey, PartnerTier, PARTNER_TIER_LIMITS } from './types';
-
-// In-memory store for rate limiting (use Redis in production)
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-  dailyCount: number;
-  dailyResetTime: number;
-}
-
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-// Cleanup expired entries every minute
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (now > entry.dailyResetTime) {
-      rateLimitStore.delete(key);
-    }
-  }
-}, 60000);
+import { NextResponse } from 'next/server';
+import { PartnerTier, PARTNER_TIER_LIMITS } from './types';
+import { rateLimitHit, rateLimitReset } from '@/lib/rate-limit-store';
 
 export interface PartnerRateLimitResult {
   allowed: boolean;
@@ -38,81 +19,51 @@ export interface PartnerRateLimitResult {
   dailyReset: number;
 }
 
+const MINUTE_WINDOW = 60 * 1000;
+const DAY_WINDOW = 24 * 60 * 60 * 1000;
+
+/** Key shape is unchanged: the minute budget is per endpoint, the daily budget per key. */
+const minuteKeyFor = (apiKeyId: string, endpoint?: string) =>
+  `partner:${endpoint ? `${apiKeyId}:${endpoint}` : apiKeyId}`;
+const dailyKeyFor = (apiKeyId: string) => `partner:${apiKeyId}:daily`;
+
 /**
- * Check rate limit for a partner API request
+ * Check rate limit for a partner API request.
+ *
+ * Counters live in the shared store (`lib/rate-limit-store.ts`), not in module
+ * memory. The previous Map reset on every cold start and was never shared
+ * between warm instances, so the limit a partner actually hit was
+ * `limit x instances` — no limit at all under real traffic. The store fails
+ * closed, and `authenticatePartnerRequest` turns that into a 500 rather than
+ * waving the request through.
  */
-export function checkPartnerRateLimit(
+export async function checkPartnerRateLimit(
   apiKeyId: string,
   tier: PartnerTier,
   endpoint?: string
-): PartnerRateLimitResult {
+): Promise<PartnerRateLimitResult> {
   const limits = PARTNER_TIER_LIMITS[tier];
-  const now = Date.now();
-  
-  // Create unique key including endpoint for more granular limiting
-  const key = endpoint ? `${apiKeyId}:${endpoint}` : apiKeyId;
-  const dailyKey = `${apiKeyId}:daily`;
-  
-  // Get or create minute entry
-  let entry = rateLimitStore.get(key);
-  const minuteWindow = 60 * 1000;
-  const dayWindow = 24 * 60 * 60 * 1000;
-  
-  if (!entry || now > entry.resetTime) {
-    entry = {
-      count: 0,
-      resetTime: now + minuteWindow,
-      dailyCount: 0,
-      dailyResetTime: now + dayWindow,
-    };
-  }
-  
-  // Get or create daily entry
-  let dailyEntry = rateLimitStore.get(dailyKey);
-  if (!dailyEntry || now > dailyEntry.dailyResetTime) {
-    dailyEntry = {
-      count: 0,
-      resetTime: now + minuteWindow,
-      dailyCount: 0,
-      dailyResetTime: now + dayWindow,
-    };
-  }
-  
-  // Increment counters
-  entry.count++;
-  dailyEntry.dailyCount++;
-  
-  // Save entries
-  rateLimitStore.set(key, entry);
-  rateLimitStore.set(dailyKey, dailyEntry);
-  
-  // Check limits
-  const minuteRemaining = Math.max(0, limits.requestsPerMinute - entry.count);
-  const dailyRemaining = Math.max(0, limits.requestsPerDay - dailyEntry.dailyCount);
-  
-  const minuteExceeded = entry.count > limits.requestsPerMinute;
-  const dailyExceeded = dailyEntry.dailyCount > limits.requestsPerDay;
-  
-  const allowed = !minuteExceeded && !dailyExceeded;
-  
-  let retryAfter: number | undefined;
-  if (!allowed) {
-    if (dailyExceeded) {
-      retryAfter = Math.ceil((dailyEntry.dailyResetTime - now) / 1000);
-    } else {
-      retryAfter = Math.ceil((entry.resetTime - now) / 1000);
-    }
-  }
-  
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  const minute = await rateLimitHit(
+    minuteKeyFor(apiKeyId, endpoint),
+    limits.requestsPerMinute,
+    MINUTE_WINDOW
+  );
+  const daily = await rateLimitHit(dailyKeyFor(apiKeyId), limits.requestsPerDay, DAY_WINDOW);
+
+  const allowed = !minute.limited && !daily.limited;
+
   return {
     allowed,
     limit: limits.requestsPerMinute,
-    remaining: minuteRemaining,
-    reset: Math.ceil(entry.resetTime / 1000),
-    retryAfter,
+    remaining: minute.remaining,
+    reset: nowSeconds + minute.resetSeconds,
+    // The daily window is the one worth waiting on when both are blown.
+    retryAfter: allowed ? undefined : daily.limited ? daily.resetSeconds : minute.resetSeconds,
     dailyLimit: limits.requestsPerDay,
-    dailyRemaining,
-    dailyReset: Math.ceil(dailyEntry.dailyResetTime / 1000),
+    dailyRemaining: daily.remaining,
+    dailyReset: nowSeconds + daily.resetSeconds,
   };
 }
 
@@ -235,12 +186,20 @@ export function rateLimitExceededResponse(result: PartnerRateLimitResult): NextR
 }
 
 /**
- * Reset rate limit for a specific key (for testing)
+ * Reset rate limit for a specific key (for testing).
+ *
+ * A shared store cannot be scanned by prefix the way the old Map could, so the
+ * endpoint a counter was recorded against has to be named explicitly. Callers
+ * that pass none clear the daily budget and the un-scoped minute budget.
  */
-export function resetPartnerRateLimit(apiKeyId: string): void {
-  for (const key of rateLimitStore.keys()) {
-    if (key.startsWith(apiKeyId)) {
-      rateLimitStore.delete(key);
-    }
-  }
+export async function resetPartnerRateLimit(
+  apiKeyId: string,
+  endpoints: string[] = []
+): Promise<void> {
+  const keys = [
+    dailyKeyFor(apiKeyId),
+    minuteKeyFor(apiKeyId),
+    ...endpoints.map((endpoint) => minuteKeyFor(apiKeyId, endpoint)),
+  ];
+  await Promise.all(keys.map((key) => rateLimitReset(key)));
 }

@@ -3,7 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb'
 import { sendEmail, escapeHtml } from '@/lib/email'
 import { PROMO_TEMPLATES } from '@/lib/promoTemplates'
 import { CAMPAIGN_TEMPLATES } from '@/lib/marketing/campaigns'
-import { applyCoupon, withEmailUnsubscribe } from '@/lib/marketing/email-layout'
+import { applyCoupon, withEmailUnsubscribe, unsubscribeUrl } from '@/lib/marketing/email-layout'
 import { buildAudience, type Recipient } from '@/lib/marketing/segments'
 import { issueUnsubscribeToken } from '@/lib/customer-profile'
 import { ObjectId } from 'mongodb'
@@ -206,6 +206,9 @@ export async function POST(req: Request) {
               const token = await issueUnsubscribeToken(item.userId, 'email')
               const sendOpts: Parameters<typeof sendEmail>[0] = {
                 to: item.to, subject: item.subject, html: withEmailUnsubscribe(item.html, token),
+                // Bulk mail: mailbox providers expect a header-level opt-out,
+                // and penalise senders that only bury it in the body.
+                listUnsubscribe: unsubscribeUrl(token),
               }
               if (attachment) sendOpts.attachments = [attachment]
 
