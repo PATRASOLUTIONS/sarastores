@@ -207,6 +207,8 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
 
 export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
   const marketing = useMarketingContent("home")
+  if (brands.length === 0) return null
+
   return (
     <section className={styles.brands} aria-label="Top Brands">
       <HomepageHeading title={marketing.text("brands", "title")} href={marketing.text("brands", "ctaLink")} ctaText={marketing.text("brands", "ctaText")} />

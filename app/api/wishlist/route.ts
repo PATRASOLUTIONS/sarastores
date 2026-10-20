@@ -4,6 +4,7 @@ import { normalizeId } from "@/lib/db-service"
 import { ObjectId } from "mongodb"
 import { getCurrentUserId } from "@/lib/auth"
 import { z } from "zod"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 // Schema for adding to wishlist
 const addToWishlistSchema = z.object({
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
 
     // If we have product IDs, fetch the full product details
     if (wishlist.items && wishlist.items.length > 0) {
-      const productsCollection = await getCollection<{ _id: ObjectId | string; name?: string; slug?: string }>("products")
+      const productsCollection = await getCollection<{ _id: ObjectId | string; name?: string; slug?: string; active?: boolean }>("products")
       const productIds = wishlist.items.map((id: string) => {
         try {
           return new ObjectId(id)
@@ -43,7 +44,10 @@ export async function GET(request: Request) {
         }
       })
 
-      const products = await productsCollection.find({ _id: { $in: productIds } }).toArray()
+      const products = await productsCollection.find({
+        ...PUBLIC_PRODUCT_FILTER,
+        _id: { $in: productIds },
+      }).toArray()
 
       // Ensure slug exists on each product
       const { generateProductSlug } = await import("@/utils/slug")
@@ -83,6 +87,18 @@ export async function POST(request: Request) {
     const { productId } = parsed.data
 
     const wishlistCollection = await getCollection<WishlistDocument>("wishlists")
+    const productsCollection = await getCollection<{ _id: ObjectId | string; id?: string; active?: boolean }>("products")
+    const product = await productsCollection.findOne({
+      ...PUBLIC_PRODUCT_FILTER,
+      $or: [
+        ...(ObjectId.isValid(productId) ? [{ _id: new ObjectId(productId) }] : []),
+        { _id: productId },
+        { id: productId },
+      ],
+    })
+    if (!product) {
+      return NextResponse.json({ message: "Product not found" }, { status: 404 })
+    }
 
     // Check if wishlist exists
     const wishlist = await wishlistCollection.findOne({ userId })

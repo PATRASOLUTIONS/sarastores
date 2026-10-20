@@ -19,6 +19,7 @@ const TAXONOMY = {
     {
       name: "Electronics",
       count: 120,
+      brands: [{ name: "Anker", count: 70 }, { name: "Samsung", count: 50 }],
       categories: [
         {
           name: "Mobile Accessories",
@@ -42,6 +43,7 @@ const TAXONOMY = {
     {
       name: "Home Appliances",
       count: 40,
+      brands: [{ name: "LG", count: 40 }],
       categories: [
         { name: "Kitchen", count: 40, segments: [{ name: "Mixers", count: 40 }] },
       ],
@@ -79,6 +81,14 @@ test.describe("taxonomy mega-menu", () => {
     await expect(nav.getByRole("link", { name: "Mobile Accessories", exact: true })).toBeVisible()
     await expect(nav.getByRole("link", { name: "Audio Accessories", exact: true })).toBeVisible()
     await expect(nav.getByRole("link", { name: "Earphone Cases", exact: true })).toBeVisible()
+    await expect(nav.getByRole("link", { name: "Anker", exact: true })).toBeVisible()
+    await expect(nav.getByRole("link", { name: "LG", exact: true })).toBeHidden()
+
+    const ankerQuery = new URLSearchParams(
+      ((await nav.getByRole("link", { name: "Anker", exact: true }).getAttribute("href")) ?? "").split("?")[1] ?? "",
+    )
+    expect(ankerQuery.get("division")).toBe("Electronics")
+    expect(ankerQuery.get("brand")).toBe("Anker")
 
     // A segment link has to carry all three levels, or the listing it opens
     // cannot narrow to that shelf.
@@ -92,6 +102,8 @@ test.describe("taxonomy mega-menu", () => {
     // must not leave the previous one's links on screen.
     await nav.getByRole("link", { name: "Home Appliances", exact: true }).hover()
     await expect(nav.getByRole("link", { name: "Mixers", exact: true })).toBeVisible({ timeout: 10_000 })
+    await expect(nav.getByRole("link", { name: "LG", exact: true })).toBeVisible()
+    await expect(nav.getByRole("link", { name: "Anker", exact: true })).toBeHidden()
     await expect(chargers).toBeHidden()
   })
 

@@ -9,6 +9,7 @@ import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/l
 import { withProductDisplay } from "@/lib/product-presenter"
 import { generateProductSlug } from "@/utils/slug"
 import type { ProductDisplayInput } from "@/lib/product-display"
+import { isPublicProduct } from "@/lib/product-visibility"
 
 interface ProductDocument extends ProductDisplayInput {
   _id: ObjectId | string
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // If the product is inactive, hide it from public consumers unless explicitly requested
-    if (!includeInactive && product.active === false) {
+    if (!includeInactive && !isPublicProduct(product)) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 

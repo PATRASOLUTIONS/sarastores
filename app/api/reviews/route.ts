@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { MongoServerError, ObjectId } from "mongodb"
 import { getReviewProduct, publishedReviewFilter, synchronizeReviewStats, withReviewTransaction, type CustomerReviewDocument } from "@/lib/reviews"
+import { isPublicProduct } from "@/lib/product-visibility"
 
 export const dynamic = "force-dynamic"
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
       const collection = await dbService.getCollection<CustomerReviewDocument>(COLLECTIONS.REVIEWS)
       // Older documents nest the product, newer ones store a flat productId.
       const product = await getReviewProduct(productId)
-      if (!product || product.active === false) return NextResponse.json({ error: "Product not found" }, { status: 404 })
+      if (!isPublicProduct(product)) return NextResponse.json({ error: "Product not found" }, { status: 404 })
       reviews = await collection
         .find(publishedReviewFilter(String(product.id)))
         .sort({ createdAt: -1 })
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const { isVerifiedPurchase: _clientClaim, orderId: _clientOrder, ...input } = parsed.data
     const product = await getReviewProduct(input.productId)
-    if (!product || product.active === false) return NextResponse.json({ error: "Product not found" }, { status: 404 })
+    if (!isPublicProduct(product)) return NextResponse.json({ error: "Product not found" }, { status: 404 })
     const productId = String(product.id)
     const collection = await dbService.getCollection<CustomerReviewDocument>(COLLECTIONS.REVIEWS)
 

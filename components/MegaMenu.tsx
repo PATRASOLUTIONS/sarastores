@@ -142,7 +142,7 @@ function PanelHeading({ icon: Icon, label, href }: { icon: CategoryIcon; label: 
   )
 }
 
-function BrandColumn({ brands }: { brands: Brand[] }) {
+function BrandColumn({ brands, division }: { brands: Brand[]; division?: string }) {
   return (
     <div>
       <PanelHeading icon={Star} label="Top Brands" />
@@ -154,7 +154,12 @@ function BrandColumn({ brands }: { brands: Brand[] }) {
             // Keyed on the name: the feed carries entries whose `id` is absent
             // or shared, and the list is deduplicated by name on arrival.
             <li key={brand.name} className="break-inside-avoid">
-              <Link href={`/brands/${brand.slug || encodeURIComponent(brand.name)}`} className={panelLinkClass}>
+              <Link
+                href={division
+                  ? `/products?${new URLSearchParams({ division, brand: brand.name }).toString()}`
+                  : `/brands/${brand.slug || encodeURIComponent(brand.name)}`}
+                className={panelLinkClass}
+              >
                 {brand.name}
               </Link>
             </li>
@@ -235,7 +240,9 @@ function DivisionCard({ division }: { division: TaxonomyDivision }) {
  * sub-category is reachable. `break-inside-avoid` keeps a heading attached to
  * its own segments across a column boundary.
  */
-function DivisionPanel({ division, brands }: { division: TaxonomyDivision; brands: Brand[] }) {
+function DivisionPanel({ division }: { division: TaxonomyDivision }) {
+  const brands = division.brands.map(brand => ({ id: brand.name, name: brand.name }))
+
   return (
     <div className="section-container flex gap-5 py-5">
       <DivisionCard division={division} />
@@ -288,7 +295,7 @@ function DivisionPanel({ division, brands }: { division: TaxonomyDivision; brand
       </div>
 
       <div className="w-56 shrink-0 border-l border-gray-200 pl-5">
-        <BrandColumn brands={brands} />
+        <BrandColumn brands={brands} division={division.name} />
       </div>
     </div>
   )
@@ -546,7 +553,7 @@ export default function MegaMenu() {
                       onMouseLeave={scheduleClose}
                     >
                       {tab.division ? (
-                        <DivisionPanel division={tab.division} brands={brands} />
+                        <DivisionPanel division={tab.division} />
                       ) : (
                         tab.category && (
                           <LegacyCategoryPanel
@@ -577,7 +584,7 @@ export default function MegaMenu() {
                 </Link>
               ))}
               {marketing.enabled("promotion") && <Link
-                href={marketing.text("promotion", "ctaLink")}
+                href="/super-sunday"
                 className="ml-2 whitespace-nowrap rounded-full bg-[#E11D2E] px-3.5 py-1.5 text-xs font-bold text-white transition-transform hover:scale-105"
               >
                 {marketing.text("promotion", "title")}

@@ -5,6 +5,7 @@ import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/l
 import { generateProductSlug } from "@/utils/slug"
 import { withProductDisplay } from "@/lib/product-presenter"
 import { isAdmin, requireAdmin } from "@/lib/auth"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 interface ProductFilter {
   category?: string
@@ -105,7 +106,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!includeInactive) {
-      filter.active = true
+      Object.assign(filter, PUBLIC_PRODUCT_FILTER)
     }
 
     // Search runs in MongoDB, not in Node. It used to fetch the whole

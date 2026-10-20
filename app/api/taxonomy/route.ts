@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
 import { buildTaxonomyTree, type TaxonomyRow } from "@/lib/product-taxonomy"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 /**
  * The first of `paths` that holds a non-blank string.
@@ -57,7 +58,7 @@ export async function GET() {
     // stock must not create an aisle that leads to an empty listing.
     const rows = (await collection
       .aggregate([
-        { $match: { active: { $ne: false } } },
+        { $match: PUBLIC_PRODUCT_FILTER },
         {
           $group: {
             _id: {
@@ -73,6 +74,26 @@ export async function GET() {
                 "$raw.PROD DESC",
               ]),
               segment: firstNonBlank(["$segment", "$characteristics", "$char_desc", "$raw.CHAR DESC"]),
+              // Only in-stock products contribute to Top Brands. The division
+              // hierarchy itself still includes every active product.
+              brand: {
+                $cond: [
+                  {
+                    $gt: [
+                      { $convert: { input: "$stock", to: "double", onError: 0, onNull: 0 } },
+                      0,
+                    ],
+                  },
+                  firstNonBlank([
+                    "$manufacturerName",
+                    "$manufacturer_name",
+                    "$brand",
+                    "$raw.Manufacturer Name",
+                    "$raw.Brand",
+                  ]),
+                  "",
+                ],
+              },
             },
             count: { $sum: 1 },
           },
@@ -83,6 +104,7 @@ export async function GET() {
             division: "$_id.division",
             subCategory: "$_id.subCategory",
             segment: "$_id.segment",
+            brand: "$_id.brand",
             count: 1,
           },
         },

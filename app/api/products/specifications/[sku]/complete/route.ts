@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { normalizeId } from "@/lib/db-service"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ sku: string }> }) {
   try {
@@ -8,6 +9,16 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ sk
     const { sku } = await params
 
     const { db } = await connectToDatabase()
+    const product = await db.collection("products").findOne(
+      {
+        ...PUBLIC_PRODUCT_FILTER,
+        $or: [{ sku }, { itemno: sku }, { "raw.itemno": sku }],
+      },
+      { projection: { _id: 1 } },
+    )
+    if (!product) {
+      return NextResponse.json({ error: "Specifications not found for SKU" }, { status: 404 })
+    }
     const specsCollection = db.collection("product_specifications")
 
     // Fetch COMPLETE document from product_specifications collection

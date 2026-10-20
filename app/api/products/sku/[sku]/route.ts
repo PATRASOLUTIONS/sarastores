@@ -3,6 +3,7 @@ import { getCollection } from "@/lib/db-service"
 import { extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { requireAdmin } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 interface ProductUpdate {
   name?: string
@@ -107,6 +108,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sku:
     const collection = await getCollection("products")
 
     const product = await collection.findOne({
+      ...PUBLIC_PRODUCT_FILTER,
       $or: [
         { itemno: canonicalSku },
         { sku: canonicalSku },

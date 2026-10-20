@@ -8,6 +8,7 @@ import { safeJsonLd } from "@/lib/jsonld-safe"
 import { getSeoCategory } from "@/lib/seo-category"
 import { titleCaseLabel } from "@/lib/product-display"
 import { cleanProductName } from "@/utils/cleanProductName"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 async function getCategoryProducts(categoryName: string) {
   try {
@@ -21,7 +22,7 @@ async function getCategoryProducts(categoryName: string) {
     const products = await db
       .collection('products')
       .find({
-        active: { $ne: false },
+        ...PUBLIC_PRODUCT_FILTER,
         $or: [{ category: category.name }, { groupName: category.name }, { category: category.id }],
       })
       .project({ _id: 1, id: 1, slug: 1, name: 1 })

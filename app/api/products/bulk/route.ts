@@ -3,6 +3,7 @@ import { getCollection, normalizeId, createObjectId, COLLECTIONS } from "@/lib/d
 import { isAdmin } from "@/lib/auth"
 import { z } from "zod"
 import { ObjectId, type Filter } from "mongodb"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 const bulkRequestSchema = z.object({
   ids: z.array(z.union([z.string().min(1), z.number().finite()])).default([]),
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const orQuery = orFilters.length === 1 ? orFilters[0] : { $or: orFilters }
-    const finalQuery = includeInactive ? orQuery : { $and: [orQuery, { active: true }] }
+    const finalQuery = includeInactive ? orQuery : { $and: [orQuery, PUBLIC_PRODUCT_FILTER] }
     
     // For compare mode, project only essential fields to minimize response size and avoid 431 errors
     if (compareMode) {

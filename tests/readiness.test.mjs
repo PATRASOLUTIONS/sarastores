@@ -930,7 +930,7 @@ test("public campaigns normalize native/legacy product IDs, hide disabled produc
         assert.equal(query.isActive, true)
         return active ? doc : null
       } } : { find: query => {
-        assert.equal(query.active.$ne, false)
+        assert.equal(query.active, true)
         assert.ok(query.$or[0]._id.$in[0].equals(productId))
         assert.ok(query.$or[1]._id.$in.includes("legacy-id"))
         return { toArray: async () => [
@@ -948,6 +948,51 @@ test("public campaigns normalize native/legacy product IDs, hide disabled produc
   assert.ok(data.campaign.products.every(product => !("_id" in product)))
   active = false
   assert.equal((await get()).status, 404)
+})
+
+test("division visibility is admin-only, validates input and updates the exact division", async () => {
+  let authorized = false
+  let operation = null
+  const route = sourceLoader({
+    "@/lib/auth": {
+      requireAdmin: async () => authorized
+        ? { ok: true }
+        : { ok: false, response: Response.json({ error: "Unauthorized" }, { status: 401 }) },
+    },
+    "@/lib/db-service": {
+      COLLECTIONS: { PRODUCTS: "products" },
+      updateMany: async (collection, filter, update) => {
+        operation = { collection, filter, update }
+        return { success: true, matchedCount: 3, modifiedCount: 2 }
+      },
+    },
+    "@/lib/api-error": {
+      handleApiError: () => Response.json({ error: "Failed" }, { status: 500 }),
+    },
+  }).load("app/api/products/division-visibility/route.ts")
+  const request = body => new Request("https://fixture.invalid/api/products/division-visibility", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+
+  assert.equal((await route.PATCH(request({ division: "TV", active: false }))).status, 401)
+  authorized = true
+  assert.equal((await route.PATCH(request({ division: "", active: false }))).status, 400)
+
+  const response = await route.PATCH(request({ division: " TV.* ", active: false }))
+  assert.equal(response.status, 200)
+  assert.equal(operation.collection, "products")
+  assert.equal(operation.filter.division.$regex, "^TV\\.\\*$")
+  assert.equal(operation.filter.division.$options, "i")
+  assert.equal(operation.update.active, false)
+  assert.deepEqual(await response.json(), {
+    success: true,
+    division: "TV.*",
+    active: false,
+    matchedCount: 3,
+    modifiedCount: 2,
+  })
 })
 
 function participantUploadFixture() {
@@ -5002,11 +5047,11 @@ test("the taxonomy tree nests division to sub-category to segment and merges inc
   const { buildTaxonomyTree, taxonomyHref } = sourceLoader().load("lib/product-taxonomy.ts")
 
   const tree = buildTaxonomyTree([
-    { division: "Accessories", subCategory: "Mobile Accessories", segment: "Cables", count: 5 },
+    { division: "Accessories", subCategory: "Mobile Accessories", segment: "Cables", brand: "Anker", count: 5 },
     // Same aisle, typed differently in a later spreadsheet.
-    { division: "accessories", subCategory: "mobile accessories", segment: "Cables", count: 3 },
-    { division: "Accessories", subCategory: "Mobile Accessories", segment: "Power Banks", count: 9 },
-    { division: "Accessories", subCategory: "Audio Accessories", segment: "", count: 2 },
+    { division: "accessories", subCategory: "mobile accessories", segment: "Cables", brand: "anker", count: 3 },
+    { division: "Accessories", subCategory: "Mobile Accessories", segment: "Power Banks", brand: "Belkin", count: 9 },
+    { division: "Accessories", subCategory: "Audio Accessories", segment: "", brand: "Anker", count: 2 },
     // A product nobody has classified cannot be given a place in the menu, and
     // a placeholder label is not an aisle — neither may become a header tab.
     { division: "", subCategory: "Orphan", segment: "Orphan", count: 100 },
@@ -5018,6 +5063,10 @@ test("the taxonomy tree nests division to sub-category to segment and merges inc
   const [accessoriesDivision] = tree
   assert.equal(accessoriesDivision.name, "Accessories")
   assert.equal(accessoriesDivision.count, 19)
+  assert.equal(
+    accessoriesDivision.brands.map(brand => `${brand.name}=${brand.count}`).join(" | "),
+    "Anker=10 | Belkin=9",
+  )
 
   // Busiest first at every level.
   assert.equal(
@@ -5073,6 +5122,7 @@ test("an unexpected taxonomy payload degrades the menu instead of throwing", () 
       null,
       {
         name: " Accessories ",
+        brands: [null, { name: "Anker", count: 5 }, { count: 2 }],
         subCategories: [null, { name: "Audio", count: "many", segments: [{ count: 1 }, { name: "Aux Cables" }] }],
       },
     ],
@@ -5080,6 +5130,7 @@ test("an unexpected taxonomy payload degrades the menu instead of throwing", () 
   assert.equal(partial.length, 1)
   assert.equal(partial[0].name, "Accessories")
   assert.equal(partial[0].count, 0)
+  assert.equal(partial[0].brands.map(brand => brand.name).join(","), "Anker")
   assert.equal(partial[0].subCategories.length, 1)
   assert.equal(partial[0].subCategories[0].count, 0)
   assert.equal(partial[0].subCategories[0].segments.map(s => s.name).join(","), "Aux Cables")

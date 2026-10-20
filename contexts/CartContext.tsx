@@ -78,6 +78,34 @@ const CartContext = createContext<CartContextValue | null>(null)
 
 const EMPTY_CART: CartItem[] = []
 
+async function keepPublicCartItems(items: CartItem[]): Promise<CartItem[]> {
+  const productIds = [...new Set(items
+    .filter(item => item.type !== "software")
+    .map(item => item.id)
+    .filter(Boolean))]
+  if (productIds.length === 0) return items
+
+  try {
+    const response = await fetch("/api/products/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: productIds }),
+      cache: "no-store",
+    })
+    if (!response.ok) return items
+    const products = await response.json()
+    if (!Array.isArray(products)) return items
+    const visibleIds = new Set(products
+      .flatMap((product) => [product?.id, product?._id])
+      .filter((id): id is string => typeof id === "string"))
+    return items.filter(item => item.type === "software" || visibleIds.has(item.id))
+  } catch {
+    // Availability checks must fail open on a network error so an offline
+    // shopper's cart is not erased. Checkout still validates server-side.
+    return items
+  }
+}
+
 /**
  * Single source of truth for the cart, shared by every `useCart()` consumer
  * (Header, CartSidebar, CartQuickAccess, AddToCartButton, product page, cart
@@ -162,7 +190,9 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
           if (saved) {
             const parsed = JSON.parse(saved)
             if (!Array.isArray(parsed)) throw new Error("Invalid guest cart format")
-            safeSetCart(parsed)
+            const visible = await keepPublicCartItems(parsed)
+            safeSetCart(visible)
+            persistLocal(visible)
           } else safeSetCart(EMPTY_CART)
         } catch (error) {
           console.error("[Cart] Guest cart could not be restored:", error)
@@ -189,7 +219,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       const guestSaved = localStorage.getItem("cart_guest")
       if (guestSaved) {
         const parsed = JSON.parse(guestSaved)
-        if (Array.isArray(parsed)) guestItems = parsed
+        if (Array.isArray(parsed)) guestItems = await keepPublicCartItems(parsed)
       }
     } catch {
       // ignore parse error
@@ -233,7 +263,11 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
               const saved = localStorage.getItem(`cart_${userId}`)
               if (saved) {
                 const parsed = JSON.parse(saved)
-                if (Array.isArray(parsed) && parsed.length > 0) safeSetCart(parsed)
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  const visible = await keepPublicCartItems(parsed)
+                  safeSetCart(visible)
+                  persistLocal(visible)
+                }
               }
             } catch {
               // ignore
@@ -280,7 +314,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
             if (saved) {
               const parsed = JSON.parse(saved)
               if (Array.isArray(parsed) && parsed.length > 0) {
-                const merged = mergeGuest(parsed)
+                const merged = mergeGuest(await keepPublicCartItems(parsed))
                 safeSetCart(merged)
                 // Push the local cart back to the server so future GETs
                 // see it. Best-effort, fire-and-forget.

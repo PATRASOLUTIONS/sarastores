@@ -7,6 +7,7 @@ import { productImageUrls } from "@/lib/product-images"
 import { cleanProductDescription, cleanProductName } from "@/utils/cleanProductName"
 import { seoText } from "@/lib/seo-metadata"
 import type { ObjectId } from "mongodb"
+import { isPublicProduct } from "@/lib/product-visibility"
 
 export interface ProductFeedDocument extends Record<string, unknown> {
   _id: ObjectId | string
@@ -28,7 +29,7 @@ export interface ProductFeedDocument extends Record<string, unknown> {
 export const getSeoProduct = cache(async (identifier: string) => {
   identifier = decodeURIComponent(identifier)
   const product = await getReviewProduct(identifier)
-  if (!product || product.active === false) return null
+  if (!isPublicProduct(product)) return null
   const specs = product.sku
     ? await (await getCollection("product_specifications")).findOne({ sku: product.sku })
     : null

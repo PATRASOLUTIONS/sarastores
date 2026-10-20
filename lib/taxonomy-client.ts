@@ -18,9 +18,9 @@ const TTL = 10 * 60 * 1000
 
 export function fetchTaxonomy(): Promise<TaxonomyDivision[]> {
   return fetchWithCache(
-    "taxonomy",
+    "taxonomy:v3",
     async () => {
-      const response = await fetch("/api/taxonomy")
+      const response = await fetch("/api/taxonomy?v=3")
       if (!response.ok) throw new Error(`Taxonomy request failed (${response.status})`)
       return response.json()
     },
