@@ -28,20 +28,28 @@ export async function publishScrapedProduct(row: ScraperImportRow, scraped: Scra
       if (!Number.isFinite(price) || !Number.isFinite(mrp) || price < 0 || mrp < price) {
         throw new ScraperError("Price exceeds MRP or stored pricing is invalid; correct pricing before importing", 409)
       }
-      const description = scraped.description || row.name
+      // Excel only needs the join key and source URL. Legacy sheets may still
+      // override these values, otherwise the scrape supplies temporary
+      // metadata until the Products metadata update is applied.
+      const name = row.name || scraped.sap.name || row.itemno
+      const category = row.category || scraped.sap.category || ""
+      const subCategory = row.subCategory || scraped.sap.subCategory || ""
+      const brand = row.brand || scraped.sap.brand || ""
+      const charDesc = row.charDesc || scraped.sap.charDesc || ""
+      const description = scraped.description || name
       const canonical = extractCanonicalProductMetadata({
-        itemno: row.itemno, Name: row.name, Description: description,
-        Category: row.category, SubCategory: row.subCategory,
-        "CHAR DESC": row.charDesc, "Manufacturer Name": row.brand,
+        itemno: row.itemno, Name: name, Description: description,
+        Category: category, SubCategory: subCategory,
+        "CHAR DESC": charDesc, "Manufacturer Name": brand,
       })
       const fields = {
-        sku: row.itemno, itemno: row.itemno, name: row.name,
-        category: row.category, groupName: row.category, group_name: row.category,
-        subCategory: row.subCategory, prod_desc: row.subCategory,
-        brand: row.brand, manufacturerName: row.brand, manufacturer_name: row.brand,
-        char_desc: row.charDesc, description,
-        raw: { ...buildSchemaSynchronizedRaw(existing?.raw, canonical), "CHAR DESC": row.charDesc },
-        slug: existing?.slug || `${generateProductSlug(row.name)}-${id.toString()}`,
+        sku: row.itemno, itemno: row.itemno, name,
+        category, groupName: category, group_name: category,
+        subCategory, prod_desc: subCategory,
+        brand, manufacturerName: brand, manufacturer_name: brand,
+        char_desc: charDesc, description,
+        raw: { ...buildSchemaSynchronizedRaw(existing?.raw, canonical), "CHAR DESC": charDesc },
+        slug: existing?.slug || `${generateProductSlug(name)}-${id.toString()}`,
         ...(scraped.images.length ? { images: scraped.images.slice(0, 8), image: scraped.images[0] } : {}),
         specifications: scraped.technicalDetails,
         features: scraped.features,
@@ -52,10 +60,10 @@ export async function publishScrapedProduct(row: ScraperImportRow, scraped: Scra
         updatedAt: new Date(),
       }
       const spec = buildSpecificationDocument({
-        sku: row.itemno, product_id: id.toString(), name: row.name,
-        category: row.category, subCategory: row.subCategory,
-        group_name: row.category, prod_desc: row.subCategory,
-        char_desc: row.charDesc, manufacturer_name: row.brand, mrp,
+        sku: row.itemno, product_id: id.toString(), name,
+        category, subCategory,
+        group_name: category, prod_desc: subCategory,
+        char_desc: charDesc, manufacturer_name: brand, mrp,
         overview: description, technical_details: scraped.technicalDetails,
         from_manufacturer: scraped.manufacturerInfo,
         gallery_images: scraped.images, specification_images: scraped.manufacturerImages,

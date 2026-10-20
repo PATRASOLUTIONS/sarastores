@@ -165,17 +165,31 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
   }, [taxonomy, subCategories])
 
   const brands = useMemo<HomeBrand[]>(() => {
-    return HOME_BRANDS.map((fallback) => {
-      const brand = brandDocs.find((item) => String(item.name).toLowerCase() === fallback.name.toLowerCase())
-      if (brand?.enabled === false || brand?.active === false) return null
-      if (!brand) return fallback
-      return {
-        ...fallback,
-        logo: imageUrl(brand.logo) || fallback.logo,
-        href: text(brand.slug) ? `/brands/${brand.slug}` : fallback.href,
+    const counts = new Map<string, { name: string; count: number }>()
+    for (const division of taxonomy) {
+      for (const brand of division.brands) {
+        const key = brand.name.trim().toLowerCase()
+        if (!key) continue
+        const held = counts.get(key)
+        if (held) held.count += brand.count
+        else counts.set(key, { name: brand.name.trim(), count: brand.count })
       }
-    }).filter((brand): brand is HomeBrand => brand !== null)
-  }, [brandDocs])
+    }
+
+    return [...counts.values()]
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .flatMap(({ name }) => {
+        const document = brandDocs.find(item => String(item.name || "").trim().toLowerCase() === name.toLowerCase())
+        if (document?.enabled === false || document?.active === false) return []
+        const fallback = HOME_BRANDS.find(item => item.name.toLowerCase() === name.toLowerCase())
+        return [{
+          name,
+          logo: imageUrl(document?.logo) || fallback?.logo,
+          href: `/products?${new URLSearchParams({ brand: name, availability: "in" }).toString()}`,
+        }]
+      })
+      .slice(0, HOME_BRANDS.length)
+  }, [brandDocs, taxonomy])
 
   const deals = useMemo(() => {
     const available = products.filter((product) => product.stock > 0)
@@ -207,12 +221,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
           }))} /></MarketingSection>
           <MarketingSection page="home" section="deals"><HomepageDeals products={deals} loading={loading} error={catalogueError} retry={() => void loadProducts(true)} /></MarketingSection>
           <MarketingSection page="home" section="promotions"><HomepagePromotions banners={[...cardBanners, ...stripBanners, ...statementBanners].sort((a, b) => (a.order || 0) - (b.order || 0))} /></MarketingSection>
-          <MarketingSection page="home" section="brands"><HomepageBrands brands={brands.map(brand => {
-            const index = HOME_BRANDS.findIndex(item => item.name === brand.name)
-            return { ...brand, name: marketing.text("brands", `item${index + 1}Title`, brand.name),
-              logo: marketing.image("brands", `item${index + 1}Image`, brand.logo || ""),
-              href: marketing.text("brands", `item${index + 1}Href`) || brand.href }
-          })} /></MarketingSection>
+          <MarketingSection page="home" section="brands"><HomepageBrands brands={brands} /></MarketingSection>
           <MarketingSection page="home" section="stores"><HomepageStores storeCount={storeCount} /></MarketingSection>
         </MarketingSections>
       </main>

@@ -1,6 +1,7 @@
 import { ObjectId, type ClientSession, type Document, type Filter } from "mongodb"
-import { COLLECTIONS, getCollection, getById, normalizeId } from "@/lib/db-service"
+import { COLLECTIONS, getCollection, normalizeId } from "@/lib/db-service"
 import { getMongoClient } from "@/lib/mongodb"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 export interface CustomerReviewDocument extends Document {
   _id: ObjectId | string
@@ -30,8 +31,16 @@ export function publishedReviewFilter(productId?: string): Filter<CustomerReview
 
 export async function getReviewProduct(id: string) {
   const products = await getCollection<Document & { _id: ObjectId | string }>(COLLECTIONS.PRODUCTS)
-  const product = await products.findOne({ slug: id })
-  return product ? normalizeId(product) : getById(COLLECTIONS.PRODUCTS, id)
+  const product = await products.findOne({ ...PUBLIC_PRODUCT_FILTER, slug: id })
+    ?? await products.findOne({
+      ...PUBLIC_PRODUCT_FILTER,
+      $or: [
+        ...(ObjectId.isValid(id) ? [{ _id: new ObjectId(id) }] : []),
+        { _id: id },
+        { id },
+      ],
+    })
+  return product ? normalizeId(product) : null
 }
 
 export async function withReviewTransaction<T>(operation: (session: ClientSession) => Promise<T>): Promise<T> {

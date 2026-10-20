@@ -302,6 +302,7 @@ export default function AdminProducts() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isPriceExporting, setIsPriceExporting] = useState(false)
   const [updatingActiveIds, setUpdatingActiveIds] = useState<string[]>([])
+  const [updatingDivision, setUpdatingDivision] = useState(false)
   const [activatingAll, setActivatingAll] = useState(false)
   const [isAutoSaving, setIsAutoSaving] = useState(false)
 
@@ -563,6 +564,40 @@ export default function AdminProducts() {
       toast.error(err instanceof Error ? err.message : "Failed to update product visibility")
     } finally {
       setUpdatingActiveIds((s) => s.filter((x) => x !== id))
+    }
+  }
+
+  const handleToggleDivision = async (division: string, newValue: boolean) => {
+    const affectedCount = products.filter(
+      product => (product.division || "").trim().toLowerCase() === division.trim().toLowerCase(),
+    ).length
+    const action = newValue ? "activate" : "deactivate"
+    if (!window.confirm(
+      `${action === "activate" ? "Activate" : "Deactivate"} all ${affectedCount} products in "${division}"?`
+    )) return
+
+    setUpdatingDivision(true)
+    try {
+      const response = await apiFetch("/api/products/division-visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ division, active: newValue }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Failed to update division")
+
+      const next = products.map(product =>
+        (product.division || "").trim().toLowerCase() === division.trim().toLowerCase()
+          ? { ...product, active: newValue }
+          : product
+      )
+      setProducts(next)
+      setActiveProductsCount(next.filter(product => product.active === true).length)
+      toast.success(`Division ${newValue ? "activated" : "deactivated"} (${data.matchedCount} products)`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update division")
+    } finally {
+      setUpdatingDivision(false)
     }
   }
 
@@ -1108,6 +1143,12 @@ export default function AdminProducts() {
   const divisionOptions = distinctValues(products, COLUMN_VALUES.division)
   const segmentOptions = distinctValues(products, COLUMN_VALUES.segment)
   const brandOptions = distinctValues(products, COLUMN_VALUES.brand)
+  const selectedDivisionProducts = selectedDivision === "all"
+    ? []
+    : products.filter(product =>
+      (product.division || "").trim().toLowerCase() === selectedDivision.trim().toLowerCase()
+    )
+  const selectedDivisionIsActive = selectedDivisionProducts.some(product => product.active === true)
 
   const totalRows = sortedProducts.length
   const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage))
@@ -1305,19 +1346,38 @@ export default function AdminProducts() {
               with a single "All" entry, which is just noise in the toolbar.
             */}
             {divisionOptions.length > 0 && (
-              <div className="relative">
-                <select
-                  value={selectedDivision}
-                  onChange={(e) => setSelectedDivision(e.target.value)}
-                  className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[140px] sm:max-w-[140px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  aria-label="Filter by division"
-                >
-                  <option value="all">All Divisions</option>
-                  {divisionOptions.map((value) => (
-                    <option key={value} value={value}>{value}</option>
-                  ))}
-                </select>
-                <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <select
+                    value={selectedDivision}
+                    onChange={(e) => setSelectedDivision(e.target.value)}
+                    className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[140px] sm:max-w-[140px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    aria-label="Filter by division"
+                  >
+                    <option value="all">All Divisions</option>
+                    {divisionOptions.map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                  <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+                {selectedDivision !== "all" && (
+                  <button
+                    type="button"
+                    disabled={updatingDivision || selectedDivisionProducts.length === 0}
+                    onClick={() => handleToggleDivision(selectedDivision, !selectedDivisionIsActive)}
+                    className={`rounded-md px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                      selectedDivisionIsActive
+                        ? "bg-red-600 hover:bg-red-700"
+                        : "bg-green-600 hover:bg-green-700"
+                    }`}
+                    title={`${selectedDivisionIsActive ? "Deactivate" : "Activate"} every product in ${selectedDivision}`}
+                  >
+                    {updatingDivision
+                      ? "Updating..."
+                      : `${selectedDivisionIsActive ? "Deactivate" : "Activate"} Division`}
+                  </button>
+                )}
               </div>
             )}
 

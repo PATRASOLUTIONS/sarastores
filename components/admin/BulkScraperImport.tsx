@@ -56,7 +56,7 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
       const XLSX = await import("xlsx")
       const book = XLSX.utils.book_new()
       const sheet = XLSX.utils.json_to_sheet(SCRAPER_TEMPLATE)
-      sheet["!cols"] = [20, 40, 25, 25, 35, 20, 65].map(wch => ({ wch }))
+      sheet["!cols"] = [20, 65].map(wch => ({ wch }))
       XLSX.utils.book_append_sheet(book, sheet, "Scraper")
       XLSX.writeFile(book, "bulk-scraper-template.xlsx")
     } catch (cause) {
@@ -182,10 +182,10 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="text-lg font-bold">Bulk import from Excel</h2>
       <p className="text-sm text-gray-600">
-        Upload itemno, name, category, sub category, char desc, brand and product link. All columns except char desc are required.
+        Upload only <strong>itemno</strong> and <strong>product link</strong>.
         Up to 500 rows / 3 MB. Upload only prepares the queue; Run Scraper processes every item and automatically approves its specifications.
-        Sheet metadata overrides scraped suggestions. Existing prices and stock are preserved; new products start with zero stock.
-        You will be taken to Products when all rows succeed.
+        Scraped values create the initial record; update name, division, category, segment and brand later from Products → Metadata Update.
+        Existing prices and stock are preserved; new products start with zero stock. You will be taken to Products when all rows succeed.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={template} className="rounded-lg border px-4 py-2 text-sm font-semibold">Download Excel template</button>
@@ -294,9 +294,9 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead><tr><th className="p-2">Item number</th><th className="p-2">Name</th><th className="p-2">Status</th><th className="p-2">Result</th></tr></thead>
+            <thead><tr><th className="p-2">Item number</th><th className="p-2">Product link</th><th className="p-2">Status</th><th className="p-2">Result</th></tr></thead>
             <tbody>{items.slice((page - 1) * 25, page * 25).map(item => <tr key={item.row.itemno} className="border-t">
-              <td className="p-2">{item.row.itemno}</td><td className="p-2">{item.row.name}</td><td className="p-2">{item.status}</td>
+              <td className="p-2">{item.row.itemno}</td><td className="max-w-xs truncate p-2" title={item.row.url}>{item.row.url}</td><td className="p-2">{item.status}</td>
               <td className={`p-2 ${item.status === "error" ? "text-red-700" : ""}`}>{item.message || "Ready"}</td>
             </tr>)}</tbody>
           </table>

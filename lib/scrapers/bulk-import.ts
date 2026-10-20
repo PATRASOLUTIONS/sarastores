@@ -4,22 +4,18 @@ export const MAX_SCRAPER_IMPORT_BYTES = 3 * 1024 * 1024
 export const MAX_SCRAPER_IMPORT_ROWS = 500
 export const SCRAPER_TEMPLATE = [{
   itemno: "REFSAM1187",
-  name: "Example refrigerator",
-  category: "Refrigerators",
-  "sub category": "Double Door",
-  "char desc": "Example model",
-  brand: "Samsung",
   "product link": "https://www.amazon.in/dp/B000000000",
 }]
 
 const requiredText = z.string().trim().min(1).max(500)
+const optionalText = z.string().trim().max(2000).default("")
 export const ScraperImportRowSchema = z.object({
   itemno: requiredText,
-  name: requiredText,
-  category: requiredText,
-  subCategory: requiredText,
-  charDesc: z.string().trim().max(2000),
-  brand: requiredText,
+  name: optionalText,
+  category: optionalText,
+  subCategory: optionalText,
+  charDesc: optionalText,
+  brand: optionalText,
   url: z.string().trim().url().max(4096),
 })
 export type ScraperImportRow = z.infer<typeof ScraperImportRowSchema>

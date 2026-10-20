@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCollection, normalizeId } from "@/lib/db-service";
 import { ObjectId } from "mongodb";
 import { getCurrentUserId } from "@/lib/auth";
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility";
 
 const COLLECTION = "users";
 
@@ -19,6 +20,19 @@ export async function POST(req: Request) {
         const { productId } = await req.json();
         if (!productId || typeof productId !== "string") {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        const productsCollection = await getCollection<{ _id: ObjectId | string; id?: string; active?: boolean }>("products");
+        const product = await productsCollection.findOne({
+            ...PUBLIC_PRODUCT_FILTER,
+            $or: [
+                ...(ObjectId.isValid(productId) ? [{ _id: new ObjectId(productId) }] : []),
+                { _id: productId },
+                { id: productId },
+            ],
+        });
+        if (!product) {
+            return NextResponse.json({ error: "Product not found" }, { status: 404 });
         }
 
         const collection = await getCollection<UserRecentlyViewedDocument>(COLLECTION);
@@ -66,7 +80,7 @@ export async function GET(req: Request) {
         }
 
         // Fetch product details for the recent IDs
-        const productsCollection = await getCollection<{ _id: ObjectId | string; id?: string; slug?: string; name?: string }>("products");
+        const productsCollection = await getCollection<{ _id: ObjectId | string; id?: string; slug?: string; name?: string; active?: boolean }>("products");
 
         // Convert string IDs to ObjectIds if your product IDs are ObjectIds
         // Assuming product IDs are strings based on project context, but handling both
@@ -76,6 +90,7 @@ export async function GET(req: Request) {
 
         // Try matching as strings first
         products = await productsCollection.find({
+            ...PUBLIC_PRODUCT_FILTER,
             $or: [
                 { id: { $in: productIds } },
                 {

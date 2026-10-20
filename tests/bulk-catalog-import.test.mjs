@@ -21,15 +21,18 @@ function productFixture() {
   }
 }
 
-test("scraper Excel template round-trips with all requested columns", () => {
+test("scraper Excel template contains only itemno and product link", () => {
   const { SCRAPER_TEMPLATE, parseScraperRows } = sourceLoader().load("lib/scrapers/bulk-import.ts")
+  assert.deepEqual(Object.keys(SCRAPER_TEMPLATE[0]), ["itemno", "product link"])
   const book = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(SCRAPER_TEMPLATE), "Scraper")
   const read = XLSX.read(XLSX.write(book, { type: "array", bookType: "xlsx" }), { type: "array" })
   const parsed = parseScraperRows(XLSX.utils.sheet_to_json(read.Sheets.Scraper))
   assert.equal(parsed.length, 1)
-  assert.equal(parsed[0].subCategory, "Double Door")
-  assert.equal(parsed[0].charDesc, "Example model")
+  assert.equal(parsed[0].name, "")
+  assert.equal(parsed[0].category, "")
+  assert.equal(parsed[0].subCategory, "")
+  assert.equal(parsed[0].brand, "")
   assert.equal(parsed[0].itemno, "REFSAM1187")
 })
 
@@ -53,11 +56,14 @@ test("flipkart short links are accepted from plain cells, bare hosts and excel h
   assert.equal(queue.items()[0].row.url, link)
 })
 
-test("scraper rows validate required metadata, aliases, duplicates and exact 500-row limit", () => {
+test("scraper rows require only itemno and product link while retaining legacy metadata", () => {
   const { parseScraperRows } = sourceLoader().load("lib/scrapers/bulk-import.ts")
   assert.equal(parseScraperRows([{ ...row, "product link": row.url }])[0].url, row.url)
   assert.equal(parseScraperRows([{ ...row, charDesc: "" }])[0].charDesc, "")
-  for (const field of ["itemno", "name", "category", "subCategory", "brand", "url"]) {
+  const minimal = parseScraperRows([{ itemno: row.itemno, "product link": row.url }])[0]
+  assert.equal(minimal.name, "")
+  assert.equal(minimal.brand, "")
+  for (const field of ["itemno", "url"]) {
     assert.throws(() => parseScraperRows([{ ...row, [field]: "" }]), /Row 2/)
   }
   assert.throws(() => parseScraperRows([row, { ...row, itemno: row.itemno.toLowerCase() }]), /duplicate itemno/)
@@ -153,6 +159,21 @@ test("publishing atomically creates canonical product and approved, reachable sp
   assert.ok(options.every(opts => opts.session === session))
 })
 
+test("two-column scraper rows publish with scraped metadata fallbacks", async () => {
+  const fixture = publishingFixture()
+  const minimalRow = {
+    itemno: row.itemno, url: row.url, name: "", category: "",
+    subCategory: "", charDesc: "", brand: "",
+  }
+  await fixture.publish(minimalRow, productFixture())
+  const { products, specs } = fixture.state()
+  assert.equal(products[0].name, "Scraped name")
+  assert.equal(products[0].brand, "Scraped brand")
+  assert.equal(products[0].category, "")
+  assert.equal(specs[0].name, "Scraped name")
+  assert.equal(specs[0].manufacturer_name, "Scraped brand")
+})
+
 test("retries update same product and preserve selling price, MRP, stock and slug", async () => {
   const fixture = publishingFixture({ initial: [{
     _id: new ObjectId(), itemno: row.itemno, price: 60, mrp: 120,
@@ -220,7 +241,7 @@ test("publish API guards first, validates source/payload and reports concurrent 
   assert.equal(calls, 0)
   authorized = true
   for (const invalid of [
-    "{", {}, { ...payload, row: { ...row, name: "" } },
+    "{", {}, { ...payload, row: { ...row, itemno: "" } },
     { ...payload, row: { ...row, url: "https://127.0.0.1/private" } },
     { ...payload, row: { ...row, url: "https://amazon.in/dp/TEST" } },
     { ...payload, product: { ...payload.product, images: ["javascript:alert(1)"] } },
@@ -481,7 +502,7 @@ test("editor shows all issues, opens first invalid page and preserves drafts whe
   assert.equal(queue.editorOpen(), true)
   assert.ok(queue.field("Row 32, product link"))
   assert.equal(queue.field("Row 2, name"), undefined)
-  assert.equal(queue.field("Row 47, brand").props["aria-invalid"], true)
+  assert.equal(queue.field("Row 47, itemno").props["aria-invalid"], true)
   queue.field("Row 32, product link").props.onChange({ target: { value: row.url } })
   queue.button("Validate & use sheet").props.onClick()
   assert.equal(queue.editorOpen(), true)
@@ -492,7 +513,6 @@ test("editor shows all issues, opens first invalid page and preserves drafts whe
   queue.button("Edit uploaded sheet").props.onClick()
   assert.equal(queue.field("Row 32, product link").props.value, row.url)
   assert.equal(queue.field("Row 32, url").props["aria-invalid"], false)
-  queue.field("Row 47, brand").props.onChange({ target: { value: "LG" } })
   queue.field("Row 47, itemno").props.onChange({ target: { value: "CORRECTED-UNIQUE" } })
   queue.button("Previous sheet page").props.onClick()
   assert.ok(queue.field("Row 2, name"))
@@ -504,22 +524,16 @@ test("editor shows all issues, opens first invalid page and preserves drafts whe
   assert.equal(queue.items().length, 55)
 })
 
-test("missing columns become editable blanks and changing a valid sheet invalidates its old queue", async () => {
+test("a two-column sheet queues successfully and changing a required key invalidates its old queue", async () => {
   const queue = queueHarness(async () => productFixture())
-  const { brand, ...withoutBrand } = row
-  assert.ok(brand)
-  await queue.upload({ rows: [withoutBrand], expectError: true })
-  assert.equal(queue.field("Row 2, brand").props.value, "")
-  assert.equal(queue.field("Row 2, brand").props["aria-invalid"], true)
-  queue.field("Row 2, brand").props.onChange({ target: { value: "LG" } })
-  queue.button("Validate & use sheet").props.onClick()
+  await queue.upload({ rows: [{ itemno: row.itemno, "product link": row.url }] })
   assert.equal(queue.items().length, 1)
   queue.button("Edit uploaded sheet").props.onClick()
-  queue.field("Row 2, name").props.onChange({ target: { value: "" } })
+  queue.field("Row 2, itemno").props.onChange({ target: { value: "" } })
   assert.equal(queue.items().length, 0)
   queue.button("Validate & use sheet").props.onClick()
   assert.equal(queue.editorOpen(), true)
-  assert.equal(queue.field("Row 2, name").props["aria-invalid"], true)
+  assert.equal(queue.field("Row 2, itemno").props["aria-invalid"], true)
 })
 
 test("sheet editor retains original Excel row numbers across gaps and formatted leading-zero item numbers", async () => {
@@ -544,9 +558,9 @@ test("shared validator reports every row and field without changing uploaded val
   const copy = JSON.stringify(data)
   const result = validateScraperRows(data, url => !url.includes("unsupported"), [3, 7])
   assert.equal(JSON.stringify(data), copy)
-  assert.equal(result.issues.length, 4)
-  assert.equal(result.issues.filter(issue => issue.row === 3).length, 2)
-  assert.equal(result.issues.filter(issue => issue.row === 7).length, 2)
+  assert.equal(result.issues.length, 2)
+  assert.equal(result.issues.filter(issue => issue.row === 3).length, 1)
+  assert.equal(result.issues.filter(issue => issue.row === 7).length, 1)
   assert.equal(scraperColumnField("Product-Link"), "url")
   assert.equal(scraperColumnField("constructor"), undefined)
 })

@@ -161,7 +161,7 @@ export const MARKETING_SECTIONS: MarketingDefinition[] = [
     downloadTitle: "Download App", downloadLink: "/#download-app", storeTitle: "Find a Store", storeLink: "/store-locator",
     helpTitle: "Help", helpLink: "/faq", phoneSuffix: "(Toll Free)",
   }, { tool: "/admin/settings", pinned: true, note: "Phone number, logo and store name remain in Settings; festival announcement is in Theme & Festivals." }),
-  definition("header", "promotion", "Navigation campaign button", 1, { title: "SARA Super Sunday", ctaLink: "/offers" }, { pinned: true }),
+  definition("header", "promotion", "Navigation campaign button", 1, { title: "SARA Super Sunday", ctaLink: "/super-sunday" }, { pinned: true }),
   // These two must stay in step with STATIC_LINKS in components/MegaMenu.tsx:
   // the override is applied by position, so when Brands, New Arrivals, Business
   // Enquiries and About SARA were removed from the row, the leftover item1/item2

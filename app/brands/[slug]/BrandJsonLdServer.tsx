@@ -10,6 +10,7 @@ import { normalizeProductForSchema } from "@/lib/product-schema"
 import { cleanProductName } from "@/utils/cleanProductName"
 import { getSeoBrand as getBrand } from "@/lib/seo-brand"
 import type { ObjectId } from "mongodb"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 interface BrandProductDocument {
   _id: ObjectId | string
@@ -28,7 +29,7 @@ async function getBrandProducts(brandName: string, limit: number) {
     const { db } = await connectToDatabase()
     const products = await db
       .collection<BrandProductDocument>('products')
-      .find({ active: { $ne: false } })
+      .find(PUBLIC_PRODUCT_FILTER)
       .project({ _id: 1, id: 1, slug: 1, name: 1, brand: 1, manufacturer: 1, manufacturerName: 1, manufacturer_name: 1, raw: 1 })
       .toArray()
 

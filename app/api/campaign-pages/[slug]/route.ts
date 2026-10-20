@@ -3,6 +3,7 @@ import { getCollection, normalizeId } from "@/lib/db-service";
 import { ObjectId } from "mongodb";
 import { type CampaignPageDocument, campaignPageResponseSchema } from "@/lib/campaign-page";
 import { productCardResponseSchema, type ProductCardResponse } from "@/lib/product-card-response";
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility";
 
 interface CampaignProductDocument {
   _id: ObjectId | string;
@@ -30,7 +31,7 @@ export async function GET(req: Request, context: { params: Promise<{ slug: strin
       const collection = await getCollection<CampaignProductDocument>("products");
       const nativeIds = normalized.productIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
       const documents = await collection.find({
-        active: { $ne: false },
+        ...PUBLIC_PRODUCT_FILTER,
         $or: [{ _id: { $in: nativeIds } }, { _id: { $in: normalized.productIds } }, { id: { $in: normalized.productIds } }],
       }).toArray();
       products = documents.map(product => productCardResponseSchema.parse(normalizeId(product)));
@@ -46,7 +47,7 @@ export async function GET(req: Request, context: { params: Promise<{ slug: strin
         isActive: normalized.isActive,
         products
       } 
-    });
+    }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     console.error(`Failed to fetch campaign for slug [${slug}]:`, error);
     return NextResponse.json({ success: false, error: "Failed to fetch campaign" }, { status: 500 });

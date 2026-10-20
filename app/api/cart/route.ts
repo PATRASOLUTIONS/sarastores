@@ -4,6 +4,39 @@ import { getCurrentUserId } from "@/lib/auth"
 import { z } from "zod"
 import { priceOrder } from "@/lib/order-pricing"
 import { MAX_CART_PRODUCTS } from "@/lib/cart-limits"
+import { ObjectId } from "mongodb"
+
+type StoredCartItem = {
+  id?: string
+  productId?: string
+  type?: string
+}
+
+async function removeInactiveProducts(items: StoredCartItem[]): Promise<StoredCartItem[]> {
+  const hardwareIds = [...new Set(items
+    .filter(item => item.type !== "software")
+    .flatMap(item => [item.productId, item.id])
+    .filter((id): id is string => typeof id === "string" && id.length > 0))]
+  if (hardwareIds.length === 0) return items
+
+  const objectIds = hardwareIds.filter(ObjectId.isValid).map(id => new ObjectId(id))
+  const products = await getCollection<{ _id: ObjectId | string; id?: string; active?: boolean }>("products")
+  const inactive = await products.find({
+    active: { $ne: true },
+    $or: [
+      ...(objectIds.length ? [{ _id: { $in: objectIds } }] : []),
+      { _id: { $in: hardwareIds } },
+      { id: { $in: hardwareIds } },
+    ],
+  }, { projection: { _id: 1, id: 1 } }).toArray()
+  const hiddenIds = new Set(inactive.flatMap(product => [
+    product._id.toString(),
+    ...(product.id ? [product.id] : []),
+  ]))
+  return items.filter(item =>
+    item.type === "software" || ![item.productId, item.id].some(id => id && hiddenIds.has(id)),
+  )
+}
 
 // Get cart for the authenticated user
 export async function GET(request: NextRequest) {
@@ -18,7 +51,12 @@ export async function GET(request: NextRequest) {
     const collection = await getCollection("carts")
     const cart = await collection.findOne({ userId })
 
-    return NextResponse.json(cart ? normalizeId(cart) : { userId, items: [] })
+    if (!cart) return NextResponse.json({ userId, items: [] })
+    const normalized = normalizeId(cart)
+    const items = Array.isArray(normalized.items)
+      ? await removeInactiveProducts(normalized.items as StoredCartItem[])
+      : []
+    return NextResponse.json({ ...normalized, items })
   } catch (error) {
     console.error("Error getting cart:", error)
     return NextResponse.json({ error: "Failed to get cart" }, { status: 500 })

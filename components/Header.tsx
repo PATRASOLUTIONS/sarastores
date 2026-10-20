@@ -469,12 +469,12 @@ export default function Header() {
       {/* Announcement bar */}
       {marketing.enabled("announcement") && <div className="hidden bg-[#1560BD] text-white md:block">
         <div className="section-container flex items-center justify-between gap-4 py-1.5 text-[11px]">
-          <p className="flex items-center gap-1.5">
+          <Link href="/super-sunday" className="flex items-center gap-1.5 transition-colors hover:text-white/90">
             <Zap className="h-3.5 w-3.5" />
             <span className="font-bold">{marketing.text("announcement", "title")}</span>
             <span className="text-white/40">|</span>
             <span className="text-white/90">{marketing.text("announcement", "description")}</span>
-          </p>
+          </Link>
           <div className="flex items-center gap-5 text-white/90">
             <Link href={marketing.text("announcement", "downloadLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <Download className="h-3.5 w-3.5" />

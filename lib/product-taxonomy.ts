@@ -16,6 +16,7 @@ export interface TaxonomyRow {
   division?: string | null
   subCategory?: string | null
   segment?: string | null
+  brand?: string | null
   count?: number | null
 }
 
@@ -30,10 +31,16 @@ export interface TaxonomySubCategory {
   segments: TaxonomySegment[]
 }
 
+export interface TaxonomyBrand {
+  name: string
+  count: number
+}
+
 export interface TaxonomyDivision {
   name: string
   count: number
   subCategories: TaxonomySubCategory[]
+  brands: TaxonomyBrand[]
 }
 
 const clean = (value: unknown): string => (typeof value === "string" ? value.trim() : "")
@@ -61,6 +68,7 @@ export function buildTaxonomyTree(rows: TaxonomyRow[]): TaxonomyDivision[] {
     name: string
     count: number
     subCategories: Map<string, { name: string; count: number; segments: Map<string, TaxonomySegment> }>
+    brands: Map<string, TaxonomyBrand>
   }
 
   const divisions = new Map<string, DivisionAcc>()
@@ -74,10 +82,18 @@ export function buildTaxonomyTree(rows: TaxonomyRow[]): TaxonomyDivision[] {
 
     let division = divisions.get(divisionKey)
     if (!division) {
-      division = { name: divisionName, count: 0, subCategories: new Map() }
+      division = { name: divisionName, count: 0, subCategories: new Map(), brands: new Map() }
       divisions.set(divisionKey, division)
     }
     division.count += count
+
+    const brandName = clean(row.brand)
+    if (brandName) {
+      const brandKey = brandName.toLowerCase()
+      const brand = division.brands.get(brandKey)
+      if (brand) brand.count += count
+      else division.brands.set(brandKey, { name: brandName, count })
+    }
 
     const subCategoryName = clean(row.subCategory)
     if (!subCategoryName) continue
@@ -107,6 +123,7 @@ export function buildTaxonomyTree(rows: TaxonomyRow[]): TaxonomyDivision[] {
     .map(division => ({
       name: division.name,
       count: division.count,
+      brands: [...division.brands.values()].sort(byCount),
       subCategories: [...division.subCategories.values()]
         .map(subCategory => ({
           name: subCategory.name,
@@ -151,6 +168,12 @@ export function normalizeTaxonomyDivisions(value: unknown): TaxonomyDivision[] {
     named(entry, (division, name) => ({
       name,
       count: asCount(division.count),
+      brands: asList(division.brands).flatMap(brandEntry =>
+        named(brandEntry, (brand, brandName) => ({
+          name: brandName,
+          count: asCount(brand.count),
+        })) ?? [],
+      ),
       subCategories: asList(division.subCategories ?? division.categories).flatMap(subEntry =>
         named(subEntry, (subCategory, subName) => ({
           name: subName,

@@ -20,6 +20,7 @@ import {
 } from "@/lib/customer-profile"
 import { PRICE_DROP_MIN_PERCENT } from "./rules"
 import { buildReminderMessage, siteOrigin } from "./messages"
+import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
 
 const COLLECTION_ALERT_STATE = "wishlist_alert_state"
 const MAX_PRODUCTS_TRACKED = 2000
@@ -78,7 +79,7 @@ async function detectTransitions(): Promise<{
 
   const productDocs = await products
     .find(
-      { $or: [{ _id: { $in: objectIds } }, { id: { $in: ids } }] },
+      { ...PUBLIC_PRODUCT_FILTER, $or: [{ _id: { $in: objectIds } }, { id: { $in: ids } }] },
       { projection: { name: 1, price: 1, stock: 1, slug: 1, id: 1 } },
     )
     .limit(ids.length + 50)
