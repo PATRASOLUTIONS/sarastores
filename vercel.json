@@ -1,8 +1,8 @@
+
 {
   "headers": [
     {
       "source": "/api/v1/partner/(.*)",
-      "comment": "CORS is decided per-request in lib/partner/auth.ts, which reflects only an allowlisted Origin. A static Allow-Origin: * here combined with Allow-Credentials: true would let any site make credentialed calls to this surface, so neither header is set at the platform layer.",
       "headers": [
         {
           "key": "Access-Control-Allow-Methods",
@@ -41,7 +41,12 @@
     },
     {
       "source": "/api/products",
-      "missing": [{ "type": "query", "key": "include_inactive" }],
+      "missing": [
+        {
+          "type": "query",
+          "key": "include_inactive"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
@@ -51,7 +56,12 @@
     },
     {
       "source": "/api/products/:path((?!(?:export|bulk|upload-excel|activate-all|google-sheet-price-sync|specifications/(?:export|upload))).*)",
-      "missing": [{ "type": "query", "key": "include_inactive" }],
+      "missing": [
+        {
+          "type": "query",
+          "key": "include_inactive"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
@@ -61,7 +71,12 @@
     },
     {
       "source": "/api/products(.*)",
-      "has": [{ "type": "query", "key": "include_inactive" }],
+      "has": [
+        {
+          "type": "query",
+          "key": "include_inactive"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
@@ -71,7 +86,6 @@
     },
     {
       "source": "/api/:path(categories|sub-categories|brands|brand-logos|home-components|taxonomy)(.*)",
-      "comment": "/api/taxonomy aggregates the whole product collection to build the header menu, which is on every page. It only changes when the catalogue is reclassified, so it belongs with the other catalogue lists rather than in the no-store catch-all below.",
       "headers": [
         {
           "key": "Cache-Control",
@@ -106,24 +120,6 @@
         }
       ]
     }
-  ],
-  "redirects": [
-    {
-      "source": "/ott(.*)",
-      "destination": "https://ott.systechdigital.co.in/ott$1",
-      "permanent": true
-    },
-      {
-        "source": "/customer-login",
-        "destination":  "https://ott.systechdigital.co.in/customer-login",
-        "permanent": true
-      }
-    ,
-      {
-        "source": "/redeem",
-        "destination":  "https://ott.systechdigital.co.in/redeem-now",
-        "permanent": true
-      }
   ],
   "rewrites": [
     {
