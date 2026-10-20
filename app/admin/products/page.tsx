@@ -10,6 +10,8 @@ import {
   Edit,
   Trash,
   Eye,
+  ArrowDown,
+  ArrowUp,
   ArrowUpDown,
   Database,
   Trash2,
@@ -24,7 +26,14 @@ import {
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import ExcelUpload from "@/components/ExcelUpload"
-import { normalizeProductForSchema, type CanonicalProductMetadata } from "@/lib/product-schema"
+import { normalizeProductForSchema } from "@/lib/product-schema"
+import {
+  METADATA_SHEET_COLUMNS,
+  METADATA_SHEET_FIELDS,
+  metadataSheetRowFromProduct,
+  type MetadataSheetField,
+  type MetadataSheetRow,
+} from "@/lib/product-metadata-sheet"
 
 interface Product {
   id: string
@@ -39,6 +48,11 @@ interface Product {
   itemCategory?: string
   manufacturerName?: string
   color?: string
+  // Division → Category → Segment is the merchandising hierarchy; `brand` is
+  // curated separately from the category and the manufacturer.
+  division?: string
+  segment?: string
+  brand?: string
   subCategory?: string
   capacity?: string
   ean?: string
@@ -65,8 +79,6 @@ interface Category {
   description?: string
 }
 
-type ProductSortField = Exclude<keyof Product, "raw">
-
 type ProductApiResponse = AdminProductResponse
 
 interface PricePreview {
@@ -84,7 +96,8 @@ interface PricePreview {
   error?: string
 }
 
-interface MetadataPreview extends CanonicalProductMetadata {
+interface MetadataPreview extends MetadataSheetRow {
+  currentName?: string
   status: string
   error?: string
 }
@@ -113,10 +126,138 @@ function normalizeAdminProduct(product: ProductApiResponse): Product {
       product?.manufacturerName ||
       canonical.manufacturerName ||
       product?.manufacturer_name,
+    division: canonical.division,
+    segment: canonical.segment,
+    brand: canonical.brandName,
     subCategory: product?.subCategory || canonical.subCategoryProdDesc || product?.prod_desc,
     ean: product?.ean || raw["EAN Number"],
     updatedAt: product?.updatedAt,
   }
+}
+
+/** The columns the table can sort by, and how to read each one off a product. */
+const COLUMN_VALUES = {
+  name: (product: Product) => product.name || "",
+  division: (product: Product) => product.division || "",
+  subCategory: (product: Product) => product.subCategory || "",
+  segment: (product: Product) => product.segment || "",
+  brand: (product: Product) => product.brand || "",
+  price: (product: Product) => Number(product.price ?? 0),
+  mrp: (product: Product) => Number(product.mrp ?? 0),
+  stock: (product: Product) => Number(product.stock ?? 0),
+  active: (product: Product) => (product.active ?? true ? 1 : 0),
+  updatedAt: (product: Product) => (product.updatedAt ? new Date(product.updatedAt).getTime() : 0),
+} satisfies Record<string, (product: Product) => string | number>
+
+type SortColumn = keyof typeof COLUMN_VALUES
+
+/** Table columns in display order; every one of them sorts. */
+const TABLE_COLUMNS: Array<{ field: SortColumn; label: string; align?: "right" }> = [
+  { field: "name", label: "Product" },
+  { field: "division", label: "Division" },
+  { field: "subCategory", label: "Sub-Category" },
+  { field: "segment", label: "Segment" },
+  { field: "brand", label: "Brand" },
+  { field: "price", label: "Price", align: "right" },
+  { field: "mrp", label: "MRP", align: "right" },
+  { field: "stock", label: "Stock", align: "right" },
+  { field: "active", label: "Status" },
+]
+
+/**
+ * A column heading that sorts and says so.
+ *
+ * The arrow is directional on the active column and neutral elsewhere, so the
+ * current sort is readable at a glance rather than having to be inferred from
+ * the rows.
+ */
+function SortableHeader({
+  label,
+  align,
+  active,
+  direction,
+  onSort,
+}: {
+  label: string
+  align?: "right"
+  active: boolean
+  direction: "asc" | "desc"
+  onSort: () => void
+}) {
+  const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown
+
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}
+      className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider ${
+        align === "right" ? "text-right" : "text-left"
+      } ${active ? "text-gray-900" : "text-gray-500"}`}
+    >
+      <button
+        type="button"
+        onClick={onSort}
+        className={`flex w-full items-center gap-1 uppercase hover:text-gray-900 ${
+          align === "right" ? "justify-end" : ""
+        }`}
+      >
+        {label}
+        <Icon className="h-3 w-3 shrink-0" />
+      </button>
+    </th>
+  )
+}
+
+/**
+ * Columns in the upload preview, labelled with the spreadsheet headers the
+ * operator sees in their own file rather than our internal field names.
+ *
+ * Derived from the sheet contract so the preview cannot show a column the
+ * uploader does not actually read.
+ */
+const METADATA_PREVIEW_COLUMNS: Array<{ field: MetadataSheetField; label: string }> =
+  METADATA_SHEET_FIELDS.map((field) => ({ field, label: METADATA_SHEET_COLUMNS[field] }))
+
+/**
+ * What each column means to the operator filling it in.
+ *
+ * The three taxonomy levels are described by where they sit relative to one
+ * another, because the warehouse export names them one level below where they
+ * read and an operator going by the ERP's own labels files them wrongly.
+ */
+const METADATA_SHEET_DESCRIPTIONS: Record<MetadataSheetField, string> = {
+  itemno: "Product SKU (required, used to match)",
+  name: "Product name",
+  division: "Top level of the menu",
+  category: "Sits under the division",
+  segment: "Sits under the category",
+  brand: "Product brand",
+}
+
+/** A taxonomy label, or a visible gap where one has not been assigned yet. */
+function TaxonomyCell({ value }: { value?: string }) {
+  const label = (value || "").trim()
+  return (
+    <td className="px-4 py-3">
+      {label ? (
+        <p className="truncate text-sm text-gray-900" title={label}>
+          {label}
+        </p>
+      ) : (
+        <span className="text-sm text-gray-300">—</span>
+      )}
+    </td>
+  )
+}
+
+/** Distinct values for a dropdown, sorted and case-folded. */
+function distinctValues(products: Product[], read: (product: Product) => string): string[] {
+  const seen = new Map<string, string>()
+  for (const product of products) {
+    const value = read(product).trim()
+    if (value && !seen.has(value.toLowerCase())) seen.set(value.toLowerCase(), value)
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b))
 }
 
 function getNormalizedCategoryName(product: Product) {
@@ -131,13 +272,17 @@ export default function AdminProducts() {
   const [subCategories, setSubCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>("all")
+  const [selectedDivision, setSelectedDivision] = useState<string>("all")
+  const [selectedSegment, setSelectedSegment] = useState<string>("all")
+  const [selectedBrand, setSelectedBrand] = useState<string>("all")
+  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all")
   const [filterActiveStatus, setFilterActiveStatus] = useState<"all" | "active" | "inactive">("all")
   const [isLoading, setIsLoading] = useState(true)
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "failed">("checking")
   const [searchTerm, setSearchTerm] = useState("")
-  const [sortField, setSortField] = useState<ProductSortField>("updatedAt")
+  const [sortField, setSortField] = useState<SortColumn>("updatedAt")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const { user, isLoading: authLoading, canAccessAdmin } = useAuth()
   const [currentPage, setCurrentPage] = useState(1)
@@ -603,8 +748,7 @@ export default function AdminProducts() {
     }
   }
 
-  const handleSort = (field: ProductSortField) => {
-    console.log("[Admin Products] 🔗 Sorting by:", field)
+  const handleSort = (field: SortColumn) => {
     if (field === sortField) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
     } else {
@@ -677,68 +821,36 @@ export default function AdminProducts() {
         return
       }
 
-      // Fetch categories to map IDs to names
-      const categoriesResponse = await apiFetch("/api/categories", { cache: 'no-store' })
-      const categoriesData = await categoriesResponse.json()
-      const categoriesMap = new Map<string, string>()
-      if (Array.isArray(categoriesData)) {
-        categoriesData.forEach((cat: Category) => {
-          if (cat.id) {
-            categoriesMap.set(cat.id, cat.name)
-          }
-        })
-      }
-
       const XLSX = await import("xlsx")
 
-      // Map products to the required format - filter out products without SKU
+      /*
+       * Built by iterating the field list rather than naming the keys, so the
+       * sheet cannot drift from the contract the uploader reads it back with.
+       * A row with no SKU has nothing to match on, so it is dropped.
+       */
       const templateData = allProducts
         .map((product) => {
-          const raw = product.raw || {}
-          const normalized = normalizeProductForSchema(product)
-          const sku = normalized.itemno
-
-          // Get category name - try multiple sources
-          let categoryName = ""
-          if (product.category) {
-            // First check if it's already a name (not an ObjectId)
-            if (typeof product.category === 'string' && product.category.length < 30 && !product.category.match(/^[0-9a-fA-F]{24}$/)) {
-              categoryName = product.category
-            } else {
-              // It's likely an ObjectId, look it up
-              categoryName = categoriesMap.get(String(product.category)) || ""
-            }
+          const row = metadataSheetRowFromProduct(product)
+          const sheetRow: Record<string, string> = {}
+          for (const field of METADATA_SHEET_FIELDS) {
+            sheetRow[METADATA_SHEET_COLUMNS[field]] = row[field]
           }
-          // Fallback to raw fields or groupName
-          if (!categoryName) {
-            categoryName = normalized.categoryGroupName || product.groupName || product.itemCategory || ""
-          }
-
-          return {
-            "itemno": sku,
-            "Name": normalized.name,
-            "Description": normalized.description,
-            "Category/Group Name": categoryName,
-            "sub-category/PROD DESC": normalized.subCategoryProdDesc,
-            "CHAR DESC": normalized.charDesc,
-            "Manufacturer Name": normalized.manufacturerName,
-          }
+          return sheetRow
         })
-        .filter((row) => row.itemno && row.itemno.trim() !== "")
+        .filter((row) => row[METADATA_SHEET_COLUMNS.itemno].trim() !== "")
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(templateData)
 
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 20 }, // itemno
-        { wch: 40 }, // Name
-        { wch: 50 }, // Description
-        { wch: 25 }, // Category/Group Name
-        { wch: 30 }, // sub-category/PROD DESC
-        { wch: 40 }, // CHAR DESC
-        { wch: 25 }, // Manufacturer Name
-      ]
+      const COLUMN_WIDTHS: Record<MetadataSheetField, number> = {
+        itemno: 20,
+        name: 40,
+        division: 22,
+        category: 25,
+        segment: 25,
+        brand: 22,
+      }
+      ws['!cols'] = METADATA_SHEET_FIELDS.map((field) => ({ wch: COLUMN_WIDTHS[field] }))
 
       // Create workbook
       const wb = XLSX.utils.book_new()
@@ -944,31 +1056,58 @@ export default function AdminProducts() {
       matchesActive = !product.active
     }
 
-    return matchesSearch && matchesCategory && matchesSub && matchesActive
+    // 4. Merchandising hierarchy and brand, compared case-insensitively
+    //    because the values come from hand-typed spreadsheets.
+    const matchesLabel = (selected: string, value: string) =>
+      selected === "all" || value.trim().toLowerCase() === selected.trim().toLowerCase()
+
+    const matchesDivision = matchesLabel(selectedDivision, product.division || "")
+    const matchesSegment = matchesLabel(selectedSegment, product.segment || "")
+    const matchesBrand = matchesLabel(selectedBrand, product.brand || "")
+
+    // 5. Stock
+    const stock = Number(product.stock ?? 0)
+    const matchesStock =
+      stockFilter === "all" || (stockFilter === "in" ? stock > 0 : stock <= 0)
+
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesSub &&
+      matchesActive &&
+      matchesDivision &&
+      matchesSegment &&
+      matchesBrand &&
+      matchesStock
+    )
   })
 
+  /*
+   * Sorting reads through COLUMN_VALUES rather than indexing the document, so
+   * a column shown as derived text — category, which falls back through three
+   * stored fields — sorts by what the operator can actually see.
+   */
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    // Handle updatedAt (date) sorting explicitly
-    if (sortField === "updatedAt") {
-      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
-      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
-      if (ta < tb) return sortDirection === "asc" ? -1 : 1
-      if (ta > tb) return sortDirection === "asc" ? 1 : -1
-      return 0
-    }
+    const read = COLUMN_VALUES[sortField]
+    const va = read(a)
+    const vb = read(b)
+    const direction = sortDirection === "asc" ? 1 : -1
 
-    // Fallback generic comparison for other fields
-    const va = a[sortField]
-    const vb = b[sortField]
-    if (va == null && vb == null) return 0
-    if (va == null) return sortDirection === "asc" ? -1 : 1
-    if (vb == null) return sortDirection === "asc" ? 1 : -1
-    const comparableA = typeof va === "boolean" ? Number(va) : va
-    const comparableB = typeof vb === "boolean" ? Number(vb) : vb
-    if (comparableA < comparableB) return sortDirection === "asc" ? -1 : 1
-    if (comparableA > comparableB) return sortDirection === "asc" ? 1 : -1
-    return 0
+    if (typeof va === "number" && typeof vb === "number") return (va - vb) * direction
+
+    // Blanks sort last in both directions: an unclassified product is never
+    // the answer to "show me the first category alphabetically".
+    const sa = String(va)
+    const sb = String(vb)
+    if (!sa && !sb) return 0
+    if (!sa) return 1
+    if (!sb) return -1
+    return sa.localeCompare(sb) * direction
   })
+
+  const divisionOptions = distinctValues(products, COLUMN_VALUES.division)
+  const segmentOptions = distinctValues(products, COLUMN_VALUES.segment)
+  const brandOptions = distinctValues(products, COLUMN_VALUES.brand)
 
   const totalRows = sortedProducts.length
   const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage))
@@ -979,7 +1118,19 @@ export default function AdminProducts() {
   // Reset to first page when filters/sorting change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, sortField, sortDirection, selectedCategory, products.length])
+  }, [
+    searchTerm,
+    sortField,
+    sortDirection,
+    selectedCategory,
+    selectedSubCategory,
+    selectedDivision,
+    selectedSegment,
+    selectedBrand,
+    filterActiveStatus,
+    stockFilter,
+    products.length,
+  ])
 
   const selectedCategoryName = categories.find((cat) => cat.id === selectedCategory)?.name || "All Categories"
 
@@ -1024,11 +1175,9 @@ export default function AdminProducts() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 w-full">
           {/* <div className="w-full">
-            <Link href="/admin/products/new">
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center w-40 min-w-[8rem]">
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Product
-              </button>
+            <Link href="/admin/products/new" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center w-40 min-w-[8rem]">
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Product
             </Link>
           </div> */}
 
@@ -1150,6 +1299,28 @@ export default function AdminProducts() {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             </div>
 
+            {/*
+              Division / Segment / Brand only appear once some product carries
+              the label. On an unclassified catalogue they would be dropdowns
+              with a single "All" entry, which is just noise in the toolbar.
+            */}
+            {divisionOptions.length > 0 && (
+              <div className="relative">
+                <select
+                  value={selectedDivision}
+                  onChange={(e) => setSelectedDivision(e.target.value)}
+                  className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[140px] sm:max-w-[140px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Filter by division"
+                >
+                  <option value="all">All Divisions</option>
+                  {divisionOptions.map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+                <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+            )}
+
             {/* Category Filter Dropdown */}
             <div className="relative">
               <select
@@ -1180,6 +1351,58 @@ export default function AdminProducts() {
                     {sub.name}
                   </option>
                 ))}
+              </select>
+              <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+
+            {segmentOptions.length > 0 && (
+              <div className="relative">
+                <select
+                  value={selectedSegment}
+                  onChange={(e) => setSelectedSegment(e.target.value)}
+                  className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[140px] sm:max-w-[140px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Filter by segment"
+                >
+                  <option value="all">All Segments</option>
+                  {segmentOptions.map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+                <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+            )}
+
+            {brandOptions.length > 0 && (
+              <div className="relative">
+                <select
+                  value={selectedBrand}
+                  onChange={(e) => setSelectedBrand(e.target.value)}
+                  className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[140px] sm:max-w-[140px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Filter by brand"
+                >
+                  <option value="all">All Brands</option>
+                  {brandOptions.map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+                <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+            )}
+
+            {/* Stock Filter Dropdown */}
+            <div className="relative">
+              <select
+                value={stockFilter}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value === "all" || value === "in" || value === "out") setStockFilter(value)
+                }}
+                className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-7 text-xs w-[120px] sm:max-w-[120px] truncate focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                aria-label="Filter by stock"
+              >
+                <option value="all">All Stock</option>
+                <option value="in">In Stock</option>
+                <option value="out">Out of Stock</option>
               </select>
               <Filter className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
@@ -1234,38 +1457,16 @@ export default function AdminProducts() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort("name")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Product
-                      <ArrowUpDown className="h-3 w-3" />
-                    </span>
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                  >
-                    Classification
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort("price")}
-                  >
-                    <span className="flex items-center justify-end gap-1">
-                      Price
-                      <ArrowUpDown className="h-3 w-3" />
-                    </span>
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                  >
-                    Status
-                  </th>
+                  {TABLE_COLUMNS.map(({ field, label, align }) => (
+                    <SortableHeader
+                      key={field}
+                      label={label}
+                      align={align}
+                      active={sortField === field}
+                      direction={sortDirection}
+                      onSort={() => handleSort(field)}
+                    />
+                  ))}
                   <th
                     scope="col"
                     className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"
@@ -1277,7 +1478,7 @@ export default function AdminProducts() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan={TABLE_COLUMNS.length + 1} className="px-6 py-4 text-center text-sm text-gray-500">
                       <div className="py-8">
                         <Database className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                         <p className="text-lg font-medium text-gray-900 mb-2">
@@ -1287,10 +1488,8 @@ export default function AdminProducts() {
                         </p>
                         <p className="text-gray-500 mb-4">Start by adding products or importing sample data.</p>
                         <div className="space-x-2">
-                          <Link href="/admin/products/new">
-                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
-                              Add Product
-                            </button>
+                          <Link href="/admin/products/new" className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                            Add Product
                           </Link>
                           <button
                             onClick={handleSeedDatabase}
@@ -1303,24 +1502,7 @@ export default function AdminProducts() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedProducts.map((product) => {
-                    // Try to find category by ID first, then by name
-                    let productCategory = categories.find((cat) => cat.id === product.category)
-                    if (!productCategory && product.category) {
-                      // Try matching by category name (for products with category stored as name)
-                      productCategory = categories.find((cat) =>
-                        cat.name?.toLowerCase() === product.category?.toLowerCase() ||
-                        cat.name === product.category
-                      )
-                    }
-                    // Also try groupName or itemCategory as fallback
-                    if (!productCategory && (product.groupName || product.itemCategory)) {
-                      const fallbackName = product.groupName || product.itemCategory
-                      productCategory = categories.find((cat) =>
-                        cat.name?.toLowerCase() === fallbackName?.toLowerCase()
-                      )
-                    }
-                    return (
+                  paginatedProducts.map((product) => (
                       <tr key={product.id} className="align-top hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-3">
@@ -1343,25 +1525,40 @@ export default function AdminProducts() {
                           </div>
                         </td>
 
-                        <td className="px-4 py-3">
-                          <p className="truncate text-sm text-gray-900" title={productCategory?.name || "Uncategorized"}>
-                            {productCategory?.name || <span className="text-gray-400">Uncategorized</span>}
-                          </p>
-                          {product.subCategory && (
-                            <p className="truncate text-xs text-gray-500" title={product.subCategory}>
-                              {product.subCategory}
-                            </p>
-                          )}
-                          <p className="truncate text-xs text-gray-400" title={normalizeProductForSchema(product).manufacturerName}>
-                            {normalizeProductForSchema(product).manufacturerName || "—"}
-                          </p>
-                        </td>
+                        <TaxonomyCell value={product.division} />
+                        <TaxonomyCell value={product.subCategory} />
+                        <TaxonomyCell value={product.segment} />
+                        <TaxonomyCell value={product.brand} />
 
                         <td className="px-4 py-3 text-right">
                           <p className="text-sm font-semibold text-gray-900">₹{product.price}</p>
-                          {product.mrp !== undefined && product.mrp !== null && Number(product.mrp) > Number(product.price) && (
-                            <p className="text-xs text-gray-400 line-through">₹{product.mrp}</p>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {product.mrp !== undefined && product.mrp !== null && Number(product.mrp) > 0 ? (
+                            <p
+                              className={`text-sm ${
+                                Number(product.mrp) > Number(product.price)
+                                  ? "text-gray-500 line-through"
+                                  : "text-gray-900"
+                              }`}
+                            >
+                              ₹{product.mrp}
+                            </p>
+                          ) : (
+                            <span className="text-sm text-gray-300">—</span>
                           )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {/* Out of stock is the thing worth spotting in a scan. */}
+                          <span
+                            className={`text-sm font-medium ${
+                              Number(product.stock ?? 0) > 0 ? "text-gray-900" : "text-red-600"
+                            }`}
+                          >
+                            {Number(product.stock ?? 0)}
+                          </span>
                         </td>
 
                         <td className="px-4 py-3">
@@ -1391,15 +1588,11 @@ export default function AdminProducts() {
 
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <Link href={`/product/${product.slug || product.id}`}>
-                              <button className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50" title="View on storefront">
-                                <Eye className="h-4 w-4" />
-                              </button>
+                            <Link href={`/product/${product.slug || product.id}`} className="inline-block rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50" title="View on storefront">
+                              <Eye className="h-4 w-4" />
                             </Link>
-                            <Link href={`/admin/products/${product.id}/edit`}>
-                              <button className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50" title="Edit product">
-                                <Edit className="h-4 w-4" />
-                              </button>
+                            <Link href={`/admin/products/${product.id}/edit`} className="inline-block rounded-lg p-1.5 text-blue-600 hover:bg-blue-50" title="Edit product">
+                              <Edit className="h-4 w-4" />
                             </Link>
                             <button
                               onClick={() => handleDelete(product.id)}
@@ -1411,8 +1604,7 @@ export default function AdminProducts() {
                           </div>
                         </td>
                       </tr>
-                    )
-                  })
+                  ))
                 )}
               </tbody>
             </table>
@@ -1768,13 +1960,9 @@ export default function AdminProducts() {
               <div className="bg-white border border-green-200 rounded-lg p-3 mb-4 text-xs text-green-800 shadow-sm">
                 <p className="font-semibold mb-1">Required Format (Column Headers):</p>
                 <div className="grid grid-cols-2 gap-1 opacity-80">
-                  <p>• <strong>itemno</strong> - Product SKU (required)</p>
-                  <p>• <strong>Name</strong> - Product Name</p>
-                  <p>• <strong>Description</strong> - Product Description</p>
-                  <p>• <strong>CHAR DESC</strong> - Characteristics</p>
-                  <p>• <strong>Category/Group Name</strong> - Category Name</p>
-                  <p>• <strong>sub-category/PROD DESC</strong> - Subcategory Name</p>
-                  <p>• <strong>Manufacturer Name</strong> - Manufacturer</p>
+                  {METADATA_SHEET_FIELDS.map((field) => (
+                    <p key={field}>• <strong>{METADATA_SHEET_COLUMNS[field]}</strong> - {METADATA_SHEET_DESCRIPTIONS[field]}</p>
+                  ))}
                 </div>
               </div>
 
@@ -1825,26 +2013,26 @@ export default function AdminProducts() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Item No</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Description</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Category/Group Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">sub-category/PROD DESC</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">CHAR DESC</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Manufacturer Name</th>
+                        {METADATA_PREVIEW_COLUMNS.map(({ field, label }) => (
+                          <th key={field} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">
+                            {label}
+                          </th>
+                        ))}
                         <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase bg-gray-50">Status</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {metadataPreviewData.map((item, idx) => (
                         <tr key={idx} className={item.status === 'error' ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                          <td className="px-3 py-2 text-sm text-gray-900">{item.itemno}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.name}>{item.name || '-'}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.description}>{item.description || '-'}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.categoryGroupName}>{item.categoryGroupName || '-'}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.subCategoryProdDesc}>{item.subCategoryProdDesc || '-'}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.charDesc}>{item.charDesc || '-'}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]" title={item.manufacturerName}>{item.manufacturerName || '-'}</td>
+                          {METADATA_PREVIEW_COLUMNS.map(({ field }) => (
+                            <td
+                              key={field}
+                              className="px-3 py-2 text-sm text-gray-600 truncate max-w-[150px]"
+                              title={item[field]}
+                            >
+                              {item[field] || '-'}
+                            </td>
+                          ))}
                           <td className="px-3 py-2 text-sm text-center">
                             {item.status === 'error' ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title={item.error}>

@@ -49,3 +49,28 @@ export function decodeDataUri(dataUri: string): { contentType: string; body: Buf
 
   return { contentType: contentType || "application/octet-stream", body }
 }
+
+/**
+ * The content types /api/media is allowed to echo back.
+ *
+ * The stored data URI carries its own MIME type, and it is attacker-chosen as
+ * far as this route is concerned — an admin who stored `data:text/html,...` in
+ * a logo or hero-slide field would otherwise get same-origin HTML served from
+ * our own domain. `X-Content-Type-Options: nosniff` stops a browser guessing a
+ * type, but not an explicit one. This endpoint only ever serves pictures, so
+ * anything that is not a picture is treated as absent.
+ */
+const SERVABLE_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+  "image/svg+xml",
+])
+
+export function servableImageType(contentType: string): string | null {
+  const bare = contentType.split(";")[0].trim().toLowerCase()
+  return SERVABLE_IMAGE_TYPES.has(bare) ? bare : null
+}

@@ -1,0 +1,429 @@
+npm warn Unknown env config "devdir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+   ▲ Next.js 15.5.27
+   - Local:        http://localhost:3005
+   - Network:      http://172.29.8.103:3005
+
+ ✓ Starting...
+[INSTRUMENTATION] Registering hooks...
+[INSTRUMENTATION] Polyfilling localStorage for server runtime...
+ ✓ Ready in 1678ms
+PARTNER_ALLOWED_ORIGINS: ignoring "http://localhost:3000" — production requires an https origin or a *.domain.tld wildcard
+PARTNER_ALLOWED_ORIGINS: ignoring "http://localhost:3001" — production requires an https origin or a *.domain.tld wildcard
+[INSTRUMENTATION] Registering hooks...
+[INSTRUMENTATION] Polyfilling localStorage for server runtime...
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection site_theme: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async h (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\13052.js:1:255)
+    at async C (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:65747)
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[theme] Active theme could not be loaded; using the base theme Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async h (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\13052.js:1:255)
+    at async C (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:65747)
+[SEO] Site settings could not be loaded: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+ ⨯ Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\4161.js:9:14042) {
+  digest: '1486062440'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:49496)
+    at async q (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:61606)
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[SEO] Public store settings could not be loaded: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+[SEO] Site settings could not be loaded: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async A (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:1828)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:5015)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:6018)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:7140)
+API Error: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async A (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:1828)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:5015)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:6018)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:7140)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Session lookup error: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async B (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:9187)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:12792)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:13795)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:14917)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Session lookup error: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async B (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:9187)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:12792)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:13795)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:14917)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection rate_limits: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:872)
+[rate-limit] MongoDB counter initialization failed Error
+[rate-limit] MongoDB counter failed RateLimitUnavailableError
+[rate-limit] MongoDB counter failed RateLimitUnavailableError
+API Error: Error [RateLimitUnavailableError]: Request protection is temporarily unavailable. Please try again later.
+    at m (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:1880)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5311)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5520)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:5154)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:6157)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:7279)
+API Error: Error [RateLimitUnavailableError]: Request protection is temporarily unavailable. Please try again later.
+    at m (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:1880)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5311)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5520)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:5154)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:6157)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:7279)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection site_theme: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async h (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\13052.js:1:255)
+    at async C (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:65747)
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[theme] Active theme could not be loaded; using the base theme Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async h (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\13052.js:1:255)
+    at async C (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:65747)
+[SEO] Site settings could not be loaded: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+ ⨯ Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\4161.js:9:14042) {
+  digest: '1486062440'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:49496)
+    at async q (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:61606)
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[SEO] Public store settings could not be loaded: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+[SEO] Site settings could not be loaded: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async A (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:1828)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:5015)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:6018)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:7140)
+API Error: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async A (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:1828)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:5015)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:6018)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\settings\route.js:1:7140)
+Session lookup error: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async B (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:9187)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:12792)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:13795)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:14917)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection rate_limits: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:872)
+    at async m (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:1171)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5311)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5520)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:5154)
+Session lookup error: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async B (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:9187)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:12792)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:13795)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\auth\session\route.js:1:14917)
+[rate-limit] MongoDB counter initialization failed Error
+[rate-limit] MongoDB counter failed RateLimitUnavailableError
+API Error: Error [RateLimitUnavailableError]: Request protection is temporarily unavailable. Please try again later.
+    at m (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:1880)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5311)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5520)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:5154)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:6157)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:7279)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection rate_limits: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:872)
+    at async m (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:1171)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5311)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5520)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:5154)
+[rate-limit] MongoDB counter initialization failed Error
+[rate-limit] MongoDB counter failed RateLimitUnavailableError
+API Error: Error [RateLimitUnavailableError]: Request protection is temporarily unavailable. Please try again later.
+    at m (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\36867.js:1:1880)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5311)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\42981.js:1:5520)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:5154)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:6157)
+    at async H (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\api\vitals\route.js:1:7279)
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection site_theme: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async h (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\13052.js:1:255)
+    at async C (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:65747)
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[theme] Active theme could not be loaded; using the base theme Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async h (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\13052.js:1:255)
+    at async C (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:65747)
+[SEO] Site settings could not be loaded: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+ ⨯ Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async k (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:1779)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\66147.js:1:6701)
+    at async j (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\4161.js:9:14042) {
+  digest: '1486062440'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Failed to connect to MongoDB: [Error: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net] {
+  errno: undefined,
+  code: 'ENOTFOUND',
+  syscall: 'querySrv',
+  hostname: '_mongodb._tcp.ottplay.wlbaefs.mongodb.net'
+}
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:49496)
+    at async q (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\47794.js:1:61606)
+Error getting collection settings: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[SEO] Public store settings could not be loaded: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+[SEO] Site settings could not be loaded: Error: MongoDB connection failed: querySrv ENOTFOUND _mongodb._tcp.ottplay.wlbaefs.mongodb.net
+    at i (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\app\_not-found\page.js:2:8143)
+    at async l (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:5983)
+    at async g (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:4299)
+    at async (C:\Users\abpradhan\OneDrive - NVIDIA Corporation\Desktop\traning\stores\.next\server\chunks\58720.js:1:1771)
+[session] verify rejected: missing_token {"count":1}
+[session] verify rejected: missing_token {"count":1}
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+Error updating cart: [Error: aborted] { code: 'ECONNRESET' }
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+Error updating cart: [Error: aborted] { code: 'ECONNRESET' }
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[session] verify rejected: missing_token {"count":2}
+[session] verify rejected: missing_token {"count":2}
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=
+[session] verify rejected: missing_token {"count":3}
+[session] verify rejected: missing_token {"count":3}
+[Middleware] POST /api/auth/login denied: no session. session_cookie_present=false cookie_keys=

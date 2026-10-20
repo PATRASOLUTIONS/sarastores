@@ -10,7 +10,7 @@ import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { apiFetch } from "@/lib/api-client"
-import { cleanProductName } from "@/utils/cleanProductName"
+import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import CartProductImage from "@/components/CartProductImage"
 import SavedAddresses from "@/components/account/SavedAddresses"
 import { dateOfBirthSchema } from "@/lib/validation"
@@ -172,7 +172,7 @@ export default function DashboardPage() {
     try {
       const added = await addToCart({ id: product.id, name: product.name, price: product.price,
         image: imageOf(product), stock: product.stock, quantity: 1, color: null, size: null })
-      if (added) toast.success(`${cleanProductName(product.name)} added to cart`)
+      if (added) toast.success(`${toastProductName(product.name)} added to cart`)
     } finally { setAdding(null) }
   }
   const toggleWishlist = async (id: string) => {

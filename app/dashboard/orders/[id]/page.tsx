@@ -184,10 +184,8 @@ export default function OrderDetailsPage() {
         <p className="text-gray-600 mb-4">
           The order you&apos;re looking for doesn&apos;t exist or you don&apos;t have permission to view it.
         </p>
-        <Link href="/dashboard/orders">
-          <button className="px-4 py-2 bg-maroon-800 text-white rounded-md hover:bg-maroon-900 transition-colors">
-            Back to Orders
-          </button>
+        <Link href="/dashboard/orders" className="inline-block px-4 py-2 bg-maroon-800 text-white rounded-md hover:bg-maroon-900 transition-colors">
+          Back to Orders
         </Link>
       </div>
     )
@@ -199,10 +197,8 @@ export default function OrderDetailsPage() {
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
-            <Link href="/dashboard/orders">
-              <button className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-              </button>
+            <Link href="/dashboard/orders" className="inline-block mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <ArrowLeft className="h-5 w-5" />
             </Link>
             <div>
               <h1 className="text-2xl font-bold">Order #{order.id}</h1>
@@ -372,11 +368,9 @@ export default function OrderDetailsPage() {
             {isDownloading ? "Downloading..." : "Download Invoice"}
           </button>
 
-          <Link href="/contact">
-            <button className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full sm:w-auto">
-              <Mail className="h-4 w-4 mr-2" />
-              Contact Support
-            </button>
+          <Link href="/contact" className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full sm:w-auto">
+            <Mail className="h-4 w-4 mr-2" />
+            Contact Support
           </Link>
 
           {order.status.toLowerCase() === "delivered" && (

@@ -916,10 +916,8 @@ export default function AdminOrders() {
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link href={`/admin/orders/${order.id}`}>
-                          <button className="text-indigo-600 hover:text-indigo-900 mr-3">
-                            <Eye className="h-4 w-4" />
-                          </button>
+                        <Link href={`/admin/orders/${order.id}`} className="text-indigo-600 hover:text-indigo-900 mr-3">
+                          <Eye className="h-4 w-4" />
                         </Link>
                       </td>
                     </tr>

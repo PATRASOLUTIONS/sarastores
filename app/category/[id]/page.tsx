@@ -18,9 +18,10 @@ import { formatPrice } from "@/utils/formatPrice";
 import { normalizeProductForSchema } from "@/lib/product-schema"
 import { PRODUCT_SORT_OPTIONS, sortProducts, type ProductSortKey } from "@/lib/product-sort"
 import {
-  buildFacets,
+  buildSelectionAwareFacets,
   countActiveFacets,
-  matchesFacets,
+  facetValuesFor,
+  matchesFacetValues,
   toggleFacetValue,
   type FacetSelection,
 } from "@/lib/product-facets"
@@ -196,11 +197,14 @@ export default function CategoryPage() {
     )
   })
 
-  // Facets are built before the facet filter is applied, so selecting "55 inch"
-  // doesn't make every other size disappear from the sidebar.
-  const facets = buildFacets(nonFacetMatches)
-  const filteredProducts = nonFacetMatches.filter((product) =>
-    matchesFacets(product, facetSelection),
+  // Each facet is counted over the products matching every *other* facet, so
+  // the numbers move as filters are applied while a facet's own selection is
+  // ignored — otherwise picking "55 inch" would report every other size as (0)
+  // and no second size could ever be added to the OR-ed group.
+  const extractedFacetValues = nonFacetMatches.map(facetValuesFor)
+  const facets = buildSelectionAwareFacets(extractedFacetValues, facetSelection)
+  const filteredProducts = nonFacetMatches.filter((_, index) =>
+    matchesFacetValues(extractedFacetValues[index], facetSelection),
   )
 
   const sortedProducts = sortProducts(filteredProducts, sortBy)
@@ -284,10 +288,8 @@ export default function CategoryPage() {
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-800 mb-4">Category Not Found</h1>
             <p className="text-gray-600 mb-6">{error || "The requested category could not be found."}</p>
-            <Link href="/products">
-              <button className="bg-blue-800 text-white px-6 py-2 rounded-lg hover:bg-blue-900 transition-colors">
-                Browse All Products
-              </button>
+            <Link href="/products" className="inline-block bg-blue-800 text-white px-6 py-2 rounded-lg hover:bg-blue-900 transition-colors">
+              Browse All Products
             </Link>
           </div>
         </main>
@@ -598,11 +600,9 @@ export default function CategoryPage() {
                   <SlidersHorizontal className="h-4 w-4" />
                   Show Filters
                 </button>
-                <Link href="/cart">
-                  <button className="flex items-center px-4 py-2 bg-blue-800 text-white rounded-md hover:bg-blue-900 transition-colors">
-                    <ShoppingCart className="h-5 w-5 mr-2" />
-                    <span>Cart ({cart.length})</span>
-                  </button>
+                <Link href="/cart" className="flex items-center px-4 py-2 bg-blue-800 text-white rounded-md hover:bg-blue-900 transition-colors">
+                  <ShoppingCart className="h-5 w-5 mr-2" />
+                  <span>Cart ({cart.length})</span>
                 </Link>
               </div>
 
@@ -632,11 +632,9 @@ export default function CategoryPage() {
                     </select>
                   </label>
                   <div className="hidden lg:block">
-                    <Link href="/cart">
-                      <button className="flex items-center px-4 py-2 bg-blue-800 text-white rounded-md hover:bg-blue-900 transition-colors">
-                        <ShoppingCart className="h-5 w-5 mr-2" />
-                        <span>Cart ({cart.length})</span>
-                      </button>
+                    <Link href="/cart" className="flex items-center px-4 py-2 bg-blue-800 text-white rounded-md hover:bg-blue-900 transition-colors">
+                      <ShoppingCart className="h-5 w-5 mr-2" />
+                      <span>Cart ({cart.length})</span>
                     </Link>
                   </div>
                 </div>
@@ -737,10 +735,8 @@ export default function CategoryPage() {
                       Clear Filters
                     </button>
                   ) : null}
-                  <Link href="/products">
-                    <button className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors">
-                      Browse All Products
-                    </button>
+                  <Link href="/products" className="inline-block bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors">
+                    Browse All Products
                   </Link>
                 </div>
               )}

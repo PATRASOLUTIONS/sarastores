@@ -6,6 +6,7 @@ import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { toast } from "react-hot-toast"
+import { toastProductName } from "@/utils/cleanProductName"
 import { useRouter } from "next/navigation"
 
 interface Product {
@@ -76,7 +77,7 @@ export default function AddToCartButton({
       const added = await addToCart(cartItem)
       if (!added) return
 
-      toast.success(`${quantity} ${product.name} added to cart!`)
+      toast.success(`${quantity} ${toastProductName(product.name)} added to cart!`)
 
       // Open the side cart so the user can review the new line item
       // (with the "Just added" highlight), adjust qty, or proceed to buy.

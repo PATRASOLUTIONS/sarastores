@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { escapeHtml } from "@/lib/html"
 
 export interface EmailData {
   orderNumber: string;
@@ -990,20 +991,45 @@ export const emailTemplateDataSchemas = {
   CART_ABANDONMENT: cartEmailDataSchema,
 }
 
+/**
+ * Escape every string in a parsed payload before it reaches a template.
+ *
+ * The templates above interpolate roughly eighty fields directly into HTML.
+ * Much of that data is customer-supplied (name, address, product titles), and
+ * order-status mail is also sent to vendors and administrators — so an
+ * unescaped name is a way to put arbitrary markup in front of staff. Escaping
+ * once at this boundary covers every field and cannot be forgotten when a
+ * template is edited later.
+ *
+ * Only strings are touched: numbers, booleans and `Date` values pass through
+ * untouched so currency and expiry formatting still work.
+ */
+function escapeDeep<T>(value: T): T {
+  if (typeof value === "string") return escapeHtml(value) as unknown as T
+  if (Array.isArray(value)) return value.map(escapeDeep) as unknown as T
+  if (value instanceof Date) return value
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, escapeDeep(v)]),
+    ) as T
+  }
+  return value
+}
+
 export const getEmailTemplate = (templateId: EmailTemplateId, data: unknown): string => {
   switch (templateId) {
     case "SOFTWARE_LICENSE_KEYS":
-      return emailTemplates.SOFTWARE_LICENSE_KEYS.html(licenseEmailDataSchema.parse(data))
+      return emailTemplates.SOFTWARE_LICENSE_KEYS.html(escapeDeep(licenseEmailDataSchema.parse(data)))
     case "SOFTWARE_ACTIVATION_KEY":
-      return emailTemplates.SOFTWARE_ACTIVATION_KEY.html(activationEmailDataSchema.parse(data))
+      return emailTemplates.SOFTWARE_ACTIVATION_KEY.html(escapeDeep(activationEmailDataSchema.parse(data)))
     case "CART_ABANDONMENT":
-      return emailTemplates.CART_ABANDONMENT.html(cartEmailDataSchema.parse(data))
+      return emailTemplates.CART_ABANDONMENT.html(escapeDeep(cartEmailDataSchema.parse(data)))
     case "ORDER_PENDING":
     case "ORDER_PROCESSING":
     case "ORDER_SHIPPED":
     case "ORDER_DELIVERED":
     case "ORDER_CANCELLED":
-      return emailTemplates[templateId].html(orderEmailDataSchema.parse(data))
+      return emailTemplates[templateId].html(escapeDeep(orderEmailDataSchema.parse(data)))
     default:
       throw new Error(`Email template ${templateId} not found`)
   }
@@ -1034,7 +1060,7 @@ export const getEmailTemplateId = (status: string): EmailTemplateId => {
   }
 }
 
-export function getSoftwareLicenseEmailTemplate(data: {
+export function getSoftwareLicenseEmailTemplate(input: {
   customerName: string
   orderNumber: string
   softwareLicenses: Array<{
@@ -1046,6 +1072,8 @@ export function getSoftwareLicenseEmailTemplate(data: {
     }>
   }>
 }) {
+  // Bypasses getEmailTemplate, so it escapes its own payload.
+  const data = escapeDeep(input)
   return `
     <!DOCTYPE html>
     <html>

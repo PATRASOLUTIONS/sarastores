@@ -28,6 +28,13 @@ test("production preflight rejects missing, placeholder, insecure and mismatched
   assert.deepEqual(checkDeploymentEnvironment({
     ...env, MONGODB_URI: "mongodb://synthetic:fixture@one.example.net:27017,two.example.net:27017/?tls=true&replicaSet=rs0",
   }), [])
+  // A scoped partner allowlist and an acknowledged Cloudflare front both pass.
+  assert.deepEqual(checkDeploymentEnvironment({
+    ...env,
+    PARTNER_ALLOWED_ORIGINS: "https://partner.example.net, *.partner.example.net",
+    TRUST_CLOUDFLARE_IP: "true",
+    CLOUDFLARE_PROXY_CONFIRMED: "locked to Cloudflare IP ranges",
+  }), [])
   for (const change of [
     { SESSION_SECRET: "short" }, { CRON_SECRET: "<secret>" },
     { MONGODB_URI: "mongodb://host/" }, { MONGODB_URI: "mongodb+srv://synthetic:fixture@cluster.example.net/?tlsInsecure=true" },
@@ -35,6 +42,12 @@ test("production preflight rejects missing, placeholder, insecure and mismatched
     { ENABLE_DEBUG_ROUTES: "true" }, { RATE_LIMIT_BACKEND: "memory" },
     { RAZORPAY_KEY_ID: "rzp_test_fixture" }, { SMTP_PORT: "0" },
     { DPDP_GRIEVANCE_OFFICER_EMAIL: "invalid" },
+    // Partner CORS reflects these origins with credentials attached.
+    { PARTNER_ALLOWED_ORIGINS: "*" }, { PARTNER_ALLOWED_ORIGINS: "*.com" },
+    { PARTNER_ALLOWED_ORIGINS: "http://partner.example.net" },
+    { PARTNER_ALLOWED_ORIGINS: "https://partner.example.net/callback" },
+    // Trusting a client-settable header hands out a fresh rate-limit bucket.
+    { TRUST_CLOUDFLARE_IP: "yes" }, { TRUST_CLOUDFLARE_IP: "true" },
   ]) {
     const errors = checkDeploymentEnvironment({ ...env, ...change })
     assert.ok(errors.length > 0)
@@ -3586,13 +3599,16 @@ test("spin OTP delivery reports actual accepted channels and invalidates only it
   let saved
   const deleted = []
   const loader = sourceLoader({
-    "@/lib/spin-wheel-campaigns": { getCampaignCollection: async (campaign, kind) => {
-      assert.equal(campaign, "default")
-      return kind === "participants" ? { findOne: async () => null } : {
-        updateOne: async (query, update) => { saved = update; assert.equal(query.phone, "9876543210"); assert.equal(update.$unset.verificationToken, "") },
-        deleteOne: async query => deleted.push(query),
-      }
-    } },
+    "@/lib/spin-wheel-campaigns": {
+      resolveCampaignSlug: value => (value === undefined || value === null || value === "" ? "default" : null),
+      getCampaignCollection: async (campaign, kind) => {
+        assert.equal(campaign, "default")
+        return kind === "participants" ? { findOne: async () => null } : {
+          updateOne: async (query, update) => { saved = update; assert.equal(query.phone, "9876543210"); assert.equal(update.$unset.verificationToken, "") },
+          deleteOne: async query => deleted.push(query),
+        }
+      },
+    },
     "@/lib/spin-wheel-notifications": {
       sendOtpEmail: async () => { if (mailThrows) throw new Error("Fixture rejected promise"); return { success: mail } },
       sendWhatsAppOTP: async () => ({ success: whatsapp }),
@@ -3621,17 +3637,28 @@ test("spin OTP delivery reports actual accepted channels and invalidates only it
 
 test("spin OTP limits count resend requests independently of the upserted challenge and validate before work", async () => {
   let hits = 0
+  let callerHits = 0
   let writes = 0
   const loader = sourceLoader({
-    "@/lib/spin-wheel-campaigns": { getCampaignCollection: async () => ({
-      findOne: async () => null,
-      updateOne: async () => { writes++ },
-    }) },
+    "@/lib/spin-wheel-campaigns": {
+      resolveCampaignSlug: value => (value === undefined || value === null || value === "" ? "default" : null),
+      getCampaignCollection: async () => ({
+        findOne: async () => null,
+        updateOne: async () => { writes++ },
+      }),
+    },
     "@/lib/spin-wheel-notifications": { sendOtpEmail: async () => ({ success: true }), sendWhatsAppOTP: async () => ({ success: false }) },
+    // Two budgets apply per send: one bounding the caller, one bounding how
+    // often a single phone number can be messaged.
     "@/lib/rate-limit-store": { rateLimitHit: async (key, limit, window) => {
+      assert.equal(window, 15 * 60 * 1000)
+      if (key.startsWith("spin-otp-ip:")) {
+        assert.equal(limit, 10)
+        callerHits++
+        return { limited: false }
+      }
       assert.equal(key.includes("9876543210"), false)
       assert.equal(limit, 3)
-      assert.equal(window, 15 * 60 * 1000)
       return { limited: ++hits > 3 }
     } },
   })
@@ -3640,10 +3667,14 @@ test("spin OTP limits count resend requests independently of the upserted challe
   const input = { phone: "9876543210", email: "fixture@example.invalid", name: "Fixture" }
   assert.equal((await post({ ...input, phone: 9876543210 })).status, 400)
   assert.equal((await post({ ...input, campaignId: "../settings" })).status, 400)
+  // Neither budget is consumed by input that never reaches any work.
   assert.equal(hits, 0)
+  assert.equal(callerHits, 0)
   for (let index = 0; index < 3; index++) assert.equal((await post(input)).status, 200)
   assert.equal((await post(input)).status, 429)
   assert.equal(writes, 3)
+  // The caller budget is checked on every send that gets past validation.
+  assert.equal(callerHits, 4)
 })
 
 test("public spin prize endpoint exposes display fields only, never seeds and rejects inactive or unknown campaigns", async () => {
@@ -4333,7 +4364,7 @@ test("partner authentication wrapper retains promised route params, permissions 
   let allowed = true
   const loader = sourceLoader({
     "@/lib/partner/api-keys": { validateAPIKey: async value => value === "fixture" ? key : null, hasPermission: () => allowed },
-    "@/lib/partner/rate-limit": { checkPartnerRateLimit: () => ({ allowed: true }) },
+    "@/lib/partner/rate-limit": { checkPartnerRateLimit: async () => ({ allowed: true }) },
     "@/lib/db-service": { getCollection: async () => ({ findOne: async () => partner, updateOne: async () => ({ matchedCount: 1 }) }) },
   })
   const { withPartnerAuth } = loader.load("lib/partner/auth.ts")
@@ -4344,15 +4375,23 @@ test("partner authentication wrapper retains promised route params, permissions 
     assert.equal((await context.params).id, "fixture-item")
     return Response.json({ success: true })
   }, ["products:read"])
-  const request = () => new NextRequest("https://fixture.invalid/api/v1/partner/products/fixture-item", { headers: { authorization: "Bearer fixture", origin: "https://client.invalid" } })
+  const request = (origin = "https://client.invalid") => new NextRequest("https://fixture.invalid/api/v1/partner/products/fixture-item", { headers: { authorization: "Bearer fixture", origin } })
   const response = await handler(request(), { params: Promise.resolve({ id: "fixture-item" }) })
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("access-control-allow-methods"), "GET, PATCH")
-  assert.equal(response.headers.get("access-control-allow-origin"), "https://client.invalid")
+  // An origin outside the allowlist gets no Allow-Origin at all. Reflecting it
+  // alongside Allow-Credentials: true would let any website read this partner
+  // data, and middleware.ts skips this surface entirely.
+  assert.equal(response.headers.get("access-control-allow-origin"), null)
+  assert.equal(response.headers.get("access-control-allow-credentials"), null)
+  assert.equal(response.headers.get("vary"), "Origin")
   assert.ok(response.headers.get("x-request-id"))
+  const allowlisted = await handler(request("http://localhost:3000"), { params: Promise.resolve({ id: "fixture-item" }) })
+  assert.equal(allowlisted.headers.get("access-control-allow-origin"), "http://localhost:3000")
+  assert.equal(allowlisted.headers.get("access-control-allow-credentials"), "true")
   allowed = false
   assert.equal((await handler(request(), { params: Promise.resolve({ id: "fixture-item" }) })).status, 403)
-  assert.equal(handlerCalls, 1)
+  assert.equal(handlerCalls, 2)
 })
 
 test("bot checks reject malformed timestamps and reCAPTCHA replies without contacting real providers", async () => {
@@ -4877,6 +4916,173 @@ test("catalog facets retain spec precedence and OR-within / AND-between selectio
   assert.equal(buildFacets([product]).length, 0)
   const facets = buildFacets([product, { name: "Fixture 32 inch HD Ready TV" }])
   assert.equal(facets.find(facet => facet.key === "screenSize").values.length, 2)
+})
+
+test("facet counts respond to the other filters while ignoring the facet's own selection", () => {
+  const { facetValuesFor, buildSelectionAwareFacets, matchesFacetValues } =
+    sourceLoader().load("lib/product-facets.ts")
+
+  const extracted = [
+    { name: "Fixture 55 inch 4K Smart TV" },
+    { name: "Fixture 65 inch 4K Smart TV" },
+    { name: "Fixture 55 inch HD Ready TV" },
+    { name: "Fixture 32 inch HD Ready TV" },
+  ].map(facetValuesFor)
+
+  const sizesOf = (selection) =>
+    Object.fromEntries(
+      buildSelectionAwareFacets(extracted, selection)
+        .find(facet => facet.key === "screenSize")
+        .values.map(({ value, count }) => [value, count]),
+    )
+
+  // Unfiltered, both 55 inch sets are counted together.
+  assert.deepEqual(sizesOf({}), { '32"': 1, '55"': 2, '65"': 1 })
+
+  // Choosing a resolution has to move the size counts — this is the whole
+  // point of the sidebar numbers, and what the old count-everything behaviour
+  // got wrong.
+  assert.deepEqual(sizesOf({ resolution: ["4K Ultra HD"] }), { '55"': 1, '65"': 1 })
+
+  // A size selection must not collapse its own dimension, or a second size
+  // could never be added to the OR-ed group.
+  assert.deepEqual(sizesOf({ screenSize: ['55"'] }), { '32"': 1, '55"': 2, '65"': 1 })
+
+  // Leaving a facet out of the test is what makes that possible.
+  assert.equal(matchesFacetValues(extracted[1], { screenSize: ['55"'] }), false)
+  assert.equal(matchesFacetValues(extracted[1], { screenSize: ['55"'] }, "screenSize"), true)
+
+  // A facet narrowed to one value still renders while it is in use, so the
+  // shopper keeps a control to undo the choice.
+  const narrowed = buildSelectionAwareFacets(extracted, { resolution: ["HD Ready"], screenSize: ['32"'] })
+  assert.equal(narrowed.some(facet => facet.key === "screenSize"), true)
+})
+
+test("the merchandising hierarchy reads from spreadsheet columns and the stored document alike", () => {
+  const { extractCanonicalProductMetadata, normalizeProductForSchema, buildSchemaSynchronizedRaw } =
+    sourceLoader().load("lib/product-schema.ts")
+
+  // Header spellings vary between the exports operators work from.
+  const fromSheet = extractCanonicalProductMetadata({
+    itemno: "SKU-1",
+    "ITEM DIVISION": "Electronics",
+    Category: "Mobile Accessories",
+    SEGMENT: "Chargers & Adapters",
+    "Brand Name": "Anker",
+  })
+  assert.equal(fromSheet.division, "Electronics")
+  assert.equal(fromSheet.categoryGroupName, "Mobile Accessories")
+  assert.equal(fromSheet.segment, "Chargers & Adapters")
+  assert.equal(fromSheet.brandName, "Anker")
+
+  // The same values read back off a stored product, top level or raw.
+  const stored = normalizeProductForSchema({
+    sku: "SKU-1",
+    division: "Electronics",
+    segment: "Chargers & Adapters",
+    raw: { Brand: "Anker", "Category/Group Name": "Mobile Accessories" },
+  })
+  assert.equal(stored.division, "Electronics")
+  assert.equal(stored.segment, "Chargers & Adapters")
+  assert.equal(stored.brandName, "Anker")
+
+  // Brand must not borrow the manufacturer: they are separate columns, and
+  // conflating them would make an unclassified product look classified.
+  assert.equal(normalizeProductForSchema({ manufacturerName: "Foxconn" }).brandName, "")
+
+  // A round trip through raw keeps the canonical header spellings.
+  const raw = buildSchemaSynchronizedRaw({}, fromSheet)
+  assert.equal(raw["Division"], "Electronics")
+  assert.equal(raw["Segment"], "Chargers & Adapters")
+  assert.equal(raw["Brand"], "Anker")
+  assert.deepEqual(extractCanonicalProductMetadata(raw), fromSheet)
+})
+
+test("the taxonomy tree nests division to sub-category to segment and merges inconsistent casing", () => {
+  const { buildTaxonomyTree, taxonomyHref } = sourceLoader().load("lib/product-taxonomy.ts")
+
+  const tree = buildTaxonomyTree([
+    { division: "Accessories", subCategory: "Mobile Accessories", segment: "Cables", count: 5 },
+    // Same aisle, typed differently in a later spreadsheet.
+    { division: "accessories", subCategory: "mobile accessories", segment: "Cables", count: 3 },
+    { division: "Accessories", subCategory: "Mobile Accessories", segment: "Power Banks", count: 9 },
+    { division: "Accessories", subCategory: "Audio Accessories", segment: "", count: 2 },
+    // A product nobody has classified cannot be given a place in the menu, and
+    // a placeholder label is not an aisle — neither may become a header tab.
+    { division: "", subCategory: "Orphan", segment: "Orphan", count: 100 },
+    { division: "Uncategorized", subCategory: "Orphan", segment: "Orphan", count: 100 },
+    { division: "test3", subCategory: "Orphan", segment: "Orphan", count: 100 },
+  ])
+
+  assert.equal(tree.length, 1)
+  const [accessoriesDivision] = tree
+  assert.equal(accessoriesDivision.name, "Accessories")
+  assert.equal(accessoriesDivision.count, 19)
+
+  // Busiest first at every level.
+  assert.equal(
+    accessoriesDivision.subCategories.map(s => s.name).join(" | "),
+    "Mobile Accessories | Audio Accessories",
+  )
+
+  const [mobile, audio] = accessoriesDivision.subCategories
+  assert.equal(mobile.count, 17)
+  assert.equal(
+    mobile.segments.map(s => `${s.name}=${s.count}`).join(" | "),
+    "Power Banks=9 | Cables=8",
+  )
+
+  // A sub-category with no segments still exists as a destination.
+  assert.equal(audio.segments.length, 0)
+
+  // The menu links on subCategory, which is the parameter the listing reads.
+  assert.equal(
+    taxonomyHref("Accessories", "Mobile Accessories", "Cables"),
+    "/products?division=Accessories&subCategory=Mobile+Accessories&segment=Cables",
+  )
+  assert.equal(taxonomyHref("Accessories"), "/products?division=Accessories")
+})
+
+test("an unexpected taxonomy payload degrades the menu instead of throwing", () => {
+  const { normalizeTaxonomyDivisions } = sourceLoader().load("lib/product-taxonomy.ts")
+
+  // The shape this endpoint served before sub-category became the middle
+  // level. A cache can still be holding one, and the header is on every page.
+  const legacy = normalizeTaxonomyDivisions({
+    divisions: [
+      {
+        name: "Accessories",
+        count: 12,
+        categories: [{ name: "Mobile Accessories", count: 12, segments: [{ name: "Cables", count: 12 }] }],
+      },
+    ],
+  })
+  assert.equal(legacy[0].subCategories[0].name, "Mobile Accessories")
+  assert.equal(legacy[0].subCategories[0].segments[0].name, "Cables")
+
+  // Nothing here may throw, and nothing nameless may reach the menu. Length
+  // rather than deepEqual: the loader builds arrays in its own realm, so an
+  // empty result is never reference-equal to this file's [].
+  for (const payload of [null, undefined, "", 0, [], {}, { divisions: null }, { divisions: "nope" }]) {
+    assert.equal(normalizeTaxonomyDivisions(payload).length, 0)
+  }
+
+  const partial = normalizeTaxonomyDivisions({
+    divisions: [
+      { count: 5 },
+      null,
+      {
+        name: " Accessories ",
+        subCategories: [null, { name: "Audio", count: "many", segments: [{ count: 1 }, { name: "Aux Cables" }] }],
+      },
+    ],
+  })
+  assert.equal(partial.length, 1)
+  assert.equal(partial[0].name, "Accessories")
+  assert.equal(partial[0].count, 0)
+  assert.equal(partial[0].subCategories.length, 1)
+  assert.equal(partial[0].subCategories[0].count, 0)
+  assert.equal(partial[0].subCategories[0].segments.map(s => s.name).join(","), "Aux Cables")
 })
 
 test("specification review normalization retains legacy summaries and ignores malformed entries", () => {
@@ -6101,4 +6307,27 @@ test("image coverage preserves explicit roles and filters invalid legacy image e
   assert.equal(result.byRole.rear, "/fixture-rear.png")
   assert.equal(result.byRole.front, "/fixture-front.png")
   assert.equal(result.missingRequired.includes("side"), true)
+})
+
+test("an add-to-cart toast cannot grow long enough to cover the page", () => {
+  const { toastProductName, cleanProductName } = sourceLoader().load("utils/cleanProductName.ts")
+
+  // The real offender: this product's "name" is its whole marketing paragraph,
+  // which sized the toast to 2478px on a 412px viewport. Because react-hot-toast
+  // pauses dismissal while a toast is hovered, it then sat under the pointer and
+  // never expired, blanketing the storefront until a reload.
+  const paragraph =
+    "Immersive 65-inch QNED 4K Ultra HD Display Step into a world of unparalleled " +
+    "home entertainment with the LG QNED82T Smart TV, ".repeat(20)
+
+  assert.equal(cleanProductName(paragraph).length > 500, true, "the raw name really is that long")
+
+  const trimmed = toastProductName(paragraph)
+  assert.equal(trimmed.length <= 49, true, `expected a capped name, got ${trimmed.length} characters`)
+  assert.equal(trimmed.endsWith("\u2026"), true, "a truncated name should say so")
+
+  // A name that already fits is passed through untouched, ellipsis included.
+  assert.equal(toastProductName("Anker 65W Charger"), "Anker 65W Charger")
+  assert.equal(toastProductName(""), "Item")
+  assert.equal(toastProductName(null), "Item")
 })

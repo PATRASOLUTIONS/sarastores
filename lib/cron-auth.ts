@@ -24,10 +24,28 @@ function safeEqual(a: string, b: string): boolean {
 type CronOk = { ok: true }
 type CronFail = { ok: false; response: NextResponse }
 
+/**
+ * A missing secret is the single most common reason scheduled jobs silently
+ * never run: Vercel only sends the bearer header when `CRON_SECRET` is set on
+ * the project, so without it every invocation is refused. Log it loudly once
+ * per instance so the cause is visible in the platform logs instead of looking
+ * like the schedule never fired.
+ */
+let warnedAboutMissingSecret = false
+
 export function requireCron(request: NextRequest): CronOk | CronFail {
   const secret = process.env.CRON_SECRET
 
   if (!secret || secret.length < 16) {
+    if (!warnedAboutMissingSecret) {
+      warnedAboutMissingSecret = true
+      console.error(
+        "[cron] CRON_SECRET is " +
+          (secret ? `only ${secret.length} characters; 16 are required` : "not set") +
+          ". Every scheduled job will be refused with 503 until it is configured " +
+          "in the deployment environment.",
+      )
+    }
     return {
       ok: false,
       response: NextResponse.json(

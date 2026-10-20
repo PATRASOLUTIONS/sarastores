@@ -598,7 +598,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Do not set user in state, do not store in localStorage
       // User must manually login
 
-      toast.success("Account created successfully! Welcome email sent to your inbox.")
+      // Deliberately non-committal: the endpoint answers identically whether
+      // or not the address already had an account, so claiming one was created
+      // here would re-introduce the enumeration signal the API removes.
+      toast.success(
+        data.message || "Thanks. If that email address can be registered, we have sent a link to confirm it.",
+      )
 
       return true
     } catch (error) {

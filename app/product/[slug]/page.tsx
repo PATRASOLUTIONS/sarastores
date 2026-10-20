@@ -34,7 +34,7 @@ import { useWishlist } from "@/hooks/useWishlist"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
-import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName"
+import { cleanProductName, cleanProductDescription, toastProductName } from "@/utils/cleanProductName"
 import { productSuggestions, catalogProductResponseSchema, type CatalogProduct } from "@/utils/catalog"
 import { productSpecificationResponseSchema } from "@/lib/product-specification-response"
 import { productDetailResponseSchema, type ProductDetailResponse } from "@/lib/product-card-response"
@@ -259,23 +259,44 @@ export default function ProductDetailPage() {
     }
   }, [slug, attempt])
 
+  /*
+   * Six related products need a candidate pool, not the whole shop.
+   *
+   * This used to page through the entire catalogue — 500 at a time until a
+   * short page — on every single product view, and it started before the
+   * product itself had loaded, so the two competed. Production runs a pool of
+   * three connections per instance (lib/mongodb.ts), so opening a handful of
+   * product pages at once was enough for those crawls to hold every
+   * connection while the detail fetch above timed out and reported "Product
+   * information could not be loaded".
+   *
+   * Nothing could render the suggestions before the product resolved anyway —
+   * the whole page is <ProductLoading /> until then — so waiting costs nothing.
+   *
+   * The shopper-facing category is derived in the browser (categoryOf maps
+   * warehouse labels like "PANEL" onto "Televisions"), so the raw category is
+   * the only filter the API can apply. Products that share a derived category
+   * share the raw one, which is exactly what that mapping exists to do.
+   */
+  const suggestionId = product?.id ? String(product.id) : ""
+  const suggestionCategory = product?.category ? String(product.category) : ""
+
   useEffect(() => {
+    if (!suggestionId) return
     const controller = new AbortController()
     const loadSuggestions = async () => {
       setSuggestionsLoading(true)
       setSuggestionsError("")
       setCatalogue([])
       try {
-        const products: CatalogProduct[] = []
-        const pageSize = 500
-        for (let skip = 0; ; skip += pageSize) {
-          const response = await fetch(`/api/products?fields=card&limit=${pageSize}&skip=${skip}`, { signal: controller.signal })
-          if (!response.ok) throw new Error("Product suggestions could not be loaded")
-          const page = z.array(catalogProductResponseSchema).parse(await response.json())
-          products.push(...page)
-          if (page.length < pageSize) break
-        }
-        if (!controller.signal.aborted) setCatalogue(products)
+        // 120 leaves plenty of headroom: productSuggestions needs six survivors
+        // after dropping items with no image, no price, or no stock.
+        const query = new URLSearchParams({ fields: "card", limit: "120" })
+        if (suggestionCategory) query.set("category", suggestionCategory)
+        const response = await fetch(`/api/products?${query.toString()}`, { signal: controller.signal })
+        if (!response.ok) throw new Error("Product suggestions could not be loaded")
+        const page = z.array(catalogProductResponseSchema).parse(await response.json())
+        if (!controller.signal.aborted) setCatalogue(page)
       } catch (error) {
         if (!controller.signal.aborted) {
           console.error("[Product] Suggestions failed:", error)
@@ -287,7 +308,7 @@ export default function ProductDetailPage() {
     }
     void loadSuggestions()
     return () => controller.abort()
-  }, [slug, suggestionsAttempt])
+  }, [suggestionId, suggestionCategory, suggestionsAttempt])
 
   const configuredRailCards = useBanners("pdp-rail", product?.manufacturerName || product?.brand || undefined)
   const railCards = marketing.enabled("rail") ? configuredRailCards : []
@@ -658,7 +679,7 @@ export default function ProductDetailPage() {
                               </p>
                               </Link><button type="button" className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd]" onClick={async () => {
                                 const added = await addToCart({ id: String(c.id), name: c.name, price: c.price, image: c.image, quantity: 1, color: null, size: null, stock: c.stock })
-                                if (added) toast.success(`${cleanProductName(c.name)} added to cart`)
+                                if (added) toast.success(`${toastProductName(c.name)} added to cart`)
                               }}>Add</button>
                             </article>
                           ))}

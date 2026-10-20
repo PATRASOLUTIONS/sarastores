@@ -213,9 +213,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       "sub-category/PROD DESC": data.subCategory || data.prod_desc,
       "CHAR DESC": data.char_desc || data.characteristics,
       "Manufacturer Name": data.manufacturerName || data.manufacturer_name,
+      // Merchandising hierarchy. Passed explicitly so the document is correct
+      // whether the editor set the top-level field, the raw column, or both.
+      Division: data.division,
+      Segment: data.segment,
+      Brand: data.brand,
     })
 
     if (canonical.itemno) data.sku = canonical.itemno
+    if (canonical.division) data.division = canonical.division
+    if (canonical.segment) data.segment = canonical.segment
+    if (canonical.brandName) data.brand = canonical.brandName
     if (canonical.subCategoryProdDesc) {
       data.subCategory = canonical.subCategoryProdDesc
       data.prod_desc = canonical.subCategoryProdDesc

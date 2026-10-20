@@ -253,6 +253,9 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
 
   // App state
   const [participantId, setParticipantId] = useState<string | null>(null)
+  // Issued by /register; the spin endpoint uses it as proof that this browser
+  // is the one that completed OTP verification.
+  const [spinToken, setSpinToken] = useState<string | null>(null)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [agreedToPreTerms, setAgreedToPreTerms] = useState(false)
 
@@ -676,6 +679,7 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
       }
 
       setParticipantId(data.participantId)
+      setSpinToken(data.spinToken ?? null)
     } catch {
       if (retryCount < 2) {
         const delay = (retryCount + 1) * 1500
@@ -704,7 +708,7 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
       const res = await fetch("/api/spin-wheel/spin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantId, campaignId: activeCampaign })
+        body: JSON.stringify({ participantId, campaignId: activeCampaign, spinToken })
       })
       const data = await res.json()
 

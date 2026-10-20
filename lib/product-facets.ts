@@ -308,15 +308,71 @@ export function buildFacets(products: FacetProduct[], minValues = 2): Facet[] {
 
 /** Values within a facet are OR-ed; separate facets are AND-ed. */
 export function matchesFacets(product: FacetProduct, selection: FacetSelection): boolean {
-  const active = Object.entries(selection).filter(([, values]) => values.length > 0)
-  if (active.length === 0) return true
+  return matchesFacetValues(facetValuesFor(product), selection)
+}
 
-  const productValues = facetValuesFor(product)
+/**
+ * The same test against values that have already been extracted.
+ *
+ * `facetValuesFor` runs a dozen regexes over a concatenation of the name, spec
+ * keys and features, so re-deriving it per candidate makes counting every
+ * facet separately far too slow. Listing pages extract once and reuse.
+ *
+ * `exceptKey` leaves one facet out of the test. Counts for a facet have to
+ * ignore that facet's own selection, otherwise picking "4K" reports every other
+ * resolution as (0) and no second value can ever be added to an OR-ed group.
+ */
+export function matchesFacetValues(
+  values: Record<string, string[]>,
+  selection: FacetSelection,
+  exceptKey?: string,
+): boolean {
+  for (const [key, chosen] of Object.entries(selection)) {
+    if (chosen.length === 0 || key === exceptKey) continue
+    const owned = values[key]
+    if (!owned || !chosen.some((value) => owned.includes(value))) return false
+  }
+  return true
+}
 
-  return active.every(([key, values]) => {
-    const owned = productValues[key]
-    return !!owned && values.some((value) => owned.includes(value))
-  })
+/**
+ * Facets counted against the current selection.
+ *
+ * Each facet is counted over the products matching every *other* facet, so the
+ * numbers answer "how many would I have if I picked this" rather than
+ * restating what is already chosen.
+ */
+export function buildSelectionAwareFacets(
+  extracted: Array<Record<string, string[]>>,
+  selection: FacetSelection,
+  minValues = 2,
+): Facet[] {
+  const facets: Facet[] = []
+
+  for (const definition of FACET_DEFINITIONS) {
+    const bucket = new Map<string, number>()
+
+    for (const values of extracted) {
+      if (!matchesFacetValues(values, selection, definition.key)) continue
+      const owned = values[definition.key]
+      if (!owned) continue
+      for (const value of owned) bucket.set(value, (bucket.get(value) || 0) + 1)
+    }
+
+    // A facet the shopper has already used stays on screen even if it has
+    // narrowed to a single value, because otherwise the control that undoes
+    // the choice disappears along with it.
+    const inUse = (selection[definition.key]?.length ?? 0) > 0
+    if (bucket.size === 0 || (bucket.size < minValues && !inUse)) continue
+
+    const values = Array.from(bucket, ([value, count]) => ({ value, count })).sort((a, b) =>
+      definition.sort ? definition.sort(a.value, b.value) : a.value.localeCompare(b.value),
+    )
+
+    facets.push({ key: definition.key, label: definition.label, values })
+  }
+
+  return facets
 }
 
 export function countActiveFacets(selection: FacetSelection): number {

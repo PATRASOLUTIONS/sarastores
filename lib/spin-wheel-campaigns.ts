@@ -109,16 +109,45 @@ function prefixName(slug: string, col: CampaignCollection): string {
   return `spin_${slug}_${col}`
 }
 
-/** Get a collection handle for a specific campaign */
+/**
+ * The only shape a campaign slug may take. The slug becomes part of a MongoDB
+ * collection name, so an unchecked value from a request body lets an anonymous
+ * caller create collections at will. Mirrors SpinOtpRequestSchema in
+ * lib/validation.ts, which already enforced this on the OTP-send route.
+ */
+export const CAMPAIGN_SLUG_PATTERN = /^[a-z0-9-]{1,60}$/
+
+/**
+ * Normalise a caller-supplied campaign id, or null when it is unusable.
+ * An absent value means the default campaign, which is how every existing
+ * caller behaves.
+ */
+export function resolveCampaignSlug(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return "default"
+  if (typeof value !== "string") return null
+  const slug = value.trim().toLowerCase()
+  return CAMPAIGN_SLUG_PATTERN.test(slug) ? slug : null
+}
+
+/**
+ * Get a collection handle for a specific campaign.
+ *
+ * The slug becomes part of a collection name, so it is re-validated here rather
+ * than trusting each caller to have run it through resolveCampaignSlug first.
+ * Several public routes take the campaign id straight from the request body.
+ */
 export async function getCampaignCollection<TSchema extends Document = Document>(
   campaignSlug: string,
   col: CampaignCollection
 ): Promise<Collection<TSchema>> {
+  const slug = resolveCampaignSlug(campaignSlug)
+  if (!slug) throw new Error("Invalid campaign id")
+
   const { db } = await connectToDatabase()
   const name =
-    campaignSlug === "default"
+    slug === "default"
       ? LEGACY_NAMES[col]
-      : prefixName(campaignSlug, col)
+      : prefixName(slug, col)
   return db.collection<TSchema>(name)
 }
 

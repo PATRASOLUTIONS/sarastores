@@ -959,3 +959,298 @@ test("concurrent visibility changes reject the price row rather than overwriting
   assert.equal(product.stock, 3)
   assert.equal(product.active, false)
 })
+
+const metadataSheet = () => sourceLoader().load("lib/product-metadata-sheet.ts")
+
+test("warehouse metadata headers are read one level up, at the merchandising level they actually describe", () => {
+  const { extractMetadataSheetRow, METADATA_SHEET_FIELDS, METADATA_SHEET_COLUMNS } = metadataSheet()
+  const warehouse = extractMetadataSheetRow({
+    itemno: "SKU1",
+    "Category/Group Name": "Appliances",
+    "sub-category/PROD DESC": "Washing Machines",
+    "CHAR DESC": "Front Load",
+    "Manufacturer Name": "Bosch",
+  })
+  assert.equal(warehouse.itemno, "SKU1")
+  assert.equal(warehouse.division, "Appliances")
+  assert.equal(warehouse.category, "Washing Machines")
+  assert.equal(warehouse.segment, "Front Load")
+  assert.equal(warehouse.brand, "Bosch")
+  assert.equal(warehouse.name, "")
+  assert.equal(METADATA_SHEET_FIELDS.join(","), "itemno,name,division,category,segment,brand")
+  assert.equal(Object.values(METADATA_SHEET_COLUMNS).join(","), "itemno,Name,Division,Category,Segment,Brand")
+
+  // The one genuine ambiguity: a bare "Category" is the category, while
+  // "Category/Group Name" is the division, so a sheet carrying both resolves
+  // to two distinct levels instead of collapsing into one.
+  const both = extractMetadataSheetRow({
+    itemno: "SKU1", Category: "Washing Machines", "Category/Group Name": "Appliances",
+  })
+  assert.equal(both.division, "Appliances")
+  assert.equal(both.category, "Washing Machines")
+  assert.equal(extractMetadataSheetRow({ "Item No.": " SKU1 " }).itemno, "SKU1")
+  assert.equal(extractMetadataSheetRow({}).brand, "")
+
+  // Headers as they really arrive: an operator's own capitalisation, a
+  // trailing space from a copied cell, an underscore from an ERP export. A
+  // literal alias match read these as blank and reported every row a no-op.
+  const messy = extractMetadataSheetRow({
+    "ITEM_NO ": "SKU9",
+    " division": "Home Electronics",
+    "CATEGORY ": "Televisions",
+    "char desc": "55 Inch",
+    "MANUFACTURER NAME": "LG",
+  })
+  assert.equal(messy.itemno, "SKU9")
+  assert.equal(messy.division, "Home Electronics")
+  assert.equal(messy.category, "Televisions")
+  assert.equal(messy.segment, "55 Inch")
+  assert.equal(messy.brand, "LG")
+
+  // Normalising must not let a looser spelling shadow the exact column.
+  const shadowed = extractMetadataSheetRow({ Division: "Home Electronics", DIVISION: "Wrong" })
+  assert.equal(shadowed.division, "Home Electronics")
+})
+
+test("a downloaded metadata sheet re-uploads unchanged through its own six column names", () => {
+  const { extractMetadataSheetRow, metadataSheetRowFromProduct, METADATA_SHEET_COLUMNS, METADATA_SHEET_FIELDS } = metadataSheet()
+  const clean = extractMetadataSheetRow({
+    itemno: "SKU1", Name: "Bosch 7kg washer", Division: "Appliances",
+    Category: "Washing Machines", Segment: "Front Load", Brand: "Bosch",
+  })
+  assert.equal(clean.itemno, "SKU1")
+  assert.equal(clean.name, "Bosch 7kg washer")
+  assert.equal(clean.division, "Appliances")
+  assert.equal(clean.category, "Washing Machines")
+  assert.equal(clean.segment, "Front Load")
+  assert.equal(clean.brand, "Bosch")
+
+  const download = metadataSheetRowFromProduct({
+    sku: "SKU1", name: "Bosch 7kg washer", groupName: "Appliances",
+    subCategory: "Washing Machines", characteristics: "Front Load", manufacturerName: "Bosch",
+  })
+  const workbook = {}
+  for (const field of METADATA_SHEET_FIELDS) workbook[METADATA_SHEET_COLUMNS[field]] = download[field]
+  const reread = extractMetadataSheetRow(workbook)
+  for (const field of METADATA_SHEET_FIELDS) assert.equal(reread[field], download[field], field)
+  assert.equal(reread.category, "Washing Machines")
+  assert.equal(reread.division, "Appliances")
+  assert.equal(reread.brand, "Bosch")
+})
+
+test("the metadata sheet pre-fills each level from the legacy field that actually holds it", () => {
+  const { metadataSheetRowFromProduct } = metadataSheet()
+  const expected = {
+    division: "Appliances", category: "Washing Machines",
+    segment: "Front Load", brand: "Bosch",
+  }
+  const legacy = metadataSheetRowFromProduct({
+    sku: "SKU1", name: "Bosch 7kg washer",
+    category: "Appliances", groupName: "Appliances",
+    subCategory: "Washing Machines", characteristics: "Front Load",
+    manufacturerName: "Bosch", brand: "Appliances",
+  })
+  assert.equal(legacy.itemno, "SKU1")
+  assert.equal(legacy.name, "Bosch 7kg washer")
+  for (const [field, value] of Object.entries(expected)) assert.equal(legacy[field], value, field)
+
+  const rawOnly = metadataSheetRowFromProduct({ raw: {
+    itemno: "SKU2", Name: "Raw name", "Category/Group Name": "Appliances",
+    "sub-category/PROD DESC": "Washing Machines", "CHAR DESC": "Front Load",
+    "Manufacturer Name": "Bosch",
+  } })
+  assert.equal(rawOnly.itemno, "SKU2")
+  assert.equal(rawOnly.name, "Raw name")
+  for (const [field, value] of Object.entries(expected)) assert.equal(rawOnly[field], value, field)
+
+  // Two fallbacks are deliberately ordered against intuition. `category` never
+  // reads the product's own `category`, because that field holds the top-level
+  // value now belonging to `division` — reading it would show the division in
+  // both columns. And `brand` prefers the manufacturer, because the old
+  // importer wrote the category value into `brand`.
+  const topLevelOnly = metadataSheetRowFromProduct({ itemno: "SKU3", category: "Appliances" })
+  assert.equal(topLevelOnly.division, "Appliances")
+  assert.equal(topLevelOnly.category, "")
+  assert.equal(metadataSheetRowFromProduct({ brand: "Appliances", manufacturerName: "Bosch" }).brand, "Bosch")
+  assert.equal(metadataSheetRowFromProduct({ brand: "Bosch" }).brand, "Bosch", "a curated brand still shows with no manufacturer")
+
+  for (const value of [null, undefined, "SKU1", 7, [], { raw: "Appliances" }]) {
+    assert.equal(metadataSheetRowFromProduct(value).itemno, "")
+    assert.equal(metadataSheetRowFromProduct(value).division, "")
+  }
+})
+
+test("metadata writes set every corrected level and an empty cell leaves stored data alone", () => {
+  const {
+    extractMetadataSheetRow, metadataDocumentUpdates, metadataRowHasUpdates, METADATA_SHEET_EDITABLE_FIELDS,
+  } = metadataSheet()
+  const full = extractMetadataSheetRow({
+    itemno: "SKU1", Name: "Bosch 7kg washer", Division: "Appliances",
+    Category: "Washing Machines", Segment: "Front Load", Brand: "Bosch",
+  })
+  const updates = metadataDocumentUpdates(full)
+  assert.equal(updates.name, "Bosch 7kg washer")
+  assert.equal(updates.division, "Appliances")
+  assert.equal(updates.category, "Washing Machines")
+  assert.equal(updates.groupName, "Washing Machines", "parts of the storefront still read groupName")
+  assert.equal(updates.segment, "Front Load")
+  assert.equal(updates.brand, "Bosch")
+  assert.equal(
+    Object.keys(updates).sort().join(","),
+    "brand,category,division,groupName,name,segment,taxonomySource",
+  )
+  assert.equal(Object.hasOwn(updates, "itemno"), false, "the match key is never written back")
+  assert.equal(metadataRowHasUpdates(full), true)
+
+  // A partial sheet corrects the columns it lists without clearing the rest.
+  const partial = metadataDocumentUpdates(extractMetadataSheetRow({ itemno: "SKU1", Brand: " Bosch " }))
+  assert.equal(partial.brand, "Bosch")
+  assert.equal(Object.keys(partial).sort().join(","), "brand,taxonomySource")
+
+  // A name is not a classification, so it must not mark the product as one.
+  const renameOnly = metadataDocumentUpdates(extractMetadataSheetRow({ itemno: "SKU1", Name: "Bosch 8kg washer" }))
+  assert.equal(Object.keys(renameOnly).join(","), "name")
+  for (const field of ["name", "division", "category", "groupName", "segment"]) {
+    assert.equal(Object.hasOwn(partial, field), false, field)
+  }
+
+  const keyOnly = extractMetadataSheetRow({ itemno: "SKU1" })
+  assert.equal(metadataRowHasUpdates(keyOnly), false)
+  assert.equal(Object.keys(metadataDocumentUpdates(keyOnly)).length, 0)
+  assert.equal(METADATA_SHEET_EDITABLE_FIELDS.join(","), "name,division,category,segment,brand")
+  for (const field of METADATA_SHEET_EDITABLE_FIELDS) {
+    assert.equal(metadataRowHasUpdates({ ...keyOnly, [field]: "Appliances" }), true, field)
+  }
+})
+
+test("the metadata upload writes the merchandising hierarchy and stops brand inheriting the category", async () => {
+  /*
+   * The importer used to set a product's brand from the Category/Group Name
+   * column, so brand could never be curated independently. Brand now has its
+   * own column, Division and Segment are new, and the warehouse headers are
+   * read one level above the name they carry.
+   */
+  const operations = []
+  const loader = sourceLoader({
+    "@/lib/auth": { requireAdmin: async () => ({ ok: true }) },
+    "@/lib/db-service": { getCollection: async () => ({
+      find: () => ({ toArray: async () => [{ itemno: "SKU-1" }] }),
+      bulkWrite: async (ops) => { operations.push(...ops); return { matchedCount: ops.length } },
+    }) },
+  }, { context: { Blob } })
+  const route = loader.load("app/api/products/bulk-metadata-update/route.ts")
+
+  const post = async (rows, preview) => {
+    const book = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), "Product Metadata")
+    const bytes = XLSX.write(book, { type: "array", bookType: "xlsx" })
+    const form = new FormData()
+    form.set("file", new Blob([bytes]), "metadata.xlsx")
+    form.set("preview", String(preview))
+    return route.POST(new Request("https://fixture.invalid/api/products/bulk-metadata-update", { method: "POST", body: form }))
+  }
+
+  // Raw ERP headers, so the route is exercised through the alias correction
+  // rather than the already-clean download format.
+  const sheet = [{
+    itemno: "SKU-1",
+    Name: "Anker 65W charger",
+    "Category/Group Name": "Electronics",
+    "sub-category/PROD DESC": "Mobile Accessories",
+    "CHAR DESC": "Chargers & Adapters",
+    "Manufacturer Name": "Anker",
+  }]
+
+  const preview = await (await post(sheet, true)).json()
+  assert.equal(preview.preview[0].status, "found")
+  assert.equal(preview.preview[0].itemno, "SKU-1")
+  assert.equal(preview.preview[0].name, "Anker 65W charger")
+  assert.equal(preview.preview[0].division, "Electronics")
+  assert.equal(preview.preview[0].category, "Mobile Accessories")
+  assert.equal(preview.preview[0].segment, "Chargers & Adapters")
+  assert.equal(preview.preview[0].brand, "Anker")
+  assert.equal(preview.preview[0].error, "")
+  assert.equal(operations.length, 0, "preview must not write")
+
+  const result = await (await post(sheet, false)).json()
+  assert.equal(result.success, 1)
+  assert.equal(result.failed, 0)
+  assert.equal(operations.length, 1)
+
+  const { filter, update } = operations[0].updateOne
+  assert.equal(Array.isArray(update), false, "a plain update document, not an aggregation pipeline")
+  assert.equal(Object.keys(update).join(","), "$set")
+  const written = update.$set
+  assert.equal(written.division, "Electronics")
+  assert.equal(written.category, "Mobile Accessories")
+  assert.equal(written.groupName, "Mobile Accessories")
+  assert.equal(written.segment, "Chargers & Adapters")
+  assert.equal(written.brand, "Anker", "brand comes from the manufacturer column, never the category")
+  assert.equal(written.name, "Anker 65W charger")
+  assert.equal(Object.prototype.toString.call(written.updatedAt), "[object Date]")
+  assert.equal(
+    Object.keys(written).filter(key => key === "raw" || key.startsWith("raw.")).join(","), "",
+    "the sheet no longer mirrors edits into raw, where product-schema aliases would read them back one level low",
+  )
+  assert.equal(filter.$or.map(clause => Object.keys(clause).join("")).join(","), "itemno,sku,raw.itemno")
+
+  // A row that names only the key changes nothing, rather than counting as a
+  // silent success that rewrote updatedAt across the catalogue.
+  operations.length = 0
+  const empty = await (await post([{ itemno: "SKU-1" }], false)).json()
+  assert.equal(operations.length, 0)
+  assert.equal(empty.success, 0)
+  assert.match(empty.errors[0], /No fields to update/)
+  const emptyPreview = await (await post([{ itemno: "SKU-1" }], true)).json()
+  assert.equal(emptyPreview.preview[0].status, "error")
+  assert.equal(emptyPreview.preview[0].error, "No fields to update")
+  assert.equal(operations.length, 0)
+
+  const keyless = await (await post([{ Brand: "Anker" }], false)).json()
+  assert.equal(operations.length, 0)
+  assert.match(keyless.errors[0], /missing itemno/i)
+})
+
+test("a corrected product downloads showing the correction, not one level up", () => {
+  const { metadataSheetRowFromProduct, metadataDocumentUpdates, extractMetadataSheetRow } = metadataSheet()
+
+  // Round-trip the way an operator actually works: upload a correction, then
+  // download again to confirm it. `category` and `groupName` mean the top
+  // level on a warehouse document and the category on a corrected one, and
+  // only `division` distinguishes the two.
+  const corrected = metadataDocumentUpdates(
+    extractMetadataSheetRow({
+      itemno: "SKU1",
+      Division: "Appliances",
+      Category: "Washing Machines",
+      Segment: "Front Load",
+      Brand: "Bosch",
+    }),
+  )
+
+  const redownloaded = metadataSheetRowFromProduct({ itemno: "SKU1", ...corrected })
+  assert.equal(redownloaded.division, "Appliances")
+  assert.equal(redownloaded.category, "Washing Machines", "the correction must survive the round trip")
+  assert.equal(redownloaded.segment, "Front Load")
+  assert.equal(redownloaded.brand, "Bosch", "a brand chosen on the sheet outranks the manufacturer")
+
+  // The dangerous case: a category-only correction must not resurface in the
+  // Division column, which on re-upload would push it a level up the hierarchy.
+  const categoryOnly = metadataDocumentUpdates(extractMetadataSheetRow({ itemno: "SKU2", Category: "Washing Machines" }))
+  const afterCategoryOnly = metadataSheetRowFromProduct({ itemno: "SKU2", ...categoryOnly })
+  assert.equal(afterCategoryOnly.division, "", "an unset division must stay unset")
+  assert.equal(afterCategoryOnly.category, "Washing Machines")
+
+  // An untouched warehouse document still reads one level up, as before.
+  const warehouse = metadataSheetRowFromProduct({
+    itemno: "SKU3",
+    category: "Appliances",
+    groupName: "Appliances",
+    subCategory: "Washing Machines",
+    brand: "Appliances",
+    manufacturerName: "Bosch",
+  })
+  assert.equal(warehouse.division, "Appliances")
+  assert.equal(warehouse.category, "Washing Machines")
+  assert.equal(warehouse.brand, "Bosch", "an uncorrected brand is a copy of the category; prefer the manufacturer")
+})

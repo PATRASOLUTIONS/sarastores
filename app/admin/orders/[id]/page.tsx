@@ -855,11 +855,9 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center mb-6">
-        <Link href="/admin/orders">
-          <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center mr-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Orders
-          </button>
+        <Link href="/admin/orders" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center mr-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Orders
         </Link>
         <h1 className="text-2xl font-semibold">Order Details</h1>
         <div className="ml-auto flex items-center gap-2">
@@ -1643,10 +1641,8 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
               )}
 
               <div className="mt-6 pt-4 border-t">
-                <Link href={`/admin/customers/${order.userId}`}>
-                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
-                    View Customer Profile
-                  </button>
+                <Link href={`/admin/customers/${order.userId}`} className="inline-block w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                  View Customer Profile
                 </Link>
               </div>
             </div>

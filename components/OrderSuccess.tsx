@@ -6,7 +6,7 @@ import { z } from "zod"
 import { ArrowRight, Check, Coins, CreditCard, Gift, Headphones, Home, MessageCircle, Package, Shield, ShoppingBag, Store, Truck } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { useCart } from "@/hooks/useCart"
-import { cleanProductName } from "@/utils/cleanProductName"
+import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import CartProductImage from "@/components/CartProductImage"
 import { orderJourneyStage, type OrderConfirmation } from "@/lib/order-confirmation"
 import styles from "./OrderSuccess.module.css"
@@ -79,7 +79,7 @@ export default function OrderSuccess({ order, guestToken }: { order: OrderConfir
     setAdding(product.id)
     try {
       const added = await addToCart({ ...product, image: product.image || "/placeholder.svg", quantity: 1, color: null, size: null })
-      if (added) toast.success(`${cleanProductName(product.name)} added to cart`)
+      if (added) toast.success(`${toastProductName(product.name)} added to cart`)
     } finally { setAdding(null) }
   }
 

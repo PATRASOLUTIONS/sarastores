@@ -1,25 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { AnyBulkWriteOperation, Document } from "mongodb"
 import * as XLSX from "xlsx"
 import { requireAdmin } from "@/lib/auth"
 import { getCollection } from "@/lib/db-service"
 import {
-  buildSchemaSynchronizedRaw,
-  extractCanonicalProductMetadata,
-  normalizeProductForSchema,
-} from "@/lib/product-schema"
+  extractMetadataSheetRow,
+  metadataDocumentUpdates,
+  metadataRowHasUpdates,
+  metadataSheetRowFromProduct,
+} from "@/lib/product-metadata-sheet"
 
 interface PreviewRow {
   itemno: string
   name: string
-  description: string
-  categoryGroupName: string
-  subCategoryProdDesc: string
-  charDesc: string
-  manufacturerName: string
+  division: string
+  category: string
+  segment: string
+  brand: string
   currentName: string
   status: string
   error: string
 }
+
+/** Match on any of the three places a SKU has historically been stored. */
+const skuFilter = (sku: string) => ({
+  $or: [{ itemno: sku }, { sku }, { "raw.itemno": sku }],
+})
 
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
@@ -46,170 +52,148 @@ export async function POST(request: NextRequest) {
     }
 
     const collection = await getCollection("products")
+    const rows = (data as Record<string, unknown>[]).map(extractMetadataSheetRow)
 
     // PREVIEW MODE
     if (preview) {
-      const updates: PreviewRow[] = []
-      const skusToFind = new Set<string>()
-      const allRows: ReturnType<typeof extractCanonicalProductMetadata>[] = []
+      const skuArray = Array.from(new Set(rows.map(row => row.itemno).filter(Boolean)))
 
-      for (const row of data as Record<string, unknown>[]) {
-        const rowData = extractCanonicalProductMetadata(row)
-        const skuStr = rowData.itemno
-
-        if (skuStr) {
-          skusToFind.add(skuStr)
-        }
-
-        allRows.push(rowData)
-      }
-
-      const skuArray = Array.from(skusToFind)
-
-      const products = await collection.find({
-        $or: [
-          { itemno: { $in: skuArray } },
-          { sku: { $in: skuArray } },
-          { "raw.itemno": { $in: skuArray } },
-        ]
-      }).toArray()
-
-      const productsBySku = new Map<string, Record<string, unknown>>()
-      for (const p of products) {
-        const productSku = normalizeProductForSchema(p).itemno
-        if (productSku) {
-          productsBySku.set(String(productSku).trim(), p)
-        }
-      }
-
-      for (const rowInfo of allRows) {
-        const sku = rowInfo.itemno
-        const product = sku ? productsBySku.get(sku) : null
-
-        updates.push({
-          itemno: rowInfo.itemno || "(empty)",
-          name: rowInfo.name,
-          description: rowInfo.description,
-          categoryGroupName: rowInfo.categoryGroupName,
-          subCategoryProdDesc: rowInfo.subCategoryProdDesc,
-          charDesc: rowInfo.charDesc,
-          manufacturerName: rowInfo.manufacturerName,
-          currentName: (product?.name as string) || "",
-          status: rowInfo.itemno && product ? "found" : "error",
-          error: !rowInfo.itemno ? "Missing itemno" : (!product ? "Product not found" : "")
+      const products = await collection
+        .find({
+          $or: [
+            { itemno: { $in: skuArray } },
+            { sku: { $in: skuArray } },
+            { "raw.itemno": { $in: skuArray } },
+          ],
         })
+        .toArray()
+
+      /*
+       * Index under every SKU the update's filter would match on, not just the
+       * one the sheet would display. A product carrying both `sku` and a
+       * different `itemno` otherwise previews as "Product not found" and then
+       * updates anyway, so the preview understates what the upload will do.
+       */
+      const productsBySku = new Map<string, Record<string, unknown>>()
+      for (const product of products) {
+        const raw = product.raw as Record<string, unknown> | undefined
+        for (const candidate of [product.itemno, product.sku, raw?.itemno]) {
+          const key = String(candidate ?? "").trim()
+          if (key && !productsBySku.has(key)) productsBySku.set(key, product)
+        }
       }
+
+      const updates: PreviewRow[] = rows.map(row => {
+        const product = row.itemno ? productsBySku.get(row.itemno) : null
+        const changes = metadataRowHasUpdates(row)
+
+        return {
+          itemno: row.itemno || "(empty)",
+          name: row.name,
+          division: row.division,
+          category: row.category,
+          segment: row.segment,
+          brand: row.brand,
+          currentName: (product?.name as string) || "",
+          status: row.itemno && product && changes ? "found" : "error",
+          error: !row.itemno
+            ? "Missing itemno"
+            : !product
+              ? "Product not found"
+              : !changes
+                ? "No fields to update"
+                : "",
+        }
+      })
 
       return NextResponse.json({ preview: updates })
     }
 
     // UPDATE MODE
-    let successCount = 0
-    let failCount = 0
     const errors: string[] = []
+    const operations: AnyBulkWriteOperation<Document>[] = []
+    const orderedSkus: string[] = []
 
-    for (const row of data as Record<string, unknown>[]) {
-      const normalized = extractCanonicalProductMetadata(row)
-
-      if (!normalized.itemno) {
-        failCount++
+    for (const row of rows) {
+      if (!row.itemno) {
         errors.push("Row missing itemno")
         continue
       }
 
-      const sku = normalized.itemno
-      const {
-        categoryGroupName,
-        subCategoryProdDesc,
-        charDesc,
-        name,
-        description,
-        manufacturerName,
-      } = normalized
+      if (!metadataRowHasUpdates(row)) {
+        errors.push(`SKU ${row.itemno}: No fields to update`)
+        continue
+      }
 
-      try {
-        const rawUpdates = buildSchemaSynchronizedRaw({}, normalized)
+      const updates = metadataDocumentUpdates(row)
+      orderedSkus.push(row.itemno)
+      operations.push({
+        updateOne: {
+          filter: skuFilter(row.itemno),
+          /*
+           * Nothing is mirrored into `raw`. The sheet now pre-fills from the
+           * real document fields, so `raw` no longer has to carry the
+           * operator's edits for the next download to show them — and a
+           * `Category` key written there would be read back by the alias list
+           * in `lib/product-schema.ts` as the old top-level category, which
+           * would corrupt the round trip one level up the hierarchy.
+           */
+          update: { $set: { ...updates, updatedAt: new Date() } },
+        },
+      })
+    }
 
-        const hasRawUpdates = Object.keys(rawUpdates).length > 0
-        const hasNameUpdate = !!name
-        const hasDescriptionUpdate = !!description
-        const hasManufacturerUpdate = !!manufacturerName
+    let successCount = 0
 
-        if (!hasRawUpdates && !hasNameUpdate && !hasDescriptionUpdate && !hasManufacturerUpdate) {
-          failCount++
-          errors.push(`SKU ${sku}: No fields to update`)
-          continue
-        }
+    if (operations.length > 0) {
+      /*
+       * One round trip instead of one per row. A full catalogue sheet runs to
+       * a few thousand rows, and sequential updates against a hosted cluster
+       * took long enough to time out the request.
+       *
+       * Unordered so a row that matches nothing does not stop the rest, and
+       * chunked so a large sheet cannot exceed the driver's batch limits.
+       */
+      const CHUNK = 500
+      for (let start = 0; start < operations.length; start += CHUNK) {
+        const chunk = operations.slice(start, start + CHUNK)
+        const result = await collection.bulkWrite(chunk, { ordered: false })
+        successCount += result.matchedCount
 
-        const pipeline: Record<string, unknown>[] = [
-          {
-            $set: {
-              raw: {
-                $mergeObjects: [
-                  { $ifNull: ["$raw", {}] },
-                  rawUpdates
-                ]
-              },
-              updatedAt: new Date()
+        if (result.matchedCount < chunk.length) {
+          // bulkWrite does not say which operations matched nothing, so re-check
+          // just this chunk's SKUs to name the missing ones for the operator.
+          const skus = orderedSkus.slice(start, start + chunk.length)
+          const found = await collection
+            .find({ $or: skus.map(skuFilter) }, { projection: { itemno: 1, sku: 1, "raw.itemno": 1 } })
+            .toArray()
+          // Same reasoning as the preview index: a product can be matched by
+          // any of the three SKU fields, so all three have to count as present.
+          const present = new Set<string>()
+          for (const product of found) {
+            const raw = product.raw as Record<string, unknown> | undefined
+            for (const candidate of [product.itemno, product.sku, raw?.itemno]) {
+              const key = String(candidate ?? "").trim()
+              if (key) present.add(key)
             }
           }
-        ]
-
-        const firstStage = pipeline[0].$set as Record<string, unknown>
-        if (name) firstStage.name = name
-        if (description) firstStage.description = description
-        if (categoryGroupName) {
-          firstStage.brand = categoryGroupName
-          firstStage.groupName = categoryGroupName
-          firstStage.category = categoryGroupName
+          for (const sku of skus) {
+            if (!present.has(sku)) errors.push(`SKU ${sku}: Product not found`)
+          }
         }
-        if (subCategoryProdDesc) {
-          firstStage.subCategory = subCategoryProdDesc
-          firstStage.prod_desc = subCategoryProdDesc
-        }
-        if (charDesc) {
-          firstStage.characteristics = charDesc
-          firstStage.char_desc = charDesc
-        }
-        if (manufacturerName) {
-          firstStage.manufacturerName = manufacturerName
-          firstStage.manufacturer_name = manufacturerName
-        }
-
-        const result = await collection.updateOne(
-          {
-            $or: [
-              { itemno: sku },
-              { sku },
-              { "raw.itemno": sku },
-            ]
-          },
-          pipeline as Parameters<typeof collection.updateOne>[1]
-        )
-
-        if (result.matchedCount === 0) {
-          failCount++
-          errors.push(`SKU ${sku}: Product not found`)
-        } else {
-          successCount++
-        }
-      } catch (err: unknown) {
-        failCount++
-        errors.push(`SKU ${sku}: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
 
     return NextResponse.json({
       success: successCount,
-      failed: failCount,
-      errors: errors.slice(0, 20)
+      failed: rows.length - successCount,
+      errors: errors.slice(0, 20),
     })
-
   } catch (error: unknown) {
     console.error("Bulk metadata update error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to process metadata update" },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

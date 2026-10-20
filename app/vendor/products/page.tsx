@@ -116,11 +116,9 @@ export default function VendorProductsPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </button>
-          <Link href="/vendor/products/new">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Product
-            </button>
+          <Link href="/vendor/products/new" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Product
           </Link>
         </div>
       </div>
@@ -143,10 +141,8 @@ export default function VendorProductsPage() {
       {filteredProducts.length === 0 ? (
         <Card className="p-8 text-center">
           <p className="text-gray-500 mb-4">No products found</p>
-          <Link href="/vendor/products/new">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
-              Add Your First Product
-            </button>
+          <Link href="/vendor/products/new" className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+            Add Your First Product
           </Link>
         </Card>
       ) : (
@@ -171,11 +167,9 @@ export default function VendorProductsPage() {
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Link href={`/vendor/products/${product.id}/edit`} className="flex-1">
-                    <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg flex items-center justify-center">
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </button>
+                  <Link href={`/vendor/products/${product.id}/edit`} className="flex-1 w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg flex items-center justify-center">
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit
                   </Link>
                   <button
                     onClick={() => handleDelete(product.id)}

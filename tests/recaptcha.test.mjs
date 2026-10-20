@@ -87,7 +87,12 @@ test("website routes enforce enabled CAPTCHA before credentials or database acce
 test("disabled website login reaches credentials and issues an httpOnly session", async () => {
   let verified = 0
   const loader = sourceLoader({
-    "@/lib/rate-limit-store": { rateLimitHit: async () => ({ limited: false }) },
+    // A successful login clears its own throttle counter, so the stub needs
+    // rateLimitReset as well as rateLimitHit.
+    "@/lib/rate-limit-store": {
+      rateLimitHit: async () => ({ limited: false }),
+      rateLimitReset: async () => {},
+    },
     "@/lib/auth-credentials": {
       verifyCredentials: async () => { verified++; return { ok: true, user: { id: "fixture-user", email: "fixture@example.invalid", role: "user" } } },
       buildSessionPayload: user => user,

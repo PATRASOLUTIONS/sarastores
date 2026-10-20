@@ -8,8 +8,12 @@ import { useBanners } from "@/hooks/useBanners"
 import LandingHero from "@/components/home/landing/LandingHero"
 import {
   HOME_BRANDS, HOME_CATEGORIES, HomepageBenefits, HomepageBrands, HomepageCategories,
-  HomepageDeals, HomepagePromotions, HomepageStores, type HomeBrand, type HomeProduct,
+  HomepageDeals, HomepagePromotions, HomepageStores, type HomeBrand, type HomeCategory, type HomeProduct,
 } from "@/components/home/landing/HomepageSections"
+import { type TaxonomyDivision } from "@/lib/product-taxonomy"
+import { fetchTaxonomy } from "@/lib/taxonomy-client"
+import { titleCaseLabel } from "@/lib/product-display"
+import { taxonomyImage } from "@/lib/taxonomy-images"
 import styles from "@/components/home/landing/homepage.module.css"
 import { MarketingSection, MarketingSections } from "@/components/marketing/MarketingSections"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
@@ -20,6 +24,8 @@ import EcommerceLaunch from "@/components/home/EcommerceLaunch"
 
 const TTL = 5 * 60 * 1000
 const TIMEOUT = 25000
+/** Tiles in the category rail. The grid that lays it out is ten columns wide. */
+const RAIL_SIZE = 10
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 const text = (value: unknown) => typeof value === "string" ? value : undefined
 const imageUrl = (value: unknown) => typeof value === "string" && /^(https?:\/\/|\/)/.test(value) ? value : undefined
@@ -59,6 +65,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
   const marketing = useMarketingContent("home")
   const [products, setProducts] = useState<HomeProduct[]>([])
   const [subCategories, setSubCategories] = useState<Record<string, unknown>[]>([])
+  const [taxonomy, setTaxonomy] = useState<TaxonomyDivision[]>([])
   const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
   const [storeCount, setStoreCount] = useState<number>()
   const [loading, setLoading] = useState(true)
@@ -92,6 +99,11 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
         setSubCategories(data)
       })
       .catch((error: unknown) => console.error("[Homepage] Could not load categories:", error))
+    // Shares a cache entry with the header menu, which needs the same tree on
+    // every route; see lib/taxonomy-client.ts for why that matters.
+    fetchTaxonomy()
+      .then(setTaxonomy)
+      .catch((error: unknown) => console.error("[Homepage] Could not load the catalogue taxonomy:", error))
     fetchWithCache("brands", () => fetchJson("/api/brands"), homeBrandListResponseSchema, TTL)
       .then((data) => {
         setBrandDocs(data)
@@ -104,14 +116,53 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
       .catch((error: unknown) => console.error("[Homepage] Could not load stores:", error))
   }, [loadProducts])
 
-  const categories = useMemo(() => HOME_CATEGORIES.map((fallback) => {
-    const category = subCategories.find((item) => fallback.match.test(String(item.name || "")))
-    return category ? {
-      ...fallback,
-      image: imageUrl(category.image) || fallback.image,
-      href: `/products?subCategory=${encodeURIComponent(String(category.name))}`,
-    } : fallback
-  }), [subCategories])
+  /*
+   * The rail is the catalogue's own sub-categories, busiest first.
+   *
+   * It used to be ten fixed aisles — Laptops, Audio, Wearables — that a shopper
+   * could click through to an empty page, because this catalogue does not sell
+   * them. Reading the live sub-categories means every tile leads to stock, and
+   * its count is the number the /products filter will actually show.
+   *
+   * Spellings are deduplicated on letters and digits alone, less a trailing
+   * plural, so `TV 55"`/`TV 55` and `Refrigerator`/`Refrigerators` do not each
+   * take two of the ten slots. The busier spelling wins, and the quieter one
+   * is still reachable from the header menu. This hides the duplication rather
+   * than fixing it — the catalogue still needs those labels reconciled.
+   */
+  const categories = useMemo<HomeCategory[]>(() => {
+    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/s$/, "")
+    const best = new Map<string, { name: string; count: number }>()
+    for (const division of taxonomy) {
+      for (const subCategory of division.subCategories) {
+        const id = key(subCategory.name)
+        if (!id) continue
+        const held = best.get(id)
+        if (!held || subCategory.count > held.count) best.set(id, { name: subCategory.name, count: subCategory.count })
+      }
+    }
+
+    const tiles = [...best.values()]
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, RAIL_SIZE)
+      .map(({ name, count }) => {
+        const reference = HOME_CATEGORIES.find((item) => item.match?.test(name))
+        const stored = subCategories.find((item) => key(String(item.name || "")) === key(name))
+        return {
+          label: titleCaseLabel(name),
+          // The downloaded photo first, then whatever an administrator uploaded
+          // for this sub-category, then the reference illustration.
+          image: taxonomyImage(name) || imageUrl(stored?.image) || reference?.image || "",
+          fallbackImage: reference?.image,
+          href: `/products?subCategory=${encodeURIComponent(name)}&availability=in`,
+          count,
+        }
+      })
+
+    // Before the taxonomy arrives, show the reference aisles rather than a gap
+    // that would shift the whole page down when it does.
+    return tiles.length > 0 ? tiles : HOME_CATEGORIES
+  }, [taxonomy, subCategories])
 
   const brands = useMemo<HomeBrand[]>(() => {
     return HOME_BRANDS.map((fallback) => {
@@ -133,7 +184,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
     const candidates = discounted.length ? discounted : available
     const selected: HomeProduct[] = []
     for (const category of HOME_CATEGORIES) {
-      const product = candidates.find((item) => !selected.includes(item) && category.match.test(`${item.subCategory || ""} ${item.category || ""} ${item.name}`))
+      const product = candidates.find((item) => !selected.includes(item) && category.match?.test(`${item.subCategory || ""} ${item.category || ""} ${item.name}`))
       if (product) selected.push(product)
       if (selected.length === 6) break
     }

@@ -33,8 +33,9 @@ export async function POST(req: Request) {
       )
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(password, 10)
+    // Cost 12, matching signup, user creation and employee-service. At 10 a
+    // password reset silently weakened the hash it replaced.
+    const hashedPassword = await bcrypt.hash(password, 12)
 
     // Update password and clear reset token
     const result = await usersCollection.updateOne(

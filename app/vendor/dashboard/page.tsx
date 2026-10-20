@@ -148,17 +148,13 @@ export default function VendorDashboardPage() {
             <h2 className="text-lg md:text-xl font-semibold">Quick Actions</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Link href="/vendor/products/new">
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg flex items-center justify-center">
-                <ShoppingBag className="h-5 w-5 mr-2" />
-                Add New Product
-              </button>
+            <Link href="/vendor/products/new" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg flex items-center justify-center">
+              <ShoppingBag className="h-5 w-5 mr-2" />
+              Add New Product
             </Link>
-            <Link href="/vendor/products">
-              <button className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg flex items-center justify-center">
-                <Package className="h-5 w-5 mr-2" />
-                Manage Products
-              </button>
+            <Link href="/vendor/products" className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg flex items-center justify-center">
+              <Package className="h-5 w-5 mr-2" />
+              Manage Products
             </Link>
           </div>
         </Card>

@@ -78,11 +78,11 @@ export default function SoftwarePage() {
   })
 
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
 
   useEffect(() => {
-    fetchProducts()
-  }, [])
+    fetchProducts(isAdmin)
+  }, [isAdmin])
 
   // Auto-select first available pack size and validity period when product is selected
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function SoftwarePage() {
     }
   }, [selectedProduct])
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (includeIntegrationCatalogue = false) => {
     // Fetch internal and external products robustly and merge them so KGen items always appear when available.
     let internalProducts: SoftwareProduct[] = []
     try {
@@ -141,8 +141,11 @@ export default function SoftwarePage() {
     // Attempt to fetch KGen / eXlr8 products via the server proxy and map into our product shape.
     let mappedKGen: SoftwareProduct[] = []
     try {
-      const kres = await fetch('/api/integrations/exlr8/products?limit=50')
-      if (kres.ok) {
+      // The proxy requires an admin session, so shoppers would only ever get a 401.
+      const kres = includeIntegrationCatalogue
+        ? await fetch('/api/integrations/exlr8/products?limit=50')
+        : null
+      if (kres?.ok) {
         const kdata: IntegrationProduct[] | IntegrationProductList = await kres.json()
         // normalize list shapes
         let klist: IntegrationProduct[] = []
@@ -184,7 +187,7 @@ export default function SoftwarePage() {
             kgenVariants: variants,
           }
         })
-      } else {
+      } else if (kres) {
         console.warn('KGen products proxy returned non-ok status', kres.status)
       }
     } catch (err) {

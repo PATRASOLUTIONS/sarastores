@@ -119,6 +119,45 @@ export function checkDeploymentEnvironment(env) {
   }
   const partner = ["PARTNER_API_KEY_SECRET", "API_KEY_ENCRYPTION_SECRET"]
   if (partner.some(name => read(name))) for (const name of partner) secret(name)
+
+  /*
+   * Partner CORS reflects only origins on this list and attaches
+   * Allow-Credentials to them, so a loose entry hands a third party
+   * authenticated access. A wildcard must name a real parent domain, not a
+   * public suffix like *.com.
+   */
+  for (const entry of read("PARTNER_ALLOWED_ORIGINS").split(",").map(o => o.trim()).filter(Boolean)) {
+    if (entry === "*") {
+      errors.push("PARTNER_ALLOWED_ORIGINS: a bare * is not an origin; list each partner explicitly")
+    } else if (entry.startsWith("*.")) {
+      if (entry.slice(2).split(".").length < 2) {
+        errors.push(`PARTNER_ALLOWED_ORIGINS: wildcard "${entry}" is too broad; scope it to a partner's own domain`)
+      }
+    } else {
+      try {
+        const url = new URL(entry)
+        if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash) throw new Error()
+      } catch {
+        errors.push(`PARTNER_ALLOWED_ORIGINS: "${entry}" must be an https origin or a *.domain.tld wildcard`)
+      }
+    }
+  }
+
+  /*
+   * Rate limiting keys off the client address. Honouring cf-connecting-ip is
+   * only safe when every request really does arrive through Cloudflare;
+   * otherwise a caller sets the header and gets a fresh bucket per request.
+   */
+  const cloudflare = read("TRUST_CLOUDFLARE_IP")
+  if (cloudflare && cloudflare !== "true" && cloudflare !== "false") {
+    errors.push("TRUST_CLOUDFLARE_IP: use true or false")
+  }
+  if (cloudflare === "true" && !read("CLOUDFLARE_PROXY_CONFIRMED")) {
+    errors.push(
+      "TRUST_CLOUDFLARE_IP=true trusts a client-settable header; set CLOUDFLARE_PROXY_CONFIRMED " +
+        "once origin access is locked to Cloudflare, or leave the variable unset",
+    )
+  }
   return errors
 }
 

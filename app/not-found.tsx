@@ -21,10 +21,8 @@ export default function NotFound() {
         <p className="text-gray-600 mb-6">
           The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.
         </p>
-        <Link href="/">
-          <button className="px-5 py-2.5 bg-brand-primary text-white font-semibold rounded-lg hover:bg-brand-primary-hover transition-colors active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-primary/40">
-            Go back home
-          </button>
+        <Link href="/" className="inline-block px-5 py-2.5 bg-brand-primary text-white font-semibold rounded-lg hover:bg-brand-primary-hover transition-colors active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-primary/40">
+          Go back home
         </Link>
       </div>
     </div>

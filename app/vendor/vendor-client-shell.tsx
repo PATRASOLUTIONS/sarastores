@@ -2,34 +2,14 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
-import { useAuth } from "@/contexts/AuthContext"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import VendorSidebar from "@/components/VendorSidebar"
 import { Menu } from "lucide-react"
 
+// Presentation only. The vendor role is enforced in app/vendor/layout.tsx
+// before this renders, and again by requireVendor() on every vendor API route.
 export default function VendorClientShell({ children }: { children: React.ReactNode }) {
-  const { user, isVendor, isLoading } = useAuth()
-  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-
-  useEffect(() => {
-    if (!isLoading && (!user || !isVendor)) {
-      router.push("/login")
-    }
-  }, [user, isVendor, isLoading, router])
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    )
-  }
-
-  if (!user || !isVendor) {
-    return null
-  }
 
   return (
     <div className="flex h-screen bg-gray-100">

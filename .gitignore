@@ -59,3 +59,13 @@ order_debug_dump.json
 /scripts/audit/
 /scripts/archive/
 /documents/private-artifacts/
+
+# Playwright writes a trace, screenshot and video per test on every run.
+/e2e/.artifacts/
+/e2e/.report/
+/playwright-report/
+/test-results/
+
+# Captured stdout from a local server or test run.
+/e2e-run.log
+/prod-server.log

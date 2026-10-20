@@ -49,10 +49,17 @@ export const POST = withRateLimit(async (req: Request) => {
       html: buildPasswordResetEmail(resetUrl),
     })
     if (!sent.success) {
-      return NextResponse.json(
-        { error: "Failed to process password reset request. Please try again later." },
-        { status: 500 },
-      )
+      /*
+       * Still answer with the generic 200. An unknown address always gets 200,
+       * so returning 500 here would confirm that the address *does* have an
+       * account whenever mail delivery is failing. The reset token is already
+       * stored, so a retry once SMTP recovers will work.
+       *
+       * A timing difference remains — the known-address path does a database
+       * write and an SMTP round trip — which would need a background queue to
+       * close properly.
+       */
+      console.error("[forgot-password] reset mail failed to send; responding generically")
     }
 
     return NextResponse.json({

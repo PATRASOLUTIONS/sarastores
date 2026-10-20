@@ -157,11 +157,9 @@ export default function ProductAdvertisements() {
                     <h3 className="text-2xl md:text-3xl font-bold mb-4">{ad.title}</h3>
                     <p className="mb-6 opacity-90">{ad.description}</p>
 
-                    <Link href={ad.buttonLink}>
-                      <button className="group bg-white text-blue-900 hover:bg-blue-50 px-6 py-3 rounded-lg font-semibold transition-colors flex items-center">
-                        {ad.buttonText}
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </button>
+                    <Link href={ad.buttonLink} className="group bg-white text-blue-900 hover:bg-blue-50 px-6 py-3 rounded-lg font-semibold transition-colors flex items-center">
+                      {ad.buttonText}
+                      <ArrowRight className="ml-2 h-5 w-5" />
                     </Link>
                   </div>
 

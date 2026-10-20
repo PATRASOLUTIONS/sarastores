@@ -17,13 +17,28 @@ if (!SECRET) {
   process.exit(1)
 }
 
-// dryRun=true means the job can be executed safely here.
+/**
+ * The two grouped entries are what vercel.json actually schedules. Only
+ * `outreach` is executed here: every job in it honours dryRun, so nothing is
+ * sent. `maintenance` rebuilds profiles and segments, which ignore dryRun and
+ * write to the database, so it is checked for auth behaviour only.
+ */
 const JOBS = [
-  { path: "/api/cron/rebuild-profiles", schedule: "0 1 * * *", dryRun: false },
-  { path: "/api/cron/segment-customers", schedule: "30 1 * * *", dryRun: false },
-  { path: "/api/cron/cart-recovery", schedule: "0 3 * * *", dryRun: true },
-  { path: "/api/cron/wishlist-alerts", schedule: "30 4 * * *", dryRun: true },
-  { path: "/api/cron/lifecycle-reminders", schedule: "30 5 * * *", dryRun: true },
+  { path: "/api/cron/daily/maintenance", schedule: "0 1 * * *", dryRun: false },
+  { path: "/api/cron/daily/outreach", schedule: "0 3 * * *", dryRun: true },
+]
+
+/**
+ * The per-job routes are no longer scheduled, but they remain as manual and
+ * external-scheduler entry points, so they must stay authenticated.
+ */
+const DIRECT = [
+  "/api/cron/rebuild-profiles",
+  "/api/cron/segment-customers",
+  "/api/cron/data-retention",
+  "/api/cron/cart-recovery",
+  "/api/cron/wishlist-alerts",
+  "/api/cron/lifecycle-reminders",
 ]
 
 let pass = 0
@@ -46,11 +61,29 @@ console.log("  1. Every job is registered in vercel.json")
 for (const job of JOBS) {
   report(scheduled.has(job.path), job.path, scheduled.has(job.path) ? job.schedule : "NOT SCHEDULED")
 }
+// The reverse direction matters too: a scheduled path this script does not
+// know about is an unverified job.
+for (const path of scheduled) {
+  const known = JOBS.some((j) => j.path === path)
+  if (!known) report(false, path, "SCHEDULED BUT NOT VERIFIED BY THIS SCRIPT")
+}
+
+// Hobby projects are capped at two cron entries; exceeding it is a documented
+// cause of no job ever running.
+report(
+  scheduled.size <= 2,
+  `cron count within the Hobby limit (${scheduled.size})`,
+  scheduled.size <= 2 ? "" : "Hobby allows 2; extra entries are not scheduled",
+)
 
 console.log("\n  2. Unauthenticated callers are rejected")
 for (const job of JOBS) {
   const res = await fetch(BASE + job.path, { signal: AbortSignal.timeout(60_000) })
   report([401, 403].includes(res.status), job.path, String(res.status))
+}
+for (const path of DIRECT) {
+  const res = await fetch(BASE + path, { signal: AbortSignal.timeout(60_000) })
+  report([401, 403].includes(res.status), `${path} (unscheduled, manual)`, String(res.status))
 }
 
 console.log("\n  3. A wrong secret is rejected")
@@ -76,7 +109,12 @@ for (const job of JOBS) {
     })
     const body = await res.json().catch(() => ({}))
     const ok = res.ok && body?.success !== false
-    report(ok, `GET ${job.path}?dryRun=1`, `${res.status} ${Date.now() - started}ms ${JSON.stringify(body).slice(0, 90)}`)
+    report(ok, `GET ${job.path}?dryRun=1`, `${res.status} ${Date.now() - started}ms`)
+    // A grouped run reports each job separately; surface them individually so a
+    // single broken job is not hidden behind an otherwise passing group.
+    for (const j of body?.jobs || []) {
+      report(j.status === "ok", `    ${j.job}`, `${j.status} ${j.ms}ms ${j.error || ""}`)
+    }
   } catch (e) {
     report(false, `GET ${job.path}?dryRun=1`, e.message)
   }

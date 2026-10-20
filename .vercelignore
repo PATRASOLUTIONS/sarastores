@@ -31,6 +31,14 @@ npm-debug.log*
 yarn-debug.log*
 .copilot/
 
+# Browser tests and their per-run traces, screenshots and videos.
+e2e/
+e2e/.artifacts/
+e2e/.report/
+playwright-report/
+test-results/
+playwright.config.ts
+
 # Read-only audit tooling is not part of the deployed application.
 tests/
 scripts/audit-*.mjs

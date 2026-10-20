@@ -68,6 +68,25 @@ export function cleanProductName(name: string | null | undefined): string {
 }
 
 /**
+ * A product name short enough to put in a toast.
+ *
+ * Catalogue names here run to whole paragraphs — the LG QNED82T row is ~2,000
+ * characters — and react-hot-toast sizes a toast to its content. An untrimmed
+ * name produces one taller than the viewport, which then sits under the
+ * pointer; because the library pauses dismissal while a toast is hovered, it
+ * can never time out and the page stays covered until a reload.
+ *
+ * @param name - The raw product name
+ * @param max - Characters to keep before the ellipsis
+ * @returns A single-line name capped at `max` characters
+ */
+export function toastProductName(name: string | null | undefined, max = 48): string {
+  const cleaned = cleanProductName(name);
+  if (!cleaned) return 'Item';
+  return cleaned.length > max ? `${cleaned.slice(0, max).trimEnd()}…` : cleaned;
+}
+
+/**
  * Cleans a product description by removing marketplace references
  * @param description - The raw product description
  * @returns Cleaned product description

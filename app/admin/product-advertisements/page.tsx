@@ -194,11 +194,9 @@ export default function ProductAdvertisementsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Product Advertisements</h1>
           <p className="text-gray-600 mt-1">Manage hero slider advertisements for the products page</p>
         </div>
-        <Link href="/admin/product-advertisements/new">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center">
-            <Plus className="h-5 w-5 mr-2" />
-            Add New Advertisement
-          </button>
+        <Link href="/admin/product-advertisements/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center">
+          <Plus className="h-5 w-5 mr-2" />
+          Add New Advertisement
         </Link>
       </div>
 
@@ -309,10 +307,8 @@ export default function ProductAdvertisementsPage() {
                 <td className="px-6 py-4 text-sm text-gray-500">{new Date(ad.createdAt).toLocaleDateString()}</td>
                 <td className="px-6 py-4 text-sm font-medium">
                   <div className="flex space-x-2">
-                    <Link href={`/admin/product-advertisements/${ad._id}/edit`}>
-                      <button className="text-blue-600 hover:text-blue-900">
-                        <Edit className="h-4 w-4" />
-                      </button>
+                    <Link href={`/admin/product-advertisements/${ad._id}/edit`} className="text-blue-600 hover:text-blue-900">
+                      <Edit className="h-4 w-4" />
                     </Link>
                     <button onClick={() => deleteAdvertisement(ad._id)} className="text-red-600 hover:text-red-900">
                       <Trash2 className="h-4 w-4" />
@@ -327,10 +323,8 @@ export default function ProductAdvertisementsPage() {
         {advertisements.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-500 mb-4">No advertisements found</div>
-            <Link href="/admin/product-advertisements/new">
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                Create Your First Advertisement
-              </button>
+            <Link href="/admin/product-advertisements/new" className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              Create Your First Advertisement
             </Link>
           </div>
         )}

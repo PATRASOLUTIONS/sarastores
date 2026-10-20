@@ -1,18 +1,38 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { sendEmail } from "@/lib/email"
 import { withRateLimit } from "@/lib/rate-limit"
 import { getCollection } from "@/lib/db-service"
+import { emailSchema } from "@/lib/validation"
+
+/*
+ * The confirmation copy is sent to whatever address the request supplies, so
+ * this endpoint will deliver attacker-authored text to an arbitrary recipient
+ * from the shop's own domain unless the address is a well-formed mailbox and
+ * the body is bounded. Lengths here are deliberately looser than
+ * ContactFormSchema so the existing callers (the contact form and the product
+ * Q&A widget, which allows 8-character questions) keep working.
+ */
+const ContactRequestSchema = z.object({
+  name: z.string().trim().min(1, "Please enter your name").max(120),
+  email: z.string().trim().toLowerCase().pipe(emailSchema),
+  subject: z.string().trim().min(1, "Please enter a subject").max(200),
+  message: z.string().trim().min(8, "Please write a longer message").max(5000),
+})
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 export const POST = withRateLimit(async (req: Request) => {
-  const { name, email, subject, message } = await req.json()
-
-  if (!name || !email || !subject || !message) {
-    return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
+  const parsed = ContactRequestSchema.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) {
+    return NextResponse.json(
+      { success: false, error: "Missing or invalid fields", errors: parsed.error.flatten().fieldErrors },
+      { status: 400 },
+    )
   }
+  const { name, email, subject, message } = parsed.data
 
   const safeName = escapeHtml(name)
   const safeEmail = escapeHtml(email)

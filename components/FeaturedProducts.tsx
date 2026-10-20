@@ -236,11 +236,9 @@ export default function FeaturedProducts({ products: propProducts }: FeaturedPro
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
           }`}
         >
-          <Link href="/products">
-            <button className="group bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-900 transition-colors inline-flex items-center">
-              View All Products
-              <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </button>
+          <Link href="/products" className="group bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-900 transition-colors inline-flex items-center">
+            View All Products
+            <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
       </div>
