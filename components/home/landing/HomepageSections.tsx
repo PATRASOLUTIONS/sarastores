@@ -26,9 +26,30 @@ export interface HomeProduct {
   reviewsCount?: number
 }
 
-export type HomeCategory = { label: string; image: string; href: string; match: RegExp }
+/**
+ * A tile in the "Shop by Category" rail.
+ *
+ * `match` and `fallbackImage` only apply to the hand-written reference list
+ * below. The rail itself is built from the live sub-categories in the
+ * catalogue, which carry a real `count` and no regex.
+ */
+export type HomeCategory = {
+  label: string
+  image: string
+  href: string
+  count?: number
+  match?: RegExp
+  fallbackImage?: string
+}
 export type HomeBrand = { name: string; logo?: string; href: string }
 
+/**
+ * Reference aisles, kept for two jobs the live sub-categories cannot do.
+ *
+ * `match` spreads the deals row across different kinds of product instead of
+ * showing six televisions, and the illustrations are the last fallback for a
+ * tile whose sub-category has no photographed stock.
+ */
 export const HOME_CATEGORIES: HomeCategory[] = [
   { label: "Mobiles", image: "mobiles", match: /mobile|smartphone|iphone/i, href: "/products?subCategory=Mobile&availability=in" },
   { label: "Laptops", image: "laptops", match: /laptop|notebook/i, href: "/products?q=laptop" },
@@ -95,13 +116,14 @@ export function HomepageCategories({ categories }: { categories: HomeCategory[] 
     <section className={styles.categories} aria-label="Shop by Category">
       <HomepageHeading title={marketing.text("categories", "title")} href={marketing.text("categories", "ctaLink")} ctaText={marketing.text("categories", "ctaText")} />
       <div className={styles.circleRail}>
-        {categories.map(({ label, image, href }) => (
+        {categories.map(({ label, image, href, count, fallbackImage }) => (
           <Link key={label} href={href} className={styles.circleItem}>
             <span className={styles.categoryCircle}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, HOME_CATEGORIES.find((item) => item.label === label)?.image)} />
+              <img src={image} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, fallbackImage)} />
             </span>
             <span>{label}</span>
+            {count ? <small className={styles.circleCount}>{count} {count === 1 ? "product" : "products"}</small> : null}
           </Link>
         ))}
       </div>

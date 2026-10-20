@@ -54,11 +54,36 @@ async function clickPastOverlays(page: Page, button: ReturnType<Page["locator"]>
   // A drawer opened by an earlier click covers the whole viewport, so scrolling
   // cannot help; it has to be closed first.
   await closeAnyDialog(page)
+  await dismissToasts(page)
 
   // Move the control off the bottom-right corner where the widgets live.
   await page.mouse.wheel(0, -140)
   await page.waitForTimeout(150)
   await button.click({ timeout: 6000, noWaitAfter: true })
+}
+
+/**
+ * Wait out any toast left over from a previous click.
+ *
+ * react-hot-toast stacks notifications in a fixed container at the top of the
+ * 412px mobile viewport, directly over the next control the sweep wants. They
+ * expire on their own, so the fix is to let them, not to call the button
+ * underneath broken. Capped so a sticky toast cannot stall the sweep.
+ */
+async function dismissToasts(page: Page) {
+  // The element over the control is the goober-hashed wrapper (`go3958317564`),
+  // not the `role="status"` bar inside it, and the wrapper outlives the bar by
+  // one exit animation. Wait for both, long enough to cover the 4s default
+  // duration plus that animation.
+  await page
+    .waitForFunction(
+      () =>
+        document.querySelectorAll('[role="status"]').length === 0 &&
+        !Array.from(document.querySelectorAll("div")).some((el) => /^go\d+$/.test(el.className)),
+      undefined,
+      { timeout: 7000, polling: 250 },
+    )
+    .catch(() => {})
 }
 
 /**
@@ -161,7 +186,7 @@ async function sweepButtons(
       // correctly routes elsewhere — /brands "Search" goes to /products — is
       // still painting its destination 450ms in, and reading the body then
       // reports a blank page for a button that did exactly the right thing.
-      const navigated = page.url() !== before
+      let navigated = page.url() !== before
       if (navigated) await settle(page, 2500)
 
       // A click must never blank the page or trip the error boundary.
@@ -172,7 +197,20 @@ async function sweepButtons(
         failures.push({ label: short, reason: "client-side exception after click" })
       }
 
-      const body = (await page.locator("body").innerText().catch(() => "")) ?? ""
+      // An App Router soft navigation holds the URL on the current page until
+      // the destination's payload arrives, so a control that routed correctly —
+      // the header account button pushes /login — reads as a blank body still
+      // sitting on `before`. Re-read both until the page has something to show.
+      let body = (await page.locator("body").innerText().catch(() => "")) ?? ""
+      for (let wait = 0; wait < 8 && body.trim().length < 40; wait++) {
+        await page.waitForTimeout(400)
+        if (!navigated && page.url() !== before) {
+          navigated = true
+          await settle(page, 2500)
+        }
+        body = (await page.locator("body").innerText().catch(() => "")) ?? ""
+      }
+
       if (body.trim().length < 40) {
         failures.push({
           label: short,

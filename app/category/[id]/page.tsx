@@ -18,9 +18,10 @@ import { formatPrice } from "@/utils/formatPrice";
 import { normalizeProductForSchema } from "@/lib/product-schema"
 import { PRODUCT_SORT_OPTIONS, sortProducts, type ProductSortKey } from "@/lib/product-sort"
 import {
-  buildFacets,
+  buildSelectionAwareFacets,
   countActiveFacets,
-  matchesFacets,
+  facetValuesFor,
+  matchesFacetValues,
   toggleFacetValue,
   type FacetSelection,
 } from "@/lib/product-facets"
@@ -196,11 +197,14 @@ export default function CategoryPage() {
     )
   })
 
-  // Facets are built before the facet filter is applied, so selecting "55 inch"
-  // doesn't make every other size disappear from the sidebar.
-  const facets = buildFacets(nonFacetMatches)
-  const filteredProducts = nonFacetMatches.filter((product) =>
-    matchesFacets(product, facetSelection),
+  // Each facet is counted over the products matching every *other* facet, so
+  // the numbers move as filters are applied while a facet's own selection is
+  // ignored — otherwise picking "55 inch" would report every other size as (0)
+  // and no second size could ever be added to the OR-ed group.
+  const extractedFacetValues = nonFacetMatches.map(facetValuesFor)
+  const facets = buildSelectionAwareFacets(extractedFacetValues, facetSelection)
+  const filteredProducts = nonFacetMatches.filter((_, index) =>
+    matchesFacetValues(extractedFacetValues[index], facetSelection),
   )
 
   const sortedProducts = sortProducts(filteredProducts, sortBy)

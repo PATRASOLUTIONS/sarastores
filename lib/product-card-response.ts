@@ -1,6 +1,24 @@
 import { z } from "zod"
 import { productSpecificationResponseSchema } from "./product-specification-response"
 
+/**
+ * A descriptive list that the catalogue may hold as a single value.
+ *
+ * `characteristics` is the warehouse CHAR DESC column, and 659 of 1,175
+ * products store it as a plain string ("4K", "Front Loading") — which is what
+ * the rest of the codebase expects too: cleanProductName.ts types it
+ * `string | null`, and the product write path assigns `canonical.charDesc`.
+ * Declaring it a strict array meant `.parse()` threw on more than half the
+ * catalogue, and because the product page parses before it renders, every one
+ * of those detail pages died with "Product information could not be loaded".
+ *
+ * Accepting both shapes and normalising to an array keeps consumers simple.
+ * `specification_images` below already took this approach for the same reason.
+ */
+const stringList = () =>
+  z.union([z.string(), z.array(z.string())]).nullish()
+    .transform(value => (typeof value === "string" ? [value] : value))
+
 export const productCardResponseSchema = z.object({
   id: z.string().min(1),
   slug: z.string().optional(),
@@ -10,6 +28,12 @@ export const productCardResponseSchema = z.object({
   image: z.string().nullish().transform(value => value || "/placeholder.svg"),
   stock: z.number().nullish().transform(value => value ?? undefined),
   category: z.string().nullish().transform(value => value ?? undefined),
+  // Division → Category → Segment is the merchandising hierarchy behind the
+  // header menu and the listing filters. Both may be unset on a product that
+  // has not been classified yet.
+  division: z.string().nullish().transform(value => value ?? undefined),
+  segment: z.string().nullish().transform(value => value ?? undefined),
+  brand: z.string().nullish().transform(value => value ?? undefined),
   originalPrice: z.number().nullish().transform(value => value ?? undefined),
   specification_images: z.union([z.string(), z.array(z.string())]).nullish().transform(value => value ?? undefined),
   sku: z.string().optional(),
@@ -32,9 +56,9 @@ export const subCategoryProductResponseSchema = productCardResponseSchema.extend
 export type SubCategoryProductResponse = z.infer<typeof subCategoryProductResponseSchema>
 
 export const productDetailResponseSchema = productCardResponseSchema.extend({
-  images: z.array(z.string()).nullish(),
-  features: z.array(z.string()).nullish(),
-  characteristics: z.array(z.string()).nullish(),
+  images: stringList(),
+  features: stringList(),
+  characteristics: stringList(),
   brand: z.string().nullish(),
   groupName: z.string().nullish(),
   inStock: z.boolean().optional(),
@@ -47,9 +71,8 @@ export const productDetailResponseSchema = productCardResponseSchema.extend({
   ]).nullish(),
   from_manufacturer: z.string().nullish(),
   overview: z.string().nullish(),
-  included_components: z.array(z.string()).nullish(),
-  specification_images: z.union([z.string(), z.array(z.string())]).nullish()
-    .transform(value => typeof value === "string" ? [value] : value),
+  included_components: stringList(),
+  specification_images: stringList(),
 }).passthrough()
 
 export type ProductDetailResponse = z.infer<typeof productDetailResponseSchema>

@@ -2,7 +2,7 @@
 
 import React from "react"
 import useSWR from "swr"
-import { cleanProductName } from "@/utils/cleanProductName"
+import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -84,7 +84,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
     }
 
     const added = await addToCart(cartItem)
-    if (added) toast.success(`${product.name} added to cart!`)
+    if (added) toast.success(`${toastProductName(product.name)} added to cart!`)
 
     // reset adding state after small delay for UX
     setTimeout(() => setIsAdding(false), 800)

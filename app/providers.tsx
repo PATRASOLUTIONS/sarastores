@@ -28,7 +28,17 @@ export function Providers({ children }: ProvidersProps) {
               <CompareFloating />
               <CartQuickAccess />
               <CartSidebar />
-              <Toaster position="top-right" />
+              {/*
+                A toast grows to fit its message, and dismissal pauses while
+                one is hovered. An over-long message therefore covers the
+                viewport, parks itself under the pointer and never expires.
+                Callers trim product names (see `toastProductName`); this caps
+                whatever still gets through.
+              */}
+              <Toaster
+                position="top-right"
+                toastOptions={{ style: { maxHeight: "30vh", overflow: "hidden" } }}
+              />
             </CartUIProvider>
           </CartProvider>
         </AuthProvider>

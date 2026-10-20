@@ -26,6 +26,12 @@ interface Product {
   images?: string[] // support up to 5 images
   category?: string
   subCategory?: string
+  // Division → Category → Segment is the merchandising hierarchy driving the
+  // header menu and the storefront filters; brand is curated separately from
+  // both the category and the manufacturer.
+  division?: string
+  segment?: string
+  brand?: string
   sku?: string
   slug?: string
   manufacturer?: string
@@ -99,6 +105,11 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
   const [product, setProduct] = useState<Product | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
   const [subCategories, setSubCategories] = useState<Category[]>([])
+  const [taxonomyOptions, setTaxonomyOptions] = useState<{
+    divisions: string[]
+    segments: string[]
+    brands: string[]
+  }>({ divisions: [], segments: [], brands: [] })
   const [successMessage, setSuccessMessage] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const lock = useSubmitLock()
@@ -188,13 +199,27 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
         if (productsResponse.ok) {
           const productsData: Product[] = await productsResponse.json()
           const uniqueSubCategories = new Set<string>()
+          // Taxonomy labels live on the products, not in their own collection,
+          // so the existing spellings are what the suggestion lists offer.
+          const divisions = new Set<string>()
+          const segments = new Set<string>()
+          const brands = new Set<string>()
 
           productsData.forEach((p) => {
             const normalized = normalizeProductForSchema(p)
             // Collect all possible sub-category sources
             if (p.subCategory) uniqueSubCategories.add(p.subCategory)
             if (normalized.subCategoryProdDesc) uniqueSubCategories.add(normalized.subCategoryProdDesc)
-            if (normalizeProductForSchema(p).subCategoryProdDesc) uniqueSubCategories.add(normalizeProductForSchema(p).subCategoryProdDesc)
+            if (normalized.division) divisions.add(normalized.division)
+            if (normalized.segment) segments.add(normalized.segment)
+            if (normalized.brandName) brands.add(normalized.brandName)
+          })
+
+          const sorted = (values: Set<string>) => [...values].sort((a, b) => a.localeCompare(b))
+          setTaxonomyOptions({
+            divisions: sorted(divisions),
+            segments: sorted(segments),
+            brands: sorted(brands),
           })
 
           // Add unique sub-categories from products that aren't already in the list
@@ -586,6 +611,36 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
             </div>
 
 
+            {/*
+              Division → Category → Segment drives the header mega-menu and
+              the storefront filters. Division and Segment are free text with
+              suggestions rather than fixed dropdowns: the hierarchy is derived
+              from the products themselves, so a new aisle has to be typeable
+              the first time something is put in it.
+            */}
+            <div>
+              <label htmlFor="division" className="block text-sm font-medium text-gray-700 mb-1">
+                Division
+              </label>
+              <input
+                type="text"
+                id="division"
+                list="division-options"
+                placeholder="e.g. Electronics"
+                value={product.division || ""}
+                onChange={(e) => {
+                  setProduct({ ...product, division: e.target.value })
+                  handleRawDataChange("Division", e.target.value)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <datalist id="division-options">
+                {taxonomyOptions.divisions.map((value) => (
+                  <option key={value} value={value} />
+                ))}
+              </datalist>
+            </div>
+
             <div>
               <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
                 Category
@@ -603,6 +658,52 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label htmlFor="segment" className="block text-sm font-medium text-gray-700 mb-1">
+                Segment
+              </label>
+              <input
+                type="text"
+                id="segment"
+                list="segment-options"
+                placeholder="e.g. Chargers &amp; Adapters"
+                value={product.segment || ""}
+                onChange={(e) => {
+                  setProduct({ ...product, segment: e.target.value })
+                  handleRawDataChange("Segment", e.target.value)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <datalist id="segment-options">
+                {taxonomyOptions.segments.map((value) => (
+                  <option key={value} value={value} />
+                ))}
+              </datalist>
+            </div>
+
+            <div>
+              <label htmlFor="brand" className="block text-sm font-medium text-gray-700 mb-1">
+                Brand
+              </label>
+              <input
+                type="text"
+                id="brand"
+                list="brand-options"
+                placeholder="e.g. Samsung"
+                value={product.brand || ""}
+                onChange={(e) => {
+                  setProduct({ ...product, brand: e.target.value })
+                  handleRawDataChange("Brand", e.target.value)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <datalist id="brand-options">
+                {taxonomyOptions.brands.map((value) => (
+                  <option key={value} value={value} />
+                ))}
+              </datalist>
             </div>
 
             <div>

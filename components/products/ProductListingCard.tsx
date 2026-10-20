@@ -6,7 +6,7 @@ import { Check, Heart, Star } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
-import { cleanProductName } from "@/utils/cleanProductName"
+import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import CompareProductButton from "@/components/CompareProductButton"
 import type { CatalogProduct } from "@/utils/catalog"
 import {
@@ -90,7 +90,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
         color: null,
         size: null,
       })
-      if (added) toast.success(`${cleanProductName(product.name)} added to cart`)
+      if (added) toast.success(`${toastProductName(product.name)} added to cart`)
     } finally {
       setTimeout(() => setAdding(false), 400)
     }

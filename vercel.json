@@ -70,7 +70,8 @@
       ]
     },
     {
-      "source": "/api/:path(categories|sub-categories|brands|brand-logos|home-components)(.*)",
+      "source": "/api/:path(categories|sub-categories|brands|brand-logos|home-components|taxonomy)(.*)",
+      "comment": "/api/taxonomy aggregates the whole product collection to build the header menu, which is on every page. It only changes when the catalogue is reclassified, so it belongs with the other catalogue lists rather than in the no-store catch-all below.",
       "headers": [
         {
           "key": "Cache-Control",
@@ -97,7 +98,7 @@
       ]
     },
     {
-      "source": "/api/:path((?!(?:products|categories|sub-categories|brands|brand-logos|home-components|settings|footer|theme|hero-slides|posters|poster|advertisements|product-advertisements|product-slides|listing-banners|split-cards|animated-banner|featured-products|offers|offer-products|testimonials|articles|campaign-pages|content|stores|razorpay|india|blocked-pincodes|media|search)(?:/|$)).*)",
+      "source": "/api/:path((?!(?:products|categories|sub-categories|brands|brand-logos|home-components|taxonomy|settings|footer|theme|hero-slides|posters|poster|advertisements|product-advertisements|product-slides|listing-banners|split-cards|animated-banner|featured-products|offers|offer-products|testimonials|articles|campaign-pages|content|stores|razorpay|india|blocked-pincodes|media|search)(?:/|$)).*)",
       "headers": [
         {
           "key": "Cache-Control",

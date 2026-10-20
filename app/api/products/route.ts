@@ -8,6 +8,8 @@ import { isAdmin, requireAdmin } from "@/lib/auth"
 
 interface ProductFilter {
   category?: string
+  division?: { $regex: string; $options: string }
+  segment?: { $regex: string; $options: string }
   featured?: boolean
   sku?: string
   $or?: Record<string, unknown>[]
@@ -57,6 +59,8 @@ export async function GET(request: NextRequest) {
     }
 
     const category = searchParams.get("category")
+    const division = searchParams.get("division")
+    const segment = searchParams.get("segment")
     const search = searchParams.get("search")
     const featured = searchParams.get("featured")
     const limit = searchParams.get("limit")
@@ -71,6 +75,17 @@ export async function GET(request: NextRequest) {
 
     if (category && category !== "") {
       filter.category = category
+    }
+
+    /*
+     * Merchandising-hierarchy filters, matched case-insensitively and exactly.
+     * Menu links carry the stored label, but it travels through a URL and back
+     * and operators type these values into a spreadsheet, so casing drifts.
+     */
+    for (const [field, value] of [["division", division], ["segment", segment]] as const) {
+      if (value && value.trim() !== "") {
+        filter[field] = { $regex: `^${value.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+      }
     }
 
     if (featured === "true") {
@@ -130,6 +145,8 @@ export async function GET(request: NextRequest) {
       options.projection = {
         slug: 1, name: 1, price: 1, mrp: 1, image: 1, stock: 1,
         category: 1, subCategory: 1, brand: 1,
+        // The merchandising hierarchy the menu and storefront filters use.
+        division: 1, segment: 1,
         manufacturerName: 1, manufacturer_name: 1,
         rating: 1, reviews: 1, discount: 1, originalPrice: 1,
         sku: 1, active: 1, featured: 1, trusted: 1, specification_images: 1,
@@ -142,6 +159,7 @@ export async function GET(request: NextRequest) {
         slug: 1, sku: 1, itemno: 1, itemNo: 1, name: 1,
         price: 1, mrp: 1, stock: 1, image: 1, images: { $slice: 1 },
         category: 1, groupName: 1, itemCategory: 1,
+        division: 1, segment: 1, brand: 1,
         manufacturerName: 1, manufacturer_name: 1,
         color: 1, subCategory: 1, prod_desc: 1, capacity: 1, ean: 1,
         active: 1, trusted: 1, updatedAt: 1, char_desc: 1, raw: 1,

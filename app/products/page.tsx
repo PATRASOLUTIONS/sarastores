@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react"
@@ -22,9 +22,10 @@ import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import { normalizeProductForSchema, type ProductSchemaInput } from "@/lib/product-schema"
 import { calculateDiscount, getCatalogMRP, getCatalogRatingInfo, titleCaseLabel } from "@/lib/product-display"
 import {
-  buildFacets,
+  buildSelectionAwareFacets,
   countActiveFacets,
-  matchesFacets,
+  facetValuesFor,
+  matchesFacetValues,
   toggleFacetValue,
   type FacetSelection,
 } from "@/lib/product-facets"
@@ -34,6 +35,25 @@ interface Category {
   name: string
   icon?: string
 }
+
+/**
+ * One independent filter in the sidebar. Naming them lets a count leave its own
+ * dimension out, which is what makes the numbers respond to the other filters.
+ */
+type Dimension =
+  | "search"
+  | "division"
+  | "category"
+  | "segment"
+  | "subCategory"
+  | "brand"
+  | "price"
+  | "discount"
+  | "rating"
+  | "availability"
+
+/** Taxonomy labels are typed into spreadsheets, so compare them loosely. */
+const sameLabel = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 const PRICE_MAX = Infinity
 
@@ -134,6 +154,10 @@ export default function ProductsPage() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([])
   const [selectedBrands, setSelectedBrands] = useState<string[]>([])
+  // Division and segment are the outer and inner levels of the merchandising
+  // hierarchy the header menu links into.
+  const [selectedDivisions, setSelectedDivisions] = useState<string[]>([])
+  const [selectedSegments, setSelectedSegments] = useState<string[]>([])
   const [priceRange, setPriceRange] = useState<[number, number]>([0, PRICE_MAX])
   const [minDiscount, setMinDiscount] = useState(0)
   const [minRating, setMinRating] = useState(0)
@@ -193,6 +217,13 @@ export default function ProductsPage() {
     setSelectedCategories(categoryFromUrl ? [categoryFromUrl] : [])
     setSearchTerm(searchFromUrl || searchParams.get("q") || "")
     setSelectedBrands(brandFromUrl ? brandFromUrl.split(",").map(value => value.trim()).filter(Boolean) : [])
+
+    // Header menu links arrive as ?division=…&subCategory=…&segment=….
+    const commaList = (value: string | null) =>
+      value ? value.split(",").map(entry => entry.trim()).filter(Boolean) : []
+    setSelectedDivisions(commaList(searchParams.get("division") || searchParams.get("divisions")))
+    setSelectedSegments(commaList(searchParams.get("segment") || searchParams.get("segments")))
+
     setOfferTab(searchParams.size > 0 ? "all-products" : "all-offers")
     setMinDiscount(0)
     setMinRating(0)
@@ -268,29 +299,25 @@ export default function ProductsPage() {
     return true
   }), [products, offerTab, bankOffers.offers])
 
-  // ── Derived options ─────────────────────────────────────────────────
-  const subCategoryCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of eligibleProducts) {
-      const sub = shopperCategory(p)
-      if (sub) counts.set(sub, (counts.get(sub) || 0) + 1)
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])
-  }, [eligibleProducts])
-
-  const brandCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of eligibleProducts) {
-      const brand = getProductBrand(p)
-      if (brand) counts.set(brand, (counts.get(brand) || 0) + 1)
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])
-  }, [eligibleProducts])
-
-  // ── Filtering ───────────────────────────────────────────────────────
-  const filteredProducts = useMemo(
-    () =>
-      eligibleProducts.filter((product) => {
+  /*
+   * ── Filtering and faceted counts ──────────────────────────────────
+   *
+   * Every sidebar number used to be counted over `eligibleProducts`, the set
+   * before any filter ran, so the counts never moved: choosing "LG" left the
+   * category tallies untouched and choosing "Televisions" left the brand
+   * tallies untouched. They answered "what does the catalogue hold" when the
+   * shopper is asking "what is still available".
+   *
+   * A dimension is now counted over the products matching every *other*
+   * dimension, deliberately ignoring its own selection. Applying a dimension
+   * to its own counts would read (0) against every value the shopper has not
+   * picked — select "LG" and no second brand could ever be added, because each
+   * would look empty. Values within one dimension are OR-ed, so each has to be
+   * counted as though nothing in that dimension were chosen.
+   */
+  const matchesExcept = useCallback(
+    (product: Product, skip: Dimension | null): boolean => {
+      if (skip !== "search") {
         const term = searchTerm.trim().toLowerCase()
         if (
           term &&
@@ -298,47 +325,66 @@ export default function ProductsPage() {
           !(product.description || "").toLowerCase().includes(term)
         )
           return false
+      }
 
-        if (selectedCategories.length > 0) {
-          const raw = getProductCategoryGroupName(product)
-          const matching = categories.find(
-            (c) => c.id === raw || c.name.toLowerCase() === raw.toLowerCase(),
-          )
-          if (!selectedCategories.some(value => value.toLowerCase() === raw.toLowerCase() ||
-            value === matching?.id || value.toLowerCase() === matching?.name.toLowerCase())) return false
-        }
+      if (skip !== "division" && selectedDivisions.length > 0) {
+        const division = String(product.division ?? "")
+        if (!division || !selectedDivisions.some(value => sameLabel(value, division))) return false
+      }
 
-        if (selectedSubCategories.length > 0) {
-          // Sidebar categories are normalized; existing menu links use stored labels.
-          const rawSub = getProductSubCategory(product).toLowerCase()
-          const sub = normaliseSubCategory(getProductSubCategory(product)).toLowerCase()
-          if (
-            !selectedSubCategories.some((s) => {
-              const target = s.toLowerCase()
-              return target === sub || target === rawSub || target === shopperCategory(product).toLowerCase()
-            })
-          )
-            return false
-        }
+      if (skip !== "segment" && selectedSegments.length > 0) {
+        const segment = String(product.segment ?? "")
+        if (!segment || !selectedSegments.some(value => sameLabel(value, segment))) return false
+      }
 
-        if (selectedBrands.length > 0) {
-          const brand = getProductBrand(product).toLowerCase()
-          if (!selectedBrands.some((b) => b.toLowerCase() === brand)) return false
-        }
+      if (skip !== "category" && selectedCategories.length > 0) {
+        const raw = getProductCategoryGroupName(product)
+        const matching = categories.find(
+          (c) => c.id === raw || c.name.toLowerCase() === raw.toLowerCase(),
+        )
+        if (!selectedCategories.some(value => value.toLowerCase() === raw.toLowerCase() ||
+          value === matching?.id || value.toLowerCase() === matching?.name.toLowerCase())) return false
+      }
 
-        if (product.price < priceRange[0] || product.price > priceRange[1]) return false
+      if (skip !== "subCategory" && selectedSubCategories.length > 0) {
+        // Sidebar categories are normalized; existing menu links use stored labels.
+        const rawSub = getProductSubCategory(product).toLowerCase()
+        const sub = normaliseSubCategory(getProductSubCategory(product)).toLowerCase()
+        if (
+          !selectedSubCategories.some((s) => {
+            const target = s.toLowerCase()
+            return target === sub || target === rawSub || target === shopperCategory(product).toLowerCase()
+          })
+        )
+          return false
+      }
 
-        if (minDiscount > 0 && calculateDiscount(getCatalogMRP(product), product.price) < minDiscount) return false
-        if (minRating > 0 && getCatalogRatingInfo(product).rating < minRating) return false
+      if (skip !== "brand" && selectedBrands.length > 0) {
+        const brand = getProductBrand(product).toLowerCase()
+        if (!selectedBrands.some((b) => b.toLowerCase() === brand)) return false
+      }
+
+      if (skip !== "price" && (product.price < priceRange[0] || product.price > priceRange[1])) return false
+
+      if (skip !== "discount" && minDiscount > 0 &&
+        calculateDiscount(getCatalogMRP(product), product.price) < minDiscount) return false
+
+      if (skip !== "rating" && minRating > 0 &&
+        getCatalogRatingInfo(product).rating < minRating) return false
+
+      if (skip !== "availability") {
         if (availability === "in" && !isInStock(product)) return false
         if (availability === "out" && isInStock(product)) return false
-        return true
-      }),
+      }
+
+      return true
+    },
     [
-      eligibleProducts,
       categories,
       searchTerm,
       selectedCategories,
+      selectedDivisions,
+      selectedSegments,
       selectedSubCategories,
       selectedBrands,
       priceRange,
@@ -348,12 +394,130 @@ export default function ProductsPage() {
     ],
   )
 
-  // Facets come from the pre-facet result set so choosing one value doesn't
-  // erase the sibling options from the sidebar.
-  const facets = useMemo(() => buildFacets(filteredProducts), [filteredProducts])
+  /*
+   * Spec facet values are derived with a dozen regexes over the name, spec keys
+   * and features, so they are extracted once per product and reused. Counting
+   * eight dimensions and a dozen facets separately would otherwise re-derive
+   * them tens of thousands of times on every click.
+   */
+  const facetValuesById = useMemo(() => {
+    const map = new Map<string, Record<string, string[]>>()
+    for (const product of eligibleProducts) map.set(String(product.id), facetValuesFor(product))
+    return map
+  }, [eligibleProducts])
+
+  const valuesFor = useCallback(
+    (product: Product) => facetValuesById.get(String(product.id)) ?? {},
+    [facetValuesById],
+  )
+
+  /** Products matching every dimension except `skip`, spec facets included. */
+  const countBase = useCallback(
+    (skip: Dimension) =>
+      eligibleProducts.filter(
+        (product) => matchesExcept(product, skip) && matchesFacetValues(valuesFor(product), facetSelection),
+      ),
+    [eligibleProducts, matchesExcept, facetSelection, valuesFor],
+  )
+
+  // ── Derived options ─────────────────────────────────────────────────
+  /**
+   * Count a taxonomy field, keeping any selected label listed even at zero so
+   * the shopper always has a control to undo the choice.
+   */
+  const labelCounts = useCallback(
+    (dimension: Dimension, valueOf: (product: Product) => string, selected: string[]) => {
+      const counts = new Map<string, number>()
+      for (const product of countBase(dimension)) {
+        const value = valueOf(product).trim()
+        if (value) counts.set(value, (counts.get(value) || 0) + 1)
+      }
+      for (const choice of selected) {
+        if (![...counts.keys()].some(label => sameLabel(label, choice))) counts.set(choice, 0)
+      }
+      return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    },
+    [countBase],
+  )
+
+  const divisionCounts = useMemo(
+    () => labelCounts("division", p => String(p.division ?? ""), selectedDivisions),
+    [labelCounts, selectedDivisions],
+  )
+
+  const segmentCounts = useMemo(
+    () => labelCounts("segment", p => String(p.segment ?? ""), selectedSegments),
+    [labelCounts, selectedSegments],
+  )
+
+  const subCategoryCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of countBase("subCategory")) {
+      const sub = shopperCategory(p)
+      if (sub) counts.set(sub, (counts.get(sub) || 0) + 1)
+    }
+    // A selected value stays listed at zero so it can still be switched off.
+    for (const selected of selectedSubCategories) {
+      if (!counts.has(selected)) counts.set(selected, 0)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  }, [countBase, selectedSubCategories])
+
+  const brandCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of countBase("brand")) {
+      const brand = getProductBrand(p)
+      if (brand) counts.set(brand, (counts.get(brand) || 0) + 1)
+    }
+    for (const selected of selectedBrands) {
+      if (![...counts.keys()].some(brand => brand.toLowerCase() === selected.toLowerCase())) {
+        counts.set(selected, 0)
+      }
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  }, [countBase, selectedBrands])
+
+  const availabilityCounts = useMemo(() => {
+    const base = countBase("availability")
+    return { in: base.filter(isInStock).length, out: base.filter(p => !isInStock(p)).length }
+  }, [countBase])
+
+  const priceBandCounts = useMemo(() => {
+    const base = countBase("price")
+    return PRICE_BANDS.map(band =>
+      base.filter(p => p.price >= band.range[0] && p.price <= band.range[1]).length,
+    )
+  }, [countBase])
+
+  const discountBandCounts = useMemo(() => {
+    const base = countBase("discount")
+    return DISCOUNT_BANDS.map(threshold =>
+      base.filter(p => calculateDiscount(getCatalogMRP(p), p.price) >= threshold).length,
+    )
+  }, [countBase])
+
+  const ratingBandCounts = useMemo(() => {
+    const base = countBase("rating")
+    return RATING_BANDS.map(threshold =>
+      base.filter(p => getCatalogRatingInfo(p).rating >= threshold).length,
+    )
+  }, [countBase])
+
+  const filteredProducts = useMemo(
+    () => eligibleProducts.filter(product => matchesExcept(product, null)),
+    [eligibleProducts, matchesExcept],
+  )
+
+  // Each spec facet is counted ignoring its own selection, for the same reason
+  // the sidebar dimensions are.
+  const facets = useMemo(
+    () => buildSelectionAwareFacets(filteredProducts.map(valuesFor), facetSelection),
+    [filteredProducts, facetSelection, valuesFor],
+  )
+
   const facetedProducts = useMemo(
-    () => filteredProducts.filter((p) => matchesFacets(p, facetSelection)),
-    [filteredProducts, facetSelection],
+    () => filteredProducts.filter((p) => matchesFacetValues(valuesFor(p), facetSelection)),
+    [filteredProducts, facetSelection, valuesFor],
   )
 
   const sortedProducts = useMemo(() => {
@@ -379,7 +543,11 @@ export default function ProductsPage() {
       case "name-asc":
         return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""))
       default:
-        return list
+        // Only the unranked default may demote out-of-stock items: an explicit
+        // sort is a promise about the column the shopper picked, and stock is
+        // not that column. A partition, not a sort, so the catalogue order
+        // inside each group survives.
+        return [...list.filter(isInStock), ...list.filter(product => !isInStock(product))]
     }
   }, [facetedProducts, sortBy])
 
@@ -432,6 +600,8 @@ export default function ProductsPage() {
   const toggleSubCategory = toggleIn(setSelectedSubCategories)
   const toggleBrand = toggleIn(setSelectedBrands)
   const toggleCategory = toggleIn(setSelectedCategories)
+  const toggleDivision = toggleIn(setSelectedDivisions)
+  const toggleSegment = toggleIn(setSelectedSegments)
   const toggleFacet = (key: string, value: string) =>
     setFacetSelection((prev) => toggleFacetValue(prev, key, value))
 
@@ -439,6 +609,8 @@ export default function ProductsPage() {
     setSelectedCategories([])
     setSelectedSubCategories([])
     setSelectedBrands([])
+    setSelectedDivisions([])
+    setSelectedSegments([])
     setPriceRange([0, PRICE_MAX])
     setMinDiscount(0)
     setMinRating(0)
@@ -451,6 +623,8 @@ export default function ProductsPage() {
     selectedCategories.length > 0 ||
     selectedSubCategories.length > 0 ||
     selectedBrands.length > 0 ||
+    selectedDivisions.length > 0 ||
+    selectedSegments.length > 0 ||
     minDiscount > 0 ||
     minRating > 0 ||
     availability !== "all" ||
@@ -458,7 +632,21 @@ export default function ProductsPage() {
     countActiveFacets(facetSelection) > 0 ||
     !(priceRange[0] === 0 && priceRange[1] === PRICE_MAX)
 
-  const visibleBrands = showAllBrands ? brandCounts : brandCounts.slice(0, 6)
+  /*
+   * The collapsed brand list shows the six largest. Now that counts move with
+   * the other filters the order moves too, so a brand the shopper picked can
+   * drop out of the top six and take its own checkbox off screen with it.
+   * Selected brands are always listed.
+   */
+  const visibleBrands = useMemo(() => {
+    if (showAllBrands) return brandCounts
+    const isSelected = ([label]: [string, number]) =>
+      selectedBrands.some(brand => brand.toLowerCase() === label.toLowerCase())
+    return [
+      ...brandCounts.filter(isSelected),
+      ...brandCounts.filter(entry => !isSelected(entry)).slice(0, Math.max(0, 6 - selectedBrands.length)),
+    ]
+  }, [brandCounts, selectedBrands, showAllBrands])
 
   const filterPanel = (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
@@ -483,7 +671,29 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <FilterSection title="Category">
+      {/*
+        Division and Segment are the outer and inner levels of the
+        merchandising hierarchy. They only render once products carry those
+        labels, so an unclassified catalogue shows the sidebar it always had
+        rather than two empty sections.
+      */}
+      {divisionCounts.length > 0 && (
+        <FilterSection title="Division">
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {divisionCounts.map(([label, count]) => (
+              <CheckOption
+                key={label}
+                label={titleCase(label)}
+                count={count}
+                checked={selectedDivisions.some(value => sameLabel(value, label))}
+                onChange={() => toggleDivision(label)}
+              />
+            ))}
+          </div>
+        </FilterSection>
+      )}
+
+      <FilterSection title="Sub-Category">
         <div className="max-h-64 overflow-y-auto pr-1">
           {subCategoryCounts.map(([label, count]) => (
             <CheckOption
@@ -496,6 +706,22 @@ export default function ProductsPage() {
           ))}
         </div>
       </FilterSection>
+
+      {segmentCounts.length > 0 && (
+        <FilterSection title="Segment">
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {segmentCounts.map(([label, count]) => (
+              <CheckOption
+                key={label}
+                label={titleCase(label)}
+                count={count}
+                checked={selectedSegments.some(value => sameLabel(value, label))}
+                onChange={() => toggleSegment(label)}
+              />
+            ))}
+          </div>
+        </FilterSection>
+      )}
 
       <FilterSection key={offerTab === "brand" ? "brand-offers" : "brand-filter"} title="Brand" defaultOpen={offerTab === "brand"}>
         <div className="max-h-64 overflow-y-auto pr-1">
@@ -521,10 +747,11 @@ export default function ProductsPage() {
       </FilterSection>
 
       <FilterSection title="Price Range" defaultOpen={false}>
-        {PRICE_BANDS.map((band) => (
+        {PRICE_BANDS.map((band, index) => (
           <CheckOption
             key={band.label}
             label={band.label}
+            count={priceBandCounts[index]}
             checked={priceBandActive(band.range)}
             onChange={() => togglePriceBand(band.range)}
           />
@@ -532,10 +759,11 @@ export default function ProductsPage() {
       </FilterSection>
 
       <FilterSection title="Discount" defaultOpen={false}>
-        {DISCOUNT_BANDS.map((d) => (
+        {DISCOUNT_BANDS.map((d, index) => (
           <CheckOption
             key={d}
             label={`${d}% and above`}
+            count={discountBandCounts[index]}
             checked={minDiscount === d}
             onChange={() => setMinDiscount(minDiscount === d ? 0 : d)}
           />
@@ -543,15 +771,16 @@ export default function ProductsPage() {
       </FilterSection>
 
       <FilterSection title="Availability">
-        <CheckOption label="In Stock" count={eligibleProducts.filter(isInStock).length} checked={availability === "in"} onChange={() => setAvailability(value => value === "in" ? "all" : "in")} />
-        <CheckOption label="Out of Stock" count={eligibleProducts.filter(product => !isInStock(product)).length} checked={availability === "out"} onChange={() => setAvailability(value => value === "out" ? "all" : "out")} />
+        <CheckOption label="In Stock" count={availabilityCounts.in} checked={availability === "in"} onChange={() => setAvailability(value => value === "in" ? "all" : "in")} />
+        <CheckOption label="Out of Stock" count={availabilityCounts.out} checked={availability === "out"} onChange={() => setAvailability(value => value === "out" ? "all" : "out")} />
       </FilterSection>
 
       <FilterSection title="Rating" defaultOpen={false}>
-        {RATING_BANDS.map((r) => (
+        {RATING_BANDS.map((r, index) => (
           <CheckOption
             key={r}
             label={`${r}★ & above`}
+            count={ratingBandCounts[index]}
             checked={minRating === r}
             onChange={() => setMinRating(minRating === r ? 0 : r)}
           />

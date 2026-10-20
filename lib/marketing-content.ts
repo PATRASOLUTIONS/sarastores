@@ -162,9 +162,12 @@ export const MARKETING_SECTIONS: MarketingDefinition[] = [
     helpTitle: "Help", helpLink: "/faq", phoneSuffix: "(Toll Free)",
   }, { tool: "/admin/settings", pinned: true, note: "Phone number, logo and store name remain in Settings; festival announcement is in Theme & Festivals." }),
   definition("header", "promotion", "Navigation campaign button", 1, { title: "SARA Super Sunday", ctaLink: "/offers" }, { pinned: true }),
+  // These two must stay in step with STATIC_LINKS in components/MegaMenu.tsx:
+  // the override is applied by position, so when Brands, New Arrivals, Business
+  // Enquiries and About SARA were removed from the row, the leftover item1/item2
+  // defaults pointed "Offers" at /brands and "Store Locator" at /offers.
   definition("header", "navigation", "Navigation marketing links", 2, marketingItems([
-    { title: "Brands", href: "/brands" }, { title: "Offers", href: "/offers" }, { title: "New Arrivals", href: "/products?sort=newest" },
-    { title: "Store Locator", href: "/store-locator" }, { title: "Business Enquiries", href: "/business-enquiries" }, { title: "About SARA", href: "/about" },
+    { title: "Offers", href: "/offers" }, { title: "Store Locator", href: "/store-locator" },
   ]), { pinned: true, note: "Category navigation remains catalog-driven. Account/cart controls are never hidden." }),
   definition("header", "brand", "Header logo & search hint", 3, { image: "/sara-logo.png", searchHint: "Search for products, brands and more..." }, { pinned: true }),
   definition("footer", "newsletter", "Newsletter & social strip", 0, { title: "Stay Updated with the Latest Offers", description: "Subscribe to get exclusive deals, new launches and more.", ctaText: "Subscribe", followTitle: "Follow Us" }, { pinned: true }),
