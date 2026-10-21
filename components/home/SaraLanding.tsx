@@ -7,29 +7,29 @@ import { fetchWithCache, setCached } from "@/utils/cache"
 import { useBanners } from "@/hooks/useBanners"
 import LandingHero from "@/components/home/landing/LandingHero"
 import {
-  HOME_BRANDS, HOME_CATEGORIES, HomepageBenefits, HomepageBrands, HomepageCategories,
-  HomepageDeals, HomepagePromotions, HomepageStores, type HomeBrand, type HomeCategory, type HomeProduct,
+  HOME_BRANDS, HOME_CATEGORIES, HomepageBenefits, HomepageBrandPedestals, HomepageBrands,
+  HomepageDeals, HomepagePromotions, HomepageStores, type HomeBrand, type HomeProduct,
 } from "@/components/home/landing/HomepageSections"
 import { type TaxonomyDivision } from "@/lib/product-taxonomy"
 import { fetchTaxonomy } from "@/lib/taxonomy-client"
-import { titleCaseLabel } from "@/lib/product-display"
-import { taxonomyImage } from "@/lib/taxonomy-images"
 import styles from "@/components/home/landing/homepage.module.css"
 import { MarketingSection, MarketingSections } from "@/components/marketing/MarketingSections"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { catalogProductListResponseSchema } from "@/utils/catalog"
-import { homeSubCategoryListResponseSchema, homeBrandListResponseSchema, homeStoreListResponseSchema } from "@/lib/catalog-list-response"
+import { homeBrandImageListResponseSchema, homeBrandListResponseSchema, homeStoreListResponseSchema } from "@/lib/catalog-list-response"
 import type { HandshakeLaunch } from "@/lib/handshake"
 import EcommerceLaunch from "@/components/home/EcommerceLaunch"
 
 const TTL = 5 * 60 * 1000
 const TIMEOUT = 25000
-/** Tiles in the category rail. The grid that lays it out is ten columns wide. */
-const RAIL_SIZE = 10
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 const text = (value: unknown) => typeof value === "string" ? value : undefined
 const imageUrl = (value: unknown) => typeof value === "string" && /^(https?:\/\/|\/)/.test(value) ? value : undefined
 const number = (value: unknown) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : undefined
+const MOBILE_BRANDS = [
+  "Apple", "Benco", "Cellcor", "Giva", "Google", "Infinix", "Itel", "Karbonn",
+  "OnePlus", "OPPO", "POCO", "realme", "Redmi", "Samsung", "Tecno", "Villaon", "Vivo",
+]
 
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) })
@@ -64,9 +64,9 @@ function parseProducts(data: unknown): HomeProduct[] {
 export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunch | null }) {
   const marketing = useMarketingContent("home")
   const [products, setProducts] = useState<HomeProduct[]>([])
-  const [subCategories, setSubCategories] = useState<Record<string, unknown>[]>([])
   const [taxonomy, setTaxonomy] = useState<TaxonomyDivision[]>([])
   const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
+  const [brandImages, setBrandImages] = useState<Record<string, string>>({})
   const [storeCount, setStoreCount] = useState<number>()
   const [loading, setLoading] = useState(true)
   const [catalogueError, setCatalogueError] = useState<string>()
@@ -94,11 +94,6 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
 
   useEffect(() => {
     void loadProducts()
-    fetchWithCache("sub-categories", () => fetchJson("/api/sub-categories"), homeSubCategoryListResponseSchema, TTL)
-      .then((data) => {
-        setSubCategories(data)
-      })
-      .catch((error: unknown) => console.error("[Homepage] Could not load categories:", error))
     // Shares a cache entry with the header menu, which needs the same tree on
     // every route; see lib/taxonomy-client.ts for why that matters.
     fetchTaxonomy()
@@ -109,60 +104,19 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
         setBrandDocs(data)
       })
       .catch((error: unknown) => console.error("[Homepage] Could not load brands:", error))
+    fetchWithCache("mobile-brand-images-v2", () => fetchJson("/api/products/mobile-brand-images"), homeBrandImageListResponseSchema, TTL)
+      .then(data => {
+        setBrandImages(Object.fromEntries(data.brands.flatMap(brand =>
+          brand.image ? [[brand.name.toLowerCase(), brand.image]] : [],
+        )))
+      })
+      .catch((error: unknown) => console.error("[Homepage] Could not load mobile brand images:", error))
     fetchWithCache("stores", () => fetchJson("/api/stores"), homeStoreListResponseSchema, TTL)
       .then((data) => {
         if (data.length) setStoreCount(data.length)
       })
       .catch((error: unknown) => console.error("[Homepage] Could not load stores:", error))
   }, [loadProducts])
-
-  /*
-   * The rail is the catalogue's own sub-categories, busiest first.
-   *
-   * It used to be ten fixed aisles — Laptops, Audio, Wearables — that a shopper
-   * could click through to an empty page, because this catalogue does not sell
-   * them. Reading the live sub-categories means every tile leads to stock, and
-   * its count is the number the /products filter will actually show.
-   *
-   * Spellings are deduplicated on letters and digits alone, less a trailing
-   * plural, so `TV 55"`/`TV 55` and `Refrigerator`/`Refrigerators` do not each
-   * take two of the ten slots. The busier spelling wins, and the quieter one
-   * is still reachable from the header menu. This hides the duplication rather
-   * than fixing it — the catalogue still needs those labels reconciled.
-   */
-  const categories = useMemo<HomeCategory[]>(() => {
-    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/s$/, "")
-    const best = new Map<string, { name: string; count: number }>()
-    for (const division of taxonomy) {
-      for (const subCategory of division.subCategories) {
-        const id = key(subCategory.name)
-        if (!id) continue
-        const held = best.get(id)
-        if (!held || subCategory.count > held.count) best.set(id, { name: subCategory.name, count: subCategory.count })
-      }
-    }
-
-    const tiles = [...best.values()]
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-      .slice(0, RAIL_SIZE)
-      .map(({ name, count }) => {
-        const reference = HOME_CATEGORIES.find((item) => item.match?.test(name))
-        const stored = subCategories.find((item) => key(String(item.name || "")) === key(name))
-        return {
-          label: titleCaseLabel(name),
-          // The downloaded photo first, then whatever an administrator uploaded
-          // for this sub-category, then the reference illustration.
-          image: taxonomyImage(name) || imageUrl(stored?.image) || reference?.image || "",
-          fallbackImage: reference?.image,
-          href: `/products?subCategory=${encodeURIComponent(name)}&availability=in`,
-          count,
-        }
-      })
-
-    // Before the taxonomy arrives, show the reference aisles rather than a gap
-    // that would shift the whole page down when it does.
-    return tiles.length > 0 ? tiles : HOME_CATEGORIES
-  }, [taxonomy, subCategories])
 
   const brands = useMemo<HomeBrand[]>(() => {
     const counts = new Map<string, { name: string; count: number }>()
@@ -191,6 +145,19 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
       .slice(0, HOME_BRANDS.length)
   }, [brandDocs, taxonomy])
 
+  const shopBrands = useMemo<HomeBrand[]>(() => {
+    return MOBILE_BRANDS.flatMap(name => {
+      const key = name.toLowerCase()
+      const image = brandImages[key]
+      if (!image) return []
+      return [{
+        name,
+        logo: image,
+        href: `/products?${new URLSearchParams({ brand: name, availability: "in" }).toString()}`,
+      }]
+    })
+  }, [brandImages])
+
   const deals = useMemo(() => {
     const available = products.filter((product) => product.stock > 0)
     const discounted = available.filter((product) => product.mrp && product.mrp > product.price)
@@ -214,11 +181,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
         <MarketingSections page="home">
           <MarketingSection page="home" section="hero"><LandingHero products={products} sideBanners={duoBanners} /></MarketingSection>
           <MarketingSection page="home" section="benefits"><HomepageBenefits storeCount={storeCount} /></MarketingSection>
-          <MarketingSection page="home" section="categories"><HomepageCategories categories={categories.map((category, index) => ({
-            ...category, label: marketing.text("categories", `item${index + 1}Title`, category.label),
-            image: marketing.image("categories", `item${index + 1}Image`, category.image),
-            href: marketing.text("categories", `item${index + 1}Href`) || category.href,
-          }))} /></MarketingSection>
+          <MarketingSection page="home" section="categories"><HomepageBrandPedestals brands={shopBrands} /></MarketingSection>
           <MarketingSection page="home" section="deals"><HomepageDeals products={deals} loading={loading} error={catalogueError} retry={() => void loadProducts(true)} /></MarketingSection>
           <MarketingSection page="home" section="promotions"><HomepagePromotions banners={[...cardBanners, ...stripBanners, ...statementBanners].sort((a, b) => (a.order || 0) - (b.order || 0))} /></MarketingSection>
           <MarketingSection page="home" section="brands"><HomepageBrands brands={brands} /></MarketingSection>

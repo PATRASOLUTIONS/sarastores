@@ -314,9 +314,9 @@ export default function ProductSpecificationTabs({
           <div>
             <h2 className="text-xl font-bold mb-4">Product Images</h2>
             {manufacturerImages && manufacturerImages.length > 0 ? (
-              <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="mt-4 columns-1 gap-4 md:columns-2">
                 {manufacturerImages.map((image, idx) => (
-                  <div key={image}>
+                  <div key={image} className="mb-4 break-inside-avoid">
                     {failedImages[image] ? <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
                       Product image {idx + 1} could not be loaded. <button type="button" className="text-[#1560bd] underline" onClick={() => {
                         setFailedImages(previous => ({ ...previous, [image]: false }))
@@ -331,7 +331,7 @@ export default function ProductSpecificationTabs({
                         console.error("[Product images] Image could not be loaded", idx + 1)
                         setFailedImages(previous => ({ ...previous, [image]: true }))
                       }}
-                      className="mx-auto max-w-full h-auto rounded-lg border border-gray-200 hover:shadow-lg transition-shadow"
+                      className="mx-auto h-auto w-full rounded-lg border border-gray-200 object-contain transition-shadow hover:shadow-lg"
                     />}
                   </div>
                 ))}
@@ -396,22 +396,18 @@ export default function ProductSpecificationTabs({
           <div>
             <h2 className="text-2xl font-bold mb-4">Technical Specifications</h2>
             {specEntries.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {specEntries.map(([key, value], idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-                        <th scope="row" className="px-3 py-3 md:px-6 md:py-4 text-left text-xs md:text-sm font-semibold text-gray-900 w-1/3 align-top">
-                          {String(key).replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                        </th>
-                        <td className="px-3 py-3 md:px-6 md:py-4 text-xs md:text-sm text-gray-700 align-top break-words">
-                          {Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 lg:grid-cols-2">
+                {specEntries.map(([key, value]) => (
+                  <div key={key} className="grid grid-cols-[minmax(110px,0.8fr)_minmax(0,1.2fr)] bg-white text-xs md:text-sm">
+                    <dt className="bg-gray-50 px-3 py-3 font-semibold text-gray-900 md:px-4">
+                      {String(key).replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                    </dt>
+                    <dd className="break-words px-3 py-3 text-gray-700 md:px-4">
+                      {Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             ) : isSkuFetching ? <p role="status">Loading specifications...</p> : skuFetchError ? <p role="alert">Specifications could not be loaded. <button type="button" className="text-[#1560bd] underline" onClick={() => void retrySpecs()}>Retry specifications</button></p> : (
               <div className="bg-gray-50 rounded-lg p-8 text-center">
                 <p className="text-gray-500">No technical specifications available for this product.</p>

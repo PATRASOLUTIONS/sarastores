@@ -31,7 +31,7 @@ const BannerSchema = z.object({
   // Empty scope = shown on every listing page. Otherwise matched against the
   // selected category / sub-category label, case-insensitively.
   scope: z.string().max(120).optional().default(""),
-  title: z.string().min(1).max(120),
+  title: z.string().max(120).optional().default(""),
   subtitle: z.string().max(200).optional().default(""),
   script: z.string().max(120).optional().default(""),
   ctaText: z.string().max(60).optional().default(""),

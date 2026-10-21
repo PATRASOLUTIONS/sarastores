@@ -624,7 +624,7 @@ export default function Header() {
                 {/* Search button (right) */}
                 <button
                   type="submit"
-                  className="flex-shrink-0 flex items-center justify-center px-5 rounded-r-lg bg-brand-accent hover:bg-brand-accent-hover text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white/60"
+                  className="flex-shrink-0 flex items-center justify-center px-5 rounded-r-lg bg-brand-primary hover:bg-brand-primary-hover text-white transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white/60"
                   aria-label="Search"
                 >
                   <Search className="h-5 w-5" strokeWidth={2.5} />
@@ -866,7 +866,7 @@ export default function Header() {
               />
               <button
                 type="submit"
-                className="text-white px-5 py-3 min-h-[44px] transition-all flex items-center bg-brand-accent hover:bg-brand-accent-hover touch-manipulation"
+                className="text-white px-5 py-3 min-h-[44px] transition-all flex items-center bg-brand-primary hover:bg-brand-primary-hover touch-manipulation"
                 aria-label="Search"
               >
                 <Search className="h-5 w-5" strokeWidth={2.5} />

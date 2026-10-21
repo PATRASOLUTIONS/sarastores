@@ -33,6 +33,8 @@ export interface FacetProduct {
   type?: unknown
   subCategory?: unknown
   technical_details?: Record<string, unknown> | null
+  /** Flipkart-style spec sheet stored on the product. Mobile filters read this. */
+  specifications?: Record<string, unknown> | null
   features?: readonly unknown[] | null
 }
 
@@ -216,6 +218,41 @@ const FACET_DEFINITIONS: FacetDefinition[] = [
       return size >= 32 ? [`${size} GB`] : []
     },
   },
+  {
+    key: "network",
+    label: "5G Support",
+    specKeys: ["network", "network type", "connectivity", "sim type"],
+    extract: (text) => {
+      if (/\b5\s*g\b/i.test(text)) return ["5G"]
+      if (/\b4\s*g\b|\blte\b/i.test(text)) return ["4G"]
+      return []
+    },
+  },
+  {
+    key: "battery",
+    label: "Battery Capacity",
+    specKeys: ["battery", "battery capacity", "battery size"],
+    extract: (text) => {
+      const match = text.match(/\b(\d{3,5})\s*mah\b/i)
+      if (!match) return []
+      const mah = Number(match[1])
+      if (mah < 2000 || mah > 8000) return []
+      if (mah < 4000) return ["Under 4000 mAh"]
+      if (mah < 5000) return ["4000–5000 mAh"]
+      return ["5000 mAh & above"]
+    },
+  },
+  {
+    key: "operatingSystem",
+    label: "Operating System",
+    specKeys: ["operating system", "os", "platform"],
+    extract: keywordExtractor([
+      [/\bios\b|\biphone\b|\bipad\b/i, "iOS"],
+      [/\bandroid\b/i, "Android"],
+      [/\bwindows\b/i, "Windows"],
+      [/\btizen\b/i, "Tizen"],
+    ]),
+  },
 ]
 
 /** Everything on a product that might carry a spec, flattened to one string. */
@@ -369,6 +406,174 @@ export function buildSelectionAwareFacets(
       definition.sort ? definition.sort(a.value, b.value) : a.value.localeCompare(b.value),
     )
 
+    facets.push({ key: definition.key, label: definition.label, values })
+  }
+
+  return facets
+}
+
+/**
+ * Phone filters, in the order the Mobile listing sidebar shows them.
+ *
+ * Values come only from the product's `specifications` sheet. A facet with
+ * fewer than two real values is omitted, so "Type" disappears when every
+ * phone is a smartphone and "Speciality" disappears when the sheet has no
+ * such column.
+ */
+const MOBILE_SPEC_FACETS: Array<{
+  key: string
+  label: string
+  specKeys: string[]
+  normalize: (raw: string) => string[]
+  sort?: (a: string, b: string) => number
+}> = [
+  { key: "ram", label: "RAM", specKeys: ["ram"], sort: numericSort, normalize: (raw) => gigabytes(raw) },
+  { key: "networkType", label: "Network Type", specKeys: ["network type"], sort: orderOf(["5G", "4G", "3G", "2G"]), normalize: networks },
+  { key: "internalStorage", label: "Internal Storage", specKeys: ["internal storage"], sort: memorySort, normalize: storageLabel },
+  { key: "processorBrand", label: "Processor Brand", specKeys: ["processor brand"], normalize: shortLabel },
+  { key: "operatingSystem", label: "Operating System", specKeys: ["operating system"], sort: orderOf(["Android", "iOS", "HarmonyOS"]), normalize: operatingSystem },
+  { key: "batteryCapacity", label: "Battery Capacity", specKeys: ["battery capacity"], sort: numericSort, normalize: (raw) => {
+    const match = raw.match(/(\d{3,5})\s*mah/i)
+    return match ? [`${match[1]} mAh`] : []
+  } },
+  { key: "resolutionType", label: "Resolution Type", specKeys: ["resolution type"], normalize: shortLabel },
+  { key: "speciality", label: "Speciality", specKeys: ["speciality", "specialty"], normalize: shortLabel },
+  { key: "clockSpeed", label: "Clock Speed", specKeys: ["primary clock speed", "clock speed"], sort: numericSort, normalize: (raw) => {
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*ghz/i)
+    return match ? [`${match[1]} GHz`] : []
+  } },
+  { key: "phoneType", label: "Type", specKeys: ["browse type", "type"], normalize: shortLabel },
+  { key: "primaryCamera", label: "Primary Camera", specKeys: ["primary camera"], sort: numericSort, normalize: megapixels },
+  { key: "screenSize", label: "Screen Size", specKeys: ["display size", "screen size"], sort: numericSort, normalize: phoneInches },
+  { key: "simType", label: "SIM Type", specKeys: ["sim type"], normalize: shortLabel },
+  { key: "coreCount", label: "Number of Cores", specKeys: ["processor core", "number of cores"], sort: orderOf(["Single Core", "Dual Core", "Quad Core", "Hexa Core", "Octa Core", "Deca Core"]), normalize: shortLabel },
+  { key: "secondaryCamera", label: "Secondary Camera", specKeys: ["secondary camera"], sort: numericSort, normalize: megapixels },
+]
+
+export const MOBILE_FACETS_BEFORE_RATING = [
+  "ram", "networkType", "internalStorage", "processorBrand", "operatingSystem",
+  "batteryCapacity", "resolutionType", "speciality", "clockSpeed", "phoneType",
+  "primaryCamera", "screenSize", "simType",
+] as const
+
+export const MOBILE_FACETS_AFTER_RATING = ["coreCount", "secondaryCamera"] as const
+
+function orderOf(order: string[]) {
+  return (a: string, b: string) => {
+    const ai = order.indexOf(a)
+    const bi = order.indexOf(b)
+    if (ai === -1 && bi === -1) return a.localeCompare(b)
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  }
+}
+
+function memorySort(a: string, b: string) {
+  const bytes = (value: string) => {
+    const amount = parseFloat(value)
+    return /tb/i.test(value) ? amount * 1024 : amount
+  }
+  return bytes(a) - bytes(b)
+}
+
+function shortLabel(raw: string): string[] {
+  const value = raw.replace(/\s+/g, " ").trim()
+  if (!value || value.length > 60 || /^(yes|no|true|false|n\/?a|-)$/i.test(value)) return []
+  return [value]
+}
+
+function gigabytes(raw: string): string[] {
+  const match = raw.match(/(\d+(?:\.\d+)?)\s*gb/i)
+  return match ? [`${match[1]} GB`] : []
+}
+
+function storageLabel(raw: string): string[] {
+  const terabytes = raw.match(/(\d+(?:\.\d+)?)\s*tb/i)
+  if (terabytes) return [`${terabytes[1]} TB`]
+  const gigabytesMatch = raw.match(/(\d+)\s*gb/i)
+  if (!gigabytesMatch) return []
+  const amount = Number(gigabytesMatch[1])
+  if (amount >= 1024 && amount % 1024 === 0) return [`${amount / 1024} TB`]
+  return amount >= 16 ? [`${amount} GB`] : []
+}
+
+function networks(raw: string): string[] {
+  const found: string[] = []
+  if (/5\s*g/i.test(raw)) found.push("5G")
+  if (/4\s*g|\bvolte\b|\blte\b/i.test(raw)) found.push("4G")
+  if (/3\s*g/i.test(raw)) found.push("3G")
+  if (/2\s*g/i.test(raw)) found.push("2G")
+  return found
+}
+
+function operatingSystem(raw: string): string[] {
+  if (/\bios\b/i.test(raw)) return ["iOS"]
+  if (/\bandroid\b/i.test(raw)) return ["Android"]
+  if (/\bharmony/i.test(raw)) return ["HarmonyOS"]
+  return shortLabel(raw.split(/\s+/)[0] || "")
+}
+
+function megapixels(raw: string): string[] {
+  const match = raw.match(/(\d+)\s*mp/i)
+  return match ? [`${match[1]} MP`] : []
+}
+
+function phoneInches(raw: string): string[] {
+  const match = raw.match(/\(\s*(\d+(?:\.\d+)?)\s*inch/i) || raw.match(/(\d+(?:\.\d+)?)\s*(?:inch|")/i)
+  if (!match) return []
+  const inches = Number(match[1])
+  if (inches < 4 || inches > 8) return []
+  return [`${Number(inches.toFixed(2))} inch`]
+}
+
+function specificationText(product: FacetProduct, keys: string[]): string {
+  const specs = product.specifications
+  if (!specs || typeof specs !== "object" || Array.isArray(specs)) return ""
+  for (const [key, value] of Object.entries(specs)) {
+    const normalized = key.toLowerCase().replace(/[_-]+/g, " ").trim()
+    if (!keys.includes(normalized) || value == null) continue
+    const text = String(value).trim()
+    if (text) return text
+  }
+  return ""
+}
+
+/** Spec-sheet values for the Mobile listing filters. */
+export function mobileFacetValuesFor(product: FacetProduct): Record<string, string[]> {
+  const result: Record<string, string[]> = {}
+  for (const definition of MOBILE_SPEC_FACETS) {
+    const raw = specificationText(product, definition.specKeys)
+    if (!raw) continue
+    const values = definition.normalize(raw)
+    if (values.length > 0) result[definition.key] = values
+  }
+  return result
+}
+
+/** Mobile spec facets that can actually narrow the current result set. */
+export function buildMobileFacets(
+  extracted: Array<Record<string, string[]>>,
+  selection: FacetSelection,
+  minValues = 2,
+): Facet[] {
+  const facets: Facet[] = []
+
+  for (const definition of MOBILE_SPEC_FACETS) {
+    const bucket = new Map<string, number>()
+    for (const values of extracted) {
+      if (!matchesFacetValues(values, selection, definition.key)) continue
+      const owned = values[definition.key]
+      if (!owned) continue
+      for (const value of owned) bucket.set(value, (bucket.get(value) || 0) + 1)
+    }
+
+    const inUse = (selection[definition.key]?.length ?? 0) > 0
+    if (bucket.size === 0 || (bucket.size < minValues && !inUse)) continue
+
+    const values = Array.from(bucket, ([value, count]) => ({ value, count })).sort((a, b) =>
+      definition.sort ? definition.sort(a.value, b.value) : a.value.localeCompare(b.value),
+    )
     facets.push({ key: definition.key, label: definition.label, values })
   }
 

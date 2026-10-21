@@ -20,12 +20,42 @@ export interface WishlistItem {
   reviews?: number
 }
 
+const wishlistCache = new Map<string, WishlistItem[]>()
+const wishlistRequests = new Map<string, Promise<WishlistItem[]>>()
+
+async function loadWishlist(userId: string, force = false): Promise<WishlistItem[]> {
+  if (!force && wishlistCache.has(userId)) return wishlistCache.get(userId) || []
+  if (!force && wishlistRequests.has(userId)) return wishlistRequests.get(userId) || []
+
+  const request = fetch("/api/wishlist", { credentials: "include" })
+    .then(async response => {
+      if (response.status === 401) return []
+      if (!response.ok) throw new Error(`Wishlist request failed with status ${response.status}`)
+      const data = await response.json()
+      return Array.isArray(data.items) ? data.items : []
+    })
+    .then(items => {
+      wishlistCache.set(userId, items)
+      return items
+    })
+    .catch(error => {
+      console.error("Error fetching wishlist:", error)
+      return wishlistCache.get(userId) || []
+    })
+    .finally(() => {
+      wishlistRequests.delete(userId)
+    })
+
+  wishlistRequests.set(userId, request)
+  return request
+}
+
 export function useWishlist() {
   const [wishlist, setWishlist] = useState<WishlistItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuth()
 
-  const fetchWishlist = useCallback(async () => {
+  const fetchWishlist = useCallback(async (force = false) => {
     // If AuthContext hasn't hydrated yet, try reading a stored user from localStorage.
     let userId = user?.id
     if (!userId) {
@@ -47,29 +77,9 @@ export function useWishlist() {
     }
 
     setIsLoading(true)
-    try {
-      const response = await fetch(`/api/wishlist?userId=${userId}`)
-      if (response.status === 401) {
-        // The global fetch wrapper has already dispatched `auth:expired`
-        // and AuthContext will toast + clear the stale user state. We just
-        // stay quiet so the user doesn't get a second error toast.
-        setWishlist([])
-        return
-      }
-      if (!response.ok) {
-        console.error("Failed to fetch wishlist, status:", response.status)
-        toast.error("Failed to load wishlist")
-        setWishlist([])
-        return
-      }
-      const data = await response.json()
-      setWishlist(data.items || [])
-    } catch (error) {
-      console.error("Error fetching wishlist:", error)
-      toast.error("Failed to load wishlist")
-    } finally {
-      setIsLoading(false)
-    }
+    const items = await loadWishlist(userId, force)
+    setWishlist(items)
+    setIsLoading(false)
   }, [user])
 
   useEffect(() => {
@@ -88,7 +98,7 @@ export function useWishlist() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userId: user.id, productId }),
+        body: JSON.stringify({ productId }),
       })
 
       if (response.status === 401) {
@@ -104,7 +114,7 @@ export function useWishlist() {
 
       if (data.added) {
         toast.success("Added to wishlist")
-        fetchWishlist() // Refresh wishlist
+        fetchWishlist(true) // Refresh wishlist
         return true
       } else {
         toast.success("Item already in wishlist")
@@ -121,7 +131,7 @@ export function useWishlist() {
     if (!user) return false
 
     try {
-      const response = await fetch(`/api/wishlist?userId=${user.id}&productId=${productId}`, {
+      const response = await fetch(`/api/wishlist?productId=${productId}`, {
         method: "DELETE",
       })
 
@@ -135,7 +145,7 @@ export function useWishlist() {
       }
 
       toast.success("Removed from wishlist")
-      fetchWishlist() // Refresh wishlist
+      fetchWishlist(true) // Refresh wishlist
       return true
     } catch (error) {
       console.error("Error removing from wishlist:", error)

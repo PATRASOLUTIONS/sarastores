@@ -68,6 +68,23 @@ export function cleanProductName(name: string | null | undefined): string {
 }
 
 /**
+ * Format catalogue names for compact product cards.
+ * Keeps network generations and storage capacities uppercase while converting
+ * warehouse-style all-caps names to readable title case.
+ */
+export function formatProductCardName(name: string | null | undefined): string {
+  return cleanProductName(name).replace(/\S+/g, (word) => {
+    if (/^\d+[2345]?[gG](?:[),}/\]-]*)$/.test(word)) return word.toUpperCase()
+    if (/\d+(?:\.\d+)?\s*(?:KB|MB|GB|TB)\b/i.test(word)) {
+      return word.replace(/(?:KB|MB|GB|TB)/gi, unit => unit.toUpperCase())
+    }
+
+    const lower = word.toLowerCase()
+    return lower.replace(/[a-z]/, letter => letter.toUpperCase())
+  })
+}
+
+/**
  * A product name short enough to put in a toast.
  *
  * Catalogue names here run to whole paragraphs — the LG QNED82T row is ~2,000

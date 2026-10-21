@@ -5003,6 +5003,46 @@ test("facet counts respond to the other filters while ignoring the facet's own s
   assert.equal(narrowed.some(facet => facet.key === "screenSize"), true)
 })
 
+test("mobile listing filters read the spec sheet and drop filters with one value", () => {
+  const { mobileFacetValuesFor, buildMobileFacets } = sourceLoader().load("lib/product-facets.ts")
+  const phone = {
+    name: "Fixture phone 55",
+    specifications: {
+      RAM: "8 GB",
+      "Network Type": "5G, 4G, 3G, 2G",
+      "Internal Storage": "256 GB",
+      "Display Size": "16.94 cm (6.67 inch)",
+      "Primary Camera": "50MP + 8MP",
+      "Browse Type": "Smartphones",
+      "Processor Core": "Octa Core",
+    },
+  }
+  const other = {
+    name: "Fixture phone 32 inch",
+    specifications: {
+      RAM: "4 GB",
+      "Network Type": "4G VOLTE",
+      "Internal Storage": "128 GB",
+      "Display Size": "16.0 cm (6.3 inch)",
+      "Primary Camera": "48MP Rear Camera",
+      "Browse Type": "Smartphones",
+      "Processor Core": "Hexa Core",
+    },
+  }
+
+  const first = mobileFacetValuesFor(phone)
+  assert.equal([...first.ram].join(","), "8 GB")
+  assert.equal([...first.networkType].join(","), "5G,4G,3G,2G")
+  assert.equal([...first.screenSize].join(","), "6.67 inch")
+  assert.equal([...first.primaryCamera].join(","), "50 MP")
+  assert.equal(first.screenSize.includes('55"'), false)
+
+  const facets = buildMobileFacets([first, mobileFacetValuesFor(other)], {})
+  assert.equal(facets.some(facet => facet.key === "phoneType"), false)
+  assert.equal(facets.find(facet => facet.key === "ram").values.map(value => value.value).join(","), "4 GB,8 GB")
+  assert.equal(facets.findIndex(facet => facet.key === "ram") < facets.findIndex(facet => facet.key === "screenSize"), true)
+})
+
 test("the merchandising hierarchy reads from spreadsheet columns and the stored document alike", () => {
   const { extractCanonicalProductMetadata, normalizeProductForSchema, buildSchemaSynchronizedRaw } =
     sourceLoader().load("lib/product-schema.ts")

@@ -110,6 +110,32 @@ export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
   )
 }
 
+export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
+  if (brands.length === 0) return null
+
+  return (
+    <section className={styles.categories} aria-label="Shop by Brands">
+      <HomepageHeading title="Shop by Brands" href="/brands" ctaText="View All" />
+      <div className={styles.pedestalRail}>
+        {brands.map(({ name, logo, href }) => (
+          <Link key={name} href={href} className={styles.pedestalItem}>
+            <span className={styles.pedestalStage}>
+              {logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, "/placeholder.svg")} />
+              ) : (
+                <strong>{name.slice(0, 1)}</strong>
+              )}
+              <span className={styles.pedestal} aria-hidden />
+            </span>
+            <span className={styles.pedestalName}>{name}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export function HomepageCategories({ categories }: { categories: HomeCategory[] }) {
   const marketing = useMarketingContent("home")
   return (

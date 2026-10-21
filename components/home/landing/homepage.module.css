@@ -52,6 +52,16 @@
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .sectionHeading > a { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--home-action); font-size: 11px; font-weight: 600; }
 .categories { padding: 12px 0; }
+.pedestalRail { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 4px 2px 10px; }
+.pedestalRail::-webkit-scrollbar { display: none; }
+.pedestalItem { display: flex; width: 112px; flex: 0 0 112px; flex-direction: column; align-items: center; text-align: center; }
+.pedestalStage { position: relative; display: flex; height: 132px; width: 100%; align-items: flex-end; justify-content: center; overflow: hidden; }
+.pedestalStage img, .pedestalStage strong { position: relative; z-index: 1; height: 96px; max-width: 70px; object-fit: contain; margin-bottom: 18px; filter: drop-shadow(0 8px 6px rgba(20, 10, 40, .18)); }
+.pedestalStage strong { display: grid; height: 64px; width: 64px; place-items: center; border-radius: 12px; background: white; color: var(--brand-primary); font-size: 22px; }
+.pedestal { position: absolute; bottom: 10px; width: 96px; height: 18px; border-radius: 50%; background: radial-gradient(ellipse at 50% 38%, #fff8d4 0%, #ffd45a 36%, #e2a41c 70%, #c98410 100%); box-shadow: 0 6px 0 #7a32a6, 0 11px 0 #4b176c; }
+.pedestalName { position: relative; z-index: 2; display: block; margin-top: 8px; color: #1c2430; font-size: 13px; font-weight: 650; line-height: 1.25; }
+.pedestalItem:hover .pedestalStage img, .pedestalItem:hover .pedestalStage strong { transform: translateY(-4px); }
+.pedestalStage img, .pedestalStage strong { transition: transform .2s; }
 .circleRail { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 12px; }
 .circleItem { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 7px; text-align: center; font-size: 10px; line-height: 1.3; }
 /* White rather than grey: these now hold product photography cut out on white,

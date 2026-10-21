@@ -200,8 +200,8 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
   const displayImage = firstSpecImage || product.image || "/modern-tech-product.png"
 
   return (
-    <Link href={`/product/${product.slug || productId || product.id}`} className="group">
-      <div className="bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-[1.02] relative border border-transparent hover:border-gray-100">
+    <Link href={`/product/${product.slug || productId || product.id}`} className="group block h-full">
+      <div className="flex h-full flex-col bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 relative border border-transparent hover:border-gray-100">
         {/* Show up to 5 specification images as a gallery if available */}
         {/* {specImages.length > 0 && (
           <div className="flex gap-2 px-2 pt-2 pb-1 overflow-x-auto">
@@ -266,8 +266,8 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
           </button> */}
         </div>
 
-        <div className="p-4">
-          <h3 className="text-sm md:text-base font-semibold text-gray-900 mb-2 line-clamp-2 leading-snug">{displayTitle}</h3>
+        <div className="flex flex-1 flex-col p-4">
+          <h3 className="mb-2 min-h-[2lh] text-sm font-semibold leading-snug text-gray-900 line-clamp-2 md:text-base">{displayTitle}</h3>
 
 
 
@@ -287,7 +287,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="mt-auto flex flex-col gap-3">
             <CompareProductButton productId={productId} name={displayTitle} />
             <button
               onClick={(e) => {
