@@ -139,6 +139,8 @@ function normalizeAdminProduct(product: ProductApiResponse): Product {
 const COLUMN_VALUES = {
   name: (product: Product) => product.name || "",
   division: (product: Product) => product.division || "",
+  category: (product: Product) =>
+    normalizeProductForSchema(product).categoryGroupName || product.category || product.groupName || product.itemCategory || "",
   subCategory: (product: Product) => product.subCategory || "",
   segment: (product: Product) => product.segment || "",
   brand: (product: Product) => product.brand || "",
@@ -155,7 +157,7 @@ type SortColumn = keyof typeof COLUMN_VALUES
 const TABLE_COLUMNS: Array<{ field: SortColumn; label: string; align?: "right" }> = [
   { field: "name", label: "Product" },
   { field: "division", label: "Division" },
-  { field: "subCategory", label: "Sub-Category" },
+  { field: "category", label: "Category" },
   { field: "segment", label: "Segment" },
   { field: "brand", label: "Brand" },
   { field: "price", label: "Price", align: "right" },
@@ -1586,7 +1588,7 @@ export default function AdminProducts() {
                         </td>
 
                         <TaxonomyCell value={product.division} />
-                        <TaxonomyCell value={product.subCategory} />
+                        <TaxonomyCell value={COLUMN_VALUES.category(product)} />
                         <TaxonomyCell value={product.segment} />
                         <TaxonomyCell value={product.brand} />
 

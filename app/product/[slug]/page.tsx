@@ -23,7 +23,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import ProductLoading from "@/components/product/ProductLoading"
 import ProductSpecificationTabs from "@/components/ProductSpecificationTabs"
-import { FeatureTiles, RailCards, Stars } from "@/components/product/PdpBlocks"
+import { RailCards, Stars } from "@/components/product/PdpBlocks"
 import ProductReviewsSection from "@/components/ProductReviewsSection"
 import RazorpayOffers from "@/components/product/RazorpayOffers"
 import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
@@ -103,8 +103,29 @@ function deriveFeatures(product: Product): string[] {
     .slice(0, 6)
 }
 
+const STORAGE_VARIANT = /(?:\(\s*)?\d+(?:\.\d+)?\s*(?:MB|GB|TB)(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:MB|GB|TB))?(?:\s*\))?/i
+
+/** Stable family prefix used to find colour/storage variants without mixing models. */
+function variantFamilyName(value: string): string {
+  const name = cleanProductName(value).replace(/\s+/g, " ").trim()
+  const match = STORAGE_VARIANT.exec(name)
+  if (!match || match.index < 4) return ""
+  return name.slice(0, match.index).replace(/[\s(,/-]+$/, "").trim().toLowerCase()
+}
+
+function variantOptionParts(value: string): { storage: string; color: string } {
+  const name = cleanProductName(value)
+  const match = STORAGE_VARIANT.exec(name)
+  if (!match) return { storage: "", color: "" }
+  const storage = match[0].replace(/[()]/g, "").replace(/\s+/g, "")
+  const color = name.slice(match.index + match[0].length).replace(/^[\s,/-]+/, "").trim()
+  return { storage: storage.toUpperCase(), color }
+}
+
 function Gallery({ images, name }: { images: string[]; name: string }) {
   const [active, setActive] = useState(0)
+  const [zooming, setZooming] = useState(false)
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 })
   const list = images.length > 0 ? images : ["/placeholder.svg"]
   const go = (step: number) => setActive((i) => (i + step + list.length) % list.length)
 
@@ -130,7 +151,18 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
         </div>
 
         <div className="relative flex-1">
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-[#dce6f4] bg-white p-4">
+          <div
+            className="flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-lg border border-[#dce6f4] bg-white p-4"
+            onMouseEnter={() => setZooming(true)}
+            onMouseLeave={() => setZooming(false)}
+            onMouseMove={event => {
+              const bounds = event.currentTarget.getBoundingClientRect()
+              setZoomPosition({
+                x: ((event.clientX - bounds.left) / bounds.width) * 100,
+                y: ((event.clientY - bounds.top) / bounds.height) * 100,
+              })
+            }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={list[active]}
@@ -141,6 +173,18 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
               }}
             />
           </div>
+
+          {zooming && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute left-[calc(100%+12px)] top-0 z-50 hidden aspect-square w-[min(52vw,720px)] border border-gray-300 bg-white bg-no-repeat shadow-xl lg:block"
+              style={{
+                backgroundImage: `url(${JSON.stringify(list[active])})`,
+                backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                backgroundSize: "220%",
+              }}
+            />
+          )}
 
           {list.length > 1 && (
             <>
@@ -197,6 +241,7 @@ export default function ProductDetailPage() {
 
   const [product, setProduct] = useState<Product | null>(null)
   const [catalogue, setCatalogue] = useState<CatalogProduct[]>([])
+  const [variants, setVariants] = useState<CatalogProduct[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(true)
   const [suggestionsError, setSuggestionsError] = useState("")
   const [suggestionsAttempt, setSuggestionsAttempt] = useState(0)
@@ -280,6 +325,34 @@ export default function ProductDetailPage() {
    */
   const suggestionId = product?.id ? String(product.id) : ""
   const suggestionCategory = product?.category ? String(product.category) : ""
+  const variantFamily = product ? variantFamilyName(product.name) : ""
+
+  useEffect(() => {
+    if (!product || !variantFamily) {
+      setVariants([])
+      return
+    }
+
+    const controller = new AbortController()
+    const loadVariants = async () => {
+      try {
+        const query = new URLSearchParams({ fields: "card", limit: "60", search: variantFamily })
+        const response = await fetch(`/api/products?${query.toString()}`, { signal: controller.signal })
+        if (!response.ok) return
+        const candidates = z.array(catalogProductResponseSchema).parse(await response.json())
+        const familyVariants = candidates.filter(candidate =>
+          variantFamilyName(candidate.name) === variantFamily &&
+          candidate.active !== false &&
+          Number(candidate.price) > 0,
+        )
+        if (!controller.signal.aborted) setVariants(familyVariants)
+      } catch (error) {
+        if (!controller.signal.aborted) console.error("[Product] Variants failed:", error)
+      }
+    }
+    void loadVariants()
+    return () => controller.abort()
+  }, [product, variantFamily])
 
   useEffect(() => {
     if (!suggestionId) return
@@ -364,6 +437,15 @@ export default function ProductDetailPage() {
   const wishlisted = isInWishlist(String(product.id))
   const freeShippingThreshold = Number(settings?.freeShippingThreshold ?? 10000)
   const freeDelivery = Number(product.price) >= freeShippingThreshold
+  const currentVariant = variantOptionParts(product.name)
+  const variantChoices = variants.map(variant => ({ product: variant, ...variantOptionParts(variant.name) }))
+    .filter(option => option.storage)
+  const colorOptions = [...new Set(variantChoices.map(option => option.color).filter(Boolean))]
+  const storageOptions = [...new Set(variantChoices.map(option => option.storage).filter(Boolean))]
+  const hasVariantSelectors = variantChoices.length > 1 && (colorOptions.length > 1 || storageOptions.length > 1)
+  const variantAvailable = (variant: CatalogProduct | undefined) =>
+    Boolean(variant && variant.active !== false && Number(variant.price) > 0 &&
+      (typeof variant.stock !== "number" || variant.stock > 0))
 
   const handleAddToCart = async (buyNow: boolean) => {
     if (adding) return
@@ -499,6 +581,94 @@ export default function ProductDetailPage() {
               </div>
               <p className="mt-1 text-[12px] text-gray-500">Inclusive of all taxes</p>
 
+              {hasVariantSelectors && (
+                <div className="mt-5 space-y-4 border-t border-gray-100 pt-4">
+                  {colorOptions.length > 1 && (
+                    <div>
+                      <h2 className="text-[13px] font-bold text-gray-900">
+                        Color: <span className="font-medium text-gray-600">{currentVariant.color}</span>
+                      </h2>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {colorOptions.map(color => {
+                          const exact = variantChoices.find(option =>
+                            option.color === color && option.storage === currentVariant.storage)?.product
+                          const representative = exact || variantChoices.find(option => option.color === color)?.product
+                          const available = variantAvailable(exact)
+                          const selected = color === currentVariant.color
+                          const content = <>
+                            <span className="flex h-9 w-9 items-center justify-center overflow-hidden bg-white">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={representative?.image || "/placeholder.svg"} alt="" className="h-full w-full object-contain" />
+                            </span>
+                            <span className="max-w-24 truncate">{color}</span>
+                          </>
+                          return available && exact ? (
+                            <Link
+                              key={color}
+                              href={`/product/${exact.slug || exact.id}`}
+                              aria-current={selected ? "page" : undefined}
+                              className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-semibold ${
+                                selected ? "border-[#1560BD] bg-blue-50 ring-1 ring-[#1560BD]" : "border-gray-300 hover:border-[#1560BD]"
+                              }`}
+                            >
+                              {content}
+                            </Link>
+                          ) : (
+                            <span key={color} title={`${color} is unavailable in ${currentVariant.storage}`} className="flex cursor-not-allowed items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2 py-1.5 text-[11px] font-semibold text-gray-400 opacity-60">
+                              {content}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {storageOptions.length > 1 && (
+                    <div>
+                      <h2 className="text-[13px] font-bold text-gray-900">Storage</h2>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {storageOptions.map(storage => {
+                          const exact = variantChoices.find(option =>
+                            option.storage === storage && option.color === currentVariant.color)?.product
+                          const available = variantAvailable(exact)
+                          const selected = storage === currentVariant.storage
+                          return available && exact ? (
+                            <Link
+                              key={storage}
+                              href={`/product/${exact.slug || exact.id}`}
+                              aria-current={selected ? "page" : undefined}
+                              className={`rounded-md border px-3 py-2 text-[12px] font-semibold ${
+                                selected ? "border-[#1560BD] bg-blue-50 text-[#1560BD] ring-1 ring-[#1560BD]" : "border-gray-300 text-gray-700 hover:border-[#1560BD]"
+                              }`}
+                            >
+                              {storage}
+                            </Link>
+                          ) : (
+                            <span key={storage} title={`${storage} is unavailable in ${currentVariant.color}`} className="cursor-not-allowed rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-[12px] font-semibold text-gray-400 line-through opacity-60">
+                              {storage}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!hasVariantSelectors && features.length > 0 && (
+                <div className="mt-5">
+                  <h2 className="text-[13px] font-bold text-gray-900">Highlights</h2>
+                  <ul className="mt-2 space-y-1.5">
+                    {features.slice(0, 5).map(feature => (
+                      <li key={feature} className="flex items-start gap-2 text-[12px] leading-snug text-gray-600">
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0F8A3C]" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {liveOffers.some(isEmiOffer) && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#1560BD]" />
@@ -511,19 +681,6 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {features.length > 0 && (
-                <div className="mt-5">
-                  <h2 className="text-[13px] font-bold text-gray-900">Highlights</h2>
-                  <ul className="mt-2 space-y-1.5">
-                    {features.slice(0, 5).map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-[12px] leading-snug text-gray-600">
-                        <CheckCircle2 className="mt-[1px] h-3.5 w-3.5 flex-shrink-0 text-[#0F8A3C]" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
 
             {/* Buy box */}
@@ -637,20 +794,22 @@ export default function ProductDetailPage() {
                 <div className={`grid gap-5 ${railCards.length ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,240px)]" : ""}`}>
                   <div>
                     <h2 className="font-heading text-lg font-bold text-gray-900">{name}</h2>
+                    {hasVariantSelectors && features.length > 0 && (
+                      <div className="mt-4">
+                        <h3 className="text-sm font-bold text-gray-900">Highlights</h3>
+                        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {features.slice(0, 6).map(feature => (
+                            <li key={feature} className="flex items-start gap-2 text-[13px] leading-snug text-gray-600">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#0F8A3C]" />
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-gray-600">
                       {cleanProductDescription(product.description) || "Full details are listed under Specifications."}
                     </p>
-
-                    {features.length > 0 && (
-                      <div className="mt-6">
-                        <FeatureTiles
-                          items={features.slice(0, 5).map((f) => ({
-                            title: f.split(/[,–—:]/)[0].trim().slice(0, 40),
-                            detail: f.slice(0, 90),
-                          }))}
-                        />
-                      </div>
-                    )}
 
                       {marketing.enabled("suggestions") && <section className="mt-8" aria-label="Product suggestions">
                         <h3 className="font-heading text-base font-bold text-gray-900">{marketing.text("suggestions", "title")}</h3>

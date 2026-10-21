@@ -13,7 +13,27 @@ export function useListingBanners(placement: "hero" | "promo", scope?: string) {
 
 const gradient = bannerGradient
 
+const hasCopy = (banner: ListingBanner) =>
+  [banner.title, banner.subtitle, banner.ctaText, banner.script].some((value) => (value || "").trim())
+
+function PhotoOnly({ banner, label, rounded }: { banner: ListingBanner; label: string; rounded: string }) {
+  const image = (
+    // The uploaded photo is the whole banner when no words were added.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={banner.image} alt="" className="block h-auto w-full" />
+  )
+  return (
+    <section className={`overflow-hidden ${rounded}`} aria-label={label}>
+      {banner.ctaLink ? <Link href={banner.ctaLink}>{image}</Link> : image}
+    </section>
+  )
+}
+
 export function ListingHero({ banner }: { banner: ListingBanner }) {
+  if (banner.image && !hasCopy(banner)) {
+    return <PhotoOnly banner={banner} label="Banner" rounded="rounded-2xl" />
+  }
+
   const light = !banner.dark
 
   return (
@@ -81,6 +101,10 @@ export function ListingPromoRow({ banners }: { banners: ListingBanner[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {banners.slice(0, 2).map((banner) => {
+        if (banner.image && !hasCopy(banner)) {
+          return <PhotoOnly key={banner.id} banner={banner} label="Promotion" rounded="rounded-xl" />
+        }
+
         const light = !banner.dark
         return (
           <section

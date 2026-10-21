@@ -112,6 +112,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Homepage Sections", path: "/admin/home-components", icon: <Layers className="h-5 w-5" /> },
       { name: "Hero Posters & Slides", path: "/admin/posters", icon: <ImageIcon className="h-5 w-5" /> },
       { name: "Banners & Promos", path: "/admin/listing-banners", icon: <ImageIcon className="h-5 w-5" /> },
+      { name: "Division Promotions", path: "/admin/division-promotions", icon: <LayoutGrid className="h-5 w-5" /> },
       { name: "Theme & Festivals", path: "/admin/theme", icon: <Palette className="h-5 w-5" /> },
       { name: "Site Features", path: "/admin/features", icon: <Star className="h-5 w-5" /> },
       { name: "Product Ads", path: "/admin/product-advertisements", icon: <Layers className="h-5 w-5" /> },

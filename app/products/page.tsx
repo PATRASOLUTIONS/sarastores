@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
-import { ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal, X } from "lucide-react"
+import { usePathname, useSearchParams } from "next/navigation"
+import { ChevronDown, ChevronLeft, ChevronRight, CreditCard, LayoutGrid, List, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import SpecFacets from "@/components/SpecFacets"
 import ProductListingCard from "@/components/products/ProductListingCard"
-import { useListingBanners } from "@/components/products/ListingBanners"
+import { ListingHero, ListingPromoRow, useListingBanners } from "@/components/products/ListingBanners"
 import { OfferTabs, OffersHero, OffersPromotions, OffersTrustStrip, type OfferTab } from "@/components/products/OffersPresentation"
 import RazorpayOffers from "@/components/product/RazorpayOffers"
 import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
@@ -22,11 +22,16 @@ import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import { normalizeProductForSchema, type ProductSchemaInput } from "@/lib/product-schema"
 import { calculateDiscount, getCatalogMRP, getCatalogRatingInfo, titleCaseLabel } from "@/lib/product-display"
 import {
+  buildMobileFacets,
   buildSelectionAwareFacets,
   countActiveFacets,
   facetValuesFor,
   matchesFacetValues,
+  mobileFacetValuesFor,
+  MOBILE_FACETS_AFTER_RATING,
+  MOBILE_FACETS_BEFORE_RATING,
   toggleFacetValue,
+  type Facet,
   type FacetSelection,
 } from "@/lib/product-facets"
 
@@ -95,6 +100,71 @@ async function fetchCatalog(): Promise<Product[]> {
   }
 }
 
+function PriceRangeBar({
+  min,
+  max,
+  value,
+  onChange,
+}: {
+  min: number
+  max: number
+  value: [number, number]
+  onChange: (next: [number, number]) => void
+}) {
+  if (!(max > min)) return null
+  const step = 100
+  const low = Math.min(Math.max(value[0], min), max - step)
+  const high = Math.min(Number.isFinite(value[1]) ? value[1] : max, max)
+  const span = max - min
+  const start = ((low - min) / span) * 100
+  const end = ((Math.max(high, low + step) - min) / span) * 100
+  const thumb =
+    "pointer-events-none absolute inset-x-0 top-1/2 h-4 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[#1560BD] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#1560BD]"
+
+  const commit = (nextLow: number, nextHigh: number) => {
+    const floor = Math.min(nextLow, nextHigh - step)
+    const ceiling = Math.max(nextHigh, floor + step)
+    const open = floor <= min && ceiling >= max
+    onChange(open ? [0, PRICE_MAX] : [floor, ceiling])
+  }
+
+  return (
+    <div className="mb-3">
+      <div className="mb-2 flex items-center justify-between gap-2 text-[12px] font-medium text-gray-600">
+        <span>₹{low.toLocaleString("en-IN")}</span>
+        <span>₹{Math.max(high, low + step).toLocaleString("en-IN")}</span>
+      </div>
+      <div className="relative h-4">
+        <div className="absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-gray-200" />
+        <div
+          className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#1560BD]"
+          style={{ left: `${start}%`, width: `${Math.max(end - start, 0)}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={low}
+          aria-label="Minimum price"
+          onChange={(event) => commit(Number(event.target.value), Math.max(high, low + step))}
+          className={`${thumb} ${low > min + span / 2 ? "z-30" : "z-10"}`}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={Math.max(high, low + step)}
+          aria-label="Maximum price"
+          onChange={(event) => commit(low, Number(event.target.value))}
+          className={`${thumb} z-20`}
+        />
+      </div>
+    </div>
+  )
+}
+
 function FilterSection({
   title,
   defaultOpen = true,
@@ -148,6 +218,8 @@ function CheckOption({
 
 export default function ProductsPage() {
   const marketing = useMarketingContent("products")
+  const pathname = usePathname()
+  const offersPage = pathname === "/offers"
   const searchParams = useSearchParams()
 
   const [searchTerm, setSearchTerm] = useState("")
@@ -164,6 +236,7 @@ export default function ProductsPage() {
   const [availability, setAvailability] = useState<"all" | "in" | "out">("all")
   const [facetSelection, setFacetSelection] = useState<FacetSelection>({})
   const [sortBy, setSortBy] = useState("relevance")
+  const [view, setView] = useState<"grid" | "list">("grid")
 
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -175,7 +248,7 @@ export default function ProductsPage() {
   const [showAllBrands, setShowAllBrands] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [retryCount, setRetryCount] = useState(0)
-  const [offerTab, setOfferTab] = useState<OfferTab>("all-offers")
+  const [offerTab, setOfferTab] = useState<OfferTab>(offersPage ? "all-offers" : "all-products")
   const bankOffers = useRazorpayOffers()
   const currentOffers = applicableOffers(bankOffers.offers, Infinity)
   const itemsPerPage = 24
@@ -224,7 +297,7 @@ export default function ProductsPage() {
     setSelectedDivisions(commaList(searchParams.get("division") || searchParams.get("divisions")))
     setSelectedSegments(commaList(searchParams.get("segment") || searchParams.get("segments")))
 
-    setOfferTab(searchParams.size > 0 ? "all-products" : "all-offers")
+    setOfferTab(offersPage ? (searchParams.size > 0 ? "all-products" : "all-offers") : "all-products")
     setMinDiscount(0)
     setMinRating(0)
     const availabilityFromUrl = searchParams.get("availability")
@@ -253,7 +326,7 @@ export default function ProductsPage() {
     if (subCategoryFromUrl) selections.push(subCategoryFromUrl)
     if (subCategoriesFromUrl) selections.push(...subCategoriesFromUrl.split(",").map((s) => s.trim()).filter(Boolean))
     setSelectedSubCategories(selections)
-  }, [searchParams])
+  }, [offersPage, searchParams])
 
   useEffect(() => {
     let cancelled = false
@@ -402,9 +475,10 @@ export default function ProductsPage() {
    */
   const facetValuesById = useMemo(() => {
     const map = new Map<string, Record<string, string[]>>()
-    for (const product of eligibleProducts) map.set(String(product.id), facetValuesFor(product))
+    const read = offersPage ? facetValuesFor : mobileFacetValuesFor
+    for (const product of eligibleProducts) map.set(String(product.id), read(product))
     return map
-  }, [eligibleProducts])
+  }, [eligibleProducts, offersPage])
 
   const valuesFor = useCallback(
     (product: Product) => facetValuesById.get(String(product.id)) ?? {},
@@ -450,6 +524,11 @@ export default function ProductsPage() {
     [labelCounts, selectedSegments],
   )
 
+  const categoryCounts = useMemo(
+    () => labelCounts("category", p => getProductCategoryGroupName(p), selectedCategories),
+    [labelCounts, selectedCategories],
+  )
+
   const subCategoryCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const p of countBase("subCategory")) {
@@ -482,6 +561,12 @@ export default function ProductsPage() {
     return { in: base.filter(isInStock).length, out: base.filter(p => !isInStock(p)).length }
   }, [countBase])
 
+  const priceBounds = useMemo(() => {
+    const prices = eligibleProducts.map((product) => Number(product.price)).filter((price) => Number.isFinite(price) && price > 0)
+    if (prices.length === 0) return { min: 0, max: 0 }
+    return { min: Math.floor(Math.min(...prices)), max: Math.ceil(Math.max(...prices)) }
+  }, [eligibleProducts])
+
   const priceBandCounts = useMemo(() => {
     const base = countBase("price")
     return PRICE_BANDS.map(band =>
@@ -511,9 +596,17 @@ export default function ProductsPage() {
   // Each spec facet is counted ignoring its own selection, for the same reason
   // the sidebar dimensions are.
   const facets = useMemo(
-    () => buildSelectionAwareFacets(filteredProducts.map(valuesFor), facetSelection),
-    [filteredProducts, facetSelection, valuesFor],
+    () => offersPage
+      ? buildSelectionAwareFacets(filteredProducts.map(valuesFor), facetSelection)
+      : buildMobileFacets(filteredProducts.map(valuesFor), facetSelection),
+    [offersPage, filteredProducts, facetSelection, valuesFor],
   )
+
+  const facetsNamed = (keys: readonly string[]) =>
+    keys.map((key) => facets.find((facet) => facet.key === key)).filter((facet): facet is Facet => Boolean(facet))
+
+  /** A taxonomy filter with a single value cannot narrow the list. */
+  const hasVariants = (counts: Array<[string, number]>) => counts.filter(([, count]) => count > 0).length > 1
 
   const facetedProducts = useMemo(
     () => filteredProducts.filter((p) => matchesFacetValues(valuesFor(p), facetSelection)),
@@ -576,16 +669,26 @@ export default function ProductsPage() {
   // ── Presentation helpers ────────────────────────────────────────────
   const getCategoryName = (id: string) => categories.find((c) => c.id === id)?.name || id
 
+  const divisionLanding = !offersPage && selectedDivisions.length === 1
+  const showSubFilters = selectedDivisions.length > 0
+  const divisionName = selectedDivisions[0] ? titleCase(selectedDivisions[0]) : ""
+  const focusName = selectedSubCategories[0] ? titleCase(selectedSubCategories[0]) : divisionName
   const activeScope =
+    selectedDivisions[0] ||
     selectedSubCategories[0] ||
     (selectedCategories[0] ? getCategoryName(selectedCategories[0]) : "") ||
     ""
-  const heading = offerTab === "all-products" ? (activeScope ? titleCase(activeScope) : "All Products") : marketing.text("results", "title")
+  const heading = offersPage
+    ? (offerTab === "all-products" ? (focusName || (activeScope ? titleCase(activeScope) : "All Products")) : marketing.text("results", "title"))
+    : (divisionLanding ? focusName : "All Products")
   const pageNumbers = [...new Set([1, ...Array.from({ length: 5 }, (_, index) => currentPage - 2 + index), totalPages])]
     .filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b)
 
   const heroBanners = useListingBanners("hero", activeScope)
   const promoBanners = useListingBanners("promo", activeScope)
+  const sameScope = (scope?: string) => (scope || "").trim().toLowerCase() === (selectedDivisions[0] || "").trim().toLowerCase()
+  const divisionHero = heroBanners.find((banner) => sameScope(banner.scope))
+  const divisionPromos = promoBanners.filter((banner) => sameScope(banner.scope))
 
   const priceBandActive = (band: [number, number]) => priceRange[0] === band[0] && priceRange[1] === band[1]
 
@@ -638,6 +741,22 @@ export default function ProductsPage() {
    * drop out of the top six and take its own checkbox off screen with it.
    * Selected brands are always listed.
    */
+  const renderFacetSections = (list: Facet[]) => list.map((facet) => (
+    <FilterSection key={facet.key} title={facet.label} defaultOpen={false}>
+      <div className="max-h-64 overflow-y-auto pr-1">
+        {facet.values.map(({ value, count }) => (
+          <CheckOption
+            key={value}
+            label={value}
+            count={count}
+            checked={(facetSelection[facet.key] || []).includes(value)}
+            onChange={() => toggleFacet(facet.key, value)}
+          />
+        ))}
+      </div>
+    </FilterSection>
+  ))
+
   const visibleBrands = useMemo(() => {
     if (showAllBrands) return brandCounts
     const isSelected = ([label]: [string, number]) =>
@@ -677,7 +796,7 @@ export default function ProductsPage() {
         labels, so an unclassified catalogue shows the sidebar it always had
         rather than two empty sections.
       */}
-      {divisionCounts.length > 0 && (
+      {!offersPage && !divisionLanding && hasVariants(divisionCounts) && (
         <FilterSection title="Division">
           <div className="max-h-64 overflow-y-auto pr-1">
             {divisionCounts.map(([label, count]) => (
@@ -693,6 +812,23 @@ export default function ProductsPage() {
         </FilterSection>
       )}
 
+      {!offersPage && hasVariants(categoryCounts) && (
+      <FilterSection title="Category">
+        <div className="max-h-64 overflow-y-auto pr-1">
+          {categoryCounts.map(([label, count]) => (
+            <CheckOption
+              key={label}
+              label={titleCase(label)}
+              count={count}
+              checked={selectedCategories.some(value => sameLabel(value, label))}
+              onChange={() => toggleCategory(label)}
+            />
+          ))}
+        </div>
+      </FilterSection>
+      )}
+
+      {offersPage && subCategoryCounts.length > 0 && (
       <FilterSection title="Sub-Category">
         <div className="max-h-64 overflow-y-auto pr-1">
           {subCategoryCounts.map(([label, count]) => (
@@ -706,8 +842,9 @@ export default function ProductsPage() {
           ))}
         </div>
       </FilterSection>
+      )}
 
-      {segmentCounts.length > 0 && (
+      {!offersPage && hasVariants(segmentCounts) && (
         <FilterSection title="Segment">
           <div className="max-h-64 overflow-y-auto pr-1">
             {segmentCounts.map(([label, count]) => (
@@ -723,7 +860,22 @@ export default function ProductsPage() {
         </FilterSection>
       )}
 
-      <FilterSection key={offerTab === "brand" ? "brand-offers" : "brand-filter"} title="Brand" defaultOpen={offerTab === "brand"}>
+      {!offersPage && (
+        <FilterSection title="Price">
+          <PriceRangeBar min={priceBounds.min} max={priceBounds.max} value={priceRange} onChange={setPriceRange} />
+          {PRICE_BANDS.map((band, index) => (
+            <CheckOption
+              key={band.label}
+              label={band.label}
+              count={priceBandCounts[index]}
+              checked={priceBandActive(band.range)}
+              onChange={() => togglePriceBand(band.range)}
+            />
+          ))}
+        </FilterSection>
+      )}
+
+      <FilterSection key={offerTab === "brand" ? "brand-offers" : "brand-filter"} title={offersPage ? "Brand" : "Brands"} defaultOpen={offerTab === "brand"}>
         <div className="max-h-64 overflow-y-auto pr-1">
           {visibleBrands.map(([label, count]) => (
             <CheckOption
@@ -746,7 +898,9 @@ export default function ProductsPage() {
         )}
       </FilterSection>
 
+      {offersPage && (
       <FilterSection title="Price Range" defaultOpen={false}>
+        <PriceRangeBar min={priceBounds.min} max={priceBounds.max} value={priceRange} onChange={setPriceRange} />
         {PRICE_BANDS.map((band, index) => (
           <CheckOption
             key={band.label}
@@ -757,7 +911,11 @@ export default function ProductsPage() {
           />
         ))}
       </FilterSection>
+      )}
 
+      {!offersPage && renderFacetSections(facetsNamed(MOBILE_FACETS_BEFORE_RATING))}
+
+      {offersPage && (
       <FilterSection title="Discount" defaultOpen={false}>
         {DISCOUNT_BANDS.map((d, index) => (
           <CheckOption
@@ -769,13 +927,16 @@ export default function ProductsPage() {
           />
         ))}
       </FilterSection>
+      )}
 
+      {offersPage && (
       <FilterSection title="Availability">
         <CheckOption label="In Stock" count={availabilityCounts.in} checked={availability === "in"} onChange={() => setAvailability(value => value === "in" ? "all" : "in")} />
         <CheckOption label="Out of Stock" count={availabilityCounts.out} checked={availability === "out"} onChange={() => setAvailability(value => value === "out" ? "all" : "out")} />
       </FilterSection>
+      )}
 
-      <FilterSection title="Rating" defaultOpen={false}>
+      <FilterSection title={offersPage ? "Rating" : "Customer Ratings"} defaultOpen={false}>
         {RATING_BANDS.map((r, index) => (
           <CheckOption
             key={r}
@@ -787,7 +948,16 @@ export default function ProductsPage() {
         ))}
       </FilterSection>
 
-      {Object.keys(facets).length > 0 && (
+      {!offersPage && renderFacetSections(facetsNamed(MOBILE_FACETS_AFTER_RATING))}
+
+      {!offersPage && (
+      <FilterSection title="Availability">
+        <CheckOption label="In Stock" count={availabilityCounts.in} checked={availability === "in"} onChange={() => setAvailability(value => value === "in" ? "all" : "in")} />
+        <CheckOption label="Out of Stock" count={availabilityCounts.out} checked={availability === "out"} onChange={() => setAvailability(value => value === "out" ? "all" : "out")} />
+      </FilterSection>
+      )}
+
+      {offersPage && showSubFilters && facets.length > 0 && (
         <div className="border-t border-gray-100 pt-4">
           <SpecFacets facets={facets} selection={facetSelection} onToggle={toggleFacet} />
         </div>
@@ -802,16 +972,72 @@ export default function ProductsPage() {
       <main id="main-content" className="w-full min-w-0 flex-grow">
         <div className="section-container py-4">
           <MarketingStatus page="products" />
-          <nav className="flex items-center text-[13px] text-gray-500" aria-label="Breadcrumb">
-            <Link href="/" className="hover:text-[#1560BD]">
-              Home
-            </Link>
-            <span className="mx-2 text-gray-300">/</span>
-            <span className="font-medium text-gray-700">Offers</span>
+          <nav className={`flex flex-wrap items-center text-[13px] ${divisionLanding ? "gap-1 text-[#1560BD]" : "text-gray-500"}`} aria-label="Breadcrumb">
+            <Link href="/" className={divisionLanding ? "font-medium hover:underline" : "hover:text-[#1560BD]"}>Home</Link>
+            {divisionLanding ? <ChevronRight className="h-3.5 w-3.5" /> : <span className="mx-2 text-gray-300">/</span>}
+            {offersPage ? (
+              <span className="font-medium text-gray-700">Offers</span>
+            ) : (
+              <>
+                {divisionLanding ? (
+                  <Link href="/products" className="font-medium hover:underline">Products</Link>
+                ) : (
+                  <span className="font-medium text-gray-700">Products</span>
+                )}
+                {divisionName && (
+                  <>
+                    {divisionLanding ? <ChevronRight className="h-3.5 w-3.5" /> : <span className="mx-2 text-gray-300">/</span>}
+                    {selectedSubCategories[0] ? (
+                      <Link href={`/products?division=${encodeURIComponent(selectedDivisions[0])}`} className="font-medium hover:underline">{divisionName}</Link>
+                    ) : (
+                      <span className={divisionLanding ? "font-semibold" : "font-medium text-gray-700"}>{divisionName}</span>
+                    )}
+                  </>
+                )}
+                {selectedSubCategories[0] && (
+                  <>
+                    {divisionLanding ? <ChevronRight className="h-3.5 w-3.5" /> : <span className="mx-2 text-gray-300">/</span>}
+                    <span className={divisionLanding ? "font-semibold" : "font-medium text-gray-700"}>{titleCase(selectedSubCategories[0])}</span>
+                  </>
+                )}
+              </>
+            )}
           </nav>
 
-          <div className="mt-3"><OffersHero banner={heroBanners[0]} /></div>
-          <OfferTabs selected={offerTab} onSelect={setOfferTab} />
+          {divisionLanding && (
+            <div className="mt-4 flex items-center justify-between gap-6 border-b border-gray-100 pb-5">
+              <div className="min-w-0 max-w-xl">
+                <h1 className="text-[28px] font-bold tracking-tight text-[#0F172A] md:text-[32px]">{focusName}</h1>
+                <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+                  Latest {focusName.toLowerCase()} from Apple, Samsung, OnePlus, Xiaomi and more.
+                </p>
+              </div>
+              <ul className="flex shrink-0 flex-nowrap gap-3">
+                {[
+                  { icon: ShieldCheck, title: "100% Genuine Products", detail: "Direct from Brands" },
+                  { icon: CreditCard, title: "Easy EMI", detail: "All Major Banks" },
+                  { icon: RefreshCw, title: "Exchange Available", detail: "Get Best Value" },
+                ].map(({ icon: Icon, title, detail }) => (
+                  <li key={title} className="flex items-center gap-2.5 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#E8F1FF] text-[#1560BD]">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-bold leading-tight text-[#0F2557]">{title}</span>
+                      <span className="mt-0.5 block text-[11px] text-gray-500">{detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {offersPage && (
+            <>
+              <div className="mt-3"><OffersHero banner={heroBanners[0]} /></div>
+              <OfferTabs selected={offerTab} onSelect={setOfferTab} />
+            </>
+          )}
 
           <div className="mt-4 flex gap-4">
             {showFilters && (
@@ -830,9 +1056,9 @@ export default function ProductsPage() {
                 showFilters
                   ? "fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[330px] overflow-y-auto bg-white p-3 shadow-2xl"
                   : "hidden"
-              } flex-shrink-0 lg:block lg:w-[195px] lg:bg-transparent lg:p-0 lg:shadow-none`}
+              } flex-shrink-0 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-7rem)] lg:w-[230px] lg:self-start lg:overflow-y-auto lg:overscroll-y-contain lg:bg-transparent lg:p-0 lg:shadow-none`}
             >
-              <div className="lg:sticky lg:top-24">{filterPanel}</div>
+              <div>{filterPanel}</div>
             </aside>
 
             <div className="min-w-0 flex-1">
@@ -845,21 +1071,35 @@ export default function ProductsPage() {
                 Filters
               </button>
 
-              <div className="mb-4"><OffersPromotions banners={promoBanners} onBank={() => setOfferTab("bank")} onExchange={() => setOfferTab("exchange")} /></div>
+              {offersPage && <div className="mb-4"><OffersPromotions banners={promoBanners} onBank={() => setOfferTab("bank")} onExchange={() => setOfferTab("exchange")} /></div>}
+              {divisionLanding && divisionHero && <div className="mb-4"><ListingHero banner={divisionHero} /></div>}
 
               {(offerTab === "bank" || offerTab === "no-cost-emi") && <div className="mb-4">
                 <RazorpayOffers offers={offerTab === "no-cost-emi" ? currentOffers.filter(isNoCostEmiOffer) : currentOffers}
                   loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} mode={offerTab === "no-cost-emi" ? "emi" : "offers"} />
               </div>}
 
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h1 className={marketing.enabled("results") ? "text-xl font-bold text-gray-900" : "sr-only"}>
+              <div className="mb-3">
+                <h1 className={divisionLanding ? "sr-only" : marketing.enabled("results") ? "min-w-0 flex-1 text-xl font-bold text-gray-900" : "sr-only"}>
                   {heading}{" "}
                   <span className="text-sm font-normal text-gray-500">
                     ({sortedProducts.length.toLocaleString("en-IN")} Products)
                   </span>
                 </h1>
-                <div className="flex items-center gap-2">
+              </div>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="relative w-52 shrink-0">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="search"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Search products"
+                      aria-label="Search products"
+                      className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-9 pr-3 text-[13px] text-gray-700 outline-none placeholder:text-gray-400 focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
+                    />
+                </div>
+                <div className="ml-auto flex items-center gap-2">
                   <label htmlFor="sort-by" className="text-[13px] text-gray-600">
                     Sort By:
                   </label>
@@ -869,7 +1109,7 @@ export default function ProductsPage() {
                     onChange={(e) => setSortBy(e.target.value)}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-700 focus:border-[#1560BD] focus:outline-none"
                   >
-                    <option value="relevance">Featured</option>
+                    <option value="relevance">Relevance</option>
                     <option value="price-asc">Price: Low to High</option>
                     <option value="price-desc">Price: High to Low</option>
                     <option value="discount">Discount</option>
@@ -877,6 +1117,26 @@ export default function ProductsPage() {
                     <option value="rating">Customer Rating</option>
                     <option value="name-asc">Name: A to Z</option>
                   </select>
+                  <div className="flex overflow-hidden rounded-md border border-gray-300">
+                    <button
+                      type="button"
+                      aria-label="Grid view"
+                      aria-pressed={view === "grid"}
+                      onClick={() => setView("grid")}
+                      className={`px-2 py-1.5 ${view === "grid" ? "bg-[#1560BD] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="List view"
+                      aria-pressed={view === "list"}
+                      onClick={() => setView("list")}
+                      className={`border-l border-gray-300 px-2 py-1.5 ${view === "list" ? "bg-[#1560BD] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    >
+                      <List className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -912,7 +1172,7 @@ export default function ProductsPage() {
               )}
 
               {isLoading ? (
-                <div role="status" aria-label="Loading products" className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                <div role="status" aria-label="Loading products" className={view === "list" ? "flex flex-col gap-3" : "grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4"}>
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="animate-pulse rounded-lg border border-gray-200 bg-white">
                       <div className="aspect-[4/3] rounded-t-lg bg-gray-100" />
@@ -948,9 +1208,9 @@ export default function ProductsPage() {
                 </div>
               ) : (
                 <>
-                  <div aria-label="Product results" className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                  <div aria-label="Product results" className={view === "list" ? "flex flex-col gap-3" : "grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4"}>
                     {currentProducts.map((product) => (
-                      <ProductListingCard key={product.id} product={product} offersMode
+                      <ProductListingCard key={product.id} product={product} offersMode layout={view}
                         offerLabels={applicableOffers(bankOffers.offers, Number(product.price)).slice(0, 2).map(offer => `${offer.name} · Terms apply`)} />
                     ))}
                   </div>
@@ -984,10 +1244,13 @@ export default function ProductsPage() {
                   )}
                 </>
               )}
+              {divisionLanding && divisionPromos.length > 0 && (
+                <div className="mt-8"><ListingPromoRow banners={divisionPromos} /></div>
+              )}
             </div>
           </div>
         </div>
-        <OffersTrustStrip />
+        {!divisionLanding && <OffersTrustStrip />}
       </main>
 
       <Footer />

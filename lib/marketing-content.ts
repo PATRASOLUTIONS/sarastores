@@ -60,7 +60,7 @@ export const MARKETING_SECTIONS: MarketingDefinition[] = [
     { title: "Fast Delivery", detail: "Across India", href: "/shipping-policy" },
     { title: "Expert Support", detail: "In-store & Online", href: "/contact" },
   ]), { note: "Store totals continue to come from the live store directory." }),
-  definition("home", "categories", "Category shortcuts", 2, { title: "Shop by Category", ctaText: "View All", ctaLink: "/products",
+  definition("home", "categories", "Brand shortcuts", 2, { title: "Shop by Brands", ctaText: "View All", ctaLink: "/brands",
     ...marketingItems(["Mobiles", "Laptops", "Televisions", "Refrigerators", "Washing Machines", "Air Conditioners", "Kitchen Appliances", "Audio", "Wearables", "Accessories"]
       .map(title => ({ title, image: "", href: "" }))) }, { tool: "/admin/catalogue", note: "Blank image/link inherits the catalog category. Names, artwork and destinations can be overridden here." }),
   definition("home", "deals", "Today's deals", 3, { title: "Today's Deals", ctaText: "View All", ctaLink: "/offers", warrantyLabel: "Brand warranty included" }, { tool: "/admin/products", note: "Product prices, discounts and availability remain catalog-driven." }),

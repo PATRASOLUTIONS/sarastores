@@ -32,12 +32,12 @@ test.describe("admin catalogue", () => {
     const rows = page.locator("tbody tr")
     await expect.poll(() => rows.count(), { timeout: 60_000 }).toBeGreaterThan(1)
 
-    for (const column of ["Division", "Sub-Category", "Segment", "Brand", "Price", "MRP", "Stock", "Status"]) {
+    for (const column of ["Division", "Category", "Segment", "Brand", "Price", "MRP", "Stock", "Status"]) {
       await expect(page.getByRole("button", { name: column, exact: true }).first()).toBeVisible()
     }
 
-    // Removed on request — Sub-Category carried the same value.
-    await expect(page.getByRole("button", { name: "Category", exact: true })).toHaveCount(0)
+    // The warehouse PROD DESC is not the merchandising category.
+    await expect(page.getByRole("button", { name: "Sub-Category", exact: true })).toHaveCount(0)
 
     // Sorting by price must actually reorder, and must reverse on a second
     // click. Compare the first cell's text rather than parsing currency.

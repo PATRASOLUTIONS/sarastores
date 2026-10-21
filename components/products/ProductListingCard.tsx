@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Check, Heart, Star } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
-import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
+import { formatProductCardName, toastProductName } from "@/utils/cleanProductName"
 import CompareProductButton from "@/components/CompareProductButton"
 import type { CatalogProduct } from "@/utils/catalog"
 import {
@@ -26,6 +27,22 @@ const BADGE_TONE = {
   new: "bg-[#0F8A3C] text-white",
   best: "bg-[#0F8A3C] text-white",
 } as const
+
+function getKeyFeatures(product: Record<string, unknown>): string[] {
+  const candidates = [product.features, product.highlights, product.characteristics]
+  const features = candidates.flatMap(value =>
+    Array.isArray(value)
+      ? value.filter(item => typeof item === "string" || typeof item === "number")
+      : typeof value === "string" ? value.split(/\r?\n|\s*[•|]\s*/) : [],
+  )
+
+  if (features.length === 0 && product.technical_details && typeof product.technical_details === "object") {
+    features.push(...Object.values(product.technical_details as Record<string, unknown>)
+      .filter(value => typeof value === "string" || typeof value === "number"))
+  }
+
+  return [...new Set(features.map(value => String(value).trim()).filter(value => value.length > 2))].slice(0, 5)
+}
 
 function Stars({ rating, count }: { rating: number; count: number }) {
   return (
@@ -53,9 +70,13 @@ function Stars({ rating, count }: { rating: number; count: number }) {
   )
 }
 
-export default function ProductListingCard({ product, offersMode = false, offerLabels = [] }: {
-  product: CatalogProduct & ProductDisplayInput; offersMode?: boolean; offerLabels?: string[]
+export default function ProductListingCard({ product, offersMode = false, offerLabels = [], layout = "grid" }: {
+  product: CatalogProduct & ProductDisplayInput
+  offersMode?: boolean
+  offerLabels?: string[]
+  layout?: "grid" | "list"
 }) {
+  const router = useRouter()
   const { addToCart } = useCart()
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const [adding, setAdding] = useState(false)
@@ -75,6 +96,8 @@ export default function ProductListingCard({ product, offersMode = false, offerL
   const unavailable = offersMode && (!Number.isFinite(Number(product.price)) || Number(product.price) <= 0 ||
     (typeof product.stock === "number" && product.stock <= 0))
   const wishlisted = isInWishlist(id)
+  const displayName = formatProductCardName(product.name)
+  const keyFeatures = getKeyFeatures(product)
 
   const handleAddToCart = async () => {
     if (adding || unavailable) return
@@ -94,6 +117,87 @@ export default function ProductListingCard({ product, offersMode = false, offerL
     } finally {
       setTimeout(() => setAdding(false), 400)
     }
+  }
+
+  if (layout === "list") {
+    return (
+      <article
+        role="link"
+        tabIndex={0}
+        onClick={event => {
+          if ((event.target as HTMLElement).closest("a, button, input")) return
+          router.push(href)
+        }}
+        onKeyDown={event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            router.push(href)
+          }
+        }}
+        className="group grid cursor-pointer grid-cols-[130px_minmax(0,1fr)] gap-5 border-b border-gray-200 bg-white px-3 py-5 transition-shadow hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 sm:grid-cols-[180px_minmax(0,1fr)_170px]"
+      >
+        <div>
+          <Link href={href} className="relative flex h-44 w-full items-center justify-center overflow-hidden bg-white">
+            {badge && (
+              <span className={`absolute left-1.5 top-1.5 z-10 rounded px-1.5 py-0.5 text-[10px] font-bold ${BADGE_TONE[badge.tone]}`}>
+                {badge.label}
+              </span>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image} alt={displayName} loading="lazy" className="h-full w-full scale-[1.08] object-contain" onError={(e) => { e.currentTarget.src = "/placeholder.svg" }} />
+          </Link>
+          <div className="mt-2">
+            <CompareProductButton productId={id} name={displayName} variant="checkbox" />
+          </div>
+        </div>
+        <div className="min-w-0 py-0.5">
+          <div className="flex items-start gap-2">
+            <Link href={href} className="min-w-0 flex-1">
+              <h3 className="text-base font-semibold leading-snug text-[#1560BD] group-hover:underline">{displayName}</h3>
+            </Link>
+            <button
+              type="button"
+              onClick={() => (wishlisted ? removeFromWishlist(id) : addToWishlist(id))}
+              aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+              className="shrink-0 p-1 text-gray-300 hover:text-[#E11D2E]"
+            >
+              <Heart className={`h-4 w-4 ${wishlisted ? "fill-[#E11D2E] text-[#E11D2E]" : ""}`} />
+            </button>
+          </div>
+          {(!offersMode || rating.count > 0) && (
+            <div className="mt-1.5 flex items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 rounded-sm bg-[#388e3c] px-1.5 py-0.5 font-semibold text-white">
+                {rating.rating.toFixed(1)}
+                <Star className="h-2.5 w-2.5 fill-white text-white" />
+              </span>
+              {rating.count > 0 && (
+                <span className="font-medium text-gray-500">{rating.count.toLocaleString("en-IN")} Ratings &amp; Reviews</span>
+              )}
+            </div>
+          )}
+          {keyFeatures.length > 0 && (
+            <ul className="mt-3 space-y-1">
+              {keyFeatures.map(feature => (
+                <li key={feature} className="flex min-w-0 items-start gap-2 text-[13px] leading-5 text-gray-700">
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gray-400" />
+                  <span className="min-w-0 truncate" title={feature}>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="col-span-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-gray-100 pt-3 sm:col-span-1 sm:block sm:border-0 sm:pt-0.5">
+          <span className="text-xl font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</span>
+          {discount > 0 && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-gray-500 line-through">₹{mrp.toLocaleString("en-IN")}</span>
+              <span className="font-semibold text-green-700">{discount}% off</span>
+            </div>
+          )}
+          {offerLabels.length > 0 && <p className="mt-2 text-xs font-semibold text-green-700">Bank Offer</p>}
+        </div>
+      </article>
+    )
   }
 
   return (
@@ -117,14 +221,14 @@ export default function ProductListingCard({ product, offersMode = false, offerL
         </button>
 
         <Link href={href} className="block">
-          <div className={`flex items-center justify-center overflow-hidden rounded-t-lg p-3 ${offersMode ? "aspect-[4/3] bg-white" : "aspect-[4/3] bg-gray-50"}`}>
+          <div className={`flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-lg p-2 ${offersMode ? "bg-white" : "bg-gray-50"}`}>
             {/* Catalogue images are hotlinked from many CDNs, so a plain img avoids loader failures. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={image}
-              alt={cleanProductName(product.name)}
+              alt={displayName}
               loading="lazy"
-              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.04]"
+              className="h-full w-full scale-[1.05] object-contain transition-transform duration-300 group-hover:scale-110"
               onError={(e) => {
                 e.currentTarget.src = "/placeholder.svg"
               }}
@@ -136,7 +240,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
       <div className="flex flex-1 flex-col p-3">
         <Link href={href}>
           <h3 className="line-clamp-2 min-h-[36px] text-[13px] font-semibold leading-[1.35] text-gray-900 transition-colors group-hover:text-[#1560BD]">
-            {cleanProductName(product.name)}
+            {displayName}
           </h3>
         </Link>
 
@@ -178,7 +282,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
         >
           {unavailable ? "Unavailable" : adding ? "Adding…" : "Add to Cart"}
         </button>
-        <CompareProductButton productId={id} name={cleanProductName(product.name)} />
+        <CompareProductButton productId={id} name={displayName} />
       </div>
     </article>
   )
