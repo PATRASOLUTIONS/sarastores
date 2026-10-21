@@ -20,6 +20,9 @@ import MegaMenu from '@/components/MegaMenu'
 import { useSettingsData } from '@/hooks/useSettingsData'
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import CategoryGlyph from '@/components/CategoryGlyph'
+import { taxonomyHref, type TaxonomyDivision } from "@/lib/product-taxonomy"
+import { fetchTaxonomy } from "@/lib/taxonomy-client"
+import { titleCaseLabel } from "@/lib/product-display"
 import { z } from "zod"
 
 const searchProductSchema = z.object({
@@ -76,6 +79,7 @@ export default function Header() {
   const { data: siteSettings } = useSettingsData()
   const marketing = useMarketingContent("header")
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [divisions, setDivisions] = useState<TaxonomyDivision[]>([])
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const router = useRouter()
@@ -264,6 +268,9 @@ export default function Header() {
       }
     }
     fetchCategories()
+    fetchTaxonomy()
+      .then(setDivisions)
+      .catch((error: unknown) => console.error("Error fetching catalogue navigation:", error))
   }, [])
 
   const handleCartClick = (e: React.MouseEvent) => {
@@ -323,14 +330,6 @@ export default function Header() {
     } else if (e.key === "Escape") {
       setShowSuggestions(false)
     }
-  }
-
-  const handleCategoryClick = (categoryId: string) => {
-    router.push(
-      /^mobiles?$/i.test(categoryId)
-        ? "/products?subCategory=Mobile&availability=in"
-        : `/products?category=${encodeURIComponent(categoryId)}`,
-    )
   }
 
   const getDashboardLink = () => {
@@ -953,23 +952,34 @@ export default function Header() {
               {/* Categories */}
               <div className="py-4 border-b border-white/10">
                 <p className="text-xs font-semibold text-white/40 uppercase mb-2 px-3 tracking-wider">Categories</p>
-                {categories.map((category, index) => (
+                {(divisions.length > 0
+                  ? divisions.map(division => ({
+                      id: `division:${division.name.toLowerCase()}`,
+                      name: titleCaseLabel(division.name),
+                      href: taxonomyHref(division.name),
+                    }))
+                  : categories.map(category => ({
+                      id: category.id,
+                      name: category.name,
+                      href: /^mobiles?$/i.test(category.name)
+                        ? "/products?subCategory=Mobile&availability=in"
+                        : `/products?category=${encodeURIComponent(category.name)}`,
+                    }))
+                ).map((category, index) => (
                   <motion.div
                     key={category.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.05 * (index + 5), duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                   >
-                    <button
-                      onClick={() => {
-                        handleCategoryClick(category.id)
-                        setIsMenuOpen(false)
-                      }}
+                    <Link
+                      href={category.href}
+                      onClick={() => setIsMenuOpen(false)}
                       className="w-full text-left text-white/80 hover:text-white font-medium flex items-center gap-3 py-3 px-3 rounded-lg hover:bg-brand-primary/15 transition-all duration-200"
                     >
                       <CategoryGlyph label={category.name} className="h-5 w-5 flex-shrink-0" strokeWidth={1.7} />
                       <span>{category.name}</span>
-                    </button>
+                    </Link>
                   </motion.div>
                 ))}
               </div>

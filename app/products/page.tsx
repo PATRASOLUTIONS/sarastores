@@ -1005,20 +1005,20 @@ export default function ProductsPage() {
           </nav>
 
           {divisionLanding && (
-            <div className="mt-4 flex items-center justify-between gap-6 border-b border-gray-100 pb-5">
+            <div className="mt-4 flex flex-col gap-4 border-b border-gray-100 pb-5 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0 max-w-xl">
-                <h1 className="text-[28px] font-bold tracking-tight text-[#0F172A] md:text-[32px]">{focusName}</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] md:text-[32px]">{focusName}</h1>
                 <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
                   Latest {focusName.toLowerCase()} from Apple, Samsung, OnePlus, Xiaomi and more.
                 </p>
               </div>
-              <ul className="flex shrink-0 flex-nowrap gap-3">
+              <ul className="flex gap-2 overflow-x-auto pb-1 md:shrink-0 md:flex-nowrap md:overflow-visible md:pb-0">
                 {[
                   { icon: ShieldCheck, title: "100% Genuine Products", detail: "Direct from Brands" },
                   { icon: CreditCard, title: "Easy EMI", detail: "All Major Banks" },
                   { icon: RefreshCw, title: "Exchange Available", detail: "Get Best Value" },
                 ].map(({ icon: Icon, title, detail }) => (
-                  <li key={title} className="flex items-center gap-2.5 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                  <li key={title} className="flex min-w-[210px] items-center gap-2.5 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2.5 md:min-w-0">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#E8F1FF] text-[#1560BD]">
                       <Icon className="h-5 w-5" />
                     </span>
@@ -1087,8 +1087,8 @@ export default function ProductsPage() {
                   </span>
                 </h1>
               </div>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="relative w-52 shrink-0">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative w-full sm:w-52 sm:shrink-0">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <input
                       type="search"
@@ -1099,15 +1099,15 @@ export default function ProductsPage() {
                       className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-9 pr-3 text-[13px] text-gray-700 outline-none placeholder:text-gray-400 focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
                     />
                 </div>
-                <div className="ml-auto flex items-center gap-2">
-                  <label htmlFor="sort-by" className="text-[13px] text-gray-600">
+                <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+                  <label htmlFor="sort-by" className="shrink-0 text-[13px] text-gray-600">
                     Sort By:
                   </label>
                   <select
                     id="sort-by"
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-700 focus:border-[#1560BD] focus:outline-none"
+                    className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-[13px] text-gray-700 focus:border-[#1560BD] focus:outline-none sm:flex-none sm:px-3"
                   >
                     <option value="relevance">Relevance</option>
                     <option value="price-asc">Price: Low to High</option>
@@ -1117,7 +1117,7 @@ export default function ProductsPage() {
                     <option value="rating">Customer Rating</option>
                     <option value="name-asc">Name: A to Z</option>
                   </select>
-                  <div className="flex overflow-hidden rounded-md border border-gray-300">
+                  <div className="flex shrink-0 overflow-hidden rounded-md border border-gray-300">
                     <button
                       type="button"
                       aria-label="Grid view"
