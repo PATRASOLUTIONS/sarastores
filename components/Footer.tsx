@@ -2,10 +2,8 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useEffect, useRef, useState, type FormEvent } from "react"
-import { Facebook, Heart, Instagram, Linkedin, Loader2, Youtube } from "lucide-react"
-import { FaApple } from "react-icons/fa"
-import QRCode from "qrcode"
+import { useRef, useState, type ElementType, type FormEvent } from "react"
+import { Facebook, Globe, Heart, Instagram, Linkedin, Loader2, Youtube } from "lucide-react"
 import toast from "react-hot-toast"
 import CookiePreferencesLink from "@/components/CookiePreferencesLink"
 import { useSettingsData } from "@/hooks/useSettingsData"
@@ -64,11 +62,18 @@ function XIcon({ className }: { className?: string }) {
   return <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
 }
 
-const SOCIALS = [
+const SOCIALS: Array<{
+  key: string
+  label: string
+  icon: ElementType
+  tint: string
+  fallbackHref?: string
+}> = [
+  { key: "websiteUrl", label: "Official website", icon: Globe, tint: "#1560bd", fallbackHref: "https://www.sarastores.com/" },
   { key: "facebookUrl", label: "Facebook", icon: Facebook, tint: "#295caf" },
-  { key: "instagramUrl", label: "Instagram", icon: Instagram, tint: "#a44b9c" },
+  { key: "instagramUrl", label: "Instagram", icon: Instagram, tint: "#a44b9c", fallbackHref: "https://www.instagram.com/saramobilesandelectronics/" },
   { key: "youtubeUrl", label: "YouTube", icon: Youtube, tint: "#ff0000" },
-  { key: "linkedinUrl", label: "LinkedIn", icon: Linkedin, tint: "#007bb5" },
+  { key: "linkedinUrl", label: "LinkedIn", icon: Linkedin, tint: "#007bb5", fallbackHref: "https://www.linkedin.com/company/sara-mobiles-electronics" },
   { key: "xUrl", label: "X", icon: XIcon, tint: "#000000" },
 ]
 
@@ -84,20 +89,6 @@ function FooterColumn({ title, links, legal = false }: { title: string; links: L
   )
 }
 
-function PlayStoreIcon() {
-  return <svg width="23" height="26" viewBox="0 0 23 26" aria-hidden><path fill="#32bbff" d="M1 1v24l12-12Z" /><path fill="#32d37c" d="m1 1 15 8-3 4Z" /><path fill="#ffcd46" d="m16 9 6 4-6 4-3-4Z" /><path fill="#ff5665" d="m1 25 15-8-3-4Z" /></svg>
-}
-
-function AppBadge({ kind, href }: { kind: "android" | "ios"; href?: string }) {
-  const content = <>
-    {kind === "android" ? <PlayStoreIcon /> : <FaApple size={25} aria-hidden />}
-    <span><small>{href ? kind === "android" ? "GET IT ON" : "Download on the" : "NOT AVAILABLE YET"}</small><strong>{kind === "android" ? "Google Play" : "App Store"}</strong></span>
-  </>
-  return href
-    ? <a href={href} className={styles.appBadge} target="_blank" rel="noopener noreferrer">{content}</a>
-    : <div role="img" className={styles.appBadge} aria-label={`${kind === "android" ? "Google Play" : "App Store"} download link not configured`}>{content}</div>
-}
-
 export default function Footer() {
   const marketing = useMarketingContent("footer")
   const linksFor = (section: string, links: LinkItem[]) => marketing.items(section, links.map(item => ({ ...item, title: item.label })))
@@ -109,13 +100,9 @@ export default function Footer() {
     return typeof value === "string" && /^https?:\/\//i.test(value.trim()) ? value.trim() : undefined
   }
   const socials = SOCIALS.map((social) => ({
-    ...social, href: settingUrl(social.key) || (social.key === "xUrl" ? settingUrl("twitterUrl") : undefined),
+    ...social,
+    href: settingUrl(social.key) || social.fallbackHref || (social.key === "xUrl" ? settingUrl("twitterUrl") : undefined),
   }))
-  const androidUrl = settingUrl("playStoreUrl")
-  const iosUrl = settingUrl("appStoreUrl")
-  const appDownloadUrl = settingUrl("appDownloadUrl")
-  const [qrCode, setQrCode] = useState<string>()
-  const [qrError, setQrError] = useState(false)
   const [email, setEmail] = useState("")
   const [subscribing, setSubscribing] = useState(false)
   const [subscriptionMessage, setSubscriptionMessage] = useState("")
@@ -123,20 +110,6 @@ export default function Footer() {
   const subscribeLock = useRef(false)
   const companyName = typeof settings?.storeName === "string" ? settings.storeName : "SARA Mobiles & Electronics"
   const legalName = typeof settings?.legalName === "string" ? settings.legalName : companyName
-
-  useEffect(() => {
-    let active = true
-    setQrError(false)
-    QRCode.toDataURL(appDownloadUrl || androidUrl || iosUrl || window.location.origin, {
-      width: 128, margin: 1, errorCorrectionLevel: "M",
-    }).then((image) => {
-      if (active) setQrCode(image)
-    }).catch((error: unknown) => {
-      console.error("[Footer] Could not generate download QR code:", error)
-      if (active) setQrError(true)
-    })
-    return () => { active = false }
-  }, [appDownloadUrl, androidUrl, iosUrl])
 
   const handleSubscribe = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -221,18 +194,6 @@ export default function Footer() {
           <MarketingSection page="footer" section="service"><FooterColumn title={marketing.text("service", "title")} links={linksFor("service", SERVICE_LINKS)} /></MarketingSection>
           <MarketingSection page="footer" section="about"><FooterColumn title={marketing.text("about", "title")} links={linksFor("about", ABOUT_LINKS)} /></MarketingSection>
           <MarketingSection page="footer" section="legal"><FooterColumn title={marketing.text("legal", "title")} links={linksFor("legal", LEGAL_LINKS)} legal /></MarketingSection>
-          <MarketingSection page="footer" section="download">
-          <div id="download-app" className={styles.download}>
-            <h3>{marketing.text("download", "title")}</h3>
-            <p>{marketing.text("download", "description")}</p>
-            <AppBadge kind="android" href={androidUrl} />
-            <AppBadge kind="ios" href={iosUrl} />
-          </div>
-          <div className={styles.qr}>
-            {qrError ? <p role="status">QR code unavailable</p> : qrCode ? <img src={qrCode} alt="QR code for SARA" width={64} height={64} /> : <span role="img" className={styles.qrLoading} aria-label="Loading QR code" />}
-            <p>{marketing.text("download", "qrTitle")}<br />{appDownloadUrl || androidUrl || iosUrl ? "to Download" : "to Shop Online"}</p>
-          </div>
-          </MarketingSection>
           </MarketingSections>
         </div>
         {!marketing.enabled("legal") && <CookiePreferencesLink className={styles.cookieLink} />}

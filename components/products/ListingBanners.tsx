@@ -42,9 +42,9 @@ export function ListingHero({ banner }: { banner: ListingBanner }) {
       style={gradient(banner)}
       aria-label={banner.title}
     >
-      <div className="relative grid items-center gap-4 px-6 py-8 sm:px-8 md:py-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_auto] lg:gap-6 lg:px-10">
+      <div className="relative grid items-center gap-3 px-4 py-5 sm:gap-4 sm:px-8 sm:py-8 md:py-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_auto] lg:gap-6 lg:px-10">
         <div className={light ? "text-white" : "text-slate-900"}>
-          <h2 className="font-heading text-[28px] font-bold leading-[1.12] sm:text-4xl lg:text-[40px]">
+          <h2 className="font-heading text-2xl font-bold leading-tight sm:text-4xl lg:text-[40px]">
             {banner.title}
           </h2>
           {banner.subtitle && (
