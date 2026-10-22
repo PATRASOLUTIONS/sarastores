@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { ArrowRight, Check, Star } from "lucide-react"
-import { bannerGradient, type SiteBanner } from "@/hooks/useBanners"
+import { bannerGradient, bannerIsPhotoOnly, type SiteBanner } from "@/hooks/useBanners"
 
 /** Bank / accessory / EMI offer cards under the hero — all admin managed. */
 export function OfferCards({ offers }: { offers: SiteBanner[] }) {
@@ -10,7 +10,11 @@ export function OfferCards({ offers }: { offers: SiteBanner[] }) {
 
   return (
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Offers on this product">
-      {offers.slice(0, 5).map((offer) => (
+      {offers.slice(0, 5).map((offer) => bannerIsPhotoOnly(offer) ? (
+        <article key={offer.id} className="overflow-hidden rounded-lg sm:col-span-2 lg:col-span-5">
+          {offer.ctaLink ? <Link href={offer.ctaLink}><img src={offer.image} alt="" className="block h-auto w-full" /></Link> : <img src={offer.image} alt="" className="block h-auto w-full" />}
+        </article>
+      ) : (
         <article key={offer.id} className="rounded-lg border border-gray-200 bg-white p-3.5">
           <div className="flex h-7 items-center">
             {offer.image ? (
@@ -49,6 +53,11 @@ export function RailCards({ cards }: { cards: SiteBanner[] }) {
   return (
     <div className="space-y-4">
       {cards.slice(0, 3).map((card) => {
+        if (bannerIsPhotoOnly(card)) {
+          return <article key={card.id} className="overflow-hidden rounded-xl">
+            {card.ctaLink ? <Link href={card.ctaLink}><img src={card.image} alt="" className="block h-auto w-full" /></Link> : <img src={card.image} alt="" className="block h-auto w-full" />}
+          </article>
+        }
         const light = !card.dark
         return (
           <article

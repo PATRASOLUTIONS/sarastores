@@ -56,30 +56,28 @@ export default function DeliverToPincode({ variant = "dark" }: { variant?: "dark
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 p-4 text-gray-800">
+        <div className="absolute right-0 top-full mt-2 z-50 w-72 max-w-[calc(100vw-1.5rem)] bg-white rounded-xl shadow-2xl border border-gray-100 p-4 text-gray-800">
           <p className="text-sm font-semibold text-gray-900 mb-1">Choose your location</p>
           <p className="text-xs text-gray-500 mb-3">Enter a 6-digit pincode to check delivery estimates.</p>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              onKeyDown={(e) => { if (e.key === "Enter") apply() }}
-              placeholder="e.g. 560027"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              autoFocus
-            />
-            <button
-              onClick={apply}
-              disabled={draft.replace(/\D/g, "").length !== 6}
-              className="px-3 py-2 rounded-lg bg-brand-primary text-white text-sm font-semibold hover:bg-brand-primary-hover disabled:opacity-50 transition-colors flex items-center gap-1"
-            >
-              <Check className="h-4 w-4" />
-              Apply
-            </button>
-          </div>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onKeyDown={(e) => { if (e.key === "Enter") apply() }}
+            placeholder="e.g. 560027"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            autoFocus
+          />
+          <button
+            onClick={apply}
+            disabled={draft.replace(/\D/g, "").length !== 6}
+            className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-brand-primary px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-primary-hover disabled:opacity-50"
+          >
+            <Check className="h-4 w-4" />
+            Apply
+          </button>
         </div>
       )}
     </div>

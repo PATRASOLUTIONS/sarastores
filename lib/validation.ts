@@ -439,8 +439,8 @@ export const LoginSchema = z.object({
 });
 
 export const RegisterSchema = z.object({
-  email: emailSchema,
-  password: z.string(),
+  email: z.string().trim().min(1, "Email is required").max(255),
+  password: z.string().min(1, "Password is required"),
   confirmPassword: z.string(),
   name: nameSchema,
   // Not collected at signup; the checkout form captures it.

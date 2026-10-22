@@ -157,6 +157,9 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
       }]
     })
   }, [brandImages])
+  void shopBrands
+  void HomepageBenefits
+  void HomepageBrandPedestals
 
   const deals = useMemo(() => {
     const available = products.filter((product) => product.stock > 0)
@@ -180,11 +183,11 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
         {launch ? <EcommerceLaunch launch={launch} /> : null}
         <MarketingSections page="home">
           <MarketingSection page="home" section="hero"><LandingHero products={products} sideBanners={duoBanners} /></MarketingSection>
-          <MarketingSection page="home" section="benefits"><HomepageBenefits storeCount={storeCount} /></MarketingSection>
-          <MarketingSection page="home" section="categories"><HomepageBrandPedestals brands={shopBrands} /></MarketingSection>
+          {/* <MarketingSection page="home" section="benefits"><HomepageBenefits storeCount={storeCount} /></MarketingSection> */}
+          {/* <MarketingSection page="home" section="categories"><HomepageBrandPedestals brands={shopBrands} /></MarketingSection> */}
+          <MarketingSection page="home" section="brands"><HomepageBrands brands={brands} /></MarketingSection>
           <MarketingSection page="home" section="deals"><HomepageDeals products={deals} loading={loading} error={catalogueError} retry={() => void loadProducts(true)} /></MarketingSection>
           <MarketingSection page="home" section="promotions"><HomepagePromotions banners={[...cardBanners, ...stripBanners, ...statementBanners].sort((a, b) => (a.order || 0) - (b.order || 0))} /></MarketingSection>
-          <MarketingSection page="home" section="brands"><HomepageBrands brands={brands} /></MarketingSection>
           <MarketingSection page="home" section="stores"><HomepageStores storeCount={storeCount} /></MarketingSection>
         </MarketingSections>
       </main>

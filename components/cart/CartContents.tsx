@@ -15,7 +15,7 @@ import { cleanProductName } from "@/utils/cleanProductName"
 import { isOfferLive } from "@/lib/offer-sections"
 import styles from "@/app/cart/cart.module.css"
 import { cartLimitError } from "@/lib/cart-limits"
-import { bannerGradient, useBanners } from "@/hooks/useBanners"
+import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
 
@@ -315,11 +315,13 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
                 <strong>{money(product.price)}</strong><button type="button" disabled={adding.includes(product.id)} onClick={() => void addSuggestion(product)}>{adding.includes(product.id) ? "Adding..." : "Add to Cart"}</button>
               </li>)}</ul> : <p>No additional recommendations are available right now. <Link href="/products">Browse products</Link></p>}
           </div>
-          {promotion && <aside className={styles.shopCard} style={{ ...bannerGradient(promotion), color: promotion.dark ? "#071331" : "#fff" }}>
+          {promotion && (bannerIsPhotoOnly(promotion) ? <aside className={styles.shopCard}>
+            {promotion.ctaLink ? <Link href={promotion.ctaLink}><img src={promotion.image} alt="" className="block h-auto w-full" /></Link> : <img src={promotion.image} alt="" className="block h-auto w-full" />}
+          </aside> : <aside className={styles.shopCard} style={{ ...bannerGradient(promotion), color: promotion.dark ? "#071331" : "#fff" }}>
             {promotion.image && <CartProductImage src={promotion.image} name={promotion.title} />}
             <h3>{promotion.title}</h3>{promotion.subtitle && <p>{promotion.subtitle}</p>}
             {promotion.ctaText && promotion.ctaLink && <Link href={promotion.ctaLink}>{promotion.ctaText} <ArrowRight size={13} /></Link>}
-          </aside>}
+          </aside>)}
         </section>}
       </>}
       {!embedded && marketing.enabled("services") && <section className={styles.benefits} aria-label="Why shop at SARA"><ul>{marketing.items("services", BENEFITS).map(({ icon: Icon, title, detail, href }) => <li key={title}><Link href={href}>

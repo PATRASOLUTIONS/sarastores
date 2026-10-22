@@ -6,7 +6,7 @@ import { ArrowRight, BadgeCheck, CreditCard, Headphones, MapPin, RefreshCw, Shie
 import AddToCartButton from "@/components/AddToCartButton"
 import CompareProductButton from "@/components/CompareProductButton"
 import { useBrandImages } from "@/hooks/useBrandImages"
-import { bannerGradient, type SiteBanner } from "@/hooks/useBanners"
+import { bannerGradient, bannerIsPhotoOnly, type SiteBanner } from "@/hooks/useBanners"
 import { cleanProductName } from "@/utils/cleanProductName"
 import styles from "./homepage.module.css"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
@@ -96,6 +96,10 @@ const BENEFITS = [
 ]
 
 export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
+  void storeCount
+  void BENEFITS
+  return null
+  /*
   const marketing = useMarketingContent("home")
   const benefits = marketing.items("benefits", BENEFITS.map(item => ({ ...item, detail: item.subtitle })))
   return (
@@ -108,9 +112,13 @@ export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
       ))}
     </section>
   )
+  */
 }
 
 export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
+  void brands
+  return null
+  /*
   if (brands.length === 0) return null
 
   return (
@@ -121,7 +129,6 @@ export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
           <Link key={name} href={href} className={styles.pedestalItem}>
             <span className={styles.pedestalStage}>
               {logo ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, "/placeholder.svg")} />
               ) : (
                 <strong>{name.slice(0, 1)}</strong>
@@ -134,6 +141,7 @@ export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
       </div>
     </section>
   )
+  */
 }
 
 export function HomepageCategories({ categories }: { categories: HomeCategory[] }) {
@@ -217,7 +225,11 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
   if (!cards.length) return null
   return (
     <section className={styles.promotions} style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }} aria-label="Exchange, EMI and special offers">
-      {cards.map((card) => (
+      {cards.map((card) => bannerIsPhotoOnly(card) ? (
+        <article key={card.id} className={`${styles.promoCard} ${styles.promoPhotoCard}`}>
+          {card.ctaLink ? <Link href={card.ctaLink}><img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
+        </article>
+      ) : (
         <article key={card.id} className={`${styles.promoCard} ${!card.image ? styles.emiCard : ""}`} style={bannerGradient(card)}>
           <div className={styles.promoCopy} style={{ color: card.dark ? "var(--brand-text-primary)" : "#FFFFFF" }}>
             <h2>{card.title}</h2>
@@ -237,7 +249,7 @@ export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
 
   return (
     <section className={styles.brands} aria-label="Top Brands">
-      <HomepageHeading title={marketing.text("brands", "title")} href={marketing.text("brands", "ctaLink")} ctaText={marketing.text("brands", "ctaText")} />
+      <HomepageHeading title="Top Brands" href={marketing.text("brands", "ctaLink")} ctaText={marketing.text("brands", "ctaText")} />
       <div className={styles.circleRail}>
         {brands.map(({ name, logo, href }) => (
           <Link key={name} href={href} className={styles.circleItem}>

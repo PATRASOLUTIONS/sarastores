@@ -259,50 +259,38 @@ function registrationHarness() {
   }
 }
 
-test("registration agreements start unchecked and the combined agreement selects and clears all five", () => {
+test("registration agreement starts unchecked and selects account plus offer consent together", () => {
   const form = registrationHarness()
-  assert.equal(form.checkboxes().length, 5)
-  assert.ok(form.checkboxes().every(node => node.props.checked === false))
+  assert.equal(form.checkboxes().length, 1)
+  assert.equal(form.checkboxes()[0].props.checked, false)
   form.change("agreeToTerms", true)
-  assert.ok(form.checkboxes().every(node => node.props.checked === true))
+  assert.equal(form.checkboxes()[0].props.checked, true)
   form.change("agreeToTerms", false)
-  assert.ok(form.checkboxes().every(node => node.props.checked === false))
+  assert.equal(form.checkboxes()[0].props.checked, false)
 })
 
-test("registration combined agreement clears both agreement errors without clearing unrelated errors", async () => {
+test("registration agreement clears its error without clearing unrelated errors", async () => {
   const form = registrationHarness()
   await form.submit()
   const messages = () => form.render().filter(node => node.type === "p").map(node => node.props.children)
   assert.ok(messages().includes("You must agree to the terms"))
-  assert.ok(messages().includes("Please confirm you have read the privacy notice"))
   form.change("agreeToTerms", true)
   assert.ok(!messages().includes("You must agree to the terms"))
-  assert.ok(!messages().includes("Please confirm you have read the privacy notice"))
   assert.ok(messages().includes("Name is required"))
 })
 
-for (const optOut of [false, true]) {
-  test(`registration submits selected consent values with individual marketing opt-outs=${optOut}`, async () => {
-    const form = registrationHarness()
-    form.change("name", "Synthetic Customer")
-    form.change("email", "customer@example.invalid")
-    form.change("password", "FixturePassword123!")
-    form.change("confirmPassword", "FixturePassword123!")
-    form.change("agreeToTerms", true)
-    if (optOut) {
-      for (const name of ["marketingEmail", "marketingWhatsapp", "marketingSms"]) {
-        form.change(name, false)
-        assert.equal(form.checkboxes().find(node => node.props.name === name).props.checked, false)
-        assert.equal(form.checkboxes().find(node => node.props.name === "agreeToTerms").props.checked, true)
-        assert.equal(form.checkboxes().find(node => node.props.name === "agreePrivacyNotice").props.checked, true)
-      }
-    }
-    await form.submit()
-    assert.equal(form.signups.length, 1)
-    assert.equal(form.signups[0][7], true)
-    assert.deepEqual({ ...form.signups[0][8] }, {
-      acceptPrivacyNotice: true, marketingEmail: !optOut, marketingWhatsapp: !optOut, marketingSms: !optOut,
-      noticeVersion: "fixture-notice",
-    })
+test("registration submits the single agreement as account and offer consent", async () => {
+  const form = registrationHarness()
+  form.change("name", "Synthetic Customer")
+  form.change("email", "customer@example.invalid")
+  form.change("password", "anything")
+  form.change("confirmPassword", "anything")
+  form.change("agreeToTerms", true)
+  await form.submit()
+  assert.equal(form.signups.length, 1)
+  assert.equal(form.signups[0][7], true)
+  assert.deepEqual({ ...form.signups[0][8] }, {
+    acceptPrivacyNotice: true, marketingEmail: true, marketingWhatsapp: true, marketingSms: true,
+    noticeVersion: "fixture-notice",
   })
-}
+})

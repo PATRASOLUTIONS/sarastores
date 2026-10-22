@@ -7,6 +7,7 @@ import toast from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
 import { fetchAllAdminProducts, type AdminProductResponse } from "@/lib/admin-products-client"
 import { campaignPageListResponseSchema } from "@/lib/campaign-page"
+import { DEFAULT_HEADER_PROMOTIONS, type HeaderPromotion } from "@/lib/header-promotions"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 
 const CAMPAIGN_NAME = "SARA Super Sunday"
@@ -23,14 +24,17 @@ export default function SuperSundayAdminPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [headerPromos, setHeaderPromos] = useState<HeaderPromotion[]>(DEFAULT_HEADER_PROMOTIONS)
+  const [savingHeader, setSavingHeader] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const [campaignResponse, catalogue] = await Promise.all([
+        const [campaignResponse, catalogue, headerResponse] = await Promise.all([
           apiFetch("/api/admin/campaign-pages", { cache: "no-store" }),
           fetchAllAdminProducts(),
+          apiFetch("/api/header-promotions", { cache: "no-store" }),
         ])
         const campaignData = campaignPageListResponseSchema.safeParse(await campaignResponse.json())
         if (!campaignResponse.ok || !campaignData.success) throw new Error("Campaign settings could not be loaded")
@@ -40,6 +44,10 @@ export default function SuperSundayAdminPage() {
         const campaign = campaignData.data.campaigns.find(item => item.slug === CAMPAIGN_SLUG)
         if (cancelled) return
 
+        const headerData = await headerResponse.json().catch(() => null)
+        if (Array.isArray(headerData?.promotions) && headerData.promotions.length === 2) {
+          setHeaderPromos(headerData.promotions)
+        }
         setProducts(activeProducts)
         if (campaign) {
           setCampaignId(campaign.id)
@@ -78,6 +86,28 @@ export default function SuperSundayAdminPage() {
       }
       return [...previous, id]
     })
+  }
+
+  const saveHeaderPromos = async () => {
+    if (!lock.acquire()) return
+    setSavingHeader(true)
+    try {
+      const response = await apiFetch("/api/header-promotions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(headerPromos.map(({ id, title, href, description, enabled }) => ({
+          id, title, href, description, enabled,
+        }))),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Header offers could not be saved")
+      toast.success("Header offers saved")
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Header offers could not be saved")
+    } finally {
+      lock.release()
+      setSavingHeader(false)
+    }
   }
 
   const uploadBanner = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,6 +184,58 @@ export default function SuperSundayAdminPage() {
       </div>
 
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Header offers</h2>
+            <p className="mt-1 text-sm text-gray-600">SARA Super Sunday shows on Sunday. Full Moon Day shows on Monday. Every other day the header hides both. Times follow India Standard Time.</p>
+          </div>
+          <button type="button" onClick={saveHeaderPromos} disabled={savingHeader} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">
+            {savingHeader ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save header offers
+          </button>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {headerPromos.map((promo, index) => (
+            <div key={promo.id} className="rounded-lg border border-gray-200 p-4">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <input
+                  type="checkbox"
+                  checked={promo.enabled}
+                  onChange={event => setHeaderPromos(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))}
+                  className="h-4 w-4 rounded border-gray-300 text-red-600"
+                />
+                Show on {promo.weekday === 0 ? "Sunday" : "Monday"}
+              </label>
+              <label className="mt-3 block text-xs font-medium text-gray-600">
+                Title
+                <input
+                  value={promo.title}
+                  onChange={event => setHeaderPromos(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              </label>
+              <label className="mt-3 block text-xs font-medium text-gray-600">
+                Link
+                <input
+                  value={promo.href}
+                  onChange={event => setHeaderPromos(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, href: event.target.value } : item))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              </label>
+              <label className="mt-3 block text-xs font-medium text-gray-600">
+                Short line
+                <input
+                  value={promo.description}
+                  onChange={event => setHeaderPromos(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="rounded-xl border bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">

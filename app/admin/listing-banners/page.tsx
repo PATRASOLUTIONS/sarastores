@@ -5,7 +5,7 @@ import { useSWRConfig } from "swr"
 import toast from "react-hot-toast"
 import { Loader2, Plus, Trash2, Upload } from "lucide-react"
 import { apiFetchJson } from "@/lib/api-client"
-import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, siteBannerListResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
+import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, bannerIsPhotoOnly, siteBannerListResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
 import { imageUploadResponseSchema } from "@/lib/media-response"
 import { ListingHero, ListingPromoRow } from "@/components/products/ListingBanners"
 import LandingHero from "@/components/home/landing/LandingHero"
@@ -20,7 +20,7 @@ const BLANK: Draft = {
   title: "",
   subtitle: "",
   script: "",
-  ctaText: "Shop Now",
+  ctaText: "",
   ctaLink: "/products",
   image: "/homepage/hero-iphone.webp",
   bgFrom: "#1560BD",
@@ -39,6 +39,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   )
+}
+
+const BANNER_PHOTO_SIZES: Record<BannerPlacement, string> = {
+  hero: "1920 × 600 px",
+  promo: "960 × 400 px",
+  "home-hero": "1920 × 768 px",
+  "home-strip": "1920 × 320 px",
+  "home-duo": "700 × 280 px",
+  "home-card": "800 × 360 px",
+  "home-statement": "1920 × 280 px",
+  "pdp-offer": "800 × 360 px",
+  "pdp-rail": "480 × 640 px",
+  "brands-hero": "1920 × 480 px",
+  "cart-promo": "640 × 480 px",
 }
 
 const inputClass =
@@ -92,7 +106,7 @@ export default function ListingBannersAdminPage() {
   }
 
   const save = async () => {
-    if (!draft.title.trim()) return toast.error("Title is required")
+    if (!draft.title.trim() && !(draft.image || "").trim()) return toast.error("Add a title or upload a photo")
     setSaving(true)
     try {
       const { id, ...payload } = draft
@@ -145,7 +159,7 @@ export default function ListingBannersAdminPage() {
     }
   }
 
-  const preview: SiteBanner = { ...draft, id: draft.id || "preview", title: draft.title || "Banner title" }
+  const preview: SiteBanner = { ...draft, id: draft.id || "preview" }
 
   const renderPreview = () => {
     switch (draft.placement) {
@@ -181,7 +195,12 @@ export default function ListingBannersAdminPage() {
           Campaign banners on home, listing, product, brand and cart pages. Upload artwork and edit copy, links, colours, visibility and order here. Leave “Scope” blank to show a
           banner everywhere, or type a category name (e.g. <code>TV</code>) to target one listing.
         </p>
-        <p className="mt-2 text-sm text-gray-600">New posters start off. Turn on the ones you want to show. Main posters rotate; the first two enabled sub banners and first three enabled below-deals banners appear by order. The first enabled Cart promotional banner appears by order; turning all Cart banners off hides its promotional area.</p>
+        <p className="mt-2 text-sm text-gray-600">New posters start off. Turn on the ones you want to show. Main posters rotate; the first two enabled sub banners and first three enabled below-deals banners appear by order. The first enabled Cart promotional banner appears by order; turning all Cart banners off hides its promotional area. A banner with a photo and no title, subtitle, note, bullets or button fills the full width.</p>
+        <ul className="mt-3 grid gap-1 text-sm text-gray-700 sm:grid-cols-2">
+          {BANNER_PLACEMENTS.map(placement => (
+            <li key={placement}><strong>{BANNER_PLACEMENT_LABELS[placement]}:</strong> {BANNER_PHOTO_SIZES[placement]}</li>
+          ))}
+        </ul>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
@@ -249,7 +268,8 @@ export default function ListingBannersAdminPage() {
               </Field>
             </div>
 
-            <Field label="Artwork">
+            <Field label={`Artwork — ${BANNER_PHOTO_SIZES[draft.placement]}`}>
+              <p className="mb-2 text-xs text-gray-500">Upload at {BANNER_PHOTO_SIZES[draft.placement]}. Leave the title, subtitle, note, bullets and button empty to show this photo at full width.</p>
               <div className="flex gap-2">
                 <input value={draft.image} onChange={(e) => set("image", e.target.value)} className={inputClass} placeholder="/banners/…" />
                 <input
@@ -330,7 +350,7 @@ export default function ListingBannersAdminPage() {
         <div className="space-y-6">
           <div>
             <h2 className="mb-3 text-base font-bold text-gray-900">Live preview</h2>
-            {renderPreview()}
+            {bannerIsPhotoOnly(preview) || preview.title.trim() || preview.image ? renderPreview() : <p className="text-sm text-gray-500">Add a title or a photo to preview this banner.</p>}
           </div>
 
           <div>

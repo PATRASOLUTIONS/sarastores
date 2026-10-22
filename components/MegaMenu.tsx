@@ -5,6 +5,7 @@ import Link from "next/link"
 import { titleCaseLabel } from "@/lib/product-display"
 import { categoryIcon } from "@/lib/category-icons"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { useHeaderPromotion } from "@/hooks/useHeaderPromotion"
 import { taxonomyHref, type TaxonomyDivision } from "@/lib/product-taxonomy"
 import { fetchTaxonomy } from "@/lib/taxonomy-client"
 import { fetchWithCache } from "@/utils/cache"
@@ -53,6 +54,7 @@ function categoryHref(categoryName: string): string {
 
 export default function MegaMenu() {
   const marketing = useMarketingContent("header")
+  const headerPromotion = useHeaderPromotion()
   const links = marketing.items("navigation", STATIC_LINKS.map(item => ({ ...item, title: item.label })))
   const [divisions, setDivisions] = useState<TaxonomyDivision[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -151,11 +153,11 @@ export default function MegaMenu() {
                   {title}
                 </Link>
               ))}
-              {marketing.enabled("promotion") && <Link
-                href="/super-sunday"
+              {headerPromotion && <Link
+                href={headerPromotion.href}
                 className="ml-2 whitespace-nowrap rounded-full bg-[#E11D2E] px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#C41928]"
               >
-                {marketing.text("promotion", "title")}
+                {headerPromotion.title}
               </Link>}
             </li>
           </ul>

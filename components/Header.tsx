@@ -19,6 +19,7 @@ import DeliverToPincode from '@/components/DeliverToPincode'
 import MegaMenu from '@/components/MegaMenu'
 import { useSettingsData } from '@/hooks/useSettingsData'
 import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { useHeaderPromotion } from "@/hooks/useHeaderPromotion"
 import CategoryGlyph from '@/components/CategoryGlyph'
 import { taxonomyHref, type TaxonomyDivision } from "@/lib/product-taxonomy"
 import { fetchTaxonomy } from "@/lib/taxonomy-client"
@@ -78,6 +79,7 @@ export default function Header() {
   const { openCart } = useCartUI()
   const { data: siteSettings } = useSettingsData()
   const marketing = useMarketingContent("header")
+  const headerPromotion = useHeaderPromotion()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [divisions, setDivisions] = useState<TaxonomyDivision[]>([])
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
@@ -468,17 +470,19 @@ export default function Header() {
       {/* Announcement bar */}
       {marketing.enabled("announcement") && <div className="hidden bg-[#1560BD] text-white md:block">
         <div className="section-container flex items-center justify-between gap-4 py-1.5 text-[11px]">
-          <Link href="/super-sunday" className="flex items-center gap-1.5 transition-colors hover:text-white/90">
-            <Zap className="h-3.5 w-3.5" />
-            <span className="font-bold">{marketing.text("announcement", "title")}</span>
-            <span className="text-white/40">|</span>
-            <span className="text-white/90">{marketing.text("announcement", "description")}</span>
-          </Link>
+          {headerPromotion ? (
+            <Link href={headerPromotion.href} className="flex items-center gap-1.5 transition-colors hover:text-white/90">
+              <Zap className="h-3.5 w-3.5" />
+              <span className="font-bold">{headerPromotion.title}</span>
+              <span className="text-white/40">|</span>
+              <span className="text-white/90">{headerPromotion.description}</span>
+            </Link>
+          ) : <span />}
           <div className="flex items-center gap-5 text-white/90">
-            <Link href={marketing.text("announcement", "downloadLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
+            {/* <Link href={marketing.text("announcement", "downloadLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <Download className="h-3.5 w-3.5" />
               {marketing.text("announcement", "downloadTitle")}
-            </Link>
+            </Link> */}
             <Link href={marketing.text("announcement", "storeLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <MapPin className="h-3.5 w-3.5" />
               {marketing.text("announcement", "storeTitle")}
@@ -872,6 +876,11 @@ export default function Header() {
               </button>
             </div>
           </form>
+          {headerPromotion && (
+            <Link href={headerPromotion.href} className="mt-2 inline-flex items-center rounded-full bg-[#E11D2E] px-3 py-1 text-xs font-bold text-white">
+              {headerPromotion.title}
+            </Link>
+          )}
         </div>
 
       </div>
