@@ -49,7 +49,26 @@ export async function GET(request: Request) {
     const { db } = await connectToDatabase()
     const ordersCollection = db.collection<LicenseOrder>('orders')
 
-    const enriched = await Promise.all(keys.map(async (k) => {
+    // Fetch every referenced order in one query, then join in memory, instead
+    // of up to three findOne calls per key.
+    const orderIds = [...new Set(keys
+      .filter((k) => !k.assignedTo)
+      .map((k) => k.orderId || k.assignedTo?.orderId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0))]
+    const objectIds = orderIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id))
+    const orderDocs: WithId<LicenseOrder>[] = orderIds.length
+      ? await ordersCollection.find({ $or: [{ _id: { $in: objectIds } }, { id: { $in: orderIds } }, { _id: { $in: orderIds } }] }).toArray()
+      : []
+    const byObjectId = new Map<string, WithId<LicenseOrder>>()
+    const byIdField = new Map<string, WithId<LicenseOrder>>()
+    const byStringId = new Map<string, WithId<LicenseOrder>>()
+    for (const doc of orderDocs) {
+      if (doc._id instanceof ObjectId) byObjectId.set(doc._id.toString(), doc)
+      else byStringId.set(String(doc._id), doc)
+      if (doc.id) byIdField.set(doc.id, doc)
+    }
+
+    const enriched = keys.map((k) => {
       // normalize id
       const out: Omit<StoredLicenseKey, '_id'> & { id: string } = normalizeId(k)
 
@@ -64,14 +83,8 @@ export async function GET(request: Request) {
       let order: WithId<LicenseOrder> | null = null
 
       if (orderId) {
-        if (ObjectId.isValid(orderId)) {
-          order = await ordersCollection.findOne({ _id: new ObjectId(orderId) })
-        }
-
-        if (!order) {
-          // try fallback shapes
-          order = await ordersCollection.findOne({ id: orderId }) || await ordersCollection.findOne({ _id: orderId })
-        }
+        order = (ObjectId.isValid(orderId) ? byObjectId.get(orderId) : undefined)
+          || byIdField.get(orderId) || byStringId.get(orderId) || null
       }
 
       // If order found, extract customer email/name and createdAt
@@ -114,7 +127,7 @@ export async function GET(request: Request) {
       if (out.expiresAt && out.expiresAt instanceof Date) out.expiresAt = out.expiresAt.toISOString()
 
       return out
-    }))
+    })
 
     return NextResponse.json({
       success: true,

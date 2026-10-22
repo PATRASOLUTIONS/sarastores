@@ -7,8 +7,6 @@ import {
   newId,
   normalisePrizes,
   type LuckyDrawCampaign,
-  type LuckyDrawParticipant,
-  type LuckyDrawWinner,
 } from "@/lib/lucky-draw"
 import { z } from "zod"
 
@@ -32,19 +30,29 @@ export async function GET() {
 
   try {
     const campaigns = await getCollection<LuckyDrawCampaign>(LUCKY_DRAW_COLLECTIONS.CAMPAIGNS)
-    const participants = await getCollection<LuckyDrawParticipant>(LUCKY_DRAW_COLLECTIONS.PARTICIPANTS)
-    const winners = await getCollection<LuckyDrawWinner>(LUCKY_DRAW_COLLECTIONS.WINNERS)
 
-    const docs = await campaigns.find({}).sort({ createdAt: -1 }).toArray()
-
-    const enriched = await Promise.all(
-      docs.map(async (c) => ({
-        ...c,
-        id: c._id,
-        participantCount: await participants.countDocuments({ campaignId: c._id }),
-        winnerCount: await winners.countDocuments({ campaignId: c._id }),
-      })),
-    )
+    // One round trip: each $lookup counts on the server instead of two
+    // countDocuments calls per campaign.
+    const countBy = (from: string, as: string) => ({
+      $lookup: {
+        from,
+        let: { campaignId: "$_id" },
+        pipeline: [{ $match: { $expr: { $eq: ["$campaignId", "$$campaignId"] } } }, { $count: "n" }],
+        as,
+      },
+    })
+    const enriched = await campaigns.aggregate<LuckyDrawCampaign & { id: string; participantCount: number; winnerCount: number }>([
+      { $sort: { createdAt: -1 } },
+      countBy(LUCKY_DRAW_COLLECTIONS.PARTICIPANTS, "participantCount"),
+      countBy(LUCKY_DRAW_COLLECTIONS.WINNERS, "winnerCount"),
+      {
+        $set: {
+          id: "$_id",
+          participantCount: { $ifNull: [{ $first: "$participantCount.n" }, 0] },
+          winnerCount: { $ifNull: [{ $first: "$winnerCount.n" }, 0] },
+        },
+      },
+    ]).toArray()
 
     return NextResponse.json({ success: true, campaigns: enriched })
   } catch (error) {

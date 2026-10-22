@@ -4472,13 +4472,22 @@ test("license listings guard access, preserve native/legacy order enrichment and
   ]
   const queries = []
   let reads = 0
+  const stored = [
+    { _id: orderId, customer: { firstName: "Fixture", lastName: "Buyer" }, shippingAddress: { email: "customer@example.invalid" }, createdAt: { $date: "2026-01-01T00:00:00.000Z" } },
+    { _id: new ObjectId(), id: "legacy-order", customer: { name: "Legacy" }, createdAt: "2026-01-01T00:00:00.000Z" },
+    { _id: new ObjectId(), id: "invalid-date", createdAt: "not-a-date" },
+  ]
   const orders = {
-    findOne: async query => {
+    find: query => {
       queries.push(query)
-      if (query._id?.toString() === orderId.toString()) return { _id: orderId, customer: { firstName: "Fixture", lastName: "Buyer" }, shippingAddress: { email: "customer@example.invalid" }, createdAt: { $date: "2026-01-01T00:00:00.000Z" } }
-      if (query.id === "legacy-order") return { _id: "legacy-order", customer: { name: "Legacy" }, createdAt: "2026-01-01T00:00:00.000Z" }
-      if (query.id === "invalid-date") return { _id: "invalid-date", createdAt: "not-a-date" }
-      return null
+      const [byObjectId, byIdField, byStringId] = query.$or
+      const objectIds = byObjectId._id.$in.map(String)
+      return {
+        toArray: async () => stored.filter(order =>
+          (order._id instanceof ObjectId && objectIds.includes(order._id.toString())) ||
+          (order.id && byIdField.id.$in.includes(order.id)) ||
+          byStringId._id.$in.includes(order._id)),
+      }
     },
   }
   let authorized = true
@@ -4501,7 +4510,8 @@ test("license listings guard access, preserve native/legacy order enrichment and
   assert.equal(contract.keys[1].expiresAt, "2026-01-31T00:00:00.000Z")
   assert.equal(contract.keys[2].expiresAt, "2028-01-01T00:00:00.000Z")
   assert.equal(contract.keys[3].expiresAt, undefined)
-  assert.ok(queries[0]._id instanceof ObjectId)
+  assert.equal(queries.length, 1, "orders must be fetched in one batched query, not per key")
+  assert.ok(queries[0].$or[0]._id.$in[0] instanceof ObjectId)
   assert.equal((await route.GET(new Request("https://fixture.invalid/api/software/license-keys?status=unknown"))).status, 400)
   authorized = false
   assert.equal((await route.GET(request)).status, 401)
@@ -4540,7 +4550,7 @@ test("license enrichment surfaces a database failure rather than issuing an inco
     "@/lib/auth": { requireAdmin: async () => ({ ok: true }) },
     "@/lib/software-service": { getAllLicenseKeys: async () => [{ _id: new ObjectId(), key: "FIXTURE", status: "assigned", orderId: new ObjectId().toString() }] },
     "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: () => ({
-      findOne: async () => { orderQueries++; throw new Error("Fixture order service unavailable") },
+      find: () => ({ toArray: async () => { orderQueries++; throw new Error("Fixture order service unavailable") } }),
     }) } }) },
   })
   const response = await loader.load("app/api/software/license-keys/route.ts").GET(new Request("https://fixture.invalid/api/software/license-keys"))

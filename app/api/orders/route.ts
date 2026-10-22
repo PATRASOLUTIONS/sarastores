@@ -133,10 +133,12 @@ export async function GET(request: NextRequest) {
     if (couponUsageCount) {
       const codes = couponUsageCount.split(",").map((c) => c.trim().toUpperCase())
       const collection = await getCollection("orders")
-      const counts: Record<string, number> = {}
-      for (const code of codes) {
-        counts[code] = await collection.countDocuments({ "coupon.code": code })
-      }
+      const counts: Record<string, number> = Object.fromEntries(codes.map((code) => [code, 0]))
+      const grouped = await collection.aggregate<{ _id: string; count: number }>([
+        { $match: { "coupon.code": { $in: codes } } },
+        { $group: { _id: "$coupon.code", count: { $sum: 1 } } },
+      ]).toArray()
+      for (const row of grouped) counts[row._id] = row.count
       return NextResponse.json({ counts })
     }
 

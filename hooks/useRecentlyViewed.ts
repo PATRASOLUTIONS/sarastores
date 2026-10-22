@@ -14,14 +14,20 @@ function unique(products: ProductCardResponse[]): ProductCardResponse[] {
 async function loadFromDevice(): Promise<ProductCardResponse[]> {
   const ids = readRecentlyViewedIds()
   if (!ids.length) return []
-  const results = await Promise.all(ids.slice(0, LIMIT).map(async (id) => {
-    const response = await fetch(`/api/products/${encodeURIComponent(id)}`)
-    if (response.status === 404) return null
-    if (!response.ok) throw new Error("Recently viewed product could not be loaded")
-    const parsed = productCardResponseSchema.safeParse(await response.json())
-    return parsed.success && parsed.data.active !== false ? parsed.data : null
-  }))
-  const products = unique(results.filter((product): product is ProductCardResponse => product !== null))
+  const requested = ids.slice(0, LIMIT)
+  const response = await fetch("/api/products/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: requested }),
+  })
+  if (!response.ok) throw new Error("Recently viewed products could not be loaded")
+  const body: unknown = await response.json()
+  const found = new Map<string, ProductCardResponse>()
+  for (const row of Array.isArray(body) ? body : []) {
+    const parsed = productCardResponseSchema.safeParse(row)
+    if (parsed.success && parsed.data.active !== false) found.set(parsed.data.id, parsed.data)
+  }
+  const products = unique(requested.flatMap((id) => found.get(id) ?? []))
   const valid = new Set(products.map((product) => product.id))
   const cleaned = ids.filter((id) => valid.has(id) || !ids.slice(0, LIMIT).includes(id))
   if (cleaned.length !== ids.length) writeRecentlyViewedIds(cleaned)
