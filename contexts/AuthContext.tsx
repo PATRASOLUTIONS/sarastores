@@ -43,11 +43,13 @@ export interface SignupDpdpFields {
   noticeVersion?: string
 }
 
+export type SignupResult = { ok: true } | { ok: false; message: string; code?: string }
+
 interface AuthContextType {
   user: User | null
   isLoading: boolean
     login: (email: string, password: string, recaptchaToken?: string) => Promise<true | "rejected" | "unavailable">
-    signup: (name: string, email: string, password: string, honeypot?: string, formTimestamp?: number, recaptchaToken?: string, confirmPassword?: string, acceptTerms?: boolean, dpdp?: SignupDpdpFields) => Promise<boolean>
+    signup: (name: string, email: string, password: string, honeypot?: string, formTimestamp?: number, recaptchaToken?: string, confirmPassword?: string, acceptTerms?: boolean, dpdp?: SignupDpdpFields) => Promise<SignupResult>
   logout: () => void
   isAuthenticated: boolean
   isAdmin: boolean
@@ -561,7 +563,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     confirmPassword?: string,
     acceptTerms?: boolean,
     dpdp?: SignupDpdpFields
-  ): Promise<boolean> => {
+  ): Promise<SignupResult> => {
     setIsLoading(true)
     try {
       const response = await fetch("/api/auth/signup", {
@@ -590,26 +592,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json()
 
       if (!response.ok) {
-        toast.error(data.message || "Signup failed")
-        return false
+        return {
+          ok: false,
+          message: typeof data?.message === "string" && data.message ? data.message : "Signup failed. Please try again.",
+          code: typeof data?.code === "string" ? data.code : undefined,
+        }
       }
 
       // DO NOT auto-login after signup
       // Do not set user in state, do not store in localStorage
       // User must manually login
+      toast.success(data.message || "Thanks. We have sent a link to confirm your email address.")
 
-      // Deliberately non-committal: the endpoint answers identically whether
-      // or not the address already had an account, so claiming one was created
-      // here would re-introduce the enumeration signal the API removes.
-      toast.success(
-        data.message || "Thanks. If that email address can be registered, we have sent a link to confirm it.",
-      )
-
-      return true
+      return { ok: true }
     } catch (error) {
       console.error("Signup error:", error)
-      toast.error("Signup failed. Please try again.")
-      return false
+      return { ok: false, message: "Signup failed. Please try again." }
     } finally {
       setIsLoading(false)
     }

@@ -16,6 +16,7 @@ interface ProductFilter {
   $or?: Record<string, unknown>[]
   $and?: Record<string, unknown>[]
   active?: boolean
+  $expr?: Record<string, unknown>
 }
 
 // Upper bound on any single response. Measured at 10,000 products, an unbounded
@@ -91,6 +92,11 @@ export async function GET(request: NextRequest) {
 
     if (featured === "true") {
       filter.featured = true
+    }
+
+    if (searchParams.get("inStock") === "true") {
+      // Imported stock is sometimes a numeric string; match /api/taxonomy.
+      filter.$expr = { $gt: [{ $convert: { input: "$stock", to: "double", onError: 0, onNull: 0 } }, 0] }
     }
 
     if (sku && sku !== "") {

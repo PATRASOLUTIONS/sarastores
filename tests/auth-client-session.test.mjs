@@ -228,7 +228,7 @@ function registrationHarness() {
     "@/components/Footer": "footer",
     "@/contexts/AuthContext": { useAuth: () => ({
       isAuthenticated: false,
-      signup: async (...args) => { signups.push(args); return true },
+      signup: async (...args) => { signups.push(args); return { ok: true } },
     }) },
     "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
     "@/hooks/useRateLimit": { useRateLimit: () => ({

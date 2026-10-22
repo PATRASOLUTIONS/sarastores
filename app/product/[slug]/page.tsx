@@ -35,7 +35,9 @@ import { useSettingsData } from "@/hooks/useSettingsData"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import { cleanProductName, cleanProductDescription, toastProductName } from "@/utils/cleanProductName"
-import { productSuggestions, catalogProductResponseSchema, type CatalogProduct } from "@/utils/catalog"
+import { productSuggestions, similarProducts, catalogProductResponseSchema, type CatalogProduct } from "@/utils/catalog"
+import { useAuth } from "@/contexts/AuthContext"
+import { recordRecentlyViewed } from "@/lib/recently-viewed-client"
 import { productSpecificationResponseSchema } from "@/lib/product-specification-response"
 import { productDetailResponseSchema, type ProductDetailResponse } from "@/lib/product-card-response"
 import { z } from "zod"
@@ -236,6 +238,7 @@ export default function ProductDetailPage() {
   const router = useRouter()
 
   const { addToCart } = useCart()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const { data: settings } = useSettingsData()
 
@@ -325,6 +328,10 @@ export default function ProductDetailPage() {
    */
   const suggestionId = product?.id ? String(product.id) : ""
   const suggestionCategory = product?.category ? String(product.category) : ""
+
+  useEffect(() => {
+    if (suggestionId && !authLoading) recordRecentlyViewed(suggestionId, isAuthenticated)
+  }, [suggestionId, authLoading, isAuthenticated])
   const variantFamily = product ? variantFamilyName(product.name) : ""
 
   useEffect(() => {
@@ -364,7 +371,7 @@ export default function ProductDetailPage() {
       try {
         // 120 leaves plenty of headroom: productSuggestions needs six survivors
         // after dropping items with no image, no price, or no stock.
-        const query = new URLSearchParams({ fields: "card", limit: "120" })
+        const query = new URLSearchParams({ fields: "card", limit: "120", inStock: "true" })
         if (suggestionCategory) query.set("category", suggestionCategory)
         const response = await fetch(`/api/products?${query.toString()}`, { signal: controller.signal })
         if (!response.ok) throw new Error("Product suggestions could not be loaded")
@@ -394,7 +401,12 @@ export default function ProductDetailPage() {
 
   const features = useMemo(() => (product ? deriveFeatures(product) : []), [product])
 
-  const companions = useMemo(() => product ? productSuggestions(product, catalogue) : [], [catalogue, product])
+  const similar = useMemo(() => product ? similarProducts(product, catalogue, 6) : [], [catalogue, product])
+  const companions = useMemo(() => {
+    if (!product) return []
+    const shown = new Set(similar.map(item => String(item.id)))
+    return productSuggestions(product, catalogue, 18).filter(item => !shown.has(String(item.id))).slice(0, 6)
+  }, [catalogue, product, similar])
 
   if (loading) {
     return <ProductLoading />
@@ -424,6 +436,29 @@ export default function ProductDetailPage() {
 
   const name = cleanProductName(product.name)
   const brand = String(product.manufacturerName || product.brand || "")
+  const renderSuggestion = (c: CatalogProduct) => (
+    <article
+      key={c.id}
+      className="group rounded-lg border border-gray-200 p-2 text-center transition-shadow hover:shadow-md"
+    >
+      <Link href={`/product/${c.slug || c.id}`}>
+        <span className="flex h-16 items-center justify-center overflow-hidden rounded bg-gray-50">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={c.image} alt={cleanProductName(c.name)} className="h-full w-full object-contain p-1" loading="lazy" />
+        </span>
+        <p className="mt-1.5 line-clamp-2 text-[11px] leading-tight text-gray-700">
+          {cleanProductName(c.name)}
+        </p>
+        <p className="mt-1 text-[11px] font-bold text-gray-900">
+          ₹{Number(c.price).toLocaleString("en-IN")}
+        </p>
+      </Link>
+      <button type="button" className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd]" onClick={async () => {
+        const added = await addToCart({ id: String(c.id), name: c.name, price: c.price, image: c.image, quantity: 1, color: null, size: null, stock: c.stock })
+        if (added) toast.success(`${toastProductName(c.name)} added to cart`)
+      }}>Add</button>
+    </article>
+  )
   const hasMrp = Number(product.mrp || product.originalPrice || product.raw?.MRP || product.raw?.mrp) > 0
   const mrp = hasMrp ? getEffectiveMRP(product) : Number(product.price)
   const discount = calculateDiscount(mrp, product.price)
@@ -811,6 +846,14 @@ export default function ProductDetailPage() {
                       {cleanProductDescription(product.description) || "Full details are listed under Specifications."}
                     </p>
 
+                      {similar.length > 0 && <section className="mt-8" aria-label="Similar products">
+                        <h3 className="font-heading text-base font-bold text-gray-900">Similar Products</h3>
+                        <p className="mt-1 text-xs text-gray-500">Same kind of product in a similar price range.</p>
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                          {similar.map(renderSuggestion)}
+                        </div>
+                      </section>}
+
                       {marketing.enabled("suggestions") && <section className="mt-8" aria-label="Product suggestions">
                         <h3 className="font-heading text-base font-bold text-gray-900">{marketing.text("suggestions", "title")}</h3>
                         <p className="mt-1 text-xs text-gray-500">{marketing.text("suggestions", "description")}</p>
@@ -820,28 +863,7 @@ export default function ProductDetailPage() {
                           suggestionsError ? <p role="alert" className="mt-4 text-sm text-amber-800">{suggestionsError} <button type="button" className="text-[#1560BD] underline" onClick={() => setSuggestionsAttempt(value => value + 1)}>Retry suggestions</button></p> :
                           !companions.length ? <p className="mt-4 text-sm text-gray-500">No related products are currently available.</p> : (
                         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                          {companions.map((c) => (
-                            <article
-                              key={c.id}
-                              className="group rounded-lg border border-gray-200 p-2 text-center transition-shadow hover:shadow-md"
-                            >
-                              <Link href={`/product/${c.slug || c.id}`}>
-                              <span className="flex h-16 items-center justify-center overflow-hidden rounded bg-gray-50">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={c.image} alt={cleanProductName(c.name)} className="h-full w-full object-contain p-1" loading="lazy" />
-                              </span>
-                              <p className="mt-1.5 line-clamp-2 text-[11px] leading-tight text-gray-700">
-                                {cleanProductName(c.name)}
-                              </p>
-                              <p className="mt-1 text-[11px] font-bold text-gray-900">
-                                ₹{Number(c.price).toLocaleString("en-IN")}
-                              </p>
-                              </Link><button type="button" className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd]" onClick={async () => {
-                                const added = await addToCart({ id: String(c.id), name: c.name, price: c.price, image: c.image, quantity: 1, color: null, size: null, stock: c.stock })
-                                if (added) toast.success(`${toastProductName(c.name)} added to cart`)
-                              }}>Add</button>
-                            </article>
-                          ))}
+                          {companions.map(renderSuggestion)}
                         </div>
                         )}
                       </section>}

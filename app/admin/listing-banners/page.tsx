@@ -93,7 +93,7 @@ export default function ListingBannersAdminPage() {
     try {
       const body = new FormData()
       body.append("file", file)
-      const json = await apiFetchJson("/api/media/upload", { method: "POST", body }, imageUploadResponseSchema.parse)
+      const json = await apiFetchJson("/api/listing-banners/upload", { method: "POST", body }, imageUploadResponseSchema.parse)
       if (!json.images?.[0]) throw new Error(json.errors?.[0] || json.error || "Upload failed")
       set("image", json.images[0].url)
       toast.success("Image uploaded")
@@ -268,10 +268,14 @@ export default function ListingBannersAdminPage() {
               </Field>
             </div>
 
-            <Field label={`Artwork — ${BANNER_PHOTO_SIZES[draft.placement]}`}>
+            {/* Not a <label>: a file input and its trigger button inside one get their clicks redirected to the text field. */}
+            <div>
+              <label htmlFor="banner-artwork-url" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Artwork — {BANNER_PHOTO_SIZES[draft.placement]}
+              </label>
               <p className="mb-2 text-xs text-gray-500">Upload at {BANNER_PHOTO_SIZES[draft.placement]}. Leave the title, subtitle, note, bullets and button empty to show this photo at full width.</p>
               <div className="flex gap-2">
-                <input value={draft.image} onChange={(e) => set("image", e.target.value)} className={inputClass} placeholder="/banners/…" />
+                <input id="banner-artwork-url" value={draft.image} onChange={(e) => set("image", e.target.value)} className={inputClass} placeholder="/banners/…" />
                 <input
                   ref={fileInput}
                   type="file"
@@ -289,7 +293,7 @@ export default function ListingBannersAdminPage() {
                   Upload
                 </button>
               </div>
-            </Field>
+            </div>
 
             <div className="grid grid-cols-3 gap-3">
               {(["bgFrom", "bgTo", "accent"] as const).map((key) => (

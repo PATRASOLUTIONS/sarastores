@@ -93,6 +93,7 @@ function RegisterForm() {
     setErrors((prev) => {
       const newErrors = { ...prev }
       delete newErrors[name]
+      if (name === "email") delete newErrors.emailExists
       if (isAgreementToggle) delete newErrors.agreePrivacyNotice
       return newErrors
     })
@@ -154,7 +155,7 @@ function RegisterForm() {
     setIsSubmitting(true)
 
     try {
-      const success = await signup(
+      const result = await signup(
         formData.name,
         formData.email,
         formData.password,
@@ -171,10 +172,12 @@ function RegisterForm() {
           noticeVersion: PRIVACY_NOTICE_VERSION,
         }
       )
-      if (success) {
+      if (result.ok) {
         router.push("/login")
+      } else if (result.code === "EMAIL_EXISTS") {
+        setErrors({ email: result.message, emailExists: "true" })
       } else {
-        setErrors({ general: "Could not create your account. Please try again." })
+        setErrors({ general: result.message })
       }
     } catch (error) {
       console.error("Registration error:", error)
@@ -328,7 +331,19 @@ function RegisterForm() {
                     placeholder="you@example.com"
                   />
                 </div>
-                {errors.email && <p className="mt-1.5 text-[12px] text-red-600">{errors.email}</p>}
+                {errors.email && (
+                  <p role="alert" className="mt-1.5 text-[12px] text-red-600">
+                    {errors.email}
+                    {errors.emailExists && (
+                      <>
+                        {" "}
+                        <Link href="/login" className="font-semibold underline">Sign in</Link>
+                        {" or "}
+                        <Link href="/forgot-password" className="font-semibold underline">reset your password</Link>
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
 
               <div>

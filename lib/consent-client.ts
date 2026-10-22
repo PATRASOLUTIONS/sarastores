@@ -39,6 +39,34 @@ export const DENY_ALL: Omit<TrackingConsent, "decidedAt" | "anonymousId" | "vers
   personalisation: false,
 }
 
+const CONSENT_COOKIE_MAX_AGE = 365 * 24 * 60 * 60
+
+// A cookie copy survives storage partitioning and site-data cleanups that
+// drop localStorage, so a made choice is not asked for again.
+function readConsentCookie(): string | null {
+  if (typeof document === "undefined" || typeof document.cookie !== "string") return null
+  const prefix = `${CONSENT_STORAGE_KEY}=`
+  const entry = document.cookie.split("; ").find((part) => part.startsWith(prefix))
+  if (!entry) return null
+  try {
+    return decodeURIComponent(entry.slice(prefix.length))
+  } catch {
+    return null
+  }
+}
+
+function writeConsentCookie(value: string | null): void {
+  if (typeof document === "undefined") return
+  try {
+    const secure = window.location?.protocol === "https:" ? "; Secure" : ""
+    document.cookie = value === null
+      ? `${CONSENT_STORAGE_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`
+      : `${CONSENT_STORAGE_KEY}=${encodeURIComponent(value)}; Max-Age=${CONSENT_COOKIE_MAX_AGE}; Path=/; SameSite=Lax${secure}`
+  } catch {
+    // Cookies disabled: localStorage remains the record.
+  }
+}
+
 function randomId(): string {
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -58,8 +86,12 @@ function randomId(): string {
 export function readConsent(): TrackingConsent | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY)
+    const stored = window.localStorage.getItem(CONSENT_STORAGE_KEY)
+    const raw = stored || readConsentCookie()
     if (!raw) return null
+    if (!stored) {
+      try { window.localStorage.setItem(CONSENT_STORAGE_KEY, raw) } catch { /* cookie still holds it */ }
+    }
     const parsed = JSON.parse(raw) as TrackingConsent
     if (
       typeof parsed?.analytics !== "boolean" ||
@@ -101,6 +133,7 @@ export function writeConsent(choice: Partial<Record<TrackingCategory, boolean>>)
     anonymousId: getAnonymousId(),
   }
 
+  writeConsentCookie(JSON.stringify(record))
   try {
     window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(record))
   } catch {
@@ -168,6 +201,7 @@ export function onConsentChange(handler: (consent: TrackingConsent | null) => vo
 /** Clears the stored decision so the banner reappears. */
 export function resetConsent(): void {
   const previous = readConsent()
+  writeConsentCookie(null)
   try {
     window.localStorage.removeItem(CONSENT_STORAGE_KEY)
     window.dispatchEvent(new CustomEvent(CONSENT_CHANGE_EVENT, { detail: null }))

@@ -158,7 +158,7 @@ test("the contact endpoint will not relay mail to a malformed recipient", async 
   assert.equal(sent.length, 0, "no mail may be sent for a rejected submission")
 })
 
-test("signup answers identically whether or not the address already has an account", async () => {
+test("signup rejects an address that already has an account with a 409", async () => {
   const mail = []
   const existing = { _id: "u1", email: "taken@example.invalid" }
 
@@ -199,21 +199,17 @@ test("signup answers identically whether or not the address already has an accou
   const taken = await submit(buildRoute(), existing.email)
   const fresh = await submit(buildRoute(), "brand-new@example.invalid")
 
-  // Status, body and field set must all match; any difference re-identifies
-  // the address for an attacker enumerating a list.
-  assert.equal(taken.status, fresh.status)
+  assert.equal(taken.status, 409)
   const takenBody = await taken.json()
-  const freshBody = await fresh.json()
-  assert.deepEqual(takenBody, freshBody)
+  assert.equal(takenBody.code, "EMAIL_EXISTS")
+  assert.equal(takenBody.success, false)
   assert.ok(!("user" in takenBody), "must not return a user object")
-  assert.ok(
-    !/exist|already|registered account/i.test(JSON.stringify(takenBody)),
-    "the message must not hint that the account exists",
-  )
+  assert.equal(mail.filter((m) => m.to === existing.email).length, 0, "no mail is sent for a duplicate address")
 
-  // The fact is disclosed only to the account holder.
-  const notice = mail.find((m) => m.to === existing.email && /tried to create an account/i.test(m.subject))
-  assert.ok(notice, "the existing account owner should be told someone tried to register")
+  assert.equal(fresh.status, 200)
+  const freshBody = await fresh.json()
+  assert.equal(freshBody.success, true)
+  assert.ok(!("user" in freshBody), "must not return a user object")
 })
 
 test("getCampaignCollection re-checks the slug instead of trusting its caller", async () => {
