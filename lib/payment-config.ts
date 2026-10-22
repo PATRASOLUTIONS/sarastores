@@ -17,6 +17,11 @@ export function cashOnDeliveryEnabled(): boolean {
   return value === "true"
 }
 
+/** Off unless INSTORE_PURCHASE_ENABLED is exactly "true". */
+export function inStorePurchaseEnabled(): boolean {
+  return process.env.INSTORE_PURCHASE_ENABLED?.trim() === "true"
+}
+
 export function paymentConfiguration() {
   const providers = PaymentProviderSchema.options.filter(paymentEnabled)
   const requested = process.env.PAYMENT_DEFAULT_PROVIDER
@@ -24,7 +29,7 @@ export function paymentConfiguration() {
     throw new PaymentConfigurationError("PAYMENT_DEFAULT_PROVIDER must name an enabled gateway")
   }
   const defaultProvider = providers.find(provider => provider === requested) ?? providers[0] ?? null
-  return { providers, defaultProvider, codEnabled: cashOnDeliveryEnabled() }
+  return { providers, defaultProvider, codEnabled: cashOnDeliveryEnabled(), instoreEnabled: inStorePurchaseEnabled() }
 }
 
 export function paymentSiteOrigin(): string {

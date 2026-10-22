@@ -6,6 +6,7 @@ import { CheckCircle, MapPin, Store, Truck, Zap } from "lucide-react"
 import { analytics } from "@/lib/analytics"
 import { checkoutCity } from "@/lib/checkout-region"
 import { useSettingsData } from "@/hooks/useSettingsData"
+import { calculateDistance, coordinates, geocodePincode, type Coordinates } from "@/lib/geo-client"
 import styles from "./FulfilmentSelector.module.css"
 
 /**
@@ -41,7 +42,11 @@ interface ApiStore {
   state?: string
   pincode?: string
   image?: string
+  latitude?: number
+  longitude?: number
 }
+
+type RankedStore = ApiStore & { distance: number | null }
 
 export default function FulfilmentSelector({
   method,
@@ -49,6 +54,8 @@ export default function FulfilmentSelector({
   selectedStore,
   onStoreChange,
   deliveryFeeLabel = "Charges confirmed at payment",
+  deliveryPincode = "",
+  deliveryCity = "",
   children,
 }: {
   method: FulfilmentMethod
@@ -56,8 +63,27 @@ export default function FulfilmentSelector({
   selectedStore: PickupStore | null
   onStoreChange: (store: PickupStore | null) => void
   deliveryFeeLabel?: string
+  /** The shopper's delivery address, used to put the nearest stores first. */
+  deliveryPincode?: string
+  deliveryCity?: string
   children?: ReactNode
 }) {
+  const [origin, setOrigin] = useState<Coordinates | null>(null)
+  const pincode = /^[1-9]\d{5}$/.test(deliveryPincode.trim()) ? deliveryPincode.trim() : ""
+
+  useEffect(() => {
+    setOrigin(null)
+    if (!pincode) return
+    const controller = new AbortController()
+    // Debounced so typing a pincode does not fire a lookup per keystroke.
+    const timer = setTimeout(() => {
+      geocodePincode(pincode, controller.signal)
+        .then(coords => { if (!controller.signal.aborted) setOrigin(coords) })
+        .catch(error => { if (!controller.signal.aborted) console.warn("[Checkout] Pincode location lookup failed:", error) })
+    }, 400)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [pincode])
+
   const [stores, setStores] = useState<ApiStore[]>([])
   const [city, setCity] = useState("")
   const [loading, setLoading] = useState(false)
@@ -101,12 +127,31 @@ export default function FulfilmentSelector({
     [stores],
   )
 
+  // Nearest first: by distance from the delivery pincode when it can be
+  // located, otherwise stores in the same pincode, then the same city.
+  const rankedStores = useMemo<RankedStore[]>(() => {
+    const homeCity = checkoutCity(deliveryCity || "")
+    const ranked = stores.map((store) => {
+      const position = coordinates(store.latitude, store.longitude)
+      return { ...store, distance: origin && position ? calculateDistance(origin, position) : null }
+    })
+    const closeness = (store: RankedStore) =>
+      (pincode && store.pincode === pincode ? 0 : 2) + (homeCity && checkoutCity(store.city) === homeCity ? 0 : 1)
+    return ranked.sort((a, b) =>
+      a.distance !== null && b.distance !== null ? a.distance - b.distance
+        : a.distance !== null ? -1 : b.distance !== null ? 1
+          : closeness(a) - closeness(b))
+  }, [stores, origin, pincode, deliveryCity])
+
+  const hasLocation = Boolean(origin) || Boolean(pincode) || Boolean(deliveryCity)
+  const nearestId = hasLocation ? rankedStores[0]?.id : undefined
+
   const visibleStores = useMemo(
     () => {
-      const filtered = city ? stores.filter((store) => checkoutCity(store.city) === city) : stores
+      const filtered = city ? rankedStores.filter((store) => checkoutCity(store.city) === city) : rankedStores
       return expanded ? filtered : filtered.slice(0, 3)
     },
-    [stores, city, expanded],
+    [rankedStores, city, expanded],
   )
 
   return (
@@ -145,7 +190,7 @@ export default function FulfilmentSelector({
 
       {children}
         <div className={styles.stores}>
-          <div className={styles.storeHeading}><h3>Stores for Pickup</h3>
+          <div className={styles.storeHeading}><h3>{pincode ? `Stores near ${pincode}` : "Stores for Pickup"}</h3>
             <button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? "Show fewer stores" : "View All Stores"}</button>
           </div>
           {loading ? (
@@ -217,7 +262,11 @@ export default function FulfilmentSelector({
                             }} />
                         </div>
                         <strong>{store.name}</strong>
-                        <small className={styles.storeCity}>{checkoutCity(store.city)}</small>
+                        <small className={styles.storeCity}>
+                          {checkoutCity(store.city)}
+                          {store.distance !== null && ` · ${store.distance < 10 ? store.distance.toFixed(1) : Math.round(store.distance)} km away`}
+                        </small>
+                        {store.id === nearestId && <small className={styles.storeReady}><MapPin size={10} />Nearest to your address</small>}
                         {store.address && (
                           <span className={styles.storeAddress} title={store.address}>
                             {store.address}

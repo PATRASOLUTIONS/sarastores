@@ -57,7 +57,7 @@ test("configuration endpoint returns only non-secret gateway choices", async () 
   const loader = sourceLoader({}, { env })
   const response = await loader.load("app/api/payment/config/route.ts").GET()
   const data = await response.json()
-  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true })
+  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true, instoreEnabled: false })
   assert.match(response.headers.get("cache-control"), /no-store/)
   for (const value of [key, pineKey, env.PINELABS_CLIENT_SECRET]) assert.equal(JSON.stringify(data).includes(value), false)
 })
@@ -605,10 +605,11 @@ test("checkout logo cards show only enabled gateways and keep offline choices in
   const options = sourceLoader({ "next/image": "provider-image" }).load("components/CheckoutPaymentOptions.tsx")
   const selected = []
   for (const codEnabled of [true, false]) {
+   for (const instoreEnabled of [true, false]) {
    for (const providers of [[], ["pinelabs"], ["razorpay", "paytm"], ["pinelabs", "razorpay", "paytm"]]) {
-     const choices = [...providers, ...(codEnabled ? ["cash-on-delivery"] : []), "instore"]
+     const choices = [...providers, ...(codEnabled ? ["cash-on-delivery"] : []), ...(instoreEnabled ? ["instore"] : [])]
      for (const choice of [null, ...choices]) {
-       const tree = options.default({ providers, codEnabled, selected: choice, onChange: value => selected.push(value) })
+       const tree = options.default({ providers, codEnabled, instoreEnabled, selected: choice, onChange: value => selected.push(value) })
        const radios = elements(tree).filter(node => node.type === "input")
        assert.deepEqual(radios.map(node => node.props.value), choices)
        assert.equal(radios.filter(node => node.props.checked).length, choice === null ? 0 : 1)
@@ -618,6 +619,7 @@ test("checkout logo cards show only enabled gateways and keep offline choices in
          assert.equal(selected.at(-1), radio.props.value)
        }
      }
+   }
    }
   }
   for (const provider of ["pinelabs", "razorpay", "paytm"]) {
@@ -715,7 +717,7 @@ for (const mode of ["all", "blocked"]) {
 }
 
 test("checkout uses the server default, switches provider handoff, and preserves COD/in-store choices", async () => {
-  const config = { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true }
+  const config = { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true, instoreEnabled: true }
   const fixture = checkoutOptionsFixture(config)
   await new Promise(setImmediate)
   const options = () => findElement(fixture.render(), "checkout-options").props
@@ -741,17 +743,18 @@ test("checkout uses the server default, switches provider handoff, and preserves
 
 for (const fail of [false, true]) {
   test(`checkout never invents an online gateway when none are available (configuration failure=${fail})`, async () => {
-    const fixture = checkoutOptionsFixture({ providers: [], defaultProvider: null, codEnabled: true }, fail)
+    const fixture = checkoutOptionsFixture({ providers: [], defaultProvider: null, codEnabled: true, instoreEnabled: true }, fail)
     await new Promise(setImmediate)
     const options = findElement(fixture.render(), "checkout-options").props
     assert.equal(options.providers.length, 0)
-    assert.equal(options.selected, fail ? "instore" : "cash-on-delivery")
+    assert.equal(options.selected, fail ? null : "cash-on-delivery")
     assert.equal(options.codEnabled, !fail)
+    assert.equal(options.instoreEnabled, !fail)
     if (fail) assert.equal(fixture.errors.length, 1)
     options.onChange("cash-on-delivery")
     if (fail) {
-      assert.equal(findElement(fixture.render(), "payment-gateway"), null)
-      assert.ok(findElement(fixture.render(), "in-store"))
+      assert.equal(findElement(fixture.render(), "checkout-options").props.selected, null)
+      assert.equal(findElement(fixture.render(), "in-store"), null)
     } else {
       assert.equal(findElement(fixture.render(), "payment-gateway").props.paymentMethod, "cash-on-delivery")
     }
@@ -760,7 +763,7 @@ for (const fail of [false, true]) {
 
 for (const providers of [[], ["pinelabs"]]) {
   test(`disabled COD stays unavailable and selects a valid alternative (gateways=${providers.length})`, async () => {
-    const fixture = checkoutOptionsFixture({ providers, defaultProvider: providers[0] ?? null, codEnabled: false })
+    const fixture = checkoutOptionsFixture({ providers, defaultProvider: providers[0] ?? null, codEnabled: false, instoreEnabled: true })
     assert.equal(findElement(fixture.render(), "checkout-options").props.codEnabled, false, "Hidden until configuration loads")
     await new Promise(setImmediate)
     const options = () => findElement(fixture.render(), "checkout-options").props

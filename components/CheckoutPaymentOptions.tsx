@@ -24,9 +24,10 @@ const OFFLINE_OPTIONS = [
   { id: "instore", label: "In-store Purchase", description: "Verify your purchase with a SARA store.", icon: Store },
 ] as const
 
-export default function CheckoutPaymentOptions({ providers, codEnabled, selected, onChange }: {
+export default function CheckoutPaymentOptions({ providers, codEnabled, instoreEnabled = false, selected, onChange }: {
   providers: PaymentProvider[]
   codEnabled: boolean
+  instoreEnabled?: boolean
   selected: CheckoutPaymentChoice | null
   onChange: (choice: CheckoutPaymentChoice) => void
 }) {
@@ -50,7 +51,7 @@ export default function CheckoutPaymentOptions({ providers, codEnabled, selected
           </span>
         </label>
       ))}
-      {OFFLINE_OPTIONS.filter(option => option.id !== "cash-on-delivery" || codEnabled).map(({ id, label, description, icon: Icon }) => (
+      {OFFLINE_OPTIONS.filter(option => option.id === "cash-on-delivery" ? codEnabled : instoreEnabled).map(({ id, label, description, icon: Icon }) => (
         <label key={id} className={optionClass(selected === id)}>
           <input type="radio" name="paymentChoice" value={id} checked={selected === id}
             onChange={() => onChange(id)} className="h-4 w-4 shrink-0 accent-[#1560BD]" />

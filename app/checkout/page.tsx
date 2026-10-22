@@ -151,6 +151,7 @@ export default function CheckoutPage() {
   const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
   const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
   const [codEnabled, setCodEnabled] = useState(false)
+  const [instoreEnabled, setInstoreEnabled] = useState(false)
   const [paymentConfigError, setPaymentConfigError] = useState("")
   const [paymentConfigLoading, setPaymentConfigLoading] = useState(true)
   const [pincodeRules, setPincodeRules] = useState<PincodeRestrictions | null>(null)
@@ -198,12 +199,15 @@ export default function CheckoutPage() {
         setPaymentProviders(config.providers)
         setPaymentProvider(config.defaultProvider)
         setCodEnabled(config.codEnabled)
-        if (!config.defaultProvider) setPaymentMethod(config.codEnabled ? "cash-on-delivery" : "instore")
+        setInstoreEnabled(config.instoreEnabled)
+        if (!config.defaultProvider) {
+          if (config.codEnabled) setPaymentMethod("cash-on-delivery")
+          else if (config.instoreEnabled) setPaymentMethod("instore")
+        }
       } catch (error) {
         if (controller.signal.aborted) return
         console.error("[Checkout] Gateway configuration failed:", error)
         setPaymentConfigError("Online payment gateways are unavailable. Refresh this page to retry.")
-        setPaymentMethod("instore")
       } finally {
         if (!controller.signal.aborted) setPaymentConfigLoading(false)
       }
@@ -1248,6 +1252,7 @@ export default function CheckoutPage() {
                 <h2 id="delivery-options-heading" className={styles.sectionTitle}><span>2</span>Delivery Options</h2>
                 <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
                 <FulfilmentSelector method={fulfilmentMethod} onMethodChange={setFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
+                  deliveryPincode={customerData.pincode} deliveryCity={customerData.city}
                   deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
                   <div className={styles.deliveryNotice}><Truck size={34} /><div>
                     <small>{isPickup ? "Store pickup" : "Home delivery service area"}</small>
@@ -1272,13 +1277,16 @@ export default function CheckoutPage() {
                   {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
                   {paymentConfigLoading && <p role="status" className={styles.sectionHint}>Loading online payment gateways...</p>}
                   {!paymentConfigLoading && !paymentConfigError && !paymentProviders.length &&
-                    <p className={styles.sectionHint}>Online payments are currently unavailable. {codEnabled
-                      ? "Choose cash on delivery or in-store purchase." : "Choose in-store purchase."}</p>}
-                  <CheckoutPaymentOptions providers={paymentProviders} codEnabled={codEnabled}
+                    <p className={styles.sectionHint}>Online payments are currently unavailable. {
+                      codEnabled && instoreEnabled ? "Choose cash on delivery or in-store purchase."
+                        : codEnabled ? "Choose cash on delivery."
+                          : instoreEnabled ? "Choose in-store purchase." : "Please try again later."}</p>}
+                  <CheckoutPaymentOptions providers={paymentProviders} codEnabled={codEnabled} instoreEnabled={instoreEnabled}
                     selected={paymentMethod === "online" ? paymentProvider : paymentMethod}
                     onChange={choice => {
                       if (choice === "cash-on-delivery" || choice === "instore") {
                         if (choice === "cash-on-delivery" && !codEnabled) return
+                        if (choice === "instore" && !instoreEnabled) return
                         setPaymentMethod(choice)
                       } else {
                         setPaymentProvider(choice)
@@ -1287,7 +1295,7 @@ export default function CheckoutPage() {
                     }} />
 
                   {/* In-store Purchase Verification */}
-                  {paymentMethod === "instore" && (
+                  {paymentMethod === "instore" && instoreEnabled && (
                     <div className="mt-6">
                       <InStorePurchase
                         beforeVerify={validateCheckout}

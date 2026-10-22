@@ -375,6 +375,25 @@ for (const endpoint of ["place-order", "queue-order"]) {
   })
 }
 
+const instoreEnv = { INSTORE_PURCHASE_ENABLED: "true" }
+
+for (const value of [undefined, "false", "yes"]) {
+  test(`in-store purchase is refused when INSTORE_PURCHASE_ENABLED=${value}`, async () => {
+    let calls = 0
+    const loader = sourceLoader({
+      "@/lib/auth": auth(),
+      "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { AUTH: {}, ORDERS: {} } },
+      "@/lib/db-service": mockDb({ findOne: async () => { calls++; return null } }),
+      "@/lib/email": { sendEmail: async () => { calls++; return { success: true } } },
+    }, { env: value === undefined ? {} : { INSTORE_PURCHASE_ENABLED: value } })
+    const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
+      email: user.email, employeeId: "fixture", action: "verify", checkout: { items: [{ id, quantity: 1 }] },
+    }))
+    assert.equal(result.status, 403)
+    assert.equal(calls, 0)
+  })
+}
+
 test("in-store OTP rejects nonexistent employees before sending an email", async () => {
   let mails = 0
   const loader = sourceLoader({
@@ -382,7 +401,7 @@ test("in-store OTP rejects nonexistent employees before sending an email", async
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { AUTH: {} } },
     "@/lib/db-service": mockDb({ findOne: async () => null }),
     "@/lib/email": { sendEmail: async () => { mails++; return { success: true } } },
-  })
+  }, { env: instoreEnv })
   const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
     email: "attacker@example.invalid", employeeId: "fixture", action: "verify", checkout: { items: [{ id, quantity: 1 }] },
   }))
@@ -399,7 +418,7 @@ test("in-store approval validates its checkout challenge, not an email-only OTP"
       ...sourceLoader({ "@/lib/order-pricing": pricing, "@/lib/loyalty": noRewards }).load("lib/checkout-payment.ts"),
       quoteCheckout: async () => ({ ok: true, ...price, pricing: price, amount: 100, fingerprint: "fixture-checkout" }),
     },
-  })
+  }, { env: instoreEnv })
   const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
     email: user.email, employeeId: "fixture", action: "validate", otp: "123456",
     challengeId: crypto.randomUUID(), checkout: { items: [{ id, quantity: 1 }] },
@@ -445,7 +464,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
       }),
     },
     "@/lib/emailTemplates": { emailTemplates: { ORDER_PENDING: { subject: "Fixture #{orderNumber}", html: () => "<p>Fixture</p>" } } },
-  })
+  }, { env: instoreEnv })
   return { route: loader.load("app/api/orders/route.ts"), writes: () => writes, persisted: () => persisted, cartClears, consumptions, transaction, adminNotifications }
 }
 
@@ -605,7 +624,7 @@ test("valid employee OTP creates a checkout-bound single-use approval without se
         return "fixture-approval-token"
       },
     },
-  }, { env: { SESSION_SECRET: secret } })
+  }, { env: { SESSION_SECRET: secret, ...instoreEnv } })
   const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
     email: user.email, employeeId: "fixture", action: "validate", otp: "123456",
     challengeId, checkout: { items: [{ id, quantity: 1 }] },

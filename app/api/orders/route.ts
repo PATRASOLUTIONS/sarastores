@@ -12,7 +12,7 @@ import { checkoutFingerprint, getCheckoutIntent, persistCheckoutOrder, CheckoutC
 import { fulfillSoftwareOrder } from "@/lib/software-fulfillment"
 import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfillment"
 import { initiateHostedCheckout, notifyHostedGuestOrder } from "@/lib/hosted-checkout"
-import { cashOnDeliveryEnabled, PaymentConfigurationError } from "@/lib/payment-config"
+import { cashOnDeliveryEnabled, inStorePurchaseEnabled, PaymentConfigurationError } from "@/lib/payment-config"
 import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
@@ -474,6 +474,9 @@ export async function POST(request: NextRequest) {
       }
       status = "confirmed"
     } else if (method === "instore") {
+      if (!inStorePurchaseEnabled()) {
+        return NextResponse.json({ error: "In-store purchase is not available" }, { status: 403 })
+      }
       const approvalId = paymentDetails?.approvalId
       const approvalToken = paymentDetails?.approvalToken
       if (typeof approvalId !== "string" || typeof approvalToken !== "string") {
