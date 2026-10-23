@@ -16,7 +16,7 @@ const post = (body, path = "/api/payment/store-request") => new NextRequest(`htt
 })
 const requestBody = { items: [{ id: "p1", quantity: 1 }], fulfilment: { method: "delivery" }, storeId, customer }
 
-function requestLoader({ env = {}, loaded = store, limited = false } = {}) {
+function requestLoader({ env = {}, loaded = store, limited = false, stocked = true } = {}) {
   const intents = []
   const notifications = []
   const loader = sourceLoader({
@@ -38,6 +38,10 @@ function requestLoader({ env = {}, loaded = store, limited = false } = {}) {
         notifyStoreManager: true, storeManagers: {}, platformManagers: [{ name: "Ops", phone: "9000000001" }],
       }),
       notifyStoreOfPaymentRequest: async (...args) => { notifications.push(args); return { whatsapp: true, email: true, managers: 1 } },
+    },
+    "@/lib/store-stock": {
+      itemCodesFor: async ids => new Map(ids.map(id => [id, `SKU-${id}`])),
+      storesHoldingStock: async () => new Set(stocked ? [storeId] : []),
     },
   }, { env })
   return { route: loader.load("app/api/payment/store-request/route.ts"), intents, notifications }
@@ -78,8 +82,9 @@ test("pay at store request lists the coupon and reward discount as offers", asyn
   }
 })
 
-test("pay at store request is refused when disabled, rate limited, invalid, for an unknown store or a mismatched pickup", async () => {
+test("pay at store request is refused when disabled, rate limited, invalid, for an unknown or unstocked store or a mismatched pickup", async () => {
   const cases = [
+    [{ stocked: false }, requestBody, 409],
     [{ env: { PAY_AT_STORE_ENABLED: "false" } }, requestBody, 403],
     [{ limited: true }, requestBody, 429],
     [{}, { ...requestBody, customer: { ...customer, phone: "12345" } }, 400],

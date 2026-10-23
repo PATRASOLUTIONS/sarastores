@@ -6,6 +6,7 @@ export interface StoredStoreLocation {
   _id?: ObjectId | string
   id?: string
   shopName?: string
+  storeCode?: string
   locationDescription?: string
   city?: string
   state?: string

@@ -6,6 +6,7 @@ import { CheckoutQuoteSchema, createCheckoutIntent, quoteCheckout } from "@/lib/
 import { generateOrderId } from "@/lib/order-id"
 import { storePaymentEnabled } from "@/lib/payment-config"
 import { getStorePaymentWhatsAppSettings, loadPaymentStore, notifyStoreOfPaymentRequest, STORE_PAYMENT_REQUEST_TTL_MS } from "@/lib/store-payment"
+import { itemCodesFor, storesHoldingStock } from "@/lib/store-stock"
 
 export const dynamic = "force-dynamic"
 
@@ -55,6 +56,14 @@ export async function POST(request: NextRequest) {
     const userId = (await getSession())?.user?.id ?? null
     const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints })
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400, headers })
+    const hardware = quote.pricing.items.filter(item => item.type !== "software")
+    if (hardware.length) {
+      const codes = await itemCodesFor(hardware.map(item => item.id))
+      const holding = await storesHoldingStock(hardware.map(item => ({ sku: codes.get(item.id) ?? null, quantity: item.quantity })))
+      if (!holding.has(store.id)) {
+        return NextResponse.json({ error: "This store does not have every item in stock. Please choose another store or pay online." }, { status: 409, headers })
+      }
+    }
 
     const orderId = await generateOrderId()
     const requestToken = await createCheckoutIntent(orderId, userId, quote, "store-payment", {

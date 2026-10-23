@@ -1,21 +1,21 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { CheckCircle, MapPin, Store, Truck, Zap } from "lucide-react"
 import { analytics } from "@/lib/analytics"
 import { checkoutCity } from "@/lib/checkout-region"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { formatDistance, useNearbyStores } from "@/hooks/useNearbyStores"
+import { farStoreMessage, type StoreStockState } from "@/hooks/useStoreStock"
 import styles from "./FulfilmentSelector.module.css"
 
 /**
  * Click & Pick fulfilment selector ("OMNICHANNEL — THIS SHOULD BE A TOP PRIORITY").
  *
- * Lets the shopper choose home delivery or collection from a SARA store. Store
- * availability is shown as "reserve on confirmation" because per-store stock
- * comes from SAP, which is not connected yet — see
- * docs/brd/PENDING-EXTERNAL-INTEGRATIONS.md (SAP-02, SAP-06).
+ * Lets the shopper choose home delivery or collection from a SARA store. Only
+ * stores whose uploaded stock (/admin/stock-check) covers the whole cart are
+ * offered.
  */
 
 export type FulfilmentMethod = "delivery" | "pickup"
@@ -40,6 +40,7 @@ export default function FulfilmentSelector({
   deliveryFeeLabel = "Charges confirmed at payment",
   deliveryPincode = "",
   deliveryCity = "",
+  stock,
   children,
 }: {
   method: FulfilmentMethod
@@ -50,9 +51,24 @@ export default function FulfilmentSelector({
   /** The shopper's delivery address, used to put the nearest stores first. */
   deliveryPincode?: string
   deliveryCity?: string
+  /** Stores that hold the whole cart; stores outside it are not offered. */
+  stock: StoreStockState
   children?: ReactNode
 }) {
-  const { stores: rankedStores, loading, error, retry, pincode, nearestId } = useNearbyStores(deliveryPincode, deliveryCity)
+  const { stores: nearbyStores, loading: storesLoading, error: storesError, retry: retryStores, pincode, nearestId: nearbyNearestId } = useNearbyStores(deliveryPincode, deliveryCity)
+  const rankedStores = useMemo(
+    () => stock.storeIds ? nearbyStores.filter((store) => stock.storeIds!.has(store.id)) : [],
+    [nearbyStores, stock.storeIds],
+  )
+  const nearestId = nearbyNearestId ? rankedStores[0]?.id : undefined
+  const loading = storesLoading || stock.loading || (!stock.storeIds && !stock.error)
+  const error = storesError || stock.error
+  const retry = () => { retryStores(); stock.retry() }
+  const farMessage = farStoreMessage(rankedStores[0]?.distance, stock.farDistanceKm)
+
+  useEffect(() => {
+    if (selectedStore && stock.storeIds && !stock.storeIds.has(selectedStore.id)) onStoreChange(null)
+  }, [selectedStore, stock.storeIds, onStoreChange])
   const [city, setCity] = useState("")
   const [expanded, setExpanded] = useState(false)
   const { data: settings } = useSettingsData()
@@ -114,7 +130,7 @@ export default function FulfilmentSelector({
             <p className="text-sm text-gray-600">Loading stores…</p>
           ) : error ? <p role="alert" className="text-sm text-red-700">{error} Please retry or choose home delivery. <button type="button" className="underline" onClick={retry}>Retry stores</button></p> : rankedStores.length === 0 ? (
             <p className="text-sm text-gray-600">
-              Store pickup is unavailable right now. Please choose home delivery.
+              None of our stores has every item in your cart in stock. Please choose home delivery.
             </p>
           ) : (
             <>
@@ -137,6 +153,7 @@ export default function FulfilmentSelector({
                 </select>
               </label>}
 
+              {farMessage && <p role="note" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{farMessage}</p>}
               <ul className={styles.storeGrid}>
                 {visibleStores.map((store) => {
                   const isSelected = method === "pickup" && selectedStore?.id === store.id
@@ -189,7 +206,7 @@ export default function FulfilmentSelector({
                             {store.address}
                           </span>
                         )}
-                        <small className={styles.storeReady}><MapPin size={10} />Store will confirm availability</small>
+                        <small className={styles.storeReady}><CheckCircle size={10} />Items in stock</small>
                       </button>
                     </li>
                   )
@@ -199,8 +216,8 @@ export default function FulfilmentSelector({
               {method === "pickup" && selectedStore && (
                 <p className={styles.pickupConfirmation}>
                   <CheckCircle size={14} />
-                  Collecting from <strong>{selectedStore.name}</strong>. We will confirm stock and
-                  message you when your order is ready for pickup.
+                  Collecting from <strong>{selectedStore.name}</strong>. Your items are in stock there;
+                  we will message you when your order is ready for pickup.
                   <span className={styles.storeContact}>
                     <span>{selectedStore.address}</span>
                     {selectedStore.hours && <span>{selectedStore.hours}</span>}

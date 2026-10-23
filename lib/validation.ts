@@ -811,6 +811,7 @@ export const StoreQrAnalyticsQuerySchema = z.object({
 }).strict();
 export const CreateStoreLocationSchema = z.object({
   shopName: z.string().trim().min(1).max(200),
+  storeCode: z.string().trim().max(50, "Store code must be 50 characters or fewer").optional(),
   locationDescription: z.string().trim().max(2000).default(""),
   googleMapLocation: z.union([StoreHttpUrlSchema, z.literal("")]).default(""),
   mobileNo: z.string().trim().max(30).default(""),
@@ -823,7 +824,11 @@ export const UpdateStoreLocationSchema = CreateStoreLocationSchema.partial().str
   .refine(value => Object.keys(value).length > 0, "Provide a store update");
 export const BulkStoreLocationSchema = z.object({
   stores: z.array(CreateStoreLocationSchema).min(1).max(500)
-    .refine(stores => new Set(stores.map(store => store.shopName)).size === stores.length, "Shop names must be unique in an upload"),
+    .refine(stores => new Set(stores.map(store => store.shopName)).size === stores.length, "Shop names must be unique in an upload")
+    .refine(stores => {
+      const codes = stores.flatMap(store => store.storeCode ? [store.storeCode] : [])
+      return new Set(codes).size === codes.length
+    }, "Store codes must be unique in an upload"),
 }).strict();
 export const PartnerProductAssignmentSchema = z.object({
   productId: z.string().trim().min(1).max(100).transform(value => /^[a-f\d]{24}$/i.test(value) ? value.toLowerCase() : value),

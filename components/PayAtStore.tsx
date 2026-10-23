@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { CheckCircle, MapPin, MessageCircle, PhoneCall, Receipt, Store, X } from "lucide-react"
 import { formatDistance, useNearbyStores } from "@/hooks/useNearbyStores"
+import { farStoreMessage, type StoreStockState } from "@/hooks/useStoreStock"
 import { STORE_PAYMENT_PLATFORMS, StorePaymentTransactionSchema, type StorePaymentPlatform } from "@/types/store-payment"
 
 export interface PayAtStoreChoice {
@@ -10,29 +11,38 @@ export interface PayAtStoreChoice {
   name: string
 }
 
-/** Which store the shopper will pay. Pickup orders pay where they collect. */
-export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, deliveryCity, value, onChange }: {
+/**
+ * Which store the shopper will pay. Pickup orders pay where they collect;
+ * otherwise only stores holding the whole cart are offered.
+ */
+export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, deliveryCity, stock, value, onChange }: {
   isPickup: boolean
   pickupStore: PayAtStoreChoice | null
   deliveryPincode: string
   deliveryCity: string
+  stock: StoreStockState
   value: PayAtStoreChoice | null
   onChange: (store: PayAtStoreChoice | null) => void
 }) {
-  const { stores: ranked, loading, error, retry, nearestId: rankedNearestId } =
+  const { stores: ranked, loading: storesLoading, error: storesError, retry: retryStores, nearestId: rankedNearestId } =
     useNearbyStores(deliveryPincode, deliveryCity, { url: "/api/payment/stores", allStores: true })
   const [showAll, setShowAll] = useState(false)
+  const loading = storesLoading || stock.loading || (!stock.storeIds && !stock.error)
+  const error = storesError || stock.error
+  const retry = () => { retryStores(); stock.retry() }
   // Stores that can receive the order first, each group still nearest-first.
-  const stores = useMemo(() => [...ranked].sort((a, b) =>
-    Number(b.acceptsPayAtStore !== false) - Number(a.acceptsPayAtStore !== false)), [ranked])
+  const stores = useMemo(() => ranked
+    .filter(store => stock.storeIds?.has(store.id))
+    .sort((a, b) => Number(b.acceptsPayAtStore !== false) - Number(a.acceptsPayAtStore !== false)), [ranked, stock.storeIds])
   const nearestId = rankedNearestId ? stores.find(store => store.acceptsPayAtStore !== false)?.id : undefined
+  const farMessage = farStoreMessage(stores.find(store => store.acceptsPayAtStore !== false)?.distance, stock.farDistanceKm)
 
   useEffect(() => {
     if (isPickup) {
       if (value?.id !== pickupStore?.id) onChange(pickupStore)
       return
     }
-    if (value && stores.some(store => store.id === value.id && store.acceptsPayAtStore === false)) {
+    if (value && !loading && !stores.some(store => store.id === value.id && store.acceptsPayAtStore !== false)) {
       onChange(null)
       return
     }
@@ -40,7 +50,7 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
       const nearest = stores.find(store => store.id === nearestId)
       if (nearest) onChange({ id: nearest.id, name: nearest.name })
     }
-  }, [isPickup, pickupStore, value, nearestId, stores, onChange])
+  }, [isPickup, pickupStore, value, nearestId, stores, loading, onChange])
 
   if (isPickup) {
     return <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -54,8 +64,9 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
     <p className="mb-2 text-sm font-semibold text-slate-900">Choose the store you want to pay</p>
     {loading ? <p className="text-sm text-slate-600">Loading stores…</p>
       : error ? <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="underline" onClick={retry}>Retry</button></p>
-        : stores.length === 0 ? <p className="text-sm text-slate-600">No store can take payments right now.</p>
+        : stores.length === 0 ? <p className="text-sm text-slate-600">None of our stores has every item in your cart in stock. Please pay online.</p>
           : <>
+            {farMessage && <p role="note" className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{farMessage}</p>}
             <ul className="grid gap-2">
               {visible.map(store => {
                 const available = store.acceptsPayAtStore !== false

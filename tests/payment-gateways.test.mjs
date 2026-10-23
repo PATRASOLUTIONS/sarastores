@@ -672,6 +672,7 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     "@/contexts/AuthContext": { useAuth: () => ({ user: null, isLoading: false }) },
     "@/hooks/useSettingsData": { useSettingsData: () => ({ data: { shippingFee: 99, freeShippingThreshold: 1000 }, isLoading: false }) },
     "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
+    "@/hooks/useStoreStock": { useStoreStock: () => ({ storeIds: new Set(), farDistanceKm: 15, loading: false, error: "", retry() {} }) },
     "@/lib/analytics": { analytics: { beginCheckout() {} }, toAnalyticsItem: item => item },
     "react-hot-toast": { toast: { error: message => errors.push(message) } },
   }, {

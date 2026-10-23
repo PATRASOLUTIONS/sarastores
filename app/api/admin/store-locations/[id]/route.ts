@@ -40,6 +40,7 @@ export async function GET(
       store: {
         id: store._id.toString(),
         shopName: store.shopName || "",
+        storeCode: store.storeCode || "",
         locationDescription: store.locationDescription || "",
         googleMapLocation: store.googleMapLocation || "",
         mobileNo: store.mobileNo || "",
@@ -88,6 +89,13 @@ export async function PUT(
         success: false, 
         message: "Store not found" 
       }, { status: 404 })
+    }
+
+    if (parsed.data.storeCode && await collection.findOne(
+      { storeCode: parsed.data.storeCode, _id: { $ne: new ObjectId(id) } },
+      { projection: { _id: 1 } },
+    )) {
+      return NextResponse.json({ success: false, message: `Store code ${parsed.data.storeCode} is already used by another store` }, { status: 409 })
     }
 
     const updateData = { ...parsed.data, updatedAt: new Date() }

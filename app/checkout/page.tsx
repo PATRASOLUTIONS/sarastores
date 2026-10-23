@@ -14,6 +14,7 @@ import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/Paymen
 import CheckoutPaymentOptions, { PaymentProviderLogo } from "@/components/CheckoutPaymentOptions"
 import InStorePurchase from "@/components/InStorePurchase"
 import { PayAtStoreDialog, PayAtStoreStorePicker, type PayAtStoreChoice } from "@/components/PayAtStore"
+import { useStoreStock } from "@/hooks/useStoreStock"
 import { StorePaymentRequestResponseSchema, type StorePaymentPlatform, type StorePaymentRequestResponse } from "@/types/store-payment"
 import FulfilmentSelector, {
   type FulfilmentMethod,
@@ -308,6 +309,7 @@ export default function CheckoutPage() {
   const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
   const [pickupStore, setPickupStore] = useState<PickupStore | null>(null)
   const isPickup = fulfilmentMethod === "pickup"
+  const storeStock = useStoreStock(cart)
 
   // Guest checkout: the shopper explicitly opts out of signing in.
   const [continueAsGuest, setContinueAsGuest] = useState(false)
@@ -1332,7 +1334,7 @@ export default function CheckoutPage() {
                 <h2 id="delivery-options-heading" className={styles.sectionTitle}><span>2</span>Delivery Options</h2>
                 <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
                 <FulfilmentSelector method={fulfilmentMethod} onMethodChange={setFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
-                  deliveryPincode={customerData.pincode} deliveryCity={customerData.city}
+                  deliveryPincode={customerData.pincode} deliveryCity={customerData.city} stock={storeStock}
                   deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
                   <div className={styles.deliveryNotice}><Truck size={34} /><div>
                     <small>{isPickup ? "Store pickup" : "Home delivery service area"}</small>
@@ -1378,7 +1380,7 @@ export default function CheckoutPage() {
                       }
                     }}>
                     <PayAtStoreStorePicker isPickup={isPickup} pickupStore={pickupStore}
-                      deliveryPincode={customerData.pincode} deliveryCity={customerData.city}
+                      deliveryPincode={customerData.pincode} deliveryCity={customerData.city} stock={storeStock}
                       value={payStore} onChange={setPayStore} />
                   </CheckoutPaymentOptions>
 

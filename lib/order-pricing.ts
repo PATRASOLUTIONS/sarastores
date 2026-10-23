@@ -1,6 +1,7 @@
 import { type ClientSession, ObjectId } from "mongodb"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { cartLimitError, MAX_CART_PRODUCTS } from "@/lib/cart-limits"
+import { storesHoldingStock } from "@/lib/store-stock"
 
 // Catalogue prices are GST-inclusive; base and tax are derived from them.
 const GST_RATE = 0.18
@@ -430,6 +431,12 @@ export async function priceOrder(
     const stores = await getCollection("store_locations")
     const store = await stores.findOne({ _id: new ObjectId(storeId), isActive: true })
     if (!store) return { ok: false, error: "The selected pickup store is unavailable." }
+    const needs = items
+      .filter((i) => i.type !== "software")
+      .map((i) => ({ sku: catalogue.get(i.id)?.sku?.trim() || null, quantity: i.quantity }))
+    if (needs.length && !(await storesHoldingStock(needs)).has(storeId)) {
+      return { ok: false, error: "The selected store does not have every item in stock. Please choose another store or home delivery." }
+    }
     shipping = 0
   }
 

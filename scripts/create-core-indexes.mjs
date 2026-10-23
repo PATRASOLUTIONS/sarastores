@@ -45,6 +45,18 @@ const INDEXES = [
     why: "Bulk store imports upsert by exact trimmed shop name; reconcile historical duplicates before applying.",
   },
   {
+    collection: "store_stock",
+    spec: { storeCode: 1, sku: 1 },
+    options: { unique: true, name: "store_stock_store_sku_unique" },
+    why: "Stock uploads upsert one row per store code and item code; checkout availability reads by both.",
+  },
+  {
+    collection: "store_stock",
+    spec: { sku: 1 },
+    options: { name: "store_stock_sku" },
+    why: "Recomputing a product's total stock sums every store's row for its item code.",
+  },
+  {
     collection: "store_qr_codes",
     spec: { storeId: 1, type: 1 },
     options: { unique: true, name: "store_qr_type_unique" },

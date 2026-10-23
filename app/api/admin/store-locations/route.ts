@@ -19,6 +19,7 @@ export async function GET() {
     const normalizedStores = stores.map(store => ({
       id: store._id.toString(),
       shopName: store.shopName || "",
+      storeCode: store.storeCode || "",
       locationDescription: store.locationDescription || "",
       googleMapLocation: store.googleMapLocation || "",
       mobileNo: store.mobileNo || "",
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
     const storeData = { ...parsed.data, createdAt: new Date(), updatedAt: new Date() }
     const collection = await getCollection<StoredStoreLocation>(COLLECTION)
+    if (storeData.storeCode && await collection.findOne({ storeCode: storeData.storeCode }, { projection: { _id: 1 } })) {
+      return NextResponse.json({ success: false, message: `Store code ${storeData.storeCode} is already used by another store` }, { status: 409 })
+    }
     const result = await collection.insertOne(storeData)
 
     return NextResponse.json({ 
