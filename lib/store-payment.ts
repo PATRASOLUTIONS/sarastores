@@ -76,45 +76,59 @@ export async function loadPaymentStore(storeId: string): Promise<PaymentStore | 
   }
 }
 
+function sendTemplate(phone: string, name: string, values: string[], label: string) {
+  return sendWhatsAppTemplate(phone, {
+    language: { policy: "deterministic", code: process.env.STORE_ORDER_WHATSAPP_LANGUAGE?.trim() || "en" },
+    name,
+    components: [{ type: "body", parameters: values.map(text => ({ type: "text" as const, text: templateText(text) })) }],
+  }, undefined, label)
+}
+
 function itemsLine(items: StorePaymentSummary["items"]): string {
   return items.map(item => `${item.name} x${item.quantity} (${rupees(item.price * item.quantity)})`).join("; ")
 }
 
 /**
  * Tells the chosen store manager and every platform manager that a customer wants to
- * pay through the store. WhatsApp needs a Meta-approved AskEva template named by
- * STORE_ORDER_WHATSAPP_TEMPLATE whose body takes eight variables in this order:
- * order ID, customer name, customer phone, customer email, items, offers applied,
- * delivery details (address), amount to collect. The store email is always attempted
- * as well so the request is not lost while the template is pending approval.
+ * pay through the store. Each audience has its own Meta-approved AskEva template:
+ *
+ * STORE_ORDER_WHATSAPP_TEMPLATE, eight body variables: order ID, customer name,
+ * customer phone, customer email, items, offers applied, delivery details, amount.
+ *
+ * PLATFORM_MANAGER_WHATSAPP_TEMPLATE, nine body variables: order ID, store name,
+ * customer name, customer phone, customer email, items, offers applied, delivery
+ * details, amount.
+ *
+ * The store email is always attempted as well so the request is not lost while a
+ * template is pending approval.
  */
 export async function notifyStoreOfPaymentRequest(
   store: PaymentStore,
   summary: StorePaymentSummary,
   recipients: StorePaymentRecipients = { notifyStoreManager: true, platformManagers: [] },
 ) {
-  const template = process.env.STORE_ORDER_WHATSAPP_TEMPLATE?.trim()
-  const offers = summary.offers?.length ? summary.offers.join("; ") : "No offer applied"
-  const parameters = [
-    summary.orderId, summary.customer.name, summary.customer.phone, summary.customer.email || "-",
-    itemsLine(summary.items), offers, summary.delivery, rupees(summary.total),
-  ].map(text => ({ type: "text" as const, text: templateText(text) }))
-  const send = (phone: string, label: string) => sendWhatsAppTemplate(phone, {
-    language: { policy: "deterministic", code: process.env.STORE_ORDER_WHATSAPP_LANGUAGE?.trim() || "en" },
-    name: template!,
-    components: [{ type: "body", parameters }],
-  }, undefined, label)
+  const storeTemplate = process.env.STORE_ORDER_WHATSAPP_TEMPLATE?.trim()
+  const managerTemplate = process.env.PLATFORM_MANAGER_WHATSAPP_TEMPLATE?.trim()
+  const offers = summary.offers?.length ? summary.offers.join("; ") : "None"
+  const customerParams = [summary.customer.name, summary.customer.phone, summary.customer.email || "-"]
+  const orderParams = [itemsLine(summary.items), offers, summary.delivery, rupees(summary.total)]
 
   let whatsapp = false
   let managers = 0
-  if (!template) {
+  const storePhone = recipients.notifyStoreManager ? store.phone : ""
+  if (storePhone && storeTemplate) {
+    whatsapp = (await sendTemplate(storePhone, storeTemplate,
+      [summary.orderId, ...customerParams, ...orderParams], "Store payment WhatsApp")).success
+  } else if (storePhone) {
     console.error("[Store payment] STORE_ORDER_WHATSAPP_TEMPLATE is not set; WhatsApp to the store was skipped")
-  } else {
-    const storePhone = recipients.notifyStoreManager ? store.phone : ""
-    if (storePhone) whatsapp = (await send(storePhone, "Store payment WhatsApp")).success
-    const others = recipients.platformManagers.filter(manager => manager.phone !== storePhone)
-    const results = await Promise.all(others.map(manager => send(manager.phone, "Platform manager WhatsApp")))
+  }
+  const others = recipients.platformManagers.filter(manager => manager.phone !== storePhone)
+  if (others.length && managerTemplate) {
+    const results = await Promise.all(others.map(manager => sendTemplate(manager.phone, managerTemplate,
+      [summary.orderId, store.name, ...customerParams, ...orderParams], "Platform manager WhatsApp")))
     managers = results.filter(result => result.success).length
+  } else if (others.length) {
+    console.error("[Store payment] PLATFORM_MANAGER_WHATSAPP_TEMPLATE is not set; WhatsApp to platform managers was skipped")
   }
 
   let email = false
@@ -160,5 +174,52 @@ export async function sendStorePaymentApprovedEmail(order: {
       `<strong>Transaction ID:</strong> ${escapeHtml(order.storePayment?.transactionId)}</p>` +
       `<p>Approved by ${escapeHtml(approver.name || approver.email)} (${escapeHtml(approver.email)}).</p>`,
   })
+  return { status: result.success ? "sent" as const : "failed" as const }
+}
+
+type ConfirmedOrder = {
+  orderId?: string
+  total?: number
+  items?: unknown[]
+  customer?: { name?: string; phone?: string | null; address?: unknown; city?: string; state?: string; zipCode?: string }
+  fulfilment?: unknown
+  storePayment?: { storeName?: string; platform?: string; transactionId?: string }
+}
+
+function confirmedDelivery(order: ConfirmedOrder): string {
+  const fulfilment = order.fulfilment as { method?: string; storeName?: string } | undefined
+  if (fulfilment?.method === "pickup") return `Pickup from ${fulfilment.storeName || order.storePayment?.storeName || "the store"}`
+  const customer = order.customer ?? {}
+  const address = typeof customer.address === "string" ? customer.address
+    : customer.address && typeof customer.address === "object"
+      ? Object.values(customer.address as Record<string, unknown>).filter(value => typeof value === "string" && value).join(", ")
+      : ""
+  return `Delivery to ${[address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(", ") || "your address"}`
+}
+
+/**
+ * Tells the customer their pay-at-store order is confirmed. Uses the Meta-approved
+ * AskEva template named by CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE whose body takes
+ * six variables in this order: customer name, order ID, items, amount paid, payment
+ * (platform, transaction ID and store), delivery or pickup details.
+ */
+export async function sendStorePaymentConfirmedWhatsApp(order: ConfirmedOrder) {
+  const template = process.env.CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE?.trim()
+  const phone = normaliseIndianPhone(String(order.customer?.phone || ""))
+  if (!template) {
+    console.error("[Store payment] CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE is not set; customer WhatsApp was skipped")
+    return { status: "skipped" as const }
+  }
+  if (!phone) return { status: "skipped" as const }
+  const items = (order.items ?? []).map(raw => {
+    const item = raw as { name?: string; quantity?: number; price?: number }
+    return { name: String(item.name || "Item"), quantity: Number(item.quantity) || 1, price: Number(item.price) || 0 }
+  })
+  const payment = `${storePaymentPlatformLabel(order.storePayment?.platform)}, txn ${order.storePayment?.transactionId || "-"}, ` +
+    `at ${order.storePayment?.storeName || "SARA store"}`
+  const result = await sendTemplate(phone.slice(2), template, [
+    order.customer?.name || "Customer", String(order.orderId || ""), itemsLine(items),
+    rupees(Number(order.total) || 0), payment, confirmedDelivery(order),
+  ], "Customer confirmation WhatsApp")
   return { status: result.success ? "sent" as const : "failed" as const }
 }

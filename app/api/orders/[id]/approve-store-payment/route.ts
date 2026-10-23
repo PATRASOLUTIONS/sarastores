@@ -7,7 +7,7 @@ import { getEmailTemplate, getEmailSubject, getEmailTemplateId } from "@/lib/ema
 import { sendEmail } from "@/lib/email"
 import { notifyAdminOrder } from "@/lib/order-notifications"
 import { notifyOrderStatus } from "@/lib/push"
-import { sendStorePaymentApprovedEmail } from "@/lib/store-payment"
+import { sendStorePaymentApprovedEmail, sendStorePaymentConfirmedWhatsApp } from "@/lib/store-payment"
 import type { OrderDocument } from "@/lib/order-document"
 
 const headers = { "Cache-Control": "private, no-store" }
@@ -96,12 +96,14 @@ export async function POST(_request: NextRequest, context: { params: Promise<{ i
     const adminNotification = await notifyAdminOrder(updated._id, "orders", "confirmed")
     const staffNotification = await sendStorePaymentApprovedEmail(updated, approvedBy)
       .catch(error => { console.error("[Store payment approval] Staff email failed:", error); return { status: "failed" as const } })
+    const customerWhatsApp = await sendStorePaymentConfirmedWhatsApp(updated)
+      .catch(error => { console.error("[Store payment approval] Customer WhatsApp failed:", error); return { status: "failed" as const } })
 
     const safeOrder = normalizeId(updated)
     delete safeOrder.guestAccessTokenHash
     return NextResponse.json({
       ...safeOrder,
-      notification: { customerEmailSent, adminNotification, staffNotification },
+      notification: { customerEmailSent, customerWhatsApp: customerWhatsApp.status, adminNotification, staffNotification },
     }, { headers })
   } catch (error) {
     console.error("[Store payment approval]", error instanceof Error ? error.message : String(error))

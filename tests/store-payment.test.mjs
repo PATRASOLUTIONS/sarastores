@@ -122,7 +122,7 @@ test("store WhatsApp uses the configured template with eight flat parameters and
   assert.equal(params.length, 8)
   assert.equal(params[0], "SARAECOM-555001")
   assert.equal(params[3], customer.email)
-  assert.equal(params[5], "No offer applied")
+  assert.equal(params[5], "None")
   assert.equal(params[6], "Home delivery: 1 Fixture Street")
   for (const text of params) assert.doesNotMatch(text, /[\n\t]| {5,}/)
   assert.equal(mails[0].to, "store@example.invalid")
@@ -130,14 +130,20 @@ test("store WhatsApp uses the configured template with eight flat parameters and
   assert.ok(mails[0].html.includes("&lt;b&gt;Shopper&lt;/b&gt;"))
 })
 
-test("platform managers get the same WhatsApp, the store manager can be switched off and numbers are not messaged twice", async () => {
+test("platform managers get their own template with the store name, the store manager can be switched off and numbers are not messaged twice", async () => {
   const sent = []
+  const bodies = []
   const loader = sourceLoader({
     "@/lib/email": { sendEmail: async () => ({ success: true }) },
   }, {
-    env: { ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid", STORE_ORDER_WHATSAPP_TEMPLATE: "store_order_v1" },
+    env: {
+      ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid",
+      STORE_ORDER_WHATSAPP_TEMPLATE: "store_order_v1", PLATFORM_MANAGER_WHATSAPP_TEMPLATE: "platform_order_v1",
+    },
     fetch: async (_url, init) => {
-      sent.push(JSON.parse(init.body).to)
+      const body = JSON.parse(init.body)
+      sent.push(body.to)
+      bodies.push(body)
       return Response.json({ messaging_product: "whatsapp", messages: [{ id: "fixture-message" }] })
     },
   })
@@ -147,10 +153,44 @@ test("platform managers get the same WhatsApp, the store manager can be switched
   const both = await notifyStoreOfPaymentRequest(store, summary, { notifyStoreManager: true, platformManagers: managers })
   assert.deepEqual({ whatsapp: both.whatsapp, managers: both.managers }, { whatsapp: true, managers: 1 })
   assert.deepEqual([...sent].sort(), ["919000000001", "919876543210"])
+  const toStore = bodies.find(body => body.to === "919876543210").template
+  const toManager = bodies.find(body => body.to === "919000000001").template
+  assert.deepEqual([toStore.name, toStore.components[0].parameters.length], ["store_order_v1", 8])
+  assert.deepEqual([toManager.name, toManager.components[0].parameters.length], ["platform_order_v1", 9])
+  assert.equal(toManager.components[0].parameters[1].text, "Fixture Store")
+  assert.equal(toManager.components[0].parameters[6].text, "Coupon X: -Rs. 5")
   sent.length = 0
   const managersOnly = await notifyStoreOfPaymentRequest(store, summary, { notifyStoreManager: false, platformManagers: managers })
   assert.deepEqual({ whatsapp: managersOnly.whatsapp, managers: managersOnly.managers }, { whatsapp: false, managers: 2 })
   assert.deepEqual([...sent].sort(), ["919000000001", "919876543210"])
+})
+
+test("customer gets the order-confirmed WhatsApp with payment and delivery details, and nothing without a template", async () => {
+  const bodies = []
+  const load = env => sourceLoader({}, {
+    env: { ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid", ...env },
+    fetch: async (_url, init) => {
+      bodies.push(JSON.parse(init.body))
+      return Response.json({ messaging_product: "whatsapp", messages: [{ id: "fixture-message" }] })
+    },
+    context: { console: { ...console, error: () => {} } },
+  }).load("lib/store-payment.ts")
+  const order = {
+    ...pendingOrder(),
+    items: [{ name: "Fixture TV", quantity: 1, price: 1234 }],
+    customer: { name: "Synthetic Shopper", phone: customer.phone, address: "1 Fixture Street", city: "Bengaluru", zipCode: "560001" },
+  }
+  assert.equal((await load({}).sendStorePaymentConfirmedWhatsApp(order)).status, "skipped")
+  assert.equal(bodies.length, 0)
+  const result = await load({ CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE: "order_confirmed_v1" }).sendStorePaymentConfirmedWhatsApp(order)
+  assert.equal(result.status, "sent")
+  assert.equal(bodies[0].to, `91${customer.phone}`)
+  assert.equal(bodies[0].template.name, "order_confirmed_v1")
+  const params = bodies[0].template.components[0].parameters.map(parameter => parameter.text)
+  assert.deepEqual(params, [
+    "Synthetic Shopper", "SARAECOM-555003", "Fixture TV x1 (Rs. 1,234)", "Rs. 1,234",
+    "PhonePe, txn T2410231234, at Fixture Store", "Delivery to 1 Fixture Street, Bengaluru, 560001",
+  ])
 })
 
 test("WhatsApp recipient settings normalise numbers, drop duplicate managers and reject bad input", () => {

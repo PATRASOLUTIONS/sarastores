@@ -15,7 +15,7 @@ type AdminStore = { id: string; name: string; city: string; listedPhone: string 
 export default function StorePaymentWhatsAppRecipients({ onSaved }: { onSaved?: () => void }) {
   const [settings, setSettings] = useState<StorePaymentWhatsAppSettings>({ notifyStoreManager: true, storeManagers: {}, platformManagers: [] })
   const [stores, setStores] = useState<AdminStore[]>([])
-  const [templateConfigured, setTemplateConfigured] = useState(true)
+  const [templates, setTemplates] = useState({ store: true, platformManager: true, customer: true })
   const [draft, setDraft] = useState({ name: "", phone: "" })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -28,7 +28,7 @@ export default function StorePaymentWhatsAppRecipients({ onSaved }: { onSaved?: 
         if (!active) return
         setSettings(data.settings)
         setStores(data.stores)
-        setTemplateConfigured(data.templateConfigured)
+        setTemplates(data.templates)
       })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : "Failed to load recipients") })
       .finally(() => { if (active) setLoading(false) })
@@ -69,10 +69,15 @@ export default function StorePaymentWhatsAppRecipients({ onSaved }: { onSaved?: 
 
   return <form onSubmit={save} className="space-y-5">
     {error ? <p role="alert" className="text-sm text-red-700">{error} Only full administrators can change these recipients.</p> : null}
-    {!loading && !error && !templateConfigured ? (
-      <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        WhatsApp is not sending yet: set <code>STORE_ORDER_WHATSAPP_TEMPLATE</code> to an approved AskEva template. Stores still get the order by email.
-      </p>
+    {!loading && !error && (!templates.store || !templates.platformManager || !templates.customer) ? (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        <p className="font-semibold">Some WhatsApp messages are not sending yet. Set these to approved AskEva templates:</p>
+        <ul className="mt-1 list-disc pl-4">
+          {!templates.store && <li><code>STORE_ORDER_WHATSAPP_TEMPLATE</code> (store manager; the store still gets an email)</li>}
+          {!templates.platformManager && <li><code>PLATFORM_MANAGER_WHATSAPP_TEMPLATE</code> (platform managers)</li>}
+          {!templates.customer && <li><code>CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE</code> (customer, once you approve the payment)</li>}
+        </ul>
+      </div>
     ) : null}
 
     <section className="space-y-2">

@@ -57,7 +57,7 @@ export type StorePaymentWhatsAppSettings = z.infer<typeof StorePaymentWhatsAppSe
 export const StorePaymentWhatsAppAdminSchema = z.object({
   settings: StorePaymentWhatsAppSettingsSchema,
   stores: z.array(z.object({ id: z.string(), name: z.string(), city: z.string(), listedPhone: z.string() })),
-  templateConfigured: z.boolean(),
+  templates: z.object({ store: z.boolean(), platformManager: z.boolean(), customer: z.boolean() }),
 })
 
 /** Returned by POST /api/payment/store-request. */

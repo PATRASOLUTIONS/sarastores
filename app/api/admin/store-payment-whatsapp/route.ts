@@ -30,7 +30,11 @@ export async function GET() {
   try {
     const [settings, stores] = await Promise.all([getStorePaymentWhatsAppSettings(), listStores()])
     return NextResponse.json({
-      settings, stores, templateConfigured: !!process.env.STORE_ORDER_WHATSAPP_TEMPLATE?.trim(),
+      settings, stores, templates: {
+        store: !!process.env.STORE_ORDER_WHATSAPP_TEMPLATE?.trim(),
+        platformManager: !!process.env.PLATFORM_MANAGER_WHATSAPP_TEMPLATE?.trim(),
+        customer: !!process.env.CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE?.trim(),
+      },
     }, { headers })
   } catch (error) {
     return handleApiError(error, "Failed to load pay at store WhatsApp recipients")
