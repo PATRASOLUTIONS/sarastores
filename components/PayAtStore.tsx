@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { CheckCircle, MapPin, MessageCircle, PhoneCall, Receipt, Store, X } from "lucide-react"
 import { formatDistance, useNearbyStores } from "@/hooks/useNearbyStores"
 import { STORE_PAYMENT_PLATFORMS, StorePaymentTransactionSchema, type StorePaymentPlatform } from "@/types/store-payment"
@@ -19,12 +19,21 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
   value: PayAtStoreChoice | null
   onChange: (store: PayAtStoreChoice | null) => void
 }) {
-  const { stores, loading, error, retry, nearestId } = useNearbyStores(deliveryPincode, deliveryCity)
+  const { stores: ranked, loading, error, retry, nearestId: rankedNearestId } =
+    useNearbyStores(deliveryPincode, deliveryCity, { url: "/api/payment/stores", allStores: true })
   const [showAll, setShowAll] = useState(false)
+  // Stores that can receive the order first, each group still nearest-first.
+  const stores = useMemo(() => [...ranked].sort((a, b) =>
+    Number(b.acceptsPayAtStore !== false) - Number(a.acceptsPayAtStore !== false)), [ranked])
+  const nearestId = rankedNearestId ? stores.find(store => store.acceptsPayAtStore !== false)?.id : undefined
 
   useEffect(() => {
     if (isPickup) {
       if (value?.id !== pickupStore?.id) onChange(pickupStore)
+      return
+    }
+    if (value && stores.some(store => store.id === value.id && store.acceptsPayAtStore === false)) {
+      onChange(null)
       return
     }
     if (!value && nearestId) {
@@ -48,19 +57,27 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
         : stores.length === 0 ? <p className="text-sm text-slate-600">No store can take payments right now.</p>
           : <>
             <ul className="grid gap-2">
-              {visible.map(store => (
+              {visible.map(store => {
+                const available = store.acceptsPayAtStore !== false
+                return (
                 <li key={store.id}>
-                  <label className={`flex cursor-pointer items-start gap-2 rounded-md border p-2 text-xs ${value?.id === store.id ? "border-[#1560BD] bg-blue-50/60" : "border-slate-200 hover:border-slate-400"}`}>
-                    <input type="radio" name="payAtStore" className="mt-0.5 accent-[#1560BD]" checked={value?.id === store.id}
+                  <label className={`flex items-start gap-2 rounded-md border p-2 text-xs ${!available ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+                    : value?.id === store.id ? "cursor-pointer border-[#1560BD] bg-blue-50/60" : "cursor-pointer border-slate-200 hover:border-slate-400"}`}>
+                    <input type="radio" name="payAtStore" className="mt-0.5 accent-[#1560BD]" checked={value?.id === store.id} disabled={!available}
                       onChange={() => onChange({ id: store.id, name: store.name })} />
                     <span className="min-w-0">
                       <strong className="block text-sm text-slate-900">{store.name}</strong>
-                      <span className="text-slate-600">{store.city}{store.distance !== null && ` · ${formatDistance(store.distance)}`}</span>
+                      {store.address && <span className="block text-slate-600">{store.address}</span>}
+                      <span className="text-slate-500">
+                        {[store.hours, store.distance !== null ? formatDistance(store.distance) : ""].filter(Boolean).join(" · ")}
+                      </span>
                       {store.id === nearestId && <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-green-700"><MapPin size={10} />Nearest</span>}
+                      {!available && <span className="block font-semibold text-amber-700">Not accepting pay at store yet</span>}
                     </span>
                   </label>
                 </li>
-              ))}
+                )
+              })}
             </ul>
             {stores.length > 4 && <button type="button" onClick={() => setShowAll(value => !value)} className="mt-2 text-xs font-semibold text-[#1560BD] underline">
               {showAll ? "Show fewer stores" : `Show all ${stores.length} stores`}

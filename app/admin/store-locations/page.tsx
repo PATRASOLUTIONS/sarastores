@@ -50,6 +50,184 @@ const EMPTY_STORE: Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'> = {
   isActive: true,
 }
 
+// Defined outside the page so it keeps its identity across renders; an inner
+// component remounts on every keystroke and the focused input is lost.
+const StoreForm = ({ 
+  store, 
+  onChange, 
+  onSave, 
+  onCancel, 
+  title 
+}: { 
+  store: Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'> | StoreLocation
+  onChange: <K extends keyof typeof EMPTY_STORE>(field: K, value: (typeof EMPTY_STORE)[K]) => void
+  onSave: () => void
+  onCancel: () => void
+  title: string
+}) => (
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+        <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      
+      <div className="p-6 space-y-5">
+        {/* Shop Name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Store className="w-4 h-4 inline mr-2" />
+            Shop Name *
+          </label>
+          <input
+            type="text"
+            value={store.shopName}
+            onChange={(e) => onChange('shopName', e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            placeholder="Enter shop name"
+          />
+        </div>
+
+        {/* Location Description */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <MapPin className="w-4 h-4 inline mr-2" />
+            Location Description *
+          </label>
+          <textarea
+            value={store.locationDescription}
+            onChange={(e) => onChange('locationDescription', e.target.value)}
+            rows={3}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
+            placeholder="Enter complete address"
+          />
+        </div>
+
+        {/* Google Map Location */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <ExternalLink className="w-4 h-4 inline mr-2" />
+            Google Map Location URL
+          </label>
+          <input
+            type="url"
+            value={store.googleMapLocation}
+            onChange={(e) => onChange('googleMapLocation', e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            placeholder="https://maps.google.com/..."
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Mobile Number */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Phone className="w-4 h-4 inline mr-2" />
+              Mobile Number *
+            </label>
+            <input
+              type="tel"
+              value={store.mobileNo}
+              onChange={(e) => onChange('mobileNo', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              placeholder="9876543210"
+            />
+          </div>
+
+          {/* Shop Timing */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Clock className="w-4 h-4 inline mr-2" />
+              Shop Timing
+            </label>
+            <input
+              type="text"
+              value={store.shopTiming}
+              onChange={(e) => onChange('shopTiming', e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              placeholder="9:00 AM - 9:00 PM"
+            />
+          </div>
+        </div>
+
+        {/* Email ID */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Mail className="w-4 h-4 inline mr-2" />
+            Email ID
+          </label>
+          <input
+            type="email"
+            value={store.emailId}
+            onChange={(e) => onChange('emailId', e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            placeholder="store@example.com"
+          />
+        </div>
+
+        {/* Shop Image URL */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <ImageIcon className="w-4 h-4 inline mr-2" />
+            Shop Image URL
+          </label>
+          <input
+            type="url"
+            value={store.shopImage}
+            onChange={(e) => onChange('shopImage', e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            placeholder="https://example.com/shop-image.jpg"
+          />
+          {store.shopImage && (
+            <div className="mt-3 relative">
+              <img 
+                src={store.shopImage} 
+                alt="Shop preview" 
+                className="w-full h-40 object-cover rounded-xl border"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/placeholder-store.jpg'
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Active Status */}
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="isActive"
+            checked={store.isActive}
+            onChange={(e) => onChange('isActive', e.target.checked)}
+            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
+            Store is Active
+          </label>
+        </div>
+      </div>
+
+      <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex gap-3 justify-end">
+        <button
+          onClick={onCancel}
+          className="px-6 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+        >
+          <Save className="w-4 h-4" />
+          Save Store
+        </button>
+      </div>
+    </div>
+  </div>
+)
+
 export default function StoreLocationsPage() {
   const [stores, setStores] = useState<StoreLocation[]>([])
   const [loading, setLoading] = useState(true)
@@ -332,182 +510,6 @@ export default function StoreLocationsPage() {
     store.emailId.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  // Store Form Component
-  const StoreForm = ({ 
-    store, 
-    onChange, 
-    onSave, 
-    onCancel, 
-    title 
-  }: { 
-    store: Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'> | StoreLocation
-    onChange: <K extends keyof typeof EMPTY_STORE>(field: K, value: (typeof EMPTY_STORE)[K]) => void
-    onSave: () => void
-    onCancel: () => void
-    title: string
-  }) => (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-          <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="p-6 space-y-5">
-          {/* Shop Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Store className="w-4 h-4 inline mr-2" />
-              Shop Name *
-            </label>
-            <input
-              type="text"
-              value={store.shopName}
-              onChange={(e) => onChange('shopName', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="Enter shop name"
-            />
-          </div>
-
-          {/* Location Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <MapPin className="w-4 h-4 inline mr-2" />
-              Location Description *
-            </label>
-            <textarea
-              value={store.locationDescription}
-              onChange={(e) => onChange('locationDescription', e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
-              placeholder="Enter complete address"
-            />
-          </div>
-
-          {/* Google Map Location */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <ExternalLink className="w-4 h-4 inline mr-2" />
-              Google Map Location URL
-            </label>
-            <input
-              type="url"
-              value={store.googleMapLocation}
-              onChange={(e) => onChange('googleMapLocation', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="https://maps.google.com/..."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Mobile Number */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Phone className="w-4 h-4 inline mr-2" />
-                Mobile Number *
-              </label>
-              <input
-                type="tel"
-                value={store.mobileNo}
-                onChange={(e) => onChange('mobileNo', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="9876543210"
-              />
-            </div>
-
-            {/* Shop Timing */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Clock className="w-4 h-4 inline mr-2" />
-                Shop Timing
-              </label>
-              <input
-                type="text"
-                value={store.shopTiming}
-                onChange={(e) => onChange('shopTiming', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="9:00 AM - 9:00 PM"
-              />
-            </div>
-          </div>
-
-          {/* Email ID */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Mail className="w-4 h-4 inline mr-2" />
-              Email ID
-            </label>
-            <input
-              type="email"
-              value={store.emailId}
-              onChange={(e) => onChange('emailId', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="store@example.com"
-            />
-          </div>
-
-          {/* Shop Image URL */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <ImageIcon className="w-4 h-4 inline mr-2" />
-              Shop Image URL
-            </label>
-            <input
-              type="url"
-              value={store.shopImage}
-              onChange={(e) => onChange('shopImage', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="https://example.com/shop-image.jpg"
-            />
-            {store.shopImage && (
-              <div className="mt-3 relative">
-                <img 
-                  src={store.shopImage} 
-                  alt="Shop preview" 
-                  className="w-full h-40 object-cover rounded-xl border"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/placeholder-store.jpg'
-                  }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Active Status */}
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isActive"
-              checked={store.isActive}
-              onChange={(e) => onChange('isActive', e.target.checked)}
-              className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
-              Store is Active
-            </label>
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-6 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            Save Store
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 
   return (
     <div className="max-w-7xl mx-auto p-6">

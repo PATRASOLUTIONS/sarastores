@@ -242,6 +242,32 @@ test("the WhatsApp recipients admin route requires a full admin and saves valida
     ["store_payment_settings", "whatsapp", false, "admin-1"])
 })
 
+test("pay at store lists every active store live from store locations and flags those that cannot receive orders", async () => {
+  const withPhone = new ObjectId()
+  const withOverride = new ObjectId()
+  const unreachable = new ObjectId()
+  let filter = null
+  const load = env => sourceLoader({
+    "@/lib/db-service": {
+      getCollection: async name => name === "store_locations" ? {
+        find: query => { filter = query; return { sort: () => ({ toArray: async () => [
+          { _id: withPhone, shopName: "Jayanagar", locationDescription: "4th Block, Jayanagar, Bengaluru - 560011", mobileNo: "9876543210", shopTiming: "10 AM - 9 PM", googleMapLocation: "https://maps.google.com/?q=12.93,77.58" },
+          { _id: withOverride, shopName: "Hubballi", locationDescription: "Station Road, Hubballi - 580020", mobileNo: "" },
+          { _id: unreachable, shopName: "No Contact", locationDescription: "Somewhere" },
+        ] }) } },
+      } : { findOne: async () => ({ storeManagers: { [withOverride.toString()]: "9000000002" } }) },
+    },
+  }, { env }).load("app/api/payment/stores/route.ts")
+  const response = await load({}).GET()
+  assert.equal(response.headers.get("cache-control"), "no-store")
+  const { stores } = await response.json()
+  assert.deepEqual({ ...filter }, { isActive: true })
+  assert.deepEqual(stores.map(store => [store.name, store.acceptsPayAtStore]), [["Jayanagar", true], ["Hubballi", true], ["No Contact", false]])
+  assert.deepEqual([stores[0].city, stores[0].pincode, stores[0].latitude, stores[0].hours], ["Bengaluru", "560011", 12.93, "10 AM - 9 PM"])
+  assert.equal(stores[1].city, "Hubballi", "stores outside the delivery region are still offered")
+  assert.deepEqual((await (await load({ PAY_AT_STORE_ENABLED: "false" }).GET()).json()).stores, [])
+})
+
 test("checkout shows the product title, not the marketing description that follows it", () => {
   const { shortProductTitle } = sourceLoader().load("utils/cleanProductName.ts")
   assert.equal(shortProductTitle("Samsung Galaxy M35 5G (Moonlight Blue, 6GB RAM, 128GB) | Corning Gorilla Glass Victus+ | 6000mAh"),

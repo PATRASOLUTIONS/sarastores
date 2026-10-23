@@ -375,7 +375,7 @@ for (const endpoint of ["place-order", "queue-order"]) {
   })
 }
 
-const instoreEnv = { INSTORE_PURCHASE_ENABLED: "true" }
+const instoreEnv = { INSTORE_PURCHASE_ENABLED: "true", COD_ENABLED: "true" }
 
 for (const value of [undefined, "false", "yes"]) {
   test(`in-store purchase is refused when INSTORE_PURCHASE_ENABLED=${value}`, async () => {

@@ -16,15 +16,23 @@ export interface NearbyStore {
   image?: string
   latitude?: number
   longitude?: number
+  /** Set by the pay-at-store list: false when the store has no phone or email to receive orders. */
+  acceptsPayAtStore?: boolean
 }
 
 export type RankedStore = NearbyStore & { distance: number | null }
 
 /**
- * Checkout-region SARA stores, nearest to the delivery address first: by distance
- * when the pincode can be located, otherwise same pincode, then same city.
+ * SARA stores, nearest to the delivery address first: by distance when the
+ * pincode can be located, otherwise same pincode, then same city. By default the
+ * list is limited to checkout-region stores; pass `allStores` to keep every
+ * store the endpoint returns.
  */
-export function useNearbyStores(deliveryPincode = "", deliveryCity = "") {
+export function useNearbyStores(
+  deliveryPincode = "",
+  deliveryCity = "",
+  { url = "/api/stores", allStores = false }: { url?: string; allStores?: boolean } = {},
+) {
   const [origin, setOrigin] = useState<Coordinates | null>(null)
   const pincode = /^[1-9]\d{5}$/.test(deliveryPincode.trim()) ? deliveryPincode.trim() : ""
 
@@ -53,12 +61,12 @@ export function useNearbyStores(deliveryPincode = "", deliveryCity = "") {
     setError("")
     ;(async () => {
       try {
-        const res = await fetch("/api/stores")
+        const res = await fetch(url, { cache: "no-store" })
         if (!res.ok) throw new Error("Stores could not be loaded.")
         const data = await res.json()
         if (cancelled) return
         if (!data?.success || !Array.isArray(data.stores)) throw new Error("Invalid stores response.")
-        setStores(data.stores.filter((store: NearbyStore) => checkoutCity(store.city || "") &&
+        setStores(allStores ? data.stores : data.stores.filter((store: NearbyStore) => checkoutCity(store.city || "") &&
           (!store.state || store.state.trim().toLowerCase() === "karnataka")))
       } catch (error) {
         if (cancelled) return
@@ -69,7 +77,7 @@ export function useNearbyStores(deliveryPincode = "", deliveryCity = "") {
       }
     })()
     return () => { cancelled = true }
-  }, [stores.length, attempt])
+  }, [stores.length, attempt, url, allStores])
 
   const ranked = useMemo<RankedStore[]>(() => {
     const homeCity = checkoutCity(deliveryCity || "")
@@ -78,7 +86,7 @@ export function useNearbyStores(deliveryPincode = "", deliveryCity = "") {
       return { ...store, distance: origin && position ? calculateDistance(origin, position) : null }
     })
     const closeness = (store: RankedStore) =>
-      (pincode && store.pincode === pincode ? 0 : 2) + (homeCity && checkoutCity(store.city) === homeCity ? 0 : 1)
+      (pincode && store.pincode === pincode ? 0 : 2) + (homeCity && checkoutCity(store.city || "") === homeCity ? 0 : 1)
     return withDistance.sort((a, b) =>
       a.distance !== null && b.distance !== null ? a.distance - b.distance
         : a.distance !== null ? -1 : b.distance !== null ? 1

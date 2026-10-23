@@ -31,6 +31,12 @@ export type TrackingConsent = {
   decidedAt: string
   /** Correlates pre-login consent with the account after sign-in. */
   anonymousId: string
+  /**
+   * True when the banner was skipped because someone on the same network had
+   * already decided. Optional tracking is off and this is not the visitor's
+   * own decision, so it is never remembered or logged as one.
+   */
+  inherited?: boolean
 }
 
 export const DENY_ALL: Omit<TrackingConsent, "decidedAt" | "anonymousId" | "version"> = {
@@ -167,6 +173,77 @@ export function writeConsent(choice: Partial<Record<TrackingCategory, boolean>>)
   // Unmounting a Script does not stop an already-loaded third-party tracker.
   if (hasWithdrawnConsent(previous, readConsent())) window.location.reload()
   return record
+}
+
+/** Stores a remembered decision locally without adding a new ledger entry. */
+function adoptConsent(choice: Omit<TrackingConsent, "version" | "anonymousId">): TrackingConsent {
+  const record: TrackingConsent = { ...choice, version: PRIVACY_NOTICE_VERSION, anonymousId: getAnonymousId() }
+  if (!record.inherited) delete record.inherited
+  writeConsentCookie(JSON.stringify(record))
+  try { window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(record)) } catch { /* cookie still holds it */ }
+  try { window.dispatchEvent(new CustomEvent(CONSENT_CHANGE_EVENT, { detail: record })) } catch { /* no listeners */ }
+  return record
+}
+
+type RememberedResponse =
+  | { match: "account"; consent: { analytics: boolean; advertising: boolean; personalisation: boolean; decidedAt: string } }
+  | { match: "network" | null; consent: null }
+
+async function lookupRemembered(): Promise<RememberedResponse | null> {
+  try {
+    const response = await fetch("/api/consent/tracking", { credentials: "include", cache: "no-store" })
+    if (!response.ok) return null
+    const data = await response.json() as RememberedResponse
+    return data && (data.match === "account" || data.match === "network" || data.match === null) ? data : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Called when this browser has no decision yet. Returns the restored decision
+ * when the signed-in account, or someone on this network, already chose, so the
+ * banner can stay hidden; returns null when the visitor must be asked.
+ */
+export async function restoreRememberedConsent(): Promise<TrackingConsent | null> {
+  const remembered = await lookupRemembered()
+  if (readConsent()) return readConsent()
+  if (remembered?.match === "account") {
+    const { analytics, advertising, personalisation, decidedAt } = remembered.consent
+    return adoptConsent({ analytics, advertising, personalisation, decidedAt })
+  }
+  if (remembered?.match === "network") {
+    return adoptConsent({ ...DENY_ALL, decidedAt: new Date().toISOString(), inherited: true })
+  }
+  return null
+}
+
+/**
+ * Run after sign-in. Restores the account's own decision over a network default,
+ * or links this browser's own decision to the account so other devices skip the
+ * banner too.
+ */
+export async function syncConsentWithAccount(): Promise<void> {
+  if (typeof window === "undefined") return
+  const local = readConsent()
+  if (!local || local.inherited) {
+    const remembered = await lookupRemembered()
+    if (remembered?.match === "account") {
+      const { analytics, advertising, personalisation, decidedAt } = remembered.consent
+      adoptConsent({ analytics, advertising, personalisation, decidedAt })
+    }
+    return
+  }
+  try {
+    await fetch("/api/consent/tracking", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(local),
+    })
+  } catch {
+    // The banner will simply be asked once more on the other device.
+  }
 }
 
 function hasWithdrawnConsent(previous: TrackingConsent | null, current: TrackingConsent | null): boolean {

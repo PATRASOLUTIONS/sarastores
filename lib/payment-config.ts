@@ -10,9 +10,10 @@ export function paymentEnabled(provider: PaymentProvider): boolean {
   return value === "true"
 }
 
+/** Cash on delivery is offered only when COD_ENABLED is exactly "true". */
 export function cashOnDeliveryEnabled(): boolean {
   const value = process.env.COD_ENABLED
-  if (value === undefined || value === "") return true
+  if (value === undefined || value === "") return false
   if (value !== "true" && value !== "false") throw new PaymentConfigurationError("COD_ENABLED must be true or false")
   return value === "true"
 }

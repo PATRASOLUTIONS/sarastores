@@ -57,7 +57,7 @@ test("configuration endpoint returns only non-secret gateway choices", async () 
   const loader = sourceLoader({}, { env })
   const response = await loader.load("app/api/payment/config/route.ts").GET()
   const data = await response.json()
-  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true, instoreEnabled: false, storePaymentEnabled: true })
+  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: false, instoreEnabled: false, storePaymentEnabled: true })
   assert.match(response.headers.get("cache-control"), /no-store/)
   for (const value of [key, pineKey, env.PINELABS_CLIENT_SECRET]) assert.equal(JSON.stringify(data).includes(value), false)
 })
@@ -784,7 +784,7 @@ test("COD configuration is strict, returned by the public endpoint, and checked 
   loader.env.COD_ENABLED = "true"
   assert.equal(config.cashOnDeliveryEnabled(), true)
   delete loader.env.COD_ENABLED
-  assert.equal(config.cashOnDeliveryEnabled(), true, "Retain existing deployments when unset")
+  assert.equal(config.cashOnDeliveryEnabled(), false, "Hidden unless explicitly enabled")
   loader.env.COD_ENABLED = "yes"
   assert.throws(() => config.cashOnDeliveryEnabled(), /COD_ENABLED must be true or false/)
   assert.equal((await loader.load("app/api/payment/config/route.ts").GET()).status, 500)

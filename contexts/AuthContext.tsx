@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect, useRef } from "react"
+import { syncConsentWithAccount } from "@/lib/consent-client"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
 import { destinationAfterLogin, loginHref, safeReturnPath } from "@/lib/return-path"
@@ -314,6 +315,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     checkAuth()
   }, [])
+
+  // Links the cookie-banner decision to the account, so the same person is not
+  // asked again on another device or network.
+  const userId = user?.id
+  useEffect(() => {
+    if (userId) void syncConsentWithAccount()
+  }, [userId])
 
   useEffect(() => {
     const syncAuthState = () => {
