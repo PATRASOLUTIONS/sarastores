@@ -9,10 +9,12 @@ import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { analytics, toAnalyticsItem } from "@/lib/analytics"
 import { useSettingsData } from "@/hooks/useSettingsData"
-import { cleanProductName } from "@/utils/cleanProductName"
+import { cleanProductName, shortProductTitle } from "@/utils/cleanProductName"
 import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/PaymentGateway"
 import CheckoutPaymentOptions, { PaymentProviderLogo } from "@/components/CheckoutPaymentOptions"
 import InStorePurchase from "@/components/InStorePurchase"
+import { PayAtStoreDialog, PayAtStoreStorePicker, type PayAtStoreChoice } from "@/components/PayAtStore"
+import { StorePaymentRequestResponseSchema, type StorePaymentPlatform, type StorePaymentRequestResponse } from "@/types/store-payment"
 import FulfilmentSelector, {
   type FulfilmentMethod,
   type PickupStore,
@@ -147,11 +149,16 @@ export default function CheckoutPage() {
     return () => controller.abort()
   }, [catalogueIds, catalogueAttempt, refreshItemPrices])
 
-  const [paymentMethod, setPaymentMethod] = useState<"online" | "cash-on-delivery" | "instore">("online")
+  const [paymentMethod, setPaymentMethod] = useState<"online" | "cash-on-delivery" | "instore" | "store-payment">("online")
   const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
   const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
   const [codEnabled, setCodEnabled] = useState(false)
   const [instoreEnabled, setInstoreEnabled] = useState(false)
+  const [storePaymentEnabled, setStorePaymentEnabled] = useState(false)
+  const [payStore, setPayStore] = useState<PayAtStoreChoice | null>(null)
+  const [storeRequest, setStoreRequest] = useState<StorePaymentRequestResponse | null>(null)
+  const [storeRequestLoading, setStoreRequestLoading] = useState(false)
+  const [storeDialogOpen, setStoreDialogOpen] = useState(false)
   const [paymentConfigError, setPaymentConfigError] = useState("")
   const [paymentConfigLoading, setPaymentConfigLoading] = useState(true)
   const [pincodeRules, setPincodeRules] = useState<PincodeRestrictions | null>(null)
@@ -200,9 +207,11 @@ export default function CheckoutPage() {
         setPaymentProvider(config.defaultProvider)
         setCodEnabled(config.codEnabled)
         setInstoreEnabled(config.instoreEnabled)
+        setStorePaymentEnabled(config.storePaymentEnabled)
         if (!config.defaultProvider) {
           if (config.codEnabled) setPaymentMethod("cash-on-delivery")
           else if (config.instoreEnabled) setPaymentMethod("instore")
+          else if (config.storePaymentEnabled) setPaymentMethod("store-payment")
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -797,6 +806,12 @@ export default function CheckoutPage() {
             approvalId: paymentDetails?.approvalId,
             approvalToken: paymentDetails?.approvalToken,
           }),
+          ...(paymentMethod === "store-payment" && {
+            requestId: paymentDetails?.requestId,
+            requestToken: paymentDetails?.requestToken,
+            platform: paymentDetails?.platform,
+            transactionId: paymentDetails?.transactionId,
+          }),
           ...(paymentMethod === "online" && {
             paymentId: paymentDetails?.paymentId,
             orderId: paymentDetails?.orderId,
@@ -873,6 +888,11 @@ export default function CheckoutPage() {
         clearCart()
         router.replace(`/thank-you?orderId=${encodeURIComponent(newOrderId)}${token ? `&token=${encodeURIComponent(token)}` : ""}`)
       } else {
+        if (paymentDetails?.method === "store-payment" && response.status === 409 && /request/i.test(String(result.error))) {
+          // The cart, coupon or store changed since the store was messaged; a fresh request is needed.
+          setStoreRequest(null)
+          setStoreDialogOpen(false)
+        }
         throw new Error(result.error || "Failed to place order")
       }
     } catch (error) {
@@ -887,6 +907,66 @@ export default function CheckoutPage() {
   const handlePaymentSuccess = (paymentDetails: CheckoutPaymentDetails) => {
     // Directly place order on payment success without showing confirmation
     return handlePlaceOrder(paymentDetails)
+  }
+
+  const activeStoreRequest = storeRequest && storeRequest.store.id === payStore?.id ? storeRequest : null
+
+  // Messages the chosen store; the order itself is created once the shopper submits the transaction ID.
+  const requestStorePayment = async () => {
+    if (activeStoreRequest) { setStoreDialogOpen(true); return }
+    if (!payStore) { toast.error(isPickup ? "Choose a pickup store first" : "Choose the store you want to pay"); return }
+    if (!/^[6-9]\d{9}$/.test(customerData.phone.trim())) {
+      toast.error("Enter a valid 10-digit mobile number so the store can call you")
+      return
+    }
+    if (!await validateCheckout()) return
+    setStoreRequestLoading(true)
+    try {
+      const response = await fetch("/api/payment/store-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: cart.map(item => ({ id: item.id, quantity: item.quantity, color: item.color, size: item.size })),
+          couponCode: appliedCoupon?.code || null,
+          redeemPoints,
+          fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id },
+          storeId: payStore.id,
+          customer: {
+            name: `${customerData.firstName} ${customerData.lastName}`.trim(),
+            email: customerData.email,
+            phone: customerData.phone.trim(),
+            address: customerData.address,
+            city: customerData.city,
+            state: customerData.state,
+            zipCode: customerData.pincode,
+          },
+        }),
+      })
+      const json: unknown = await response.json().catch(() => null)
+      const parsed = StorePaymentRequestResponseSchema.safeParse(json)
+      if (!response.ok || !parsed.success) {
+        const message = json && typeof json === "object" && "error" in json && typeof json.error === "string" ? json.error : ""
+        throw new Error(message || "Could not send your order to the store. Please try again.")
+      }
+      setStoreRequest(parsed.data)
+      setStoreDialogOpen(true)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send your order to the store. Please try again.")
+    } finally {
+      setStoreRequestLoading(false)
+    }
+  }
+
+  const submitStorePayment = (platform: StorePaymentPlatform, transactionId: string) => {
+    if (!activeStoreRequest) return
+    return handlePlaceOrder({
+      method: "store-payment",
+      status: "pending",
+      requestId: activeStoreRequest.requestId,
+      requestToken: activeStoreRequest.requestToken,
+      platform,
+      transactionId,
+    })
   }
 
   if (cartLoading) {
@@ -1276,23 +1356,31 @@ export default function CheckoutPage() {
                   <p className={styles.sectionHint}>Choose a payment gateway, then select UPI, cards or another available option on its secure checkout.</p>
                   {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
                   {paymentConfigLoading && <p role="status" className={styles.sectionHint}>Loading online payment gateways...</p>}
-                  {!paymentConfigLoading && !paymentConfigError && !paymentProviders.length &&
-                    <p className={styles.sectionHint}>Online payments are currently unavailable. {
-                      codEnabled && instoreEnabled ? "Choose cash on delivery or in-store purchase."
-                        : codEnabled ? "Choose cash on delivery."
-                          : instoreEnabled ? "Choose in-store purchase." : "Please try again later."}</p>}
+                  {!paymentConfigLoading && !paymentConfigError && !paymentProviders.length && (() => {
+                    const offline = [codEnabled && "cash on delivery", instoreEnabled && "in-store purchase", storePaymentEnabled && "pay at store"]
+                      .filter((option): option is string => !!option)
+                    return <p className={styles.sectionHint}>Online payments are currently unavailable. {offline.length
+                      ? `Choose ${offline.length > 1 ? `${offline.slice(0, -1).join(", ")} or ${offline.at(-1)}` : offline[0]}.`
+                      : "Please try again later."}</p>
+                  })()}
                   <CheckoutPaymentOptions providers={paymentProviders} codEnabled={codEnabled} instoreEnabled={instoreEnabled}
+                    storePaymentEnabled={storePaymentEnabled}
                     selected={paymentMethod === "online" ? paymentProvider : paymentMethod}
                     onChange={choice => {
-                      if (choice === "cash-on-delivery" || choice === "instore") {
+                      if (choice === "cash-on-delivery" || choice === "instore" || choice === "store-payment") {
                         if (choice === "cash-on-delivery" && !codEnabled) return
                         if (choice === "instore" && !instoreEnabled) return
+                        if (choice === "store-payment" && !storePaymentEnabled) return
                         setPaymentMethod(choice)
                       } else {
                         setPaymentProvider(choice)
                         setPaymentMethod("online")
                       }
-                    }} />
+                    }}>
+                    <PayAtStoreStorePicker isPickup={isPickup} pickupStore={pickupStore}
+                      deliveryPincode={customerData.pincode} deliveryCity={customerData.city}
+                      value={payStore} onChange={setPayStore} />
+                  </CheckoutPaymentOptions>
 
                   {/* In-store Purchase Verification */}
                   {paymentMethod === "instore" && instoreEnabled && (
@@ -1336,11 +1424,19 @@ export default function CheckoutPage() {
 
                 {/* Cart Items */}
                 <div className={styles.summaryItems}>
-                  {cart.map((item) => (
+                  {cart.map((item) => {
+                    const title = shortProductTitle(item.name) || "Product"
+                    const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(item.id)}`
+                    return (
                     <div key={item.id} className={styles.summaryRow}>
-                      <div className={styles.summaryImage}><CartProductImage src={item.image} name={cleanProductName(item.name)} /></div>
+                      <a href={href} target="_blank" rel="noopener noreferrer" className={styles.summaryImage} aria-label={`Open ${title} in a new tab`}>
+                        <CartProductImage src={item.image} name={title} />
+                      </a>
                       <div className="flex-1 min-w-0">
-                        <p className={styles.productName}>{cleanProductName(item.name)}</p>
+                        <a href={href} target="_blank" rel="noopener noreferrer" title={cleanProductName(item.name)}
+                          className={`${styles.productName} line-clamp-2 hover:text-[#1560BD] hover:underline`}>
+                          {title}
+                        </a>
                         <p className="text-xs text-gray-500 mb-1">Qty: {item.quantity}</p>
                         {item.type === 'software' && (
                           <div className="text-xs text-gray-600 space-y-0.5">
@@ -1356,16 +1452,17 @@ export default function CheckoutPage() {
                       <div className="flex flex-col items-end gap-2">
                         <p className="text-sm font-semibold flex-shrink-0">₹{money(item.price * item.quantity)}</p>
                         <button
-                          onClick={() => setItemToRemove({ id: item.id, name: cleanProductName(item.name) })}
+                          onClick={() => setItemToRemove({ id: item.id, name: title })}
                           className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                          aria-label={`Remove ${item.name}`}
-                          title={`Remove ${item.name}`}
+                          aria-label={`Remove ${title}`}
+                          title={`Remove ${title}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Coupon input */}
@@ -1484,7 +1581,16 @@ export default function CheckoutPage() {
                     }}
                   />
                 )}
-                {paymentMethod !== "instore" ? <PaymentGateway
+                {paymentMethod === "store-payment" ? (
+                  <button type="button" onClick={() => void requestStorePayment()}
+                    disabled={storeRequestLoading || isProcessing || !storePaymentEnabled}
+                    className="flex w-full items-center justify-center rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
+                    {storeRequestLoading ? "Sending to store..."
+                      : activeStoreRequest ? "Enter transaction ID"
+                        : `Place order ₹${money(payableTotal)}`}
+                    {!storeRequestLoading && <ArrowRight className="ml-2 h-4 w-4" />}
+                  </button>
+                ) : paymentMethod !== "instore" ? <PaymentGateway
                   key={`${paymentMethod}:${paymentProvider}`}
                   compact
                   paymentMethod={paymentMethod}
@@ -1511,6 +1617,7 @@ export default function CheckoutPage() {
                 <div className={styles.secureIntro}><Shield size={40} /><div><strong>Secure Payments</strong>
                   <p>{paymentMethod === "cash-on-delivery" ? "Pay when your order is delivered."
                     : paymentMethod === "instore" ? "Your purchase is verified with the store."
+                    : paymentMethod === "store-payment" ? "Pay the store through the link they send on WhatsApp."
                     : `Processed through ${paymentProvider ? PAYMENT_PROVIDER_LABELS[paymentProvider] : "your selected gateway"}. SARA does not store your card details.`}</p>
                 </div></div>
                 {paymentProviders.length > 0 && <ul className={styles.paymentBrands} aria-label="Enabled payment gateways">
@@ -1541,6 +1648,19 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
+
+      {storeDialogOpen && activeStoreRequest && (
+        <PayAtStoreDialog
+          storeName={activeStoreRequest.store.name}
+          orderReference={activeStoreRequest.requestId}
+          amount={payableTotal}
+          customerPhone={customerData.phone.trim()}
+          storeNotified={activeStoreRequest.notified.whatsapp || activeStoreRequest.notified.email}
+          submitting={isProcessing}
+          onSubmit={(platform, transactionId) => void submitStorePayment(platform, transactionId)}
+          onClose={() => setStoreDialogOpen(false)}
+        />
+      )}
 
       {itemToRemove && (
         <div

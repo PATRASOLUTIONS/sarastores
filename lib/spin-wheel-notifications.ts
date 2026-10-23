@@ -1,6 +1,5 @@
 import { sendEmail, escapeHtml } from "@/lib/email"
-import type { WhatsAppPayload } from "@/lib/marketing/whatsapp"
-import { z } from "zod"
+import { sendWhatsAppTemplate, type WhatsAppNotificationResult } from "@/lib/whatsapp-template"
 
 // ==================== EMAIL TEMPLATES ====================
 
@@ -150,56 +149,7 @@ export async function sendSpinWheelEmail(email: string, name: string, prize: str
   })
 }
 
-const whatsappAcceptanceSchema = z.object({
-  messaging_product: z.literal("whatsapp"),
-  messages: z.array(z.object({
-    id: z.string().min(1),
-    message_status: z.enum(["accepted", "sent"]).optional(),
-  })).min(1),
-})
-export type WhatsAppNotificationResult =
-  | { success: true; data: z.infer<typeof whatsappAcceptanceSchema> }
-  | { success: false; error: string }
-
-async function sendWhatsAppTemplate(
-  phone: string,
-  template: WhatsAppPayload["template"],
-  senderOverride?: string,
-): Promise<WhatsAppNotificationResult> {
-  const apiKey = process.env.ASKEVA_API_KEY
-  const apiUrl = process.env.ASKEVA_API_URL
-  if (!apiKey || !apiUrl) {
-    console.error("[Spin WhatsApp] Provider is not configured")
-    return { success: false, error: "WhatsApp notifications are not configured" }
-  }
-  if (!/^\d{10}$/.test(phone)) {
-    console.error("[Spin WhatsApp] Invalid phone format")
-    return { success: false, error: "Invalid phone format" }
-  }
-  const payload: WhatsAppPayload = {
-    to: `91${phone}`,
-    type: "template",
-    sender: senderOverride || process.env.ASKEVA_SENDER_NUMBER,
-    template,
-  }
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(8000),
-    })
-    const parsed = whatsappAcceptanceSchema.safeParse(await response.json().catch(() => null))
-    if (!response.ok || !parsed.success) {
-      console.error("[Spin WhatsApp] Provider did not accept the message", { status: response.status })
-      return { success: false, error: "WhatsApp provider did not accept the message" }
-    }
-    return { success: true, data: parsed.data }
-  } catch {
-    console.error("[Spin WhatsApp] Request failed")
-    return { success: false, error: "WhatsApp request failed" }
-  }
-}
+export type { WhatsAppNotificationResult }
 
 export function sendWhatsAppOTP(phone: string, otp: string, senderOverride?: string) {
   return sendWhatsAppTemplate(phone, {
@@ -209,7 +159,7 @@ export function sendWhatsAppOTP(phone: string, otp: string, senderOverride?: str
       { type: "body", parameters: [{ type: "text", text: otp }] },
       { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] },
     ],
-  }, senderOverride)
+  }, senderOverride, "Spin WhatsApp")
 }
 
 export function sendWhatsAppWinNotification(phone: string, name: string, prize: string, couponCode: string, senderOverride?: string) {
@@ -217,5 +167,5 @@ export function sendWhatsAppWinNotification(phone: string, name: string, prize: 
     language: { policy: "deterministic", code: "en" },
     name: "spin_win_confirm",
     components: [{ type: "body", parameters: [name, prize, couponCode].map(text => ({ type: "text", text })) }],
-  }, senderOverride)
+  }, senderOverride, "Spin WhatsApp")
 }

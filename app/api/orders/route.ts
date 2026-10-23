@@ -12,7 +12,8 @@ import { checkoutFingerprint, getCheckoutIntent, persistCheckoutOrder, CheckoutC
 import { fulfillSoftwareOrder } from "@/lib/software-fulfillment"
 import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfillment"
 import { initiateHostedCheckout, notifyHostedGuestOrder } from "@/lib/hosted-checkout"
-import { cashOnDeliveryEnabled, inStorePurchaseEnabled, PaymentConfigurationError } from "@/lib/payment-config"
+import { cashOnDeliveryEnabled, inStorePurchaseEnabled, storePaymentEnabled, PaymentConfigurationError } from "@/lib/payment-config"
+import { StorePaymentTransactionSchema } from "@/types/store-payment"
 import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
@@ -36,6 +37,10 @@ interface OrderListDocument {
   shippingAddress?: unknown
   paymentMethod?: string
   paymentDetails?: unknown
+  storePayment?: unknown
+  paymentVerification?: { verified?: boolean }
+  licenseFulfillment?: { status?: string }
+  licenseKeys?: string[]
   trackingNumber?: string
   timeline?: unknown[]
   externalQueue?: unknown
@@ -195,6 +200,10 @@ export async function GET(request: NextRequest) {
       },
       paymentMethod: order.paymentMethod || "cash",
       paymentDetails: order.paymentDetails || {},
+      storePayment: order.storePayment || null,
+      paymentVerification: { verified: order.paymentVerification?.verified === true },
+      licenseFulfillment: order.licenseFulfillment?.status ? { status: order.licenseFulfillment.status } : null,
+      licenseKeys: Array.isArray(order.licenseKeys) ? order.licenseKeys : [],
       trackingNumber: order.trackingNumber || null,
       timeline: order.timeline || [
         {
@@ -259,6 +268,7 @@ export async function GET(request: NextRequest) {
           } : {},
           paymentMethod: po.paymentMethod || "partner",
           paymentDetails: {},
+          storePayment: null,
           trackingNumber: po.tracking?.trackingNumber || null,
           timeline: (po.statusHistory || []).map((sh: Record<string, unknown>) => ({
             date: sh.timestamp || new Date().toISOString(),
@@ -274,6 +284,8 @@ export async function GET(request: NextRequest) {
           commission: po.commission || null,
           razorpayPaymentDetails: po.paymentDetails || null,
           paymentVerification: po.paymentVerification || { verified: false },
+          licenseFulfillment: null,
+          licenseKeys: [],
           createdAt: po.createdAt || new Date().toISOString(),
           updatedAt: po.updatedAt || new Date().toISOString(),
         }))
@@ -371,7 +383,7 @@ export async function POST(request: NextRequest) {
         zipCode: z.string().optional(),
         country: z.string().optional(),
       }).optional(),
-      paymentMethod: z.enum(["cash", "cod", "cash-on-delivery", "online", "razorpay", "pinelabs", "paytm", "instore"]).optional(),
+      paymentMethod: z.enum(["cash", "cod", "cash-on-delivery", "online", "razorpay", "pinelabs", "paytm", "instore", "store-payment"]).optional(),
       paymentDetails: z.record(z.unknown()).optional(),
       fulfilment: z.object({
         method: z.enum(["delivery", "pickup"]),
@@ -444,6 +456,7 @@ export async function POST(request: NextRequest) {
     let status = "pending"
     let paymentVerification: Record<string, unknown> = { verified: false, method }
     let checkoutIntent: CheckoutIntent | null = null
+    let storePayment: Record<string, unknown> | null = null
     const fingerprint = checkoutFingerprint(pricing, parsed.data, payableTotal)
 
     if (method === "online" || method === "razorpay") {
@@ -500,9 +513,47 @@ export async function POST(request: NextRequest) {
         checkedAt: new Date(),
       }
       status = "confirmed"
+    } else if (method === "store-payment") {
+      if (!storePaymentEnabled()) {
+        return NextResponse.json({ error: "Pay at store is not available" }, { status: 403 })
+      }
+      const requestId = paymentDetails?.requestId
+      const requestToken = paymentDetails?.requestToken
+      if (typeof requestId !== "string" || typeof requestToken !== "string") {
+        return NextResponse.json({ error: "Pay at store request is required" }, { status: 400 })
+      }
+      const transaction = StorePaymentTransactionSchema.safeParse({
+        platform: paymentDetails?.platform, transactionId: paymentDetails?.transactionId,
+      })
+      if (!transaction.success) {
+        return NextResponse.json({ error: transaction.error.issues[0]?.message || "Invalid transaction details" }, { status: 400 })
+      }
+      checkoutIntent = await getCheckoutIntent(requestId, requestToken, userId)
+      if (!checkoutIntent || checkoutIntent.method !== "store-payment" || checkoutIntent.status !== "created" || !checkoutIntent.store ||
+        checkoutIntent.fingerprint !== fingerprint || checkoutIntent.amount !== Math.round(payableTotal * 100)) {
+        return NextResponse.json({ error: "Your pay at store request has changed or expired. Please place the order again." }, { status: 409 })
+      }
+      const reused = await (await getCollection("orders")).findOne({
+        "storePayment.platform": transaction.data.platform,
+        "storePayment.transactionId": transaction.data.transactionId,
+      }, { projection: { _id: 1 } })
+      if (reused) {
+        return NextResponse.json({ error: "This transaction ID has already been used for another order" }, { status: 409 })
+      }
+      storePayment = {
+        status: "confirmation_pending",
+        storeId: checkoutIntent.store.id,
+        storeName: checkoutIntent.store.name,
+        storePhone: checkoutIntent.store.phone,
+        storeEmail: checkoutIntent.store.email,
+        platform: transaction.data.platform,
+        transactionId: transaction.data.transactionId,
+        submittedAt: new Date(),
+      }
     }
 
-    const orderId = await generateOrderId()
+    // The store was already sent this reference, so the order keeps it.
+    const orderId = checkoutIntent?.method === "store-payment" ? checkoutIntent._id : await generateOrderId()
 
     // Guests get a one-time capability token; order ids are sequential and so
     // are never sufficient on their own to read an order.
@@ -542,8 +593,10 @@ export async function POST(request: NextRequest) {
         status: paymentVerification.verified ? "completed" : "pending",
         ...(checkoutIntent?.method === "razorpay" ? { paymentId: checkoutIntent.paymentId, orderId: checkoutIntent._id } : {}),
         ...(checkoutIntent?.method === "instore" ? { employeeId: checkoutIntent.employeeId, verifiedEmail: checkoutIntent.employeeEmail } : {}),
+        ...(storePayment ? { platform: storePayment.platform, transactionId: storePayment.transactionId, storeId: storePayment.storeId, storeName: storePayment.storeName } : {}),
       },
       paymentVerification,
+      ...(storePayment ? { storePayment } : {}),
       // Store pickup is recorded here; reserving the unit against store stock
       // waits on the SAP inventory feed (see docs/brd/PENDING-EXTERNAL-INTEGRATIONS.md).
       fulfilment: parsed.data.fulfilment ?? { method: "delivery" },
@@ -560,7 +613,9 @@ export async function POST(request: NextRequest) {
         {
           date: new Date().toISOString(),
           status: "Order Placed",
-          description: "Your order has been placed successfully",
+          description: storePayment
+            ? "Your order has been placed. We are confirming your store payment."
+            : "Your order has been placed successfully",
         },
       ],
       createdAt: new Date(),

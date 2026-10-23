@@ -1,10 +1,11 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Image from "next/image"
-import { Package, Store } from "lucide-react"
+import { MessageCircle, Package, Store } from "lucide-react"
 import { PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
 
-export type CheckoutPaymentChoice = PaymentProvider | "cash-on-delivery" | "instore"
+export type CheckoutPaymentChoice = PaymentProvider | "cash-on-delivery" | "instore" | "store-payment"
 
 const PROVIDER_LOGOS: Record<PaymentProvider, { src: string; width: number; height: number }> = {
   pinelabs: { src: "/payment-gateways/pinelabs.svg", width: 168, height: 58 },
@@ -22,12 +23,16 @@ export function PaymentProviderLogo({ provider, className = "h-8 w-28 object-con
 const OFFLINE_OPTIONS = [
   { id: "cash-on-delivery", label: "Cash on Delivery", description: "Pay when your order is delivered.", icon: Package },
   { id: "instore", label: "In-store Purchase", description: "Verify your purchase with a SARA store.", icon: Store },
+  { id: "store-payment", label: "Pay at store", description: "A SARA store calls you and sends a payment link on WhatsApp.", icon: MessageCircle },
 ] as const
 
-export default function CheckoutPaymentOptions({ providers, codEnabled, instoreEnabled = false, selected, onChange }: {
+export default function CheckoutPaymentOptions({ providers, codEnabled, instoreEnabled = false, storePaymentEnabled = false, selected, onChange, children }: {
   providers: PaymentProvider[]
   codEnabled: boolean
   instoreEnabled?: boolean
+  storePaymentEnabled?: boolean
+  /** Rendered under the "Pay at store" option while it is selected. */
+  children?: ReactNode
   selected: CheckoutPaymentChoice | null
   onChange: (choice: CheckoutPaymentChoice) => void
 }) {
@@ -51,16 +56,20 @@ export default function CheckoutPaymentOptions({ providers, codEnabled, instoreE
           </span>
         </label>
       ))}
-      {OFFLINE_OPTIONS.filter(option => option.id === "cash-on-delivery" ? codEnabled : instoreEnabled).map(({ id, label, description, icon: Icon }) => (
-        <label key={id} className={optionClass(selected === id)}>
-          <input type="radio" name="paymentChoice" value={id} checked={selected === id}
-            onChange={() => onChange(id)} className="h-4 w-4 shrink-0 accent-[#1560BD]" />
-          <Icon size={22} className="shrink-0 text-slate-600" aria-hidden="true" />
-          <span className="text-xs text-slate-600">
-            <strong className="block text-sm font-semibold text-slate-900">{label}</strong>
-            {description}
-          </span>
-        </label>
+      {OFFLINE_OPTIONS.filter(option => option.id === "cash-on-delivery" ? codEnabled
+        : option.id === "instore" ? instoreEnabled : storePaymentEnabled).map(({ id, label, description, icon: Icon }) => (
+        <div key={id}>
+          <label className={optionClass(selected === id)}>
+            <input type="radio" name="paymentChoice" value={id} checked={selected === id}
+              onChange={() => onChange(id)} className="h-4 w-4 shrink-0 accent-[#1560BD]" />
+            <Icon size={22} className="shrink-0 text-slate-600" aria-hidden="true" />
+            <span className="text-xs text-slate-600">
+              <strong className="block text-sm font-semibold text-slate-900">{label}</strong>
+              {description}
+            </span>
+          </label>
+          {id === "store-payment" && selected === id ? children : null}
+        </div>
       ))}
     </fieldset>
   )

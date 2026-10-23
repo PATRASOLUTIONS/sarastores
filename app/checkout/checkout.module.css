@@ -63,8 +63,8 @@
 .summaryRow > div:last-child > button { position: absolute; right: 0; bottom: 3px; padding: 2px; opacity: 0; }
 .summaryRow:hover > div:last-child > button, .summaryRow:focus-within > div:last-child > button { opacity: 1; }
 .summaryRow > div:last-child > button svg { width: 12px; height: 12px; }
-.summaryImage { height: 40px; width: 38px; flex-shrink: 0; }
-.productName { font-size: 10px; font-weight: 400; line-height: 1.5; }
+.summaryImage { display: block; height: 40px; width: 38px; flex-shrink: 0; }
+.productName { font-size: 11px; font-weight: 600; line-height: 1.4; color: #0f2557; overflow-wrap: anywhere; }
 .summaryRow > div > p:not(.productName) { font-size: 10px; }
 .priceDetails { padding-top: 16px; }
 .priceDetails > h3 { font-size: 14px; margin-bottom: 12px; font-weight: 700; }

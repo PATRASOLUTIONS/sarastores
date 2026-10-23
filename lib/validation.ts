@@ -84,10 +84,15 @@ export const emailSchema = z.string()
 export const OrderNotificationSettingsSchema = z.object({
   enabled: z.boolean(),
   email: z.union([z.literal(""), emailSchema]).transform(value => value.toLowerCase()),
+  additionalEmails: z.array(emailSchema.transform(value => value.toLowerCase()))
+    .max(10, "Add at most 10 additional recipients").default([]),
 }).strict().refine(value => !value.enabled || !!value.email, {
   message: "Enter a recipient email before enabling notifications",
   path: ["email"],
-});
+}).transform(value => ({
+  ...value,
+  additionalEmails: [...new Set(value.additionalEmails)].filter(email => email !== value.email),
+}));
 
 // Strong password
 export const passwordSchema = z.string()

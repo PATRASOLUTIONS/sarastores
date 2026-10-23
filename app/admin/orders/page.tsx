@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
-import { Search, ArrowUpDown, Eye, Edit } from "lucide-react"
+import { Search, ArrowUpDown, Eye, Edit, Mail, MessageCircle, Store, X } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
@@ -10,6 +10,9 @@ import * as XLSX from "xlsx"
 import { products } from "@/lib/mock-data"
 import BulkStatusUpload from "@/components/admin/BulkStatusUpload"
 import PaymentBadge from "@/app/components/PaymentBadge"
+import OrderNotificationEmails from "@/components/admin/OrderNotificationEmails"
+import StorePaymentWhatsAppRecipients from "@/components/admin/StorePaymentWhatsAppRecipients"
+import { storePaymentPlatformLabel } from "@/types/store-payment"
 
 interface OrderItem {
   id?: string
@@ -74,6 +77,17 @@ interface Order {
     verifiedAt?: string
     verifiedBy?: string
   }
+  licenseFulfillment?: { status: string } | null
+  storePayment?: {
+    status: "confirmation_pending" | "approved"
+    storeName: string
+    storePhone?: string
+    platform: string
+    transactionId: string
+    submittedAt?: string
+    approvedAt?: string
+    approvedBy?: { name?: string; email: string }
+  } | null
 }
 
 export default function AdminOrders() {
@@ -90,6 +104,9 @@ export default function AdminOrders() {
   const [currentPage, setCurrentPage] = useState(1)
   const [trackingModal, setTrackingModal] = useState<{ orderId: string; status: Order["status"] } | null>(null)
   const [trackingInput, setTrackingInput] = useState("")
+  const [showEmailSettings, setShowEmailSettings] = useState(false)
+  const [showWhatsAppSettings, setShowWhatsAppSettings] = useState(false)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
   const [itemsPerPage] = useState(10)
   const { user, isLoading: authLoading, canAccessAdmin } = useAuth()
 
@@ -144,9 +161,16 @@ export default function AdminOrders() {
     try {
       const processedRaw = localStorage.getItem('assignLicenseProcessed')
       const processed: Set<string> = new Set(processedRaw ? JSON.parse(processedRaw) : [])
+      const failures: string[] = []
 
       for (const order of ordersToProcess) {
         if (processed.has(order.id)) continue
+        // Only paid, live orders whose fulfilment has not started are assignable; the
+        // server refuses the rest with 409, which used to surface as one toast per order.
+        if (order.source === "partner" || order.paymentVerification?.verified !== true) continue
+        if (["cancelled", "refunded", "returned"].includes(order.status)) continue
+        const fulfilment = order.licenseFulfillment?.status
+        if (fulfilment && fulfilment !== "needs_inventory" && fulfilment !== "failed") continue
 
         // find software items that are not from an external provider
         const softwareItems = (order.items || []).filter(it => it.type === 'software' && !it.provider)
@@ -168,7 +192,8 @@ export default function AdminOrders() {
               method: 'POST',
             })
 
-            const jr: { data?: { licenseKeys?: string[] }; error?: string } = await resp.json()
+            const jr: { data?: { licenseKeys?: string[] }; error?: string } = await resp.json().catch(() => ({}))
+            if (resp.status === 409 || resp.status === 400) processed.add(order.id)
             if (!resp.ok) throw new Error(jr.error || "License assignment failed")
             if (!Array.isArray(jr.data?.licenseKeys) || jr.data.licenseKeys.length === 0) {
               throw new Error("License assignment returned no keys")
@@ -194,11 +219,15 @@ export default function AdminOrders() {
               processed.add(order.id)
         } catch (e) {
             console.warn('[Admin Orders] assign-license failed for order', order.id, e)
-            toast.error(e instanceof Error ? e.message : "License assignment failed")
+            failures.push(order.orderId || order.id)
         }
       }
 
       localStorage.setItem('assignLicenseProcessed', JSON.stringify(Array.from(processed)))
+      if (failures.length) {
+        toast.error(`Licence auto-assignment failed for ${failures.length} order${failures.length > 1 ? "s" : ""}: ` +
+          `${failures.slice(0, 3).join(", ")}${failures.length > 3 ? "…" : ""}`, { id: "license-auto-assign" })
+      }
     } catch (e) {
       console.warn('[Admin Orders] processNewOrders error', e)
     }
@@ -213,8 +242,39 @@ export default function AdminOrders() {
     }
   }
 
+  const approveStorePayment = async (order: Order) => {
+    if (!order.storePayment || approvingId) return
+    if (!window.confirm(`Confirm that ${order.storePayment.storeName} received ₹${order.total.toLocaleString("en-IN")} ` +
+      `(${storePaymentPlatformLabel(order.storePayment.platform)} txn ${order.storePayment.transactionId})?`)) return
+    setApprovingId(order.id)
+    try {
+      const response = await apiFetch(`/api/orders/${order.id}/approve-store-payment`, { method: "POST" })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error || "Failed to approve store payment")
+      setOrders(prev => prev.map(o => o.id === order.id ? {
+        ...o,
+        status: "processing",
+        updatedAt: new Date().toISOString(),
+        storePayment: data?.storePayment ?? { ...order.storePayment!, status: "approved" },
+        paymentVerification: data?.paymentVerification ?? { verified: true },
+      } : o))
+      toast.success("Store payment approved. The order is now processing.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to approve store payment")
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
   const handleStatusChange = async (orderId: string, newStatus: Order["status"]) => {
     console.log("[Admin Orders] 🔄 Status change requested - Order ID:", orderId, "New Status:", newStatus)
+
+    const target = orders.find(order => order.id === orderId)
+    if (target?.storePayment?.status === "confirmation_pending" && newStatus !== "pending" && newStatus !== "cancelled") {
+      if (newStatus === "processing") void approveStorePayment(target)
+      else toast.error("Approve the store payment before progressing this order")
+      return
+    }
 
     if (newStatus === "shipped") {
       console.log("[Admin Orders] 🚚 Shipped status requires tracking number")
@@ -327,7 +387,7 @@ export default function AdminOrders() {
       return sortDirection === "asc" ? dateA - dateB : dateB - dateA
     }
 
-    if (valA === undefined || valB === undefined) return 0;
+    if (valA == null || valB == null) return 0;
 
     if (valA < valB) {
       return sortDirection === "asc" ? -1 : 1
@@ -538,6 +598,22 @@ export default function AdminOrders() {
         </div>
         {/* Export controls */}
         <div className="flex gap-2 items-center">
+          <button
+            type="button"
+            onClick={() => setShowEmailSettings(true)}
+            className="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Mail className="h-4 w-4" />
+            Order emails
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowWhatsAppSettings(true)}
+            className="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Store WhatsApp
+          </button>
           <input
             type="date"
             value={fromDate}
@@ -859,6 +935,36 @@ export default function AdminOrders() {
                             <PaymentBadge method={order.paymentMethod ?? 'unknown'} />
                           </div>
 
+                          {order.storePayment && (
+                            <div className={`p-2 rounded-md border ${order.storePayment.status === "approved" ? "bg-green-50 border-green-100" : "bg-amber-50 border-amber-200"}`}>
+                              <div className="flex flex-col space-y-1">
+                                <span className={`inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${order.storePayment.status === "approved" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                                  <Store className="h-3 w-3" />
+                                  {order.storePayment.status === "approved" ? "Via store · payment confirmed" : "Via store · payment confirmation pending"}
+                                </span>
+                                <div className="text-[11px] text-gray-700"><span className="font-medium">Store:</span> {order.storePayment.storeName}</div>
+                                <div className="text-[11px] text-gray-700"><span className="font-medium">Paid via:</span> {storePaymentPlatformLabel(order.storePayment.platform)}</div>
+                                <div className="text-[11px] text-gray-700"><span className="font-medium">Txn ID:</span> <span className="font-mono">{order.storePayment.transactionId}</span></div>
+                                {order.storePayment.status === "approved" && order.storePayment.approvedBy && (
+                                  <div className="text-[10px] text-gray-500">
+                                    Approved by {order.storePayment.approvedBy.name || order.storePayment.approvedBy.email}
+                                    {order.storePayment.approvedAt && <> on {new Date(order.storePayment.approvedAt).toLocaleString("en-IN")}</>}
+                                  </div>
+                                )}
+                                {order.storePayment.status === "confirmation_pending" && order.status === "pending" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void approveStorePayment(order)}
+                                    disabled={approvingId === order.id}
+                                    className="mt-1 rounded bg-green-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                                  >
+                                    {approvingId === order.id ? "Approving..." : "Approve payment"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           {/* In-store Purchase Details */}
                           {order.paymentMethod === 'instore' && (
                             <div className="bg-purple-50 p-2 rounded-md border border-purple-100">
@@ -964,6 +1070,44 @@ export default function AdminOrders() {
           </div>
         </div>
       </div>
+
+      {showEmailSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true"
+          aria-labelledby="order-emails-title" onClick={() => setShowEmailSettings(false)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl" onClick={event => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="order-emails-title" className="text-xl font-bold text-gray-900">Order confirmation emails</h2>
+                <p className="text-sm text-gray-500">These addresses get an email whenever an order is confirmed.</p>
+              </div>
+              <button type="button" onClick={() => setShowEmailSettings(false)} aria-label="Close"
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <OrderNotificationEmails />
+          </div>
+        </div>
+      )}
+
+      {showWhatsAppSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true"
+          aria-labelledby="store-whatsapp-title" onClick={() => setShowWhatsAppSettings(false)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={event => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="store-whatsapp-title" className="text-xl font-bold text-gray-900">Pay at store WhatsApp</h2>
+                <p className="text-sm text-gray-500">Who gets a WhatsApp when a customer places a pay-at-store order.</p>
+              </div>
+              <button type="button" onClick={() => setShowWhatsAppSettings(false)} aria-label="Close"
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <StorePaymentWhatsAppRecipients />
+          </div>
+        </div>
+      )}
 
       {/* Tracking Number Modal */}
       {trackingModal && (

@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { CheckCircle, MapPin, Store, Truck, Zap } from "lucide-react"
 import { analytics } from "@/lib/analytics"
 import { checkoutCity } from "@/lib/checkout-region"
 import { useSettingsData } from "@/hooks/useSettingsData"
-import { calculateDistance, coordinates, geocodePincode, type Coordinates } from "@/lib/geo-client"
+import { formatDistance, useNearbyStores } from "@/hooks/useNearbyStores"
 import styles from "./FulfilmentSelector.module.css"
 
 /**
@@ -32,22 +32,6 @@ export interface PickupStore {
   image?: string
 }
 
-interface ApiStore {
-  id: string
-  name: string
-  address: string
-  city: string
-  phone: string
-  hours: string
-  state?: string
-  pincode?: string
-  image?: string
-  latitude?: number
-  longitude?: number
-}
-
-type RankedStore = ApiStore & { distance: number | null }
-
 export default function FulfilmentSelector({
   method,
   onMethodChange,
@@ -68,83 +52,16 @@ export default function FulfilmentSelector({
   deliveryCity?: string
   children?: ReactNode
 }) {
-  const [origin, setOrigin] = useState<Coordinates | null>(null)
-  const pincode = /^[1-9]\d{5}$/.test(deliveryPincode.trim()) ? deliveryPincode.trim() : ""
-
-  useEffect(() => {
-    setOrigin(null)
-    if (!pincode) return
-    const controller = new AbortController()
-    // Debounced so typing a pincode does not fire a lookup per keystroke.
-    const timer = setTimeout(() => {
-      geocodePincode(pincode, controller.signal)
-        .then(coords => { if (!controller.signal.aborted) setOrigin(coords) })
-        .catch(error => { if (!controller.signal.aborted) console.warn("[Checkout] Pincode location lookup failed:", error) })
-    }, 400)
-    return () => { clearTimeout(timer); controller.abort() }
-  }, [pincode])
-
-  const [stores, setStores] = useState<ApiStore[]>([])
+  const { stores: rankedStores, loading, error, retry, pincode, nearestId } = useNearbyStores(deliveryPincode, deliveryCity)
   const [city, setCity] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [attempt, setAttempt] = useState(0)
   const [expanded, setExpanded] = useState(false)
   const { data: settings } = useSettingsData()
   const genericPhoto = settings?.storefrontImage || "/store-locator/storefront.webp"
 
-  useEffect(() => {
-    if (stores.length > 0) return
-
-    let cancelled = false
-    setLoading(true)
-    setError("")
-    ;(async () => {
-      try {
-        const res = await fetch("/api/stores")
-        if (!res.ok) throw new Error("Stores could not be loaded.")
-        const data = await res.json()
-        if (cancelled) return
-        if (!data?.success || !Array.isArray(data.stores)) throw new Error("Invalid stores response.")
-        setStores(data.stores.filter((store: ApiStore) => checkoutCity(store.city || "") &&
-          (!store.state || store.state.trim().toLowerCase() === "karnataka")))
-      } catch (error) {
-        if (cancelled) return
-        console.error("[Checkout] Store pickup failed:", error)
-        setError("Stores could not be loaded. Please retry or choose home delivery.")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [stores.length, attempt])
-
   const cities = useMemo(
-    () => Array.from(new Set(stores.map((store) => checkoutCity(store.city)).filter(Boolean))).sort(),
-    [stores],
+    () => Array.from(new Set(rankedStores.map((store) => checkoutCity(store.city)).filter(Boolean))).sort(),
+    [rankedStores],
   )
-
-  // Nearest first: by distance from the delivery pincode when it can be
-  // located, otherwise stores in the same pincode, then the same city.
-  const rankedStores = useMemo<RankedStore[]>(() => {
-    const homeCity = checkoutCity(deliveryCity || "")
-    const ranked = stores.map((store) => {
-      const position = coordinates(store.latitude, store.longitude)
-      return { ...store, distance: origin && position ? calculateDistance(origin, position) : null }
-    })
-    const closeness = (store: RankedStore) =>
-      (pincode && store.pincode === pincode ? 0 : 2) + (homeCity && checkoutCity(store.city) === homeCity ? 0 : 1)
-    return ranked.sort((a, b) =>
-      a.distance !== null && b.distance !== null ? a.distance - b.distance
-        : a.distance !== null ? -1 : b.distance !== null ? 1
-          : closeness(a) - closeness(b))
-  }, [stores, origin, pincode, deliveryCity])
-
-  const hasLocation = Boolean(origin) || Boolean(pincode) || Boolean(deliveryCity)
-  const nearestId = hasLocation ? rankedStores[0]?.id : undefined
 
   const visibleStores = useMemo(
     () => {
@@ -195,7 +112,7 @@ export default function FulfilmentSelector({
           </div>
           {loading ? (
             <p className="text-sm text-gray-600">Loading stores…</p>
-          ) : error ? <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="underline" onClick={() => setAttempt(value => value + 1)}>Retry stores</button></p> : stores.length === 0 ? (
+          ) : error ? <p role="alert" className="text-sm text-red-700">{error} Please retry or choose home delivery. <button type="button" className="underline" onClick={retry}>Retry stores</button></p> : rankedStores.length === 0 ? (
             <p className="text-sm text-gray-600">
               Store pickup is unavailable right now. Please choose home delivery.
             </p>
@@ -264,7 +181,7 @@ export default function FulfilmentSelector({
                         <strong>{store.name}</strong>
                         <small className={styles.storeCity}>
                           {checkoutCity(store.city)}
-                          {store.distance !== null && ` · ${store.distance < 10 ? store.distance.toFixed(1) : Math.round(store.distance)} km away`}
+                          {store.distance !== null && ` · ${formatDistance(store.distance)}`}
                         </small>
                         {store.id === nearestId && <small className={styles.storeReady}><MapPin size={10} />Nearest to your address</small>}
                         {store.address && (

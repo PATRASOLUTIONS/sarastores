@@ -24,6 +24,9 @@ export interface CheckoutPaymentDetails {
   verifiedEmail?: string
   approvalId?: string
   approvalToken?: string
+  requestId?: string
+  requestToken?: string
+  platform?: string
 }
 
 interface PaymentOrderDetails {

@@ -169,7 +169,7 @@ async function authorizeRequest(request: NextRequest) {
       isWrite &&
       (matches("/api/orders/bulk-upload") ||
         matches("/api/orders/bulk-update") ||
-        (path.startsWith("/api/orders/") && path.endsWith("/assign-license")))
+        (path.startsWith("/api/orders/") && (path.endsWith("/assign-license") || path.endsWith("/approve-store-payment"))))
     ) {
       if (!isAdminUser) return deny(401, "Admin access required")
       return NextResponse.next()

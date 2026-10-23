@@ -67,7 +67,7 @@ export interface CheckoutIntent {
   fingerprint: string
   amount: number
   currency: "INR"
-  method: "razorpay" | "instore" | "pinelabs" | "paytm"
+  method: "razorpay" | "instore" | "pinelabs" | "paytm" | "store-payment"
   status: "created" | "verified" | "consumed"
   createdAt: Date
   expiresAt: Date
@@ -77,6 +77,7 @@ export interface CheckoutIntent {
   employeeEmail?: string
   merchantReference?: string
   needsReview?: boolean
+  store?: { id: string; name: string; phone: string; email: string }
 }
 
 export async function createCheckoutIntent(
@@ -84,13 +85,15 @@ export async function createCheckoutIntent(
   userId: string | null,
   quote: { amount: number; fingerprint: string },
   method: CheckoutIntent["method"] = "razorpay",
+  extra: { ttlMs?: number; store?: CheckoutIntent["store"] } = {},
 ): Promise<string> {
   const token = crypto.randomBytes(32).toString("base64url")
   const collection = await getCollection<CheckoutIntent>("checkout_intents")
   await collection.insertOne({
     _id: orderId, userId, tokenHash: hashCheckoutToken(token), fingerprint: quote.fingerprint,
     amount: Math.round(quote.amount * 100), currency: "INR", method, status: "created",
-    createdAt: new Date(), expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    createdAt: new Date(), expiresAt: new Date(Date.now() + (extra.ttlMs ?? 60 * 60 * 1000)),
+    ...(extra.store ? { store: extra.store } : {}),
   })
   return token
 }
@@ -116,8 +119,10 @@ export async function persistCheckoutOrder(
     await session.withTransaction(async () => {
       if (intent) {
         const hosted = intent.method === "pinelabs" || intent.method === "paytm"
+        // A store payment is settled offline, so its request is never "verified" online.
+        const expected = hosted || intent.method === "store-payment" ? "created" : "verified"
         const claimed = await db.collection<CheckoutIntent>("checkout_intents").updateOne(
-          { _id: intent._id, status: hosted ? "created" : "verified", orderId: { $exists: false }, expiresAt: { $gt: new Date() }, ...(intent.paymentId ? { paymentId: intent.paymentId } : {}) },
+          { _id: intent._id, status: expected, orderId: { $exists: false }, expiresAt: { $gt: new Date() }, ...(intent.paymentId ? { paymentId: intent.paymentId } : {}) },
           { $set: { status: hosted ? "created" : "consumed", orderId: String(order.orderId) } },
           { session },
         )
