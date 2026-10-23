@@ -3,33 +3,7 @@ import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
 import { buildTaxonomyTree, type TaxonomyRow } from "@/lib/product-taxonomy"
 import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
-
-/**
- * The first of `paths` that holds a non-blank string.
- *
- * `$ifNull` alone is not enough: it only skips a missing or null field, and an
- * imported product routinely carries `""` instead, which would short-circuit
- * the chain and hide a value a later field does have. Anything that is not a
- * string is treated as absent so a stray number cannot make `$trim` throw and
- * take the whole menu down.
- */
-function firstNonBlank(paths: string[]) {
-  return {
-    $let: {
-      vars: {
-        candidates: {
-          $filter: {
-            input: paths.map(path => ({
-              $cond: [{ $eq: [{ $type: path }, "string"] }, { $trim: { input: path } }, ""],
-            })),
-            cond: { $ne: ["$$this", ""] },
-          },
-        },
-      },
-      in: { $ifNull: [{ $first: "$$candidates" }, ""] },
-    },
-  }
-}
+import { IN_STOCK_EXPRESSION, PRODUCT_BRAND_PATHS, firstNonBlank } from "@/lib/mongo-expressions"
 
 /**
  * The Division → Sub-Category → Segment tree, derived from the live catalogue.
@@ -76,24 +50,7 @@ export async function GET() {
               segment: firstNonBlank(["$segment", "$characteristics", "$char_desc", "$raw.CHAR DESC"]),
               // Only in-stock products contribute to Top Brands. The division
               // hierarchy itself still includes every active product.
-              brand: {
-                $cond: [
-                  {
-                    $gt: [
-                      { $convert: { input: "$stock", to: "double", onError: 0, onNull: 0 } },
-                      0,
-                    ],
-                  },
-                  firstNonBlank([
-                    "$manufacturerName",
-                    "$manufacturer_name",
-                    "$brand",
-                    "$raw.Manufacturer Name",
-                    "$raw.Brand",
-                  ]),
-                  "",
-                ],
-              },
+              brand: { $cond: [IN_STOCK_EXPRESSION, firstNonBlank(PRODUCT_BRAND_PATHS), ""] },
             },
             count: { $sum: 1 },
           },

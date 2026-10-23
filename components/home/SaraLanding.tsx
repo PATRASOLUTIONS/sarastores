@@ -11,13 +11,11 @@ import {
   HomepageDeals, HomepageProductRail, HomepagePromotions, HomepageStores, type HomeBrand, type HomeProduct,
 } from "@/components/home/landing/HomepageSections"
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed"
-import { type TaxonomyDivision } from "@/lib/product-taxonomy"
-import { fetchTaxonomy } from "@/lib/taxonomy-client"
 import styles from "@/components/home/landing/homepage.module.css"
 import { MarketingSection, MarketingSections } from "@/components/marketing/MarketingSections"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { catalogProductListResponseSchema } from "@/utils/catalog"
-import { homeBrandImageListResponseSchema, homeBrandListResponseSchema, homeStoreListResponseSchema } from "@/lib/catalog-list-response"
+import { homeBrandImageListResponseSchema, homeBrandListResponseSchema, homeInStockBrandListResponseSchema, homeStoreListResponseSchema } from "@/lib/catalog-list-response"
 import type { HandshakeLaunch } from "@/lib/handshake"
 import EcommerceLaunch from "@/components/home/EcommerceLaunch"
 
@@ -67,7 +65,7 @@ function parseProducts(data: unknown): HomeProduct[] {
 export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunch | null }) {
   const marketing = useMarketingContent("home")
   const [products, setProducts] = useState<HomeProduct[]>([])
-  const [taxonomy, setTaxonomy] = useState<TaxonomyDivision[]>([])
+  const [stockedBrands, setStockedBrands] = useState<{ name: string; count: number }[]>([])
   const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
   const [brandImages, setBrandImages] = useState<Record<string, string>>({})
   const [storeCount, setStoreCount] = useState<number>()
@@ -102,11 +100,11 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
 
   useEffect(() => {
     void loadProducts()
-    // Shares a cache entry with the header menu, which needs the same tree on
-    // every route; see lib/taxonomy-client.ts for why that matters.
-    fetchTaxonomy()
-      .then(setTaxonomy)
-      .catch((error: unknown) => console.error("[Homepage] Could not load the catalogue taxonomy:", error))
+    // Fetched live, not from the client cache, so a brand that sells out
+    // leaves the Top Brands rail on the next visit.
+    fetchJson("/api/brands/in-stock")
+      .then(data => setStockedBrands(homeInStockBrandListResponseSchema.parse(data)))
+      .catch((error: unknown) => console.error("[Homepage] Could not load in-stock brands:", error))
     fetchWithCache("brands", () => fetchJson("/api/brands"), homeBrandListResponseSchema, TTL)
       .then((data) => {
         setBrandDocs(data)
@@ -127,32 +125,20 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
   }, [loadProducts])
 
   const brands = useMemo<HomeBrand[]>(() => {
-    const counts = new Map<string, { name: string; count: number }>()
-    for (const division of taxonomy) {
-      for (const brand of division.brands) {
-        const key = brand.name.trim().toLowerCase()
-        if (!key) continue
-        const held = counts.get(key)
-        if (held) held.count += brand.count
-        else counts.set(key, { name: brand.name.trim(), count: brand.count })
-      }
-    }
-
-    return [...counts.values()]
+    return stockedBrands
       .filter(({ count }) => count > 0)
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
       .flatMap(({ name }) => {
         const document = brandDocs.find(item => String(item.name || "").trim().toLowerCase() === name.toLowerCase())
         if (document?.enabled === false || document?.active === false) return []
         const fallback = HOME_BRANDS.find(item => item.name.toLowerCase() === name.toLowerCase())
         return [{
-          name,
+          name: text(document?.name)?.trim() || fallback?.name || name,
           logo: imageUrl(document?.logo) || fallback?.logo,
           href: `/products?${new URLSearchParams({ brand: name, availability: "in" }).toString()}`,
         }]
       })
       .slice(0, HOME_BRANDS.length)
-  }, [brandDocs, taxonomy])
+  }, [brandDocs, stockedBrands])
 
   const shopBrands = useMemo<HomeBrand[]>(() => {
     return MOBILE_BRANDS.flatMap(name => {

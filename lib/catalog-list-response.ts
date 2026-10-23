@@ -31,6 +31,9 @@ export const homeBrandListResponseSchema = z.union([
   homeBrandListSchema,
   z.object({ brands: homeBrandListSchema }).transform(value => value.brands),
 ])
+export const homeInStockBrandListResponseSchema = z.object({
+  brands: z.array(z.object({ name: z.string(), count: z.number() })),
+}).transform(value => value.brands)
 export const homeBrandImageListResponseSchema = z.object({
   brands: z.array(z.object({
     name: z.string(),
