@@ -74,6 +74,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Catalogue",
     items: [
       { name: "Products", path: "/admin/products", icon: <ShoppingBag className="h-5 w-5" /> },
+      { name: "Stock Check", path: "/admin/stock-check", icon: <Boxes className="h-5 w-5" /> },
       { name: "Categories & Brands", path: "/admin/catalogue", icon: <FolderTree className="h-5 w-5" /> },
       { name: "Specifications", path: "/admin/product-specifications", icon: <FileSpreadsheet className="h-5 w-5" /> },
       { name: "Image Coverage", path: "/admin/image-coverage", icon: <ImageIcon className="h-5 w-5" /> },
@@ -128,7 +129,6 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Stores",
     items: [
       { name: "Store Locations", path: "/admin/store-locations", icon: <Store className="h-5 w-5" /> },
-      { name: "Stock Check", path: "/admin/stock-check", icon: <Boxes className="h-5 w-5" /> },
       { name: "Store QR Codes", path: "/admin/store-qr", icon: <QrCode className="h-5 w-5" /> },
       { name: "QR Analytics", path: "/admin/store-qr/analytics", icon: <QrCode className="h-5 w-5" /> },
       { name: "Blocked Pincodes", path: "/admin/blocked-pincodes", icon: <MapPin className="h-5 w-5" /> },

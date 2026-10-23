@@ -26,6 +26,7 @@ interface UploadResult {
   unknownItems: string[]
   unknownItemCount: number
   skippedRows: number
+  blankRows: number
 }
 
 interface ItemLookup {
@@ -53,6 +54,7 @@ export default function StockCheckPage() {
   const [itemCode, setItemCode] = useState("")
   const [lookup, setLookup] = useState<ItemLookup | null>(null)
   const [searching, setSearching] = useState(false)
+  const [sheetUrl, setSheetUrl] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function loadSummary() {
@@ -103,6 +105,41 @@ export default function StockCheckPage() {
     }
   }
 
+  // Rows without an item code or store code are skipped; the server then keeps only item codes that match a product.
+  const importRows = async (sheet: Record<string, unknown>[], toastId: string) => {
+    if (sheet.length === 0) { toast.error("No data found in the sheet", { id: toastId }); return }
+
+    const rows = []
+    let blankRows = 0
+    for (const [index, row] of sheet.entries()) {
+      const line = index + 2
+      const code = readCell(row, ITEM_COLUMNS)
+      const storeCode = readCell(row, STORE_COLUMNS)
+      const quantityText = readCell(row, QUANTITY_COLUMNS)
+      if (!code && !storeCode && !quantityText) continue
+      if (!code || !storeCode) { blankRows++; continue }
+      const quantity = Number(quantityText.replace(/,/g, "") || 0)
+      if (!Number.isInteger(quantity) || quantity < 0) { toast.error(`Row ${line}: quantity must be a whole number of 0 or more`, { id: toastId }); return }
+      rows.push({ itemCode: code, storeCode, quantity })
+    }
+    if (rows.length === 0) { toast.error("No row has both an item code and a store code", { id: toastId }); return }
+
+    const res = await apiFetch("/api/admin/store-stock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      toast.success(`Saved ${data.saved} rows for ${data.stores} store(s)`, { id: toastId })
+      setResult({ ...data, blankRows })
+      void loadSummary()
+    } else {
+      toast.error(data.message || data.error || "Upload failed", { id: toastId })
+      if (data.unknownStores || data.unknownItems) setResult({ saved: 0, stores: 0, zeroedItems: 0, productsUpdated: 0, ...data, blankRows })
+    }
+  }
+
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -111,41 +148,35 @@ export default function StockCheckPage() {
     const toastId = toast.loading("Processing file...")
     try {
       const workbook = XLSX.read(await file.arrayBuffer())
-      const sheet = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]])
-      if (sheet.length === 0) { toast.error("No data found in the file", { id: toastId }); return }
-
-      const rows = []
-      for (const [index, row] of sheet.entries()) {
-        const line = index + 2
-        const code = readCell(row, ITEM_COLUMNS)
-        const storeCode = readCell(row, STORE_COLUMNS)
-        const quantityText = readCell(row, QUANTITY_COLUMNS)
-        if (!code && !storeCode && !quantityText) continue
-        const quantity = Number(quantityText || 0)
-        if (!code || !storeCode) { toast.error(`Row ${line}: item code and store code are required`, { id: toastId }); return }
-        if (!Number.isInteger(quantity) || quantity < 0) { toast.error(`Row ${line}: quantity must be a whole number of 0 or more`, { id: toastId }); return }
-        rows.push({ itemCode: code, storeCode, quantity })
-      }
-
-      const res = await apiFetch("/api/admin/store-stock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success(`Saved ${data.saved} rows for ${data.stores} store(s)`, { id: toastId })
-        setResult(data)
-        void loadSummary()
-      } else {
-        toast.error(data.message || data.error || "Upload failed", { id: toastId })
-        if (data.unknownStores || data.unknownItems) setResult({ saved: 0, stores: 0, zeroedItems: 0, productsUpdated: 0, ...data })
-      }
+      await importRows(XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]]), toastId)
     } catch {
       toast.error("Failed to process Excel file", { id: toastId })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  const handleGoogleSheet = async (event: FormEvent) => {
+    event.preventDefault()
+    const sheetId = sheetUrl.trim()
+    if (!sheetId) return
+    setUploading(true)
+    setResult(null)
+    const toastId = toast.loading("Fetching Google Sheet...")
+    try {
+      const res = await apiFetch("/api/admin/store-stock/google-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheetId }),
+      })
+      const data = await res.json()
+      if (!data.success) { toast.error(data.message || data.error || "Failed to fetch Google Sheet", { id: toastId }); return }
+      await importRows(data.rows, toastId)
+    } catch {
+      toast.error("Failed to import Google Sheet", { id: toastId })
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -188,9 +219,21 @@ export default function StockCheckPage() {
             <Download className="h-4 w-4" />Export Store Stock
           </button>
         </div>
+        <form onSubmit={handleGoogleSheet} className="mt-4 flex flex-wrap gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <FileSpreadsheet className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} placeholder="Google Sheet URL or ID"
+              className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <button type="submit" disabled={uploading || !sheetUrl.trim()} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 font-medium text-white hover:bg-green-700 disabled:opacity-50">
+            <RefreshCw className={`h-4 w-4 ${uploading ? "animate-spin" : ""}`} />Import from Google Sheet
+          </button>
+        </form>
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
           <p className="mb-1 font-medium">Columns: Item Code, Quantity, Store Code</p>
           <p>Item Code is the product SKU / Item No. Store Code comes from Store Locations.</p>
+          <p>Only rows whose Item Code matches an existing product are imported; rows with no Item Code are skipped.</p>
+          <p>Google Sheets: share the sheet as &quot;Anyone with the link can view&quot;. The first tab is read.</p>
           <p className="mt-1 flex items-start gap-1 font-medium text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Each store in the sheet is replaced in full: that store&apos;s items not listed in the sheet are set to 0.
@@ -202,6 +245,7 @@ export default function StockCheckPage() {
             <p className="font-medium text-gray-900">
               {result.saved} rows saved for {result.stores} store(s) · {result.zeroedItems} item(s) set to 0 · {result.productsUpdated} product stock total(s) updated
             </p>
+            {result.blankRows > 0 && <p className="mt-1 text-amber-800">{result.blankRows} row(s) skipped because the item code or store code is empty.</p>}
             {result.skippedRows > 0 && <p className="mt-1 text-amber-800">{result.skippedRows} row(s) skipped because the store code or item code is unknown.</p>}
             {result.unknownStoreCount > 0 && <p className="mt-1 text-red-700">
               Unknown store codes ({result.unknownStoreCount}): {result.unknownStores.join(", ")}{result.unknownStoreCount > result.unknownStores.length ? "…" : ""}

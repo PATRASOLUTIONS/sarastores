@@ -20,6 +20,55 @@ export function googleSheetExportUrl(sheetId: string): string | null {
   return standardId && standardId !== "e" ? `https://docs.google.com/spreadsheets/d/${standardId}/export?format=csv` : null
 }
 
+function allowedDownloadUrl(url: URL): boolean {
+  return url.protocol === "https:" && !url.port && !url.username && !url.password &&
+    (url.hostname === "docs.google.com" || url.hostname === "drive.google.com" || url.hostname.endsWith(".googleusercontent.com"))
+}
+
+export async function fetchGoogleSheet(url: string): Promise<Response> {
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "manual" })
+    if (response.status < 300 || response.status >= 400) return response
+    const location = response.headers.get("location")
+    await response.body?.cancel()
+    if (!location) throw new Error("Google Sheet redirect has no destination")
+    const next = new URL(location, url)
+    if (!allowedDownloadUrl(next)) throw new Error("Google Sheet redirected outside the allowed download hosts")
+    url = next.toString()
+  }
+  throw new Error("Google Sheet exceeded the redirect limit")
+}
+
+export async function readBoundedSheet(response: Response): Promise<ArrayBuffer> {
+  if (Number(response.headers.get("content-length")) > MAX_PRICE_IMPORT_BYTES) {
+    await response.body?.cancel()
+    throw new Error("Google Sheet exceeds 10 MB")
+  }
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error("Google Sheet has no response body")
+  const chunks: Uint8Array[] = []
+  let length = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      length += value.byteLength
+      if (length > MAX_PRICE_IMPORT_BYTES) {
+        await reader.cancel()
+        throw new Error("Google Sheet exceeds 10 MB")
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const buffer = new ArrayBuffer(length)
+  const bytes = new Uint8Array(buffer)
+  let offset = 0
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+  return buffer
+}
+
 interface PriceProduct {
   _id?: ObjectId | string
   itemno?: string
