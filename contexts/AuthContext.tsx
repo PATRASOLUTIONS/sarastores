@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect, useRef } from "react"
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from "react"
 import { syncConsentWithAccount } from "@/lib/consent-client"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
@@ -44,7 +44,7 @@ export interface SignupDpdpFields {
   noticeVersion?: string
 }
 
-export type SignupResult = { ok: true } | { ok: false; message: string; code?: string }
+export type SignupResult = { ok: true; user: User } | { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> }
 
 interface AuthContextType {
   user: User | null
@@ -52,6 +52,7 @@ interface AuthContextType {
     login: (email: string, password: string, recaptchaToken?: string) => Promise<true | "rejected" | "unavailable">
     signup: (name: string, email: string, password: string, honeypot?: string, formTimestamp?: number, recaptchaToken?: string, confirmPassword?: string, acceptTerms?: boolean, dpdp?: SignupDpdpFields) => Promise<SignupResult>
   logout: () => void
+  registerBeforeLogout: (handler: () => Promise<void>) => () => void
   isAuthenticated: boolean
   isAdmin: boolean
   isVendor: boolean
@@ -78,6 +79,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginInProgress = useRef(false)
   const loginGraceUntil = useRef(0)
   const logoutRequest = useRef<AbortController | null>(null)
+  const beforeLogoutHandlers = useRef(new Set<() => Promise<void>>())
+  const logoutInProgress = useRef(false)
+  const registerBeforeLogout = useCallback((handler: () => Promise<void>) => {
+    beforeLogoutHandlers.current.add(handler)
+    return () => { beforeLogoutHandlers.current.delete(handler) }
+  }, [])
   const router = useRouter()
   const SESSION_TIMEOUT = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   const ACTIVITY_TIMEOUT = 12 * 60 * 60 * 1000 // 12 hours of inactivity
@@ -573,9 +580,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dpdp?: SignupDpdpFields
   ): Promise<SignupResult> => {
     setIsLoading(true)
+    loginInProgress.current = true
+    cancelPendingLogout()
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
@@ -584,6 +595,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email, 
           password,
           confirmPassword: confirmPassword ?? password,
+          startSession: true,
           acceptTerms: acceptTerms ?? true,
           // DPDP: per-purpose consent, kept distinct from acceptTerms.
           acceptPrivacyNotice: dpdp?.acceptPrivacyNotice ?? true,
@@ -604,19 +616,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ok: false,
           message: typeof data?.message === "string" && data.message ? data.message : "Signup failed. Please try again.",
           code: typeof data?.code === "string" ? data.code : undefined,
+          fieldErrors: data?.fieldErrors && typeof data.fieldErrors === "object" ? data.fieldErrors : undefined,
         }
       }
 
-      // DO NOT auto-login after signup
-      // Do not set user in state, do not store in localStorage
-      // User must manually login
-      toast.success(data.message || "Thanks. We have sent a link to confirm your email address.")
+      if (!data.user?.id) {
+        return { ok: false, message: "Your account was created, but automatic sign-in is unavailable. Please log in." }
+      }
+      loginGraceUntil.current = Date.now() + 20000
+      authEpoch.current++
+      // The registration page navigates after receiving the signed cookie.
+      // Hydrate the account on that destination to avoid racing its redirect.
+      toast.success("Account created. You're now signed in!")
 
-      return { ok: true }
+      return { ok: true, user: data.user as User }
     } catch (error) {
       console.error("Signup error:", error)
       return { ok: false, message: "Signup failed. Please try again." }
     } finally {
+      loginInProgress.current = false
       setIsLoading(false)
     }
   }
@@ -652,20 +670,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    if (logoutInProgress.current) return
+    logoutInProgress.current = true
+    try {
+      await Promise.all([...beforeLogoutHandlers.current].map(handler => handler()))
+    } catch (error) {
+      logoutInProgress.current = false
+      console.error("[Logout] Cart could not be saved", error)
+      toast.error("Your cart could not be saved. Please retry logout.")
+      return
+    }
     clearClientAuthState()
+    let logoutFailed = false
     const controller = new AbortController()
     cancelPendingLogout()
     logoutRequest.current = controller
 
     fetch("/api/auth/logout", { method: "POST", signal: controller.signal })
+      .then(response => {
+        if (!response.ok) throw new Error("Server logout failed")
+      })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return
+        logoutFailed = true
         console.error("Error during logout:", err)
       })
       .finally(() => {
+        logoutInProgress.current = false
         if (logoutRequest.current !== controller) return
-        toast.success("Logged out successfully")
+        if (logoutFailed) toast.error("Unable to complete logout. Please try again.")
+        else toast.success("Logged out successfully")
         router.push("/")
         window.location.href = "/"
       })
@@ -679,6 +714,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         signup,
         logout,
+        registerBeforeLogout,
         isAuthenticated: !!user,
         isAdmin: user?.role === "admin" || user?.role === "superadmin",
         isVendor: user?.role === "vendor" || user?.role === "admin" || user?.role === "superadmin",

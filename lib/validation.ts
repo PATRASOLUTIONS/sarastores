@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { checkoutCity } from './checkout-region';
 import { isDpdpComplaint } from './complaintTypes';
 import { indianStates } from './indiaData';
+import { accountEmailSchema, registrationEmailSchema, registrationNameSchema } from './registration-validation';
 
 // ============================================
 // Common Validators
@@ -438,16 +439,18 @@ export const LicenseKeyFilterSchema = z.object({
 // ============================================
 
 export const LoginSchema = z.object({
-  email: emailSchema,
+  email: accountEmailSchema,
   password: z.string(),
   rememberMe: z.boolean().optional(),
 });
 
 export const RegisterSchema = z.object({
-  email: z.string().trim().min(1, "Email is required").max(255),
+  email: registrationEmailSchema,
   password: z.string().min(1, "Password is required"),
   confirmPassword: z.string(),
-  name: nameSchema,
+  name: registrationNameSchema,
+  /** The web registration form requests an immediate cookie session. */
+  startSession: z.boolean().optional().default(false),
   // Not collected at signup; the checkout form captures it.
   phone: phoneSchema.optional(),
   acceptTerms: z.literal(true, {
@@ -474,7 +477,7 @@ export const RegisterSchema = z.object({
 });
 
 export const ForgotPasswordSchema = z.object({
-  email: emailSchema,
+  email: accountEmailSchema,
 });
 
 export const ResetPasswordSchema = z.object({
@@ -557,13 +560,26 @@ export const AddressSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+export const CheckoutFirstNameSchema = z.string().trim().min(1, 'First name is required')
+  .pipe(registrationNameSchema).pipe(z.string().max(50, 'First name must be 50 characters or fewer'));
+export const CheckoutLastNameSchema = z.string().trim().min(1, 'Last name is required')
+  .pipe(registrationNameSchema).pipe(z.string().max(50, 'Last name must be 50 characters or fewer'));
+export const CheckoutContactSchema = z.object({
+  firstName: CheckoutFirstNameSchema,
+  lastName: CheckoutLastNameSchema,
+  email: registrationEmailSchema,
+  phone: z.string().trim().min(1, 'Phone number is required').pipe(phoneSchema),
+});
+
 export const SavedDeliveryAddressSchema = AddressSchema.pick({
   type: true, firstName: true, lastName: true, phone: true, address: true,
   city: true, state: true, pincode: true, country: true,
 }).extend({
-  firstName: z.string().trim().min(1, 'First name is required').max(50),
-  lastName: z.string().trim().max(50).default(''),
+  firstName: CheckoutFirstNameSchema,
   address: z.string().trim().min(10, 'Address must be at least 10 characters').max(200),
+  // Existing saved addresses may omit a surname; checkout contact validation
+  // asks the shopper to supply it before using the address for a new order.
+  lastName: z.union([z.literal(''), CheckoutLastNameSchema]).default(''),
   phone: z.string().trim().pipe(phoneSchema),
   pincode: z.string().trim().pipe(pincodeSchema),
   city: z.string().trim().min(2, 'City is required').max(50).transform(value => checkoutCity(value) || value),
@@ -701,6 +717,26 @@ export const CreateOrderSchema = z.object({
   (data) => data.shippingAddressId || data.shippingAddress,
   { message: 'Shipping address is required', path: ['shippingAddress'] }
 );
+
+export const GuestCheckoutCustomerSchema = CheckoutContactSchema.extend({
+  address: z.string().trim().min(10, 'Enter your full address').max(200),
+  city: z.string().trim().min(1, 'City is required').max(100),
+  state: z.string().trim().min(1, 'State is required').max(100),
+  zipCode: z.string().trim().pipe(pincodeSchema),
+  country: z.string().trim().min(1, 'Country is required').max(100),
+});
+
+export const CheckoutCartSelectionSchema = z.object({
+  requestId: z.string().uuid(),
+  action: z.enum(['preserve', 'include', 'wishlist']),
+  items: z.array(z.object({
+    id: z.string().min(1), name: z.string(), price: z.number().finite().nonnegative(),
+    quantity: z.number().int().positive().safe(), image: z.string().default(''),
+    color: z.string().nullable().default(null), size: z.string().nullable().default(null),
+    type: z.enum(['hardware', 'software']).optional(),
+  }).passthrough()).min(1).max(20),
+  previousItems: z.array(z.object({ id: z.string().min(1), quantity: z.number().int().positive().safe() })).max(20),
+});
 
 export const EmployeeCreationResponseSchema = z.object({
   success: z.literal(true),

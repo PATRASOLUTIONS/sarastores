@@ -12,7 +12,9 @@ import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Shield, Check } from "lucide-react"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import { PRIVACY_NOTICE_VERSION } from "@/lib/dpdp-config"
-import DOMPurify from "isomorphic-dompurify"
+import { destinationAfterLogin, LAST_VISITED_PATH, safeReturnPath } from "@/lib/return-path"
+import { RegistrationIdentitySchema, registrationEmailSchema, registrationNameSchema,
+  REGISTRATION_NAME_MAX_LENGTH, REGISTRATION_EMAIL_MAX_LENGTH } from "@/lib/registration-validation"
 
 export default function RegisterPage() {
   return (
@@ -59,22 +61,16 @@ function RegisterForm() {
   // Arriving from a guest order confirmation, so the email is already known.
   useEffect(() => {
     const email = searchParams.get("email")
-    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setFormData((prev) => (prev.email ? prev : { ...prev, email }))
+    const parsed = registrationEmailSchema.safeParse(email)
+    if (parsed.success) {
+      setFormData((prev) => (prev.email ? prev : { ...prev, email: parsed.data }))
     }
   }, [searchParams])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target
     const checked = (e.target as HTMLInputElement).checked
-    const sanitizedValue = type === "checkbox"
-      ? checked
-      : name === "password" || name === "confirmPassword"
-        ? value
-        : DOMPurify.sanitize(value.trim(), {
-            ALLOWED_TAGS: [],
-            ALLOWED_ATTR: []
-          })
+    const nameValidation = name === "name" ? registrationNameSchema.safeParse(value) : null
 
     const isAgreementToggle = type === "checkbox" && name === "agreeToTerms"
     setFormData((prev) => ({
@@ -86,30 +82,43 @@ function RegisterForm() {
         marketingWhatsapp: checked,
         marketingSms: checked,
       } : {
-        [name]: type === "checkbox" ? checked : sanitizedValue,
+        [name]: type === "checkbox" ? checked : value,
       }),
     }))
 
     setErrors((prev) => {
       const newErrors = { ...prev }
       delete newErrors[name]
+      if (nameValidation && !nameValidation.success) {
+        newErrors.name = nameValidation.error.issues[0].message
+      }
       if (name === "email") delete newErrors.emailExists
       if (isAgreementToggle) delete newErrors.agreePrivacyNotice
       return newErrors
     })
   }
 
+  const validateIdentityField = (field: "name" | "email") => {
+    setFocusedField(null)
+    const schema = field === "name" ? registrationNameSchema : registrationEmailSchema
+    const result = schema.safeParse(formData[field])
+    if (result.success) setFormData(prev => ({ ...prev, [field]: result.data }))
+    setErrors(prev => {
+      const next = { ...prev }
+      if (result.success) delete next[field]
+      else next[field] = result.error.issues[0].message
+      return next
+    })
+  }
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
-
-    if (!formData.name.trim()) {
-      newErrors.name = "Name is required"
-    } else if (formData.name.trim().length < 2) {
-      newErrors.name = "Name must be at least 2 characters"
-    }
-
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required"
+    const identity = RegistrationIdentitySchema.safeParse(formData)
+    if (!identity.success) {
+      for (const issue of identity.error.issues) {
+        const field = String(issue.path[0])
+        if (!newErrors[field]) newErrors[field] = issue.message
+      }
     }
 
     if (!formData.password) {
@@ -127,13 +136,14 @@ function RegisterForm() {
     }
 
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return Object.keys(newErrors).length === 0 && identity.success ? identity.data : null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm()) return
+    const identity = validateForm()
+    if (!identity) return
     if (!lock.acquire()) return
 
     let recaptchaToken: string | null = null
@@ -156,8 +166,8 @@ function RegisterForm() {
 
     try {
       const result = await signup(
-        formData.name,
-        formData.email,
+        identity.name,
+        identity.email,
         formData.password,
         honeypot,
         formTimestamp,
@@ -173,9 +183,19 @@ function RegisterForm() {
         }
       )
       if (result.ok) {
-        router.push("/login")
+        let requested = safeReturnPath(searchParams.get("redirect"))
+        try {
+          requested ||= safeReturnPath(localStorage.getItem("redirectAfterLogin"))
+            || safeReturnPath(sessionStorage.getItem(LAST_VISITED_PATH))
+          localStorage.removeItem("redirectAfterLogin")
+        } catch {
+          // A direct registration still works without browser storage.
+        }
+        window.location.assign(destinationAfterLogin(result.user, requested))
       } else if (result.code === "EMAIL_EXISTS") {
         setErrors({ email: result.message, emailExists: "true" })
+      } else if (result.fieldErrors) {
+        setErrors({ ...result.fieldErrors, general: result.message })
       } else {
         setErrors({ general: result.message })
       }
@@ -291,10 +311,14 @@ function RegisterForm() {
                     name="name"
                     type="text"
                     autoComplete="name"
+                    required
+                    maxLength={REGISTRATION_NAME_MAX_LENGTH}
+                    aria-invalid={!!errors.name}
+                    aria-describedby={errors.name ? "name-error" : undefined}
                     value={formData.name}
                     onChange={handleChange}
                     onFocus={() => setFocusedField("name")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => validateIdentityField("name")}
                     className={`block h-11 w-full rounded-lg border pl-10 pr-3 text-[14px] outline-none transition-colors ${
                       errors.name
                         ? "border-red-400 bg-red-50/40"
@@ -303,7 +327,7 @@ function RegisterForm() {
                     placeholder="John Doe"
                   />
                 </div>
-                {errors.name && <p className="mt-1.5 text-[12px] text-red-600">{errors.name}</p>}
+                {errors.name && <p id="name-error" role="alert" className="mt-1.5 text-[12px] text-red-600">{errors.name}</p>}
               </div>
 
               <div>
@@ -319,10 +343,15 @@ function RegisterForm() {
                     name="email"
                     type="text"
                     autoComplete="email"
+                    inputMode="email"
+                    required
+                    maxLength={REGISTRATION_EMAIL_MAX_LENGTH}
+                    aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? "email-error" : undefined}
                     value={formData.email}
                     onChange={handleChange}
                     onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => validateIdentityField("email")}
                     className={`block h-11 w-full rounded-lg border pl-10 pr-3 text-[14px] outline-none transition-colors ${
                       errors.email
                         ? "border-red-400 bg-red-50/40"
@@ -332,7 +361,7 @@ function RegisterForm() {
                   />
                 </div>
                 {errors.email && (
-                  <p role="alert" className="mt-1.5 text-[12px] text-red-600">
+                  <p id="email-error" role="alert" className="mt-1.5 text-[12px] text-red-600">
                     {errors.email}
                     {errors.emailExists && (
                       <>
@@ -540,7 +569,7 @@ function RegisterForm() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || (recaptchaEnabled && !recaptchaReady)}
+                disabled={isSubmitting || !!errors.name || (recaptchaEnabled && !recaptchaReady)}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1560BD] text-[14px] font-bold text-white transition-colors hover:bg-[#0F2557] focus:outline-none focus:ring-2 focus:ring-[#1560BD]/40 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmitting ? (

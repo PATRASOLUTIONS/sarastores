@@ -160,10 +160,11 @@ test("the contact endpoint will not relay mail to a malformed recipient", async 
 
 test("signup rejects an address that already has an account with a 409", async () => {
   const mail = []
-  const existing = { _id: "u1", email: "taken@example.invalid" }
+  const existing = { _id: "u1", email: "taken@example.com" }
 
   const buildRoute = () => {
     const users = {
+      createIndex: async () => "email_case_insensitive_unique",
       findOne: async (query) => (query.email === existing.email ? existing : null),
       insertOne: async () => ({ insertedId: { toString: () => "new-user-id" } }),
     }
@@ -197,7 +198,7 @@ test("signup rejects an address that already has an account with a 409", async (
     }))
 
   const taken = await submit(buildRoute(), existing.email)
-  const fresh = await submit(buildRoute(), "brand-new@example.invalid")
+  const fresh = await submit(buildRoute(), "brand-new@example.com")
 
   assert.equal(taken.status, 409)
   const takenBody = await taken.json()

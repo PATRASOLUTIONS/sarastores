@@ -17,6 +17,7 @@ import { StorePaymentTransactionSchema } from "@/types/store-payment"
 import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { GuestCheckoutCustomerSchema, CheckoutContactSchema } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
 
@@ -365,7 +366,7 @@ export async function POST(request: NextRequest) {
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         name: z.string().optional(),
-        email: z.string().email('Invalid email'),
+        email: z.string(),
         phone: z.string().optional(),
         address: z.string().optional(),
         city: z.string().optional(),
@@ -405,6 +406,21 @@ export async function POST(request: NextRequest) {
     }
 
     const { items, customer, shippingAddress, paymentMethod, paymentDetails } = parsed.data
+    const nameParts = (customer.name || "").trim().split(/\s+/)
+    const contact = CheckoutContactSchema.safeParse({ ...customer,
+      firstName: customer.firstName || nameParts[0],
+      lastName: customer.lastName || nameParts.slice(1).join(" "),
+    })
+    if (!contact.success) return NextResponse.json({ error: contact.error.issues[0].message,
+      fieldErrors: contact.error.flatten().fieldErrors }, { status: 400 })
+    Object.assign(customer, contact.data, { name: `${contact.data.firstName} ${contact.data.lastName}` })
+    if (isGuest) {
+      const details = GuestCheckoutCustomerSchema.safeParse({ ...customer,
+        firstName: customer.firstName || customer.name,
+      })
+      if (!details.success) return NextResponse.json({ error: details.error.issues[0].message }, { status: 400 })
+      Object.assign(customer, details.data)
+    }
     const method = paymentMethod || "cash"
     if (["cash", "cod", "cash-on-delivery"].includes(method) && !cashOnDeliveryEnabled()) {
       return NextResponse.json({ error: "Cash on Delivery is currently unavailable. Please choose another payment method." }, { status: 403 })

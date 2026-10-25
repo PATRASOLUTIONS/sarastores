@@ -7,6 +7,7 @@ import { generateOrderId } from "@/lib/order-id"
 import { storePaymentEnabled } from "@/lib/payment-config"
 import { getStorePaymentWhatsAppSettings, loadPaymentStore, notifyStoreOfPaymentRequest, STORE_PAYMENT_REQUEST_TTL_MS } from "@/lib/store-payment"
 import { itemCodesFor, storesHoldingStock } from "@/lib/store-stock"
+import { GuestCheckoutCustomerSchema, CheckoutContactSchema } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
 
@@ -15,13 +16,16 @@ const headers = { "Cache-Control": "private, no-store" }
 const StorePaymentRequestSchema = CheckoutQuoteSchema.extend({
   storeId: z.string().min(1).max(100),
   customer: z.object({
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
     name: z.string().trim().min(1, "Enter your name").max(120),
-    email: z.string().trim().email("Enter a valid email").max(255),
+    email: z.string().trim().max(254),
     phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number so the store can call you"),
     address: z.string().trim().max(500).optional(),
     city: z.string().trim().max(100).optional(),
     state: z.string().trim().max(100).optional(),
     zipCode: z.string().trim().max(10).optional(),
+    country: z.string().trim().max(100).optional(),
   }),
 })
 
@@ -43,6 +47,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid request" }, { status: 400, headers })
     }
     const { items, couponCode, redeemPoints, fulfilment, storeId, customer } = parsed.data
+    const nameParts = customer.name.split(/\s+/)
+    const contact = CheckoutContactSchema.safeParse({ ...customer,
+      firstName: customer.firstName || nameParts[0],
+      lastName: customer.lastName || nameParts.slice(1).join(" "),
+    })
+    if (!contact.success) return NextResponse.json({ error: contact.error.issues[0].message,
+      fieldErrors: contact.error.flatten().fieldErrors }, { status: 400, headers })
+    Object.assign(customer, contact.data, { name: `${contact.data.firstName} ${contact.data.lastName}` })
+    const userId = (await getSession())?.user?.id ?? null
+    if (!userId) {
+      const guest = GuestCheckoutCustomerSchema.safeParse(customer)
+      if (!guest.success) return NextResponse.json({ error: guest.error.issues[0].message }, { status: 400, headers })
+      Object.assign(customer, guest.data)
+    }
     if (fulfilment?.method === "pickup" && fulfilment.storeId !== storeId) {
       return NextResponse.json({ error: "Pay at the store you are collecting from" }, { status: 400, headers })
     }
@@ -53,7 +71,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This store cannot take pay-at-store orders yet. Please choose another store." }, { status: 409, headers })
     }
 
-    const userId = (await getSession())?.user?.id ?? null
     const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints })
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400, headers })
     const hardware = quote.pricing.items.filter(item => item.type !== "software")

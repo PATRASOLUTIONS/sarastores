@@ -16,7 +16,6 @@ import {
   Tag,
 } from "lucide-react"
 import { useCart } from "@/hooks/useCart"
-import { useAuth } from "@/contexts/AuthContext"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { toast } from "react-hot-toast"
@@ -30,7 +29,6 @@ const formatINR = (n: number) =>
 
 export default function CartSidebar() {
   const { isOpen, closeCart, lastAddedId, setLastAddedId } = useCartUI()
-  const { user } = useAuth()
   const router = useRouter()
   const { cart, updateQuantity, removeFromCart, clearCart, isLoading } = useCart()
   const { data: settings, error: settingsError, isLoading: settingsLoading } = useSettingsData()
@@ -87,13 +85,6 @@ export default function CartSidebar() {
   }
 
   const handleProceedToBuy = () => {
-    if (!user) {
-      const currentPath =
-        typeof window !== "undefined" ? window.location.pathname + window.location.search : "/"
-      closeCart()
-      router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
-      return
-    }
     closeCart()
     router.push("/checkout")
   }

@@ -10,7 +10,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, Shield, ShoppingCart, Zap, Headphones, BadgeCheck } from "lucide-react"
-import { destinationAfterLogin, safeReturnPath } from "@/lib/return-path"
+import { destinationAfterLogin, LAST_VISITED_PATH, safeReturnPath } from "@/lib/return-path"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import DOMPurify from "isomorphic-dompurify"
 
@@ -37,6 +37,15 @@ export default function LoginPage() {
       localStorage.setItem("redirectAfterLogin", fromQuery)
       return
     }
+    try {
+      const previousPage = safeReturnPath(sessionStorage.getItem(LAST_VISITED_PATH))
+      if (previousPage) {
+        localStorage.setItem("redirectAfterLogin", previousPage)
+        return
+      }
+    } catch {
+      // Fall back to an explicit stored destination or the document referrer.
+    }
     if (localStorage.getItem("redirectAfterLogin")) return
     try {
       const referrer = new URL(document.referrer)
@@ -51,12 +60,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isAuthenticated || isSubmitting || !user) return
-    window.location.assign(destinationAfterLogin(user, redirectTo || localStorage.getItem("redirectAfterLogin")))
+    const destination = destinationAfterLogin(user, redirectTo || localStorage.getItem("redirectAfterLogin"))
+    localStorage.removeItem("redirectAfterLogin")
+    window.location.assign(destination)
   }, [isAuthenticated, isSubmitting, redirectTo, user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    const sanitizedValue = DOMPurify.sanitize(value.trim(), {
+    // Passwords must match the exact value accepted during registration.
+    const sanitizedValue = name === "password" ? value : DOMPurify.sanitize(value.trim(), {
       ALLOWED_TAGS: [],
       ALLOWED_ATTR: []
     })

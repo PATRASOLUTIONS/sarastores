@@ -101,14 +101,16 @@ export interface RequestOptions {
   body?: unknown
   /** Attach the bearer token. Off for public catalogue reads. */
   auth?: boolean
+  /** Logout must retire the existing token pair without minting replacements. */
+  skipTokenRefresh?: boolean
   timeoutMs?: number
   signal?: AbortSignal
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, auth = false, timeoutMs = DEFAULT_TIMEOUT_MS } = options
+  const { method = "GET", body, auth = false, skipTokenRefresh = false, timeoutMs = DEFAULT_TIMEOUT_MS } = options
 
-  if (auth) await ensureFreshToken()
+  if (auth && !skipTokenRefresh) await ensureFreshToken()
 
   const send = async (): Promise<Response> => {
     const controller = new AbortController()
@@ -133,7 +135,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   // A 401 on an authenticated call means the token died earlier than expected
   // (rotated secret, revoked session). One refresh, one retry, then give up.
-  if (res.status === 401 && auth) {
+  if (res.status === 401 && auth && !skipTokenRefresh) {
     const refreshed = await (refreshInFlight ?? (refreshInFlight = performRefresh().finally(() => {
       refreshInFlight = null
     })))

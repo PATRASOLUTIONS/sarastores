@@ -14,6 +14,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { analytics, toAnalyticsItem } from "@/lib/analytics"
 import { toast } from "react-hot-toast"
 import { cartLimitError } from "@/lib/cart-limits"
+import { CHECKOUT_CART_INTENT, CHECKOUT_CART_SELECTION_ID, mergeCheckoutCart } from "@/lib/checkout-cart"
+import { usePathname } from "next/navigation"
 
 export interface CartItem {
   color: string | null
@@ -72,6 +74,14 @@ type CartContextValue = {
   getOrder: (orderId: string) => Promise<Order | undefined>
   syncCartWithDatabase: () => Promise<void>
   loadCartFromDatabase: () => Promise<void>
+  checkoutCartPending: boolean
+  previousCart: CartItem[]
+  previousCartLoaded: boolean
+  checkoutCartError: string
+  resolvingCheckoutCart: boolean
+  prepareCheckoutSignIn: () => boolean
+  resolveCheckoutCart: (includePrevious: boolean) => Promise<boolean>
+  abandonCheckoutCart: () => Promise<boolean>
 }
 
 const CartContext = createContext<CartContextValue | null>(null)
@@ -123,13 +133,37 @@ export function CartProvider({ children }: { children: ReactNode }) {
 }
 
 export function CartProviderInner({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, registerBeforeLogout } = useAuth()
+  const pathname = usePathname()
   const userId = user?.id || "guest"
 
   const [cart, setCartState] = useState<CartItem[]>(EMPTY_CART)
   const cartRef = useRef(cart)
   cartRef.current = cart
   const [isLoading, setIsLoading] = useState(true)
+  const [checkoutCartPending, setCheckoutCartPending] = useState(false)
+  const checkoutCartPendingRef = useRef(false)
+  const [previousCart, setPreviousCart] = useState<CartItem[]>([])
+  const previousCartRef = useRef<CartItem[]>([])
+  const preservedCartRef = useRef<CartItem[]>([])
+  const checkoutStageSavedRef = useRef(false)
+  const [previousCartLoaded, setPreviousCartLoaded] = useState(false)
+  const [checkoutCartError, setCheckoutCartError] = useState("")
+  const [resolvingCheckoutCart, setResolvingCheckoutCart] = useState(false)
+  const resolvingCheckoutCartRef = useRef(false)
+  const activeUserIdRef = useRef(userId)
+  activeUserIdRef.current = userId
+  useEffect(() => {
+    checkoutStageSavedRef.current = false
+    preservedCartRef.current = []
+    if (userId !== "guest") return
+    checkoutCartPendingRef.current = false
+    setCheckoutCartPending(false)
+    previousCartRef.current = []
+    setPreviousCart([])
+    setPreviousCartLoaded(false)
+    setCheckoutCartError("")
+  }, [userId])
 
   // Track which userId we have already loaded for. Prevents the
   // `[userId, user]` effect-dep instability from re-fetching when the
@@ -169,7 +203,10 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   const persistLocal = useCallback(
     (next: CartItem[]) => {
       try {
-        localStorage.setItem(`cart_${userId}`, JSON.stringify(next))
+        const stored = checkoutCartPendingRef.current && checkoutStageSavedRef.current
+          ? mergeCheckoutCart(next, previousCartRef.current) : next
+        localStorage.setItem(`cart_${userId}`, JSON.stringify(stored))
+        if (checkoutCartPendingRef.current) sessionStorage.setItem(CHECKOUT_CART_INTENT, JSON.stringify(next))
         window.dispatchEvent(new Event("cart-updated"))
       } catch {
         // localStorage write failure — non-fatal
@@ -211,13 +248,31 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     // Capture userId at load time — avoids stale closures when `user`
     // reference changes due to focus/visibility syncs.
     const currentUserId = user.id
+    let checkoutItems: CartItem[] | null = null
+    try {
+      const stored = sessionStorage.getItem(CHECKOUT_CART_INTENT)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length && parsed.every(item => item &&
+          typeof item.id === "string" && typeof item.name === "string" &&
+          Number.isSafeInteger(item.quantity) && item.quantity > 0)) checkoutItems = parsed
+      }
+    } catch { /* A normal account-cart load still works without storage. */ }
+    if (checkoutItems) {
+      checkoutCartPendingRef.current = true
+      setCheckoutCartPending(true)
+      checkoutStageSavedRef.current = false
+      setPreviousCartLoaded(false)
+      setCheckoutCartError("")
+      safeSetCart(checkoutItems)
+    }
 
     // Anything the visitor added while logged out is folded into the account
     // cart on first authenticated load, then the guest copy is discarded.
     let guestItems: CartItem[] = []
     try {
       const guestSaved = localStorage.getItem("cart_guest")
-      if (guestSaved) {
+      if (guestSaved && !checkoutItems) {
         const parsed = JSON.parse(guestSaved)
         if (Array.isArray(parsed)) guestItems = await keepPublicCartItems(parsed)
       }
@@ -247,9 +302,20 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     const promise = (async () => {
       if (isMountedRef.current) setIsLoading(true)
       try {
-        const res = await fetch(`/api/cart?userId=${currentUserId}`, {
+        let requestBody: string | undefined
+        if (checkoutItems) {
+          const requestId = sessionStorage.getItem(CHECKOUT_CART_SELECTION_ID) || crypto.randomUUID()
+          sessionStorage.setItem(CHECKOUT_CART_SELECTION_ID, requestId)
+          requestBody = JSON.stringify({ requestId, action: "preserve", items: checkoutItems, previousItems: [] })
+        }
+        const res = await fetch(checkoutItems ? "/api/cart/checkout-selection" : "/api/cart", {
+          method: checkoutItems ? "POST" : "GET",
+          body: requestBody,
+          credentials: "same-origin",
+          keepalive: !!requestBody && new TextEncoder().encode(requestBody).byteLength < 60000,
           cache: "no-store",
           headers: {
+            ...(checkoutItems ? { "Content-Type": "application/json" } : {}),
             "Cache-Control": "no-cache, no-store, must-revalidate",
             Pragma: "no-cache",
             Expires: "0",
@@ -257,6 +323,10 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
         })
 
         if (res.status === 401) {
+          if (checkoutItems) {
+            setCheckoutCartError("Sign in again to load your saved cart.")
+            return
+          }
           // Session expired — fall back to localStorage, stay quiet.
           if (isMountedRef.current) {
             try {
@@ -277,11 +347,38 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
         }
 
         if (!res.ok) {
+          if (checkoutItems) setCheckoutCartError("Your saved cart could not be loaded. Please retry before paying.")
           // Non-401 error — keep whatever we already have.
           return
         }
 
         const data = await res.json().catch(() => null)
+
+        if (checkoutItems) {
+          if (!data?.success || !Array.isArray(data.items)) {
+            setCheckoutCartError("Your saved cart could not be loaded. Please retry before paying.")
+            return
+          }
+          if (!isMountedRef.current || activeUserIdRef.current !== currentUserId) return
+          preservedCartRef.current = data.items
+          checkoutStageSavedRef.current = true
+          const previous: CartItem[] = Array.isArray(data.previousItems) ? data.previousItems : []
+          previousCartRef.current = previous
+          setPreviousCart(previous)
+          setPreviousCartLoaded(true)
+          const current: CartItem[] = data.pending && Array.isArray(data.currentItems) ? data.currentItems : data.items
+          cartRef.current = current
+          if (!data.pending) {
+            checkoutCartPendingRef.current = false
+            setCheckoutCartPending(false)
+            sessionStorage.removeItem(CHECKOUT_CART_INTENT)
+            sessionStorage.removeItem(CHECKOUT_CART_SELECTION_ID)
+            localStorage.removeItem("cart_guest")
+          }
+          safeSetCart(current)
+          persistLocal(current)
+          return
+        }
 
         if (isMountedRef.current && data && Array.isArray(data.items) && data.items.length > 0) {
           // Server has authoritative data — adopt it, folding in any guest cart.
@@ -350,6 +447,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
           }
         }
       } catch {
+        if (checkoutItems) setCheckoutCartError("Your saved cart could not be loaded. Please retry before paying.")
         // Network error — keep existing state.
       } finally {
         if (isMountedRef.current) setIsLoading(false)
@@ -363,6 +461,104 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       loadPromiseRef.current = null
     }
   }, [persistLocal, safeSetCart, userId])
+
+  const prepareCheckoutSignIn = useCallback(() => {
+    try {
+      sessionStorage.setItem(CHECKOUT_CART_INTENT, JSON.stringify(cartRef.current))
+      sessionStorage.setItem(CHECKOUT_CART_SELECTION_ID, crypto.randomUUID())
+      localStorage.setItem("cart_guest", JSON.stringify(cartRef.current))
+      if (cartUpdateTimeoutRef.current) clearTimeout(cartUpdateTimeoutRef.current)
+      checkoutCartPendingRef.current = true
+      checkoutStageSavedRef.current = false
+      return true
+    } catch {
+      toast.error("Your cart could not be saved for sign-in. Please enable browser storage or continue as a guest.")
+      return false
+    }
+  }, [])
+
+  const resolveCheckoutCart = useCallback(async (includePrevious: boolean) => {
+    if (!user?.id || !previousCartLoaded || resolvingCheckoutCartRef.current) return false
+    const owner = user.id
+    const current = cartRef.current
+    const previous = previousCartRef.current
+    const next = includePrevious ? mergeCheckoutCart(current, previous) : current
+    const limitError = cartLimitError(next)
+    if (limitError) { toast.error(limitError); return false }
+    resolvingCheckoutCartRef.current = true
+    setResolvingCheckoutCart(true)
+    setCheckoutCartError("")
+    try {
+      const requestId = sessionStorage.getItem(CHECKOUT_CART_SELECTION_ID) || crypto.randomUUID()
+      sessionStorage.setItem(CHECKOUT_CART_SELECTION_ID, requestId)
+      const response = await fetch("/api/cart/checkout-selection", {
+        method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, action: includePrevious ? "include" : "wishlist", items: current,
+          previousItems: previous.map(item => ({ id: item.id || (item as CartItem & { productId?: string }).productId, quantity: item.quantity })) }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.success) throw new Error(data?.error || "Your cart choice could not be saved. Please retry.")
+      if (activeUserIdRef.current !== owner) return false
+      checkoutCartPendingRef.current = false
+      try { sessionStorage.removeItem(CHECKOUT_CART_INTENT); sessionStorage.removeItem(CHECKOUT_CART_SELECTION_ID); localStorage.removeItem("cart_guest") } catch { /* Keep the acknowledged cart in memory. */ }
+      const savedItems: CartItem[] = Array.isArray(data.items) ? data.items : next
+      preservedCartRef.current = savedItems
+      cartRef.current = savedItems
+      safeSetCart(savedItems)
+      persistLocal(savedItems)
+      previousCartRef.current = []
+      setPreviousCart([])
+      setCheckoutCartPending(false)
+      window.dispatchEvent(new Event("wishlist-updated"))
+      toast.success(data.action === "include" ? "Your saved items are included in this checkout." : "Your saved items were moved to your wishlist.")
+      return true
+    } catch (error) {
+      setCheckoutCartError(error instanceof Error ? error.message : "Your cart choice could not be saved.")
+      return false
+    } finally {
+      resolvingCheckoutCartRef.current = false
+      setResolvingCheckoutCart(false)
+    }
+  }, [user?.id, previousCartLoaded, persistLocal, safeSetCart])
+
+  const abandonCheckoutCart = useCallback(async () => {
+    if (loadPromiseRef.current) await loadPromiseRef.current
+    if (resolvingCheckoutCartRef.current) {
+      setCheckoutCartError("Please wait for your cart choice to finish saving.")
+      return false
+    }
+    if (!checkoutCartPendingRef.current) return true
+    if (!checkoutStageSavedRef.current) {
+      setCheckoutCartError("Both carts could not be saved yet. Retry before leaving or signing out.")
+      return false
+    }
+    checkoutCartPendingRef.current = false
+    const combined = preservedCartRef.current
+    cartRef.current = combined
+    safeSetCart(combined)
+    try {
+      sessionStorage.removeItem(CHECKOUT_CART_INTENT)
+      sessionStorage.removeItem(CHECKOUT_CART_SELECTION_ID)
+      localStorage.removeItem("cart_guest")
+    } catch { /* The combined cart is already stored on the account. */ }
+    persistLocal(combined)
+    previousCartRef.current = []
+    setPreviousCart([])
+    setCheckoutCartPending(false)
+    return true
+  }, [persistLocal, safeSetCart])
+
+  useEffect(() => {
+    // Sign-in/register are part of the checkout handoff. On any other page,
+    // adopt the already preserved combined cart, even if navigation happened
+    // while the initial preservation request was still loading.
+    if (userId !== "guest" && pathname !== "/checkout" && pathname !== "/login" && pathname !== "/register"
+      && checkoutCartPending && checkoutCartPendingRef.current) {
+      void abandonCheckoutCart().then(saved => {
+        if (!saved) toast.error("Your items are kept locally; reopen checkout to retry saving your cart.")
+      })
+    }
+  }, [pathname, userId, checkoutCartPending, previousCartLoaded, abandonCheckoutCart])
 
   // ----- mount-time load (once per userId) ---------------------------------
 
@@ -380,6 +576,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     // can churn (focus/visibility sync, profile refresh), but the userId
     // only changes on actual login/logout.
     if (loadedForUserIdRef.current === userId) {
+      if (checkoutCartPendingRef.current) return
       // On remount of the *same* user, just re-hydrate from localStorage
       // for instant paint and don't hit the network.
       try {
@@ -498,7 +695,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       setCartState(updatedCart)
       persistLocal(updatedCart)
 
-      if (user?.id && user.id !== "guest") {
+      if (user?.id && user.id !== "guest" && !checkoutCartPendingRef.current) {
         try {
           await fetch("/api/cart", {
             method: "POST",
@@ -561,23 +758,33 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     })
   }, [persistLocal])
 
-  const syncCartWithDatabase = useCallback(async () => {
-    if (!user || user.id === "guest") return
-    let snapshot: CartItem[] = []
-    setCartState((prev) => {
-      snapshot = prev
-      return prev
-    })
+  const syncCartWithDatabase = useCallback(async (requireSave = false) => {
+    if (!user || user.id === "guest" || checkoutCartPendingRef.current) return
+    const snapshot = cartRef.current
     try {
-      await fetch("/api/cart", {
+      const response = await fetch("/api/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, items: snapshot }),
       })
-    } catch {
+      if (!response.ok) throw new Error("Your cart could not be saved")
+    } catch (error) {
+      if (requireSave) throw error
       // network error — localStorage is primary
     }
   }, [user])
+
+  useEffect(() => registerBeforeLogout(async () => {
+    if (cartUpdateTimeoutRef.current) clearTimeout(cartUpdateTimeoutRef.current)
+    const hadPendingChoice = checkoutCartPendingRef.current
+    if (!await abandonCheckoutCart()) throw new Error("Checkout cart preservation is incomplete")
+    // A pending choice already saved the entire combined selection. Keep it
+    // even if the combined cart exceeds limits for a single purchase.
+    const selection = (items: CartItem[]) => JSON.stringify(items.map(item => [item.id, item.quantity]))
+    const alreadySaved = checkoutStageSavedRef.current
+      && selection(cartRef.current) === selection(preservedCartRef.current)
+    if (!hadPendingChoice && !alreadySaved) await syncCartWithDatabase(true)
+  }), [registerBeforeLogout, abandonCheckoutCart, syncCartWithDatabase])
 
   // ----- cart -> server debounced sync -------------------------------------
 
@@ -605,6 +812,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      if (checkoutCartPendingRef.current) return
       if (e.key === `cart_${userId}`) {
         try {
           const latest = localStorage.getItem(`cart_${userId}`)
@@ -617,6 +825,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       }
     }
     const onCartUpdated = () => {
+      if (checkoutCartPendingRef.current) return
       try {
         const latest = localStorage.getItem(`cart_${userId}`)
         if (!latest) return
@@ -731,6 +940,8 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       getOrder,
       syncCartWithDatabase,
       loadCartFromDatabase,
+      checkoutCartPending, previousCart, previousCartLoaded, checkoutCartError, resolvingCheckoutCart,
+      prepareCheckoutSignIn, resolveCheckoutCart, abandonCheckoutCart,
     }),
     [
       cart,
@@ -745,6 +956,8 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       getOrder,
       syncCartWithDatabase,
       loadCartFromDatabase,
+      checkoutCartPending, previousCart, previousCartLoaded, checkoutCartError, resolvingCheckoutCart,
+      prepareCheckoutSignIn, resolveCheckoutCart, abandonCheckoutCart,
     ],
   )
 

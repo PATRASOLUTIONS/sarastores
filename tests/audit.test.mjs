@@ -71,6 +71,7 @@ for (const [label, current, version, expected] of [
       "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
       "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => ({ ...user, sessionVersion: version }) },
       "@/lib/auth-credentials": { getAuthenticatedUserById: async () => current },
+      "@/lib/session-revocation": { isSessionRevoked: async () => false },
     })
     assert.equal(!!(await loader.load("lib/auth.ts").getSession()), expected)
   })
@@ -81,6 +82,7 @@ test("a database outage during session lookup is not reported as logged out", as
     "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
     "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => user },
     "@/lib/auth-credentials": { getAuthenticatedUserById: async () => { throw new Error("Fixture database outage") } },
+    "@/lib/session-revocation": { isSessionRevoked: async () => false },
   })
   await assert.rejects(() => loader.load("lib/auth.ts").getSession(), /Fixture database outage/)
 })
@@ -90,6 +92,7 @@ test("server authorization uses live roles instead of stale signed privileges", 
     "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
     "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => ({ ...user, role: "superadmin" }) },
     "@/lib/auth-credentials": { getAuthenticatedUserById: async () => user },
+    "@/lib/session-revocation": { isSessionRevoked: async () => false },
   })
   assert.equal((await loader.load("lib/auth.ts").getSession()).user.role, "user")
   assert.equal((await loader.load("lib/auth.ts").requireFullAdmin()).ok, false)

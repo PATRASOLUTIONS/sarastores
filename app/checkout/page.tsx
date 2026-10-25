@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
 import { analytics, toAnalyticsItem } from "@/lib/analytics"
@@ -23,6 +24,8 @@ import FulfilmentSelector, {
 import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { cartLimitError } from "@/lib/cart-limits"
+import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
+import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
 import { apiFetch, apiFetchJson } from "@/lib/api-client"
 import { CouponQuoteSchema } from "@/lib/coupon-validation"
 import { z } from "zod"
@@ -31,7 +34,7 @@ import CartProductImage from "@/components/CartProductImage"
 import { CHECKOUT_CITIES, checkoutCity } from "@/lib/checkout-region"
 import { indianStates } from "@/lib/indiaData"
 import { isDeliveryRegionAllowed, isPincodeAllowed, type PincodeRestrictions } from "@/lib/pincode-policy"
-import { SavedDeliveryAddressSchema, PincodeRestrictionsResponseSchema, type SavedDeliveryAddress } from "@/lib/validation"
+import { SavedDeliveryAddressSchema, PincodeRestrictionsResponseSchema, GuestCheckoutCustomerSchema, CheckoutContactSchema, type SavedDeliveryAddress } from "@/lib/validation"
 import OrderSuccess from "@/components/OrderSuccess"
 import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-confirmation"
 import { PaymentConfigurationSchema, HostedPaymentStatusSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
@@ -47,15 +50,12 @@ import {
   Phone,
   Mail,
   Trash2,
+  Heart,
   Store, Home, Pencil, Headphones, Tag,
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 const CHECKOUT_TRACKER = ["Address", "Delivery", "Payment", "Review & Place Order"]
-const EMPTY_CUSTOMER = {
-  firstName: "", lastName: "", email: "", phone: "", address: "",
-  city: "", state: "Karnataka", pincode: "", country: "India", employeeId: "",
-}
 const accountProfileSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -77,13 +77,22 @@ const money = (value: number) =>
     : value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function CheckoutPage() {
-  const { cart, clearCart, removeFromCart, refreshItemPrices, isLoading: cartLoading } = useCart()
+  const { cart, clearCart, removeFromCart, refreshItemPrices, isLoading: cartLoading,
+    checkoutCartPending, previousCart, previousCartLoaded, checkoutCartError, resolvingCheckoutCart,
+    prepareCheckoutSignIn, resolveCheckoutCart, abandonCheckoutCart, loadCartFromDatabase } = useCart()
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
+
+  const leaveCheckoutWithCart = async () => {
+    if (resolvingCheckoutCart) return
+    if (await abandonCheckoutCart()) router.push("/cart")
+  }
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentPending, setPaymentPending] = useState(false)
   const [itemToRemove, setItemToRemove] = useState<{ id: string; name: string } | null>(null)
+  const [movingWishlistId, setMovingWishlistId] = useState<string | null>(null)
+  const wishlistMoveInProgress = useRef(false)
   const orderLock = useSubmitLock()
   const couponLock = useSubmitLock()
   const [orderPlaced, setOrderPlaced] = useState(false)
@@ -93,9 +102,13 @@ export default function CheckoutPage() {
 
   // Form data
   const [customerData, setCustomerData] = useState(EMPTY_CUSTOMER)
+  const [customerErrors, setCustomerErrors] = useState<Record<string, string>>({})
   const editedCustomerFields = useRef(new Set<string>())
   const accountId = user?.id
-  const previousAccountId = useRef(accountId)
+  const checkoutOwner = accountId || "guest"
+  const restoredDraftOwner = useRef<string | null>(null)
+  const [draftOwner, setDraftOwner] = useState<string | null>(null)
+  const draftReady = !authLoading && draftOwner === checkoutOwner
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState("")
   const [profileAttempt, setProfileAttempt] = useState(0)
@@ -264,6 +277,7 @@ export default function CheckoutPage() {
         const data = HostedPaymentStatusSchema.parse(json)
         if (data.status === "completed") {
           sessionStorage.removeItem("sara_hosted_checkout")
+          clearCheckoutDraft(checkoutOwner)
           setOrderId(data.orderId)
           setOrderPlaced(true)
           setHostedReturn(null)
@@ -303,7 +317,7 @@ export default function CheckoutPage() {
     }
     void check()
     return () => { controller.abort(); if (timer) clearTimeout(timer) }
-  }, [hostedReturn, authLoading, hostedStatusAttempt, clearCart, router, cart])
+  }, [hostedReturn, authLoading, hostedStatusAttempt, clearCart, router, cart, checkoutOwner])
 
   // Click & Pick: home delivery or collection from a SARA store.
   const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
@@ -341,6 +355,45 @@ export default function CheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string } | null>(null)
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
+  useEffect(() => {
+    if (authLoading || restoredDraftOwner.current === checkoutOwner) return
+    let draft = readCheckoutDraft(checkoutOwner)
+    // Carry the guest form through checkout's explicit sign-in handoff.
+    if (!draft && accountId) {
+      try {
+        if (sessionStorage.getItem(CHECKOUT_CART_INTENT)) draft = readCheckoutDraft("guest")
+      } catch { /* Account autofill still works without browser storage. */ }
+    }
+    editedCustomerFields.current.clear()
+    if (draft) {
+      for (const field of Object.keys(EMPTY_CUSTOMER) as Array<keyof typeof EMPTY_CUSTOMER>) {
+        if (draft.editedFields.includes(field) || draft.customer[field] !== EMPTY_CUSTOMER[field]) {
+          editedCustomerFields.current.add(field)
+        }
+      }
+    }
+    setCustomerData(draft?.customer || EMPTY_CUSTOMER)
+    setCustomerErrors({})
+    setContinueAsGuest(draft?.continueAsGuest || false)
+    setEditingAddress(draft?.editingAddress ?? true)
+    setAddressType(draft?.addressType || "home")
+    setSelectedAddressId(draft?.selectedAddressId || null)
+    setCouponCode(draft?.couponCode || "")
+    restoredDraftOwner.current = checkoutOwner
+    setDraftOwner(checkoutOwner)
+  }, [authLoading, accountId, checkoutOwner])
+
+  useEffect(() => {
+    // Never replace a saved draft with the initial empty render, or copy an
+    // old account's form into a new account during authentication hydration.
+    if (!draftReady || restoredDraftOwner.current !== checkoutOwner) return
+    if (orderPlaced) { clearCheckoutDraft(checkoutOwner); return }
+    saveCheckoutDraft(checkoutOwner, {
+      version: 1, customer: customerData, continueAsGuest, editingAddress,
+      addressType, selectedAddressId, couponCode, editedFields: [...editedCustomerFields.current],
+    })
+  }, [draftReady, checkoutOwner, customerData, continueAsGuest, editingAddress,
+    addressType, selectedAddressId, couponCode, orderPlaced])
   const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [item.id, item.quantity, item.price])])
   const couponContextRef = useRef(couponContext)
   useEffect(() => {
@@ -408,12 +461,7 @@ export default function CheckoutPage() {
 
 
   useEffect(() => {
-    if (previousAccountId.current && previousAccountId.current !== accountId) {
-      editedCustomerFields.current.clear()
-      setCustomerData(EMPTY_CUSTOMER)
-      setEditingAddress(true)
-    }
-    previousAccountId.current = accountId
+    if (!draftReady) return
     setProfileError("")
     setAddressNotice("")
     if (!accountId) {
@@ -461,11 +509,11 @@ export default function CheckoutPage() {
     }
     void loadProfile()
     return () => controller.abort()
-  }, [accountId, profileAttempt, pincodeRulesLoading, nationwideDelivery])
+  }, [draftReady, accountId, profileAttempt, pincodeRulesLoading, nationwideDelivery])
 
   useEffect(() => {
+    if (!draftReady) return
     setSavedAddresses([])
-    setSelectedAddressId(null)
     setAddressesError("")
     setAddressSaving(false)
     addressMutation.current = false
@@ -481,6 +529,8 @@ export default function CheckoutPage() {
         if (!result.success) throw new Error("Invalid saved addresses received.")
         if (controller.signal.aborted) return
         setSavedAddresses(result.data.addresses)
+        setSelectedAddressId(selected => selected && result.data.addresses.some(address => address.id === selected)
+          ? selected : null)
         if (result.data.addresses[0] && editedCustomerFields.current.size === 0) {
           selectAddress(result.data.addresses[0])
         }
@@ -494,7 +544,7 @@ export default function CheckoutPage() {
     }
     void loadAddresses()
     return () => controller.abort()
-  }, [accountId, addressesAttempt])
+  }, [draftReady, accountId, addressesAttempt])
 
   // Close the remove-item dialog on Escape.
   useEffect(() => {
@@ -529,6 +579,43 @@ export default function CheckoutPage() {
       ...prev,
       [name]: value,
     }))
+    if (name === "firstName" || name === "lastName" || name === "email" || name === "phone") {
+      const parsed = CheckoutContactSchema.shape[name].safeParse(value)
+      setCustomerErrors(previous => {
+        const next = { ...previous }
+        if (parsed.success) delete next[name]
+        else next[name] = parsed.error.issues[0].message
+        return next
+      })
+    }
+  }
+  const validateContactField = (field: "firstName" | "lastName" | "email" | "phone") => {
+    const parsed = CheckoutContactSchema.shape[field].safeParse(customerData[field])
+    if (parsed.success) setCustomerData(previous => ({ ...previous, [field]: parsed.data }))
+    setCustomerErrors(previous => {
+      const next = { ...previous }
+      if (parsed.success) delete next[field]
+      else next[field] = parsed.error.issues[0].message
+      return next
+    })
+  }
+  const validateContactDetails = () => {
+    const parsed = CheckoutContactSchema.safeParse(customerData)
+    if (parsed.success) {
+      setCustomerErrors({})
+      setCustomerData(previous => ({ ...previous, ...parsed.data }))
+      return true
+    }
+    const errors: Record<string, string> = {}
+    for (const issue of parsed.error.issues) {
+      const field = String(issue.path[0])
+      if (!errors[field]) errors[field] = issue.message
+    }
+    setCustomerErrors(errors)
+    setEditingAddress(true)
+    requestAnimationFrame(() => document.getElementById(String(parsed.error.issues[0].path[0]))?.focus())
+    toast.error(parsed.error.issues[0].message)
+    return false
   }
   const startNewAddress = () => {
     for (const field of ["address", "city", "pincode"]) editedCustomerFields.current.add(field)
@@ -540,6 +627,7 @@ export default function CheckoutPage() {
   }
 
   const selectAddress = (address: SavedDeliveryAddress) => {
+    setCustomerErrors({})
     const { id, type, ...details } = address
     for (const field of Object.keys(details)) editedCustomerFields.current.add(field)
     setCustomerData(previous => ({ ...previous, ...details }))
@@ -550,6 +638,7 @@ export default function CheckoutPage() {
   }
 
   const useEnteredAddress = () => {
+    if (!validateContactDetails()) return
     const result = SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType })
     if (!result.success) { toast.error(result.error.issues[0].message); return }
     setCustomerData(previous => ({ ...previous, ...result.data }))
@@ -559,6 +648,7 @@ export default function CheckoutPage() {
 
   const saveAddress = async () => {
     if (!accountId || addressMutation.current) return
+    if (!validateContactDetails()) return
     const result = SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType })
     if (!result.success) { toast.error(result.error.issues[0].message); return }
     const owner = accountId
@@ -618,15 +708,62 @@ export default function CheckoutPage() {
     }
   }
 
+  const moveItemToWishlist = async (productId: string) => {
+    if (wishlistMoveInProgress.current || checkoutCartPending || paymentPending || hostedReturn
+      || hostedRecoveryBlocked || isProcessing || storeRequestLoading) return
+    if (!user) {
+      toast.error("Sign in to move items to your wishlist. Your item is still in the cart.")
+      return
+    }
+    const owner = user.id
+    wishlistMoveInProgress.current = true
+    setMovingWishlistId(productId)
+    try {
+      const response = await apiFetch("/api/wishlist", {
+        method: "POST", json: { productId },
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.message || "Could not save this item to your wishlist.")
+      if (currentAccountId.current !== owner) return
+      // An already-wishlisted item is also safely saved for later.
+      removeFromCart(productId)
+      window.dispatchEvent(new Event("wishlist-updated"))
+      toast.success("Item moved to wishlist")
+    } catch (error) {
+      if (currentAccountId.current !== owner) return
+      toast.error(error instanceof Error ? error.message : "Could not move this item to your wishlist.")
+    } finally {
+      wishlistMoveInProgress.current = false
+      setMovingWishlistId(null)
+    }
+  }
+
   const validateStep1 = async () => {
+    if (wishlistMoveInProgress.current) {
+      toast.error("Please wait for your item to move to the wishlist.")
+      return false
+    }
+    if (checkoutCartPending) {
+      toast.error("Choose whether to include your saved cart items or move them to your wishlist first.")
+      return false
+    }
     // Guests may complete checkout; identity for a guest order comes from the
     // validated email and phone below, never from the client.
     if (!user && !continueAsGuest) {
       toast.error("Choose to sign in or continue as a guest")
       return false
     }
+    if (!validateContactDetails()) return false
 
-    const required = isPickup
+    if (!user) {
+      const guestDetails = GuestCheckoutCustomerSchema.safeParse({ ...customerData, zipCode: customerData.pincode })
+      if (!guestDetails.success) {
+        setEditingAddress(true)
+        toast.error(guestDetails.error.issues[0].message)
+        return false
+      }
+    }
+    const required = isPickup && user
       ? ["firstName", "email", "phone"]
       : ["firstName", "email", "phone", "address", "city", "state", "pincode"]
     for (const field of required) {
@@ -862,6 +999,7 @@ export default function CheckoutPage() {
         if (confirmation.success) setPlacedOrder(confirmation.data)
         else console.error("[Checkout] Created order returned incomplete confirmation details:", confirmation.error)
         setOrderId(newOrderId)
+        clearCheckoutDraft(checkoutOwner)
         setOrderPlaced(true)
 
         // Returned only once, so persist it before anything else can fail.
@@ -934,6 +1072,8 @@ export default function CheckoutPage() {
           fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id },
           storeId: payStore.id,
           customer: {
+            firstName: customerData.firstName,
+            lastName: customerData.lastName,
             name: `${customerData.firstName} ${customerData.lastName}`.trim(),
             email: customerData.email,
             phone: customerData.phone.trim(),
@@ -941,6 +1081,7 @@ export default function CheckoutPage() {
             city: customerData.city,
             state: customerData.state,
             zipCode: customerData.pincode,
+            country: customerData.country,
           },
         }),
       })
@@ -971,7 +1112,7 @@ export default function CheckoutPage() {
     })
   }
 
-  if (cartLoading) {
+  if (cartLoading || !draftReady) {
     // Full page loader
     return (
       <div className="flex flex-col min-h-screen">
@@ -1064,8 +1205,42 @@ export default function CheckoutPage() {
             <Link href="/contact" className="ml-3 underline">Contact support</Link>
           </div>}
 
+          <Dialog open={!!user && checkoutCartPending} onOpenChange={open => {
+            if (!open) void leaveCheckoutWithCart()
+          }}>
+            <DialogContent className="max-h-[85vh] w-[92vw] max-w-xl overflow-y-auto rounded-xl"
+              onEscapeKeyDown={event => { if (resolvingCheckoutCart) event.preventDefault() }}
+              onPointerDownOutside={event => { if (resolvingCheckoutCart) event.preventDefault() }}>
+            <DialogHeader className="pr-6">
+              <DialogTitle className="text-lg font-semibold text-[#0F2557]">You previously added these items</DialogTitle>
+              <DialogDescription>Include your saved items in this purchase, or move them to your wishlist and buy your current products. Closing this popup keeps both sets of items in your cart.</DialogDescription>
+            </DialogHeader>
+            {!previousCartLoaded && !checkoutCartError && <p role="status" className="mt-3 text-sm">Loading your saved cart...</p>}
+            {previousCartLoaded && previousCart.length === 0 && <p className="mt-3 text-sm">Your saved cart is empty. Continue with your current products.</p>}
+            {previousCartLoaded && <ul className="mt-4 space-y-3">
+              {previousCart.map(item => <li key={item.id} className="flex items-center gap-3 rounded-lg bg-white p-3">
+                <CartProductImage src={item.image} name={item.name} className="h-14 w-14 rounded object-contain" />
+                <div className="min-w-0 flex-1"><p className="font-medium text-slate-900">{shortProductTitle(item.name)}</p>
+                  <p className="text-sm text-slate-600">Quantity: {item.quantity} · ₹{money(Number(item.price) * item.quantity)}</p></div>
+              </li>)}
+            </ul>}
+            {checkoutCartError && <p role="alert" className="mt-3 text-sm text-red-700">{checkoutCartError}</p>}
+            <div className="mt-4 flex flex-wrap gap-3">
+              {previousCartLoaded && <button type="button" disabled={resolvingCheckoutCart} onClick={() => void resolveCheckoutCart(true)}
+                className="rounded-lg bg-[#1560BD] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {resolvingCheckoutCart ? "Saving your choice..." : previousCart.length ? "Include saved items" : "Continue with current products"}</button>}
+              {previousCartLoaded && previousCart.length > 0 && <button type="button" disabled={resolvingCheckoutCart} onClick={() => void resolveCheckoutCart(false)}
+                className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-[#0F2557] disabled:opacity-50">Move saved items to wishlist</button>}
+              {previousCartLoaded && <button type="button" disabled={resolvingCheckoutCart} onClick={() => void leaveCheckoutWithCart()}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 underline disabled:opacity-50">Keep both in cart</button>}
+              {checkoutCartError && <button type="button" disabled={resolvingCheckoutCart || cartLoading} onClick={() => void loadCartFromDatabase()}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-[#1560BD] underline">Reload saved items</button>}
+            </div>
+            </DialogContent>
+          </Dialog>
+
           {/* Main Content Grid */}
-          <fieldset disabled={paymentPending || !!hostedReturn || hostedRecoveryBlocked || isProcessing || addressSaving} className={styles.layout}>
+          <fieldset disabled={checkoutCartPending || paymentPending || !!hostedReturn || hostedRecoveryBlocked || isProcessing || addressSaving || !!movingWishlistId} className={styles.layout}>
             <legend className="sr-only">Checkout details and payment</legend>
             {/* Customer Details - Left side */}
             <div className={styles.detailsColumn}>
@@ -1126,7 +1301,7 @@ export default function CheckoutPage() {
                       <div className="mt-3 flex flex-wrap gap-3">
                         <button
                           type="button"
-                          onClick={() => router.push("/login?redirect=/checkout")}
+                          onClick={() => { if (prepareCheckoutSignIn()) router.push("/login?redirect=/checkout") }}
                           className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
                         >
                           Sign in
@@ -1147,6 +1322,7 @@ export default function CheckoutPage() {
                         <p className="mt-3 text-xs text-gray-600">
                           We&apos;ll email your order details and a private tracking link. You can
                           create an account afterwards to keep your order history.
+                          {" "}Your name, email, phone number and full address are required.
                         </p>
                       )}
                     </div>
@@ -1171,13 +1347,19 @@ export default function CheckoutPage() {
                         name="firstName"
                         value={customerData.firstName}
                         onChange={handleInputChange}
+                        onBlur={() => validateContactField("firstName")}
+                        autoComplete="given-name"
+                        maxLength={50}
+                        aria-invalid={!!customerErrors.firstName}
+                        aria-describedby={customerErrors.firstName ? "checkout-firstName-error" : undefined}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
                         required
                       />
+                      {customerErrors.firstName && <p id="checkout-firstName-error" role="alert" className="mt-1 text-xs text-red-600">{customerErrors.firstName}</p>}
                     </div>
                     <div>
                       <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-                        Last Name
+                        Last Name *
                       </label>
                       <input
                         type="text"
@@ -1185,8 +1367,15 @@ export default function CheckoutPage() {
                         name="lastName"
                         value={customerData.lastName}
                         onChange={handleInputChange}
+                        onBlur={() => validateContactField("lastName")}
+                        autoComplete="family-name"
+                        maxLength={50}
+                        required
+                        aria-invalid={!!customerErrors.lastName}
+                        aria-describedby={customerErrors.lastName ? "checkout-lastName-error" : undefined}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
                       />
+                      {customerErrors.lastName && <p id="checkout-lastName-error" role="alert" className="mt-1 text-xs text-red-600">{customerErrors.lastName}</p>}
                     </div>
                   </div>
 
@@ -1202,9 +1391,16 @@ export default function CheckoutPage() {
                         name="email"
                         value={customerData.email}
                         onChange={handleInputChange}
+                        onBlur={() => validateContactField("email")}
+                        autoComplete="email"
+                        inputMode="email"
+                        maxLength={254}
+                        aria-invalid={!!customerErrors.email}
+                        aria-describedby={customerErrors.email ? "checkout-email-error" : undefined}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
                         required
                       />
+                      {customerErrors.email && <p id="checkout-email-error" role="alert" className="mt-1 text-xs text-red-600">{customerErrors.email}</p>}
                     </div>
                     <div>
                       <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1217,18 +1413,26 @@ export default function CheckoutPage() {
                         name="phone"
                         value={customerData.phone}
                         onChange={handleInputChange}
+                        onBlur={() => validateContactField("phone")}
+                        autoComplete="tel-national"
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="[6-9][0-9]{9}"
+                        aria-invalid={!!customerErrors.phone}
+                        aria-describedby={customerErrors.phone ? "checkout-phone-error" : undefined}
                         placeholder="10-digit mobile number"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-[#1560BD] focus:ring-1 focus:ring-[#1560BD]"
                         required
                       />
+                      {customerErrors.phone && <p id="checkout-phone-error" role="alert" className="mt-1 text-xs text-red-600">{customerErrors.phone}</p>}
                     </div>
                   </div>
 
-                  {!isPickup && (
+                  {(!isPickup || !user) && (
                   <div className="mt-6">
                     <h3 className="text-lg font-medium mb-4 flex items-center">
                       <MapPin className="h-5 w-5 mr-2" />
-                      Delivery Address
+                      {isPickup ? "Your Address" : "Delivery Address"}
                     </h3>
                     <div className="space-y-4">
                       <div>
@@ -1265,14 +1469,14 @@ export default function CheckoutPage() {
                             required
                           >
                             <option value="">Select State</option>
-                            {(nationwideDelivery ? indianStates : ["Karnataka"]).map(state => <option key={state} value={state}>{state}</option>)}
+                            {(nationwideDelivery || isPickup ? indianStates : ["Karnataka"]).map(state => <option key={state} value={state}>{state}</option>)}
                           </select>
                         </div>
                         <div>
                           <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
                             City *
                           </label>
-                          {nationwideDelivery ? <input
+                          {nationwideDelivery || isPickup ? <input
                             type="text" id="city" name="city" value={customerData.city} onChange={handleInputChange}
                             maxLength={50} disabled={!customerData.state} placeholder="Enter your city or town"
                             className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#1560BD] focus:outline-none disabled:bg-gray-100"
@@ -1450,17 +1654,24 @@ export default function CheckoutPage() {
                             </p>
                           </div>
                         )}
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                          <button type="button" onClick={() => void moveItemToWishlist(item.id)}
+                            disabled={!!movingWishlistId || storeRequestLoading}
+                            aria-label={`Move ${title} to wishlist`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-[#1560BD] hover:underline disabled:opacity-50">
+                            <Heart className="h-3.5 w-3.5" />
+                            {movingWishlistId === item.id ? "Moving..." : "Move to wishlist"}
+                          </button>
+                          <button type="button" onClick={() => setItemToRemove({ id: item.id, name: title })}
+                            disabled={!!movingWishlistId || storeRequestLoading}
+                            aria-label={`Remove ${title}`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:underline disabled:opacity-50">
+                            <Trash2 className="h-3.5 w-3.5" />Remove
+                          </button>
+                        </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <p className="text-sm font-semibold flex-shrink-0">₹{money(item.price * item.quantity)}</p>
-                        <button
-                          onClick={() => setItemToRemove({ id: item.id, name: title })}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                          aria-label={`Remove ${title}`}
-                          title={`Remove ${title}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
                       </div>
                     </div>
                     )

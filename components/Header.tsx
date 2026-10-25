@@ -6,6 +6,7 @@ import Image from "next/image"
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useCart } from "@/hooks/useCart"
+import { useWishlist } from "@/hooks/useWishlist"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { ShoppingCart, Menu, X, Search, User, Heart, MapPin, ChevronDown, TrendingUp, Clock, Package, Zap, Gift, Download, HelpCircle, Phone } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
@@ -76,6 +77,8 @@ export default function Header() {
   const pathname = usePathname()
   const [returnLoginHref, setReturnLoginHref] = useState("/login")
   const { cart } = useCart()
+  const { wishlist } = useWishlist()
+  const wishlistCount = new Set(wishlist.map(item => item.id)).size
   const { openCart } = useCartUI()
   const { data: siteSettings } = useSettingsData()
   const marketing = useMarketingContent("header")
@@ -737,13 +740,18 @@ export default function Header() {
               <DeliverToPincode variant="light" />
             </div>
 
-            {/* Wishlist - Hidden on mobile */}
+            {/* Wishlist */}
             <Link
-              href="/dashboard/wishlist"
-              aria-label="Wishlist"
-              className="order-3 hidden md:inline-flex items-center gap-2 p-2.5 rounded-lg hover:bg-brand-primary-subtle text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors group"
+              href={user ? "/dashboard/wishlist" : "/wishlist"}
+              aria-label={`Wishlist, ${wishlistCount} ${wishlistCount === 1 ? "item" : "items"}`}
+              className="order-3 inline-flex items-center gap-2 p-2.5 min-h-[44px] rounded-lg hover:bg-brand-primary-subtle text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors group"
             >
-              <Heart className="h-5 w-5 group-hover:text-brand-primary transition-colors" />
+              <span className="relative">
+                <Heart className="h-5 w-5 group-hover:text-brand-primary transition-colors" />
+                {wishlistCount > 0 && <span className="absolute -top-2 -right-2 bg-brand-accent text-white text-[10px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center font-bold ring-2 ring-white">
+                  {wishlistCount}
+                </span>}
+              </span>
               <span className="hidden xl:inline text-sm font-medium">Wishlist</span>
             </Link>
 
@@ -834,6 +842,7 @@ export default function Header() {
                     role="menuitem"
                   >
                     Wishlist
+                    {wishlistCount > 0 && <span className="ml-2 rounded-full bg-brand-accent px-2 py-0.5 text-xs font-bold text-white">{wishlistCount}</span>}
                   </Link>
                   <button
                     onClick={handleLogout}
@@ -1036,6 +1045,7 @@ export default function Header() {
                   >
                     <Heart className="h-5 w-5 text-white/50" />
                     Wishlist
+                    {wishlistCount > 0 && <span className="ml-auto rounded-full bg-brand-accent px-2 py-0.5 text-xs font-bold text-white">{wishlistCount}</span>}
                   </Link>
                   <button
                     onClick={handleLogout}

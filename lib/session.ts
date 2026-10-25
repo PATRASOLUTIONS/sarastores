@@ -23,6 +23,8 @@ export interface SessionPayload {
   dashboardAccess?: boolean
   allowedPages?: string[]
   sessionVersion?: number
+  /** Unique per login, so revoking one token does not revoke another device. */
+  sessionId?: string
   /** Expiry, epoch seconds. */
   exp: number
 }
@@ -123,6 +125,7 @@ export async function createSessionToken(
   }
   const full: SessionPayload = {
     ...payload,
+    sessionId: crypto.randomUUID(),
     exp: payload.exp ?? Math.floor(Date.now() / 1000) + SESSION_MAX_AGE,
   }
   const payloadB64 = bytesToBase64Url(utf8ToBytes(JSON.stringify(full)))

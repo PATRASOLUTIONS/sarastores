@@ -21,6 +21,19 @@ if (!MONGODB_URI) {
 
 const INDEXES = [
   {
+    collection: "users",
+    spec: { email: 1 },
+    options: { unique: true, name: "email_case_insensitive_unique", collation: { locale: "en", strength: 2 },
+      partialFilterExpression: { email: { $type: "string" } } },
+    why: "Account email uniqueness also covers legacy case variants and concurrent writers; reconcile conflicting records before applying.",
+  },
+  {
+    collection: "revoked_sessions",
+    spec: { expiresAt: 1 },
+    options: { name: "revoked_session_expiry", expireAfterSeconds: 0 },
+    why: "Logged-out token digests are needed only until their signed expiry.",
+  },
+  {
     collection: "custom_posters",
     spec: { slug: 1 },
     options: { unique: true, name: "custom_poster_slug_unique" },

@@ -54,9 +54,11 @@ export async function GET(request: NextRequest) {
     if (!cart) return NextResponse.json({ userId, items: [] })
     const normalized = normalizeId(cart)
     const items = Array.isArray(normalized.items)
-      ? await removeInactiveProducts(normalized.items as StoredCartItem[])
+      ? request.nextUrl.searchParams.get("checkoutSelection") === "true"
+        ? normalized.items
+        : await removeInactiveProducts(normalized.items as StoredCartItem[])
       : []
-    return NextResponse.json({ ...normalized, items })
+    return NextResponse.json({ ...normalized, items }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (error) {
     console.error("Error getting cart:", error)
     return NextResponse.json({ error: "Failed to get cart" }, { status: 500 })

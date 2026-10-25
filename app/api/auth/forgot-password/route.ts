@@ -3,14 +3,13 @@ import { connectToDatabase } from "@/lib/mongodb"
 import crypto from "crypto"
 import { withRateLimit } from "@/lib/rate-limit"
 import { buildPasswordResetEmail, sendEmail, storefrontOrigin } from "@/lib/email"
+import { ForgotPasswordSchema } from "@/lib/validation"
 
 export const POST = withRateLimit(async (req: Request) => {
   try {
-    const { email } = await req.json()
-
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 })
-    }
+    const parsed = ForgotPasswordSchema.safeParse(await req.json())
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    const { email } = parsed.data
 
     const { db } = await connectToDatabase()
     const usersCollection = db.collection("users")

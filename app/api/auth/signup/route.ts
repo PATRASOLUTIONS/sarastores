@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { connectToDatabase } from "@/lib/mongodb"
+import { getCollection } from "@/lib/db-service"
 import bcrypt from "bcryptjs"
 import { detectBot, formatWait, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import crypto from "crypto"
@@ -8,6 +8,8 @@ import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/con
 import { defaultProfileAvatar } from "@/lib/profile-avatars"
 import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
 import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
+import { ACCOUNT_EMAIL_COLLATION, ensureAccountEmailIndex, isDuplicateAccountEmail } from "@/lib/account-email-index"
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
 
 // Use dynamic import for email functions to prevent build-time issues
 const getEmailFunctions = async () => {
@@ -18,8 +20,7 @@ const getEmailFunctions = async () => {
   }
 }
 
-// The client never reads a user object from signup (AuthContext deliberately
-// does not auto-login), so none is returned.
+// Clients requesting a cookie session also receive a safe account summary.
 const SIGNUP_RESPONSE = {
   message: "Thanks. We have sent a link to confirm your email address.",
   success: true,
@@ -58,24 +59,47 @@ export async function POST(request: NextRequest) {
 
     const parsed = RegisterSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ message: parsed.error.errors[0].message }, { status: 400 })
+      const fieldErrors: Record<string, string> = {}
+      for (const issue of parsed.error.issues) {
+        const field = String(issue.path[0])
+        if (!fieldErrors[field]) fieldErrors[field] = issue.message
+      }
+      return NextResponse.json({ message: parsed.error.errors[0].message, fieldErrors }, { status: 400 })
     }
     const {
       email,
       password,
       name,
+      startSession,
       marketingEmail,
       marketingWhatsapp,
       marketingSms,
       noticeVersion,
     } = parsed.data
 
-    const { db } = await connectToDatabase()
-    const usersCollection = db.collection("users")
+    if (startSession) {
+      const secret = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET || ""
+      if (secret.length < 16) {
+        return NextResponse.json({ message: "Account registration is temporarily unavailable. Please try again later." }, { status: 503 })
+      }
+    }
+
+    const usersCollection = await getCollection("users")
+    try {
+      // Idempotent, and safe when several instances register concurrently.
+      // Existing conflicting legacy records/indexes must be reconciled by an
+      // operator; never accept an unprotected insert if index creation fails.
+      await ensureAccountEmailIndex(usersCollection)
+    } catch {
+      console.error("[Signup] Account email uniqueness index is unavailable")
+      return NextResponse.json({ message: "Account creation is temporarily unavailable. Please try again later.", success: false }, {
+        status: 503, headers: { "Retry-After": "60" },
+      })
+    }
 
     // Disclosing an existing address is a product decision; the per-IP
     // counter and reCAPTCHA in detectBot above are what bound enumeration.
-    const existingUser = await usersCollection.findOne({ email: email.toLowerCase() })
+    const existingUser = await usersCollection.findOne({ email }, { collation: ACCOUNT_EMAIL_COLLATION })
     if (existingUser) {
       return NextResponse.json(
         { message: EMAIL_EXISTS_MESSAGE, code: "EMAIL_EXISTS", success: false },
@@ -92,11 +116,11 @@ export async function POST(request: NextRequest) {
 
     // Create new user
     const newUser = {
-      name: name.trim(),
-      email: email.toLowerCase(),
+      name,
+      email,
       password: hashedPassword,
       role: "user",
-      avatar: defaultProfileAvatar(email.toLowerCase()),
+      avatar: defaultProfileAvatar(email),
       emailVerified: false,
       emailVerificationToken: verificationToken,
       emailVerificationExpiry: verificationExpiry,
@@ -107,7 +131,13 @@ export async function POST(request: NextRequest) {
       orders: [],
     }
 
-    const result = await usersCollection.insertOne(newUser)
+    let result
+    try {
+      result = await usersCollection.insertOne(newUser)
+    } catch (error) {
+      if (!isDuplicateAccountEmail(error)) throw error
+      return NextResponse.json({ message: EMAIL_EXISTS_MESSAGE, code: "EMAIL_EXISTS", success: false }, { status: 409 })
+    }
     const newUserId = result.insertedId.toString()
 
     /**
@@ -188,7 +218,30 @@ export async function POST(request: NextRequest) {
       // Don't fail the registration if email fails
     }
 
-    return NextResponse.json(SIGNUP_RESPONSE)
+    if (!startSession) return NextResponse.json(SIGNUP_RESPONSE)
+
+    const user = {
+      id: newUserId, name, email, role: "user" as const,
+      avatar: newUser.avatar, emailVerified: false, createdAt: newUser.createdAt,
+      dashboardAccess: false, allowedPages: [], sessionVersion: 0,
+    }
+    const sessionToken = await createSessionToken({
+      id: user.id, name: user.name, email: user.email, role: user.role,
+      dashboardAccess: false, allowedPages: [], sessionVersion: 0,
+    })
+    const response = NextResponse.json({ ...SIGNUP_RESPONSE, user }, {
+      headers: { "Cache-Control": "private, no-store" },
+    })
+    const cookieOptions = {
+      httpOnly: true, secure: process.env.NODE_ENV === "production",
+      sameSite: "lax" as const, maxAge: SESSION_MAX_AGE, path: "/",
+      ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN.replace(/^\./, "") } : {}),
+    }
+    response.cookies.set(SESSION_COOKIE, sessionToken, cookieOptions)
+    response.cookies.set("user", encodeURIComponent(JSON.stringify({
+      id: user.id, email: user.email, role: user.role,
+    })), cookieOptions)
+    return response
   } catch (error) {
     if (error instanceof RateLimitUnavailableError || error instanceof RecaptchaConfigurationError) return handleApiError(error)
     console.error("Signup error:", error)

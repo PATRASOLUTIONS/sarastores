@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
+import { z } from "zod"
 
 export interface WishlistItem {
   id: string
@@ -18,14 +19,37 @@ export interface WishlistItem {
   discount?: number
   rating?: number
   reviews?: number
+  type?: "hardware" | "software"
 }
 
 const wishlistCache = new Map<string, WishlistItem[]>()
 const wishlistRequests = new Map<string, Promise<WishlistItem[]>>()
+const GUEST_WISHLIST_KEY = "wishlist_guest"
+const guestItemSchema = z.object({
+  id: z.string().min(1), name: z.string(), price: z.number().finite().nonnegative(),
+  image: z.string().optional(), type: z.enum(["hardware", "software"]).optional(),
+}).passthrough()
+
+function readGuestWishlist(): WishlistItem[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(GUEST_WISHLIST_KEY) || "[]")
+    if (!Array.isArray(stored)) return []
+    const items = stored.flatMap(item => {
+      const parsed = guestItemSchema.safeParse(item)
+      return parsed.success ? [parsed.data as WishlistItem] : []
+    })
+    return [...new Map(items.map(item => [item.id, item])).values()]
+  } catch { return [] }
+}
+
+function saveGuestWishlist(items: WishlistItem[]) {
+  localStorage.setItem(GUEST_WISHLIST_KEY, JSON.stringify(items))
+  window.dispatchEvent(new Event("wishlist-updated"))
+}
 
 async function loadWishlist(userId: string, force = false): Promise<WishlistItem[]> {
+  if (wishlistRequests.has(userId)) return wishlistRequests.get(userId) || []
   if (!force && wishlistCache.has(userId)) return wishlistCache.get(userId) || []
-  if (!force && wishlistRequests.has(userId)) return wishlistRequests.get(userId) || []
 
   const request = fetch("/api/wishlist", { credentials: "include" })
     .then(async response => {
@@ -53,46 +77,69 @@ async function loadWishlist(userId: string, force = false): Promise<WishlistItem
 export function useWishlist() {
   const [wishlist, setWishlist] = useState<WishlistItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
+  const owner = user?.id || "guest"
+  const activeOwner = useRef(owner)
+  activeOwner.current = owner
+  const fetchVersion = useRef(0)
+  const [loadedOwner, setLoadedOwner] = useState<string | null>(null)
 
   const fetchWishlist = useCallback(async (force = false) => {
-    // If AuthContext hasn't hydrated yet, try reading a stored user from localStorage.
-    let userId = user?.id
-    if (!userId) {
-      try {
-        const stored = typeof window !== "undefined" ? localStorage.getItem("user") : null
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          userId = parsed?.id
-        }
-      } catch (e) {
-        console.debug("No fallback user in localStorage", e)
-      }
-    }
-
-    if (!userId) {
-      setWishlist([])
-      setIsLoading(false)
-      return
-    }
-
+    if (authLoading) return
+    const version = ++fetchVersion.current
     setIsLoading(true)
-    const items = await loadWishlist(userId, force)
+    const items = owner === "guest" ? readGuestWishlist() : await loadWishlist(owner, force)
+    if (activeOwner.current !== owner || version !== fetchVersion.current) return
     setWishlist(items)
+    setLoadedOwner(owner)
     setIsLoading(false)
-  }, [user])
+  }, [owner, authLoading])
 
   useEffect(() => {
     fetchWishlist()
   }, [fetchWishlist])
-
-  const addToWishlist = async (productId: string) => {
-    if (!user) {
-      toast.error("Please login to add items to your wishlist")
-      return false
+  useEffect(() => {
+    const refresh = () => { void fetchWishlist(true) }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === GUEST_WISHLIST_KEY || event.key === "wishlist-updated-at") refresh()
     }
+    window.addEventListener("wishlist-updated", refresh)
+    window.addEventListener("storage", onStorage)
+    return () => {
+      window.removeEventListener("wishlist-updated", refresh)
+      window.removeEventListener("storage", onStorage)
+      fetchVersion.current++
+    }
+  }, [fetchWishlist])
 
+  const addToWishlist = async (productId: string, product?: WishlistItem) => {
+    if (authLoading) return false
     try {
+      if (!user) {
+        if (readGuestWishlist().some(item => item.id === productId)) {
+          toast.success("Item already in wishlist")
+          return true
+        }
+        let item = product
+        if (!item) {
+          let type: "hardware" | "software" = "hardware"
+          let response = await fetch(`/api/products/${encodeURIComponent(productId)}`)
+          if (response.status === 404) {
+            type = "software"
+            response = await fetch(`/api/software/${encodeURIComponent(productId)}`)
+          }
+          if (!response.ok) throw new Error("Product could not be saved")
+          const data = await response.json()
+          const parsed = guestItemSchema.safeParse({ ...(data.product || data), id: productId, type })
+          if (!parsed.success) throw new Error("Product could not be saved")
+          item = parsed.data as WishlistItem
+        }
+        if (activeOwner.current !== "guest") return false
+        const current = readGuestWishlist()
+        saveGuestWishlist([...current.filter(existing => existing.id !== productId), { ...item, id: productId }])
+        toast.success("Added to wishlist")
+        return true
+      }
       const response = await fetch("/api/wishlist", {
         method: "POST",
         headers: {
@@ -111,15 +158,12 @@ export function useWishlist() {
       }
 
       const data = await response.json()
-
-      if (data.added) {
-        toast.success("Added to wishlist")
-        fetchWishlist(true) // Refresh wishlist
-        return true
-      } else {
-        toast.success("Item already in wishlist")
-        return false
-      }
+      await wishlistRequests.get(owner)
+      wishlistCache.delete(owner)
+      window.dispatchEvent(new Event("wishlist-updated"))
+      try { localStorage.setItem("wishlist-updated-at", String(Date.now())) } catch { /* Same-tab updates still work. */ }
+      toast.success(data.added ? "Added to wishlist" : "Item already in wishlist")
+      return true
     } catch (error) {
       console.error("Error adding to wishlist:", error)
       toast.error("Failed to add to wishlist")
@@ -128,10 +172,14 @@ export function useWishlist() {
   }
 
   const removeFromWishlist = async (productId: string) => {
-    if (!user) return false
-
+    if (authLoading) return false
     try {
-      const response = await fetch(`/api/wishlist?productId=${productId}`, {
+      if (!user) {
+        saveGuestWishlist(readGuestWishlist().filter(item => item.id !== productId))
+        toast.success("Removed from wishlist")
+        return true
+      }
+      const response = await fetch(`/api/wishlist?productId=${encodeURIComponent(productId)}`, {
         method: "DELETE",
       })
 
@@ -145,7 +193,10 @@ export function useWishlist() {
       }
 
       toast.success("Removed from wishlist")
-      fetchWishlist(true) // Refresh wishlist
+      await wishlistRequests.get(owner)
+      wishlistCache.delete(owner)
+      window.dispatchEvent(new Event("wishlist-updated"))
+      try { localStorage.setItem("wishlist-updated-at", String(Date.now())) } catch { /* Same-tab updates still work. */ }
       return true
     } catch (error) {
       console.error("Error removing from wishlist:", error)
@@ -155,12 +206,12 @@ export function useWishlist() {
   }
 
   const isInWishlist = (productId: string) => {
-    return wishlist.some((item) => item.id === productId)
+    return loadedOwner === owner && wishlist.some((item) => item.id === productId)
   }
 
   return {
-    wishlist,
-    isLoading,
+    wishlist: loadedOwner === owner && !authLoading ? wishlist : [],
+    isLoading: isLoading || authLoading || loadedOwner !== owner,
     addToWishlist,
     removeFromWishlist,
     isInWishlist,
