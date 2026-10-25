@@ -54,6 +54,9 @@ export default function StockCheckPage() {
   const [itemCode, setItemCode] = useState("")
   const [lookup, setLookup] = useState<ItemLookup | null>(null)
   const [searching, setSearching] = useState(false)
+  const [lookupCode, setLookupCode] = useState("")
+  const uploadInFlight = useRef(false)
+  const lookupRequest = useRef(0)
   const [sheetUrl, setSheetUrl] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -105,7 +108,8 @@ export default function StockCheckPage() {
     }
   }
 
-  // Rows without an item code or store code are skipped; the server then keeps only item codes that match a product.
+  // A store upload replaces its full inventory, so incomplete rows must
+  // never be silently dropped before the server zeros omitted items.
   const importRows = async (sheet: Record<string, unknown>[], toastId: string) => {
     if (sheet.length === 0) { toast.error("No data found in the sheet", { id: toastId }); return }
 
@@ -116,10 +120,10 @@ export default function StockCheckPage() {
       const code = readCell(row, ITEM_COLUMNS)
       const storeCode = readCell(row, STORE_COLUMNS)
       const quantityText = readCell(row, QUANTITY_COLUMNS)
-      if (!code && !storeCode && !quantityText) continue
-      if (!code || !storeCode) { blankRows++; continue }
-      const quantity = Number(quantityText.replace(/,/g, "") || 0)
-      if (!Number.isInteger(quantity) || quantity < 0) { toast.error(`Row ${line}: quantity must be a whole number of 0 or more`, { id: toastId }); return }
+      if (!code && !storeCode && !quantityText) { blankRows++; continue }
+      if (!code || !storeCode || !quantityText) { toast.error(`Row ${line}: Item Code, Store Code and Quantity are required. Enter 0 explicitly for zero stock.`, { id: toastId }); return }
+      const quantity = Number(quantityText.replace(/,/g, ""))
+      if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > 1000000) { toast.error(`Row ${line}: quantity must be a whole number between 0 and 1,000,000`, { id: toastId }); return }
       rows.push({ itemCode: code, storeCode, quantity })
     }
     if (rows.length === 0) { toast.error("No row has both an item code and a store code", { id: toastId }); return }
@@ -133,7 +137,8 @@ export default function StockCheckPage() {
     if (data.success) {
       toast.success(`Saved ${data.saved} rows for ${data.stores} store(s)`, { id: toastId })
       setResult({ ...data, blankRows })
-      void loadSummary()
+      await loadSummary()
+      if (lookupCode) await loadItemLookup(lookupCode)
     } else {
       toast.error(data.message || data.error || "Upload failed", { id: toastId })
       if (data.unknownStores || data.unknownItems) setResult({ saved: 0, stores: 0, zeroedItems: 0, productsUpdated: 0, ...data, blankRows })
@@ -143,15 +148,23 @@ export default function StockCheckPage() {
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    if (uploadInFlight.current) return
+    uploadInFlight.current = true
     setUploading(true)
     setResult(null)
     const toastId = toast.loading("Processing file...")
     try {
-      const workbook = XLSX.read(await file.arrayBuffer())
-      await importRows(XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]]), toastId)
-    } catch {
-      toast.error("Failed to process Excel file", { id: toastId })
+      if (!/\.(xlsx|xls)$/i.test(file.name)) throw new Error("Choose an Excel .xlsx or .xls file")
+      if (file.size > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB")
+      const workbook = XLSX.read(await file.arrayBuffer(), { sheetRows: 50002 })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!sheet) throw new Error("Spreadsheet has no worksheet")
+      if (sheet["!fullref"]) throw new Error("Upload at most 50,000 rows")
+      await importRows(XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet), toastId)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to process Excel file", { id: toastId })
     } finally {
+      uploadInFlight.current = false
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
@@ -161,6 +174,8 @@ export default function StockCheckPage() {
     event.preventDefault()
     const sheetId = sheetUrl.trim()
     if (!sheetId) return
+    if (uploadInFlight.current) return
+    uploadInFlight.current = true
     setUploading(true)
     setResult(null)
     const toastId = toast.loading("Fetching Google Sheet...")
@@ -176,25 +191,31 @@ export default function StockCheckPage() {
     } catch {
       toast.error("Failed to import Google Sheet", { id: toastId })
     } finally {
+      uploadInFlight.current = false
       setUploading(false)
     }
   }
 
-  const search = async (event: FormEvent) => {
-    event.preventDefault()
-    const code = itemCode.trim()
-    if (!code) return
+  const loadItemLookup = async (code: string) => {
+    const requestId = ++lookupRequest.current
     setSearching(true)
     try {
       const res = await apiFetch(`/api/admin/store-stock?itemCode=${encodeURIComponent(code)}`)
       const data = await res.json()
       if (!data.success) throw new Error(data.message || data.error)
+      if (requestId !== lookupRequest.current) return
+      setLookupCode(code)
       setLookup({ product: data.product, rows: data.rows })
     } catch {
       toast.error("Failed to look up the item")
     } finally {
-      setSearching(false)
+      if (requestId === lookupRequest.current) setSearching(false)
     }
+  }
+  const search = async (event: FormEvent) => {
+    event.preventDefault()
+    const code = itemCode.trim()
+    if (code) await loadItemLookup(code)
   }
 
   const missingCodes = stores.length === 0
@@ -232,7 +253,7 @@ export default function StockCheckPage() {
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
           <p className="mb-1 font-medium">Columns: Item Code, Quantity, Store Code</p>
           <p>Item Code is the product SKU / Item No. Store Code comes from Store Locations.</p>
-          <p>Only rows whose Item Code matches an existing product are imported; rows with no Item Code are skipped.</p>
+          <p>Every row needs an existing Item Code, Store Code and an explicit Quantity. Invalid or unknown codes stop the upload without changing stock.</p>
           <p>Google Sheets: share the sheet as &quot;Anyone with the link can view&quot;. The first tab is read.</p>
           <p className="mt-1 flex items-start gap-1 font-medium text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -271,6 +292,10 @@ export default function StockCheckPage() {
         </form>
         {lookup && (
           <div className="mt-4">
+            <p className="mb-2 text-sm text-gray-700">Item {lookupCode}: cumulative uploaded stock <strong>{lookup.rows.reduce((total, row) => total + row.quantity, 0)}</strong>.</p>
+            {lookup.product && lookup.product.stock !== lookup.rows.reduce((total, row) => total + row.quantity, 0) && <p role="alert" className="mb-2 rounded bg-amber-50 p-2 text-sm text-amber-900">
+              The product stock differs from its uploaded total. Upload a complete stock sheet for this item&apos;s stores to recalculate it.
+            </p>}
             {lookup.product
               ? <p className="mb-2 text-sm text-gray-700"><strong>{lookup.product.name}</strong> · website stock <strong>{lookup.product.stock}</strong></p>
               : <p className="mb-2 text-sm text-red-700">No product has this item code.</p>}

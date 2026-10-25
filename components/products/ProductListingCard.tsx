@@ -93,8 +93,9 @@ export default function ProductListingCard({ product, offersMode = false, offerL
   const badge = offersMode ? (discount > 0 ? { label: `${discount}% OFF`, tone: "sale" as const } : null) : productBadge(product)
   const rating = offersMode ? getCatalogRatingInfo(product) : getRatingInfo(product)
   const benefits = offersMode ? offerLabels.slice(0, 2) : productBenefits(product)
-  const unavailable = offersMode && (!Number.isFinite(Number(product.price)) || Number(product.price) <= 0 ||
-    (typeof product.stock === "number" && product.stock <= 0))
+  const stock = typeof product.stock === "number" && Number.isSafeInteger(product.stock) && product.stock >= 0 ? product.stock : 0
+  const unavailable = !Number.isFinite(Number(product.price)) || Number(product.price) <= 0 || stock <= 0
+  const stockLabel = stock > 0 ? `${stock.toLocaleString("en-IN")} in stock` : "Out of stock"
   const wishlisted = isInWishlist(id)
   const displayName = formatProductCardName(product.name)
   const keyFeatures = getKeyFeatures(product)
@@ -109,7 +110,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
         price: product.price,
         image,
         quantity: 1,
-        ...(offersMode ? { stock: product.stock } : {}),
+        stock,
         color: null,
         size: null,
       })
@@ -195,6 +196,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
             </div>
           )}
           {offerLabels.length > 0 && <p className="mt-2 text-xs font-semibold text-green-700">Bank Offer</p>}
+          <p className={`mt-2 text-xs font-semibold ${stock > 0 ? "text-green-700" : "text-red-700"}`}>{stockLabel}</p>
         </div>
       </article>
     )
@@ -265,6 +267,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
           </p>
         )}
 
+        <p className={`mt-2 text-xs font-semibold ${stock > 0 ? "text-green-700" : "text-red-700"}`}>{stockLabel}</p>
         <ul className={`mt-2 space-y-1 ${offersMode ? "flex-1" : ""}`}>
           {benefits.map((benefit) => (
             <li key={benefit} className="flex items-start gap-1.5 text-[11px] leading-tight text-gray-600">

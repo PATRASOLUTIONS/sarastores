@@ -8,7 +8,8 @@ export const SCRAPER_TEMPLATE = [{
   "product link": "https://www.amazon.in/dp/B000000000",
 }]
 
-const requiredText = z.string().trim().min(1).max(500)
+// Item numbers must fit the inventory feed's 100-character join key.
+const requiredText = z.string().trim().min(1).max(100)
 const optionalText = z.string().trim().max(2000).default("")
 export const ScraperImportRowSchema = z.object({
   itemno: requiredText,

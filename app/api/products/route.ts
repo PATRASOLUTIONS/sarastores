@@ -217,9 +217,7 @@ export async function GET(request: NextRequest) {
       headers: {
         // Inactive products are staff-only, so that response must never land in
         // a shared CDN cache.
-        'Cache-Control': includeInactive
-          ? 'private, no-store'
-          : 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': includeInactive ? 'private, no-store' : 'no-store',
         // The body is a bare array, so paging metadata has to travel in headers.
         'X-Total-Count': String(total),
         'X-Returned-Count': String(productsWithMrp.length),

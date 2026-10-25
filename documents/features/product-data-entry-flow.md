@@ -14,6 +14,8 @@ After a run, the page retains the result table and displays added, skipped, fail
 
 Bulk Price Update in `/admin/products` exports and accepts `itemno`, `price`, optional `mrp` and optional `active`. Stock is absent from its template and preview. Excel and Google Sheet price imports ignore any stock columns in older sheets and never write inventory quantities; the Products stock display continues to use the overall quantity supplied by `/admin/stock-check`.
 
+The full source review is recorded in [the product and inventory flow review](product-inventory-flow-review.md). Product edit saves also preserve inventory, and activation updates both `active` and `status` so reviewed scraper drafts can become visible. Stock uploads reject unknown codes or missing quantities before writes. Customer product listings fetch current data on entry, focus and every 30 seconds while visible, and display cumulative stock counts.
+
 ## 1. The three steps
 
 ```

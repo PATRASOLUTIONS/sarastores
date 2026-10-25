@@ -423,6 +423,7 @@ export default function AdminScraperPage() {
               <input
                 disabled={busy}
                 value={sku}
+                maxLength={100}
                 onChange={(e) => setSku(e.target.value)}
                 placeholder="e.g. REFSAM1187"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal"

@@ -112,6 +112,9 @@ export async function POST(request: NextRequest) {
       unknownItems: unknownItems.slice(0, LIST_LIMIT), unknownItemCount: unknownItems.length,
       skippedRows: rows.length - valid.length,
     }
+    if (unknownStores.length || unknownItems.length) {
+      return NextResponse.json({ success: false, message: "Unknown item or store codes found. Correct them and upload again; no stock was changed.", ...report }, { status: 400 })
+    }
     if (valid.length === 0) {
       return NextResponse.json({ success: false, message: "No row matched a known store code and item code; nothing was saved", ...report }, { status: 400 })
     }
@@ -123,6 +126,12 @@ export async function POST(request: NextRequest) {
       const result = await session.withTransaction(async () => {
         const now = new Date()
         const replacedStores = [...new Set(valid.map(row => row.storeCode))]
+        // Serialize full replacements of the same store, even when two
+        // uploads contain disjoint item codes and no stock rows yet exist.
+        const locations = await getCollection<StoredStoreLocation>("store_locations")
+        const claimed = await locations.updateMany({ storeCode: { $in: replacedStores } },
+          { $inc: { stockRevision: 1 } }, { session })
+        if (claimed.matchedCount < replacedStores.length) throw new Error("A store changed during upload; retry the sheet")
         const skusByStore = new Map<string, string[]>()
         for (const row of valid) skusByStore.set(row.storeCode, [...(skusByStore.get(row.storeCode) ?? []), row.itemCode])
 

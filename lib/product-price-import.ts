@@ -77,6 +77,7 @@ interface PriceProduct {
   price?: number
   mrp?: number | null
   active?: boolean
+  status?: string
   updatedAt?: Date
 }
 interface PriceRow {
@@ -180,12 +181,13 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
           price: product.price === undefined ? { $exists: false } : product.price,
           mrp: product.mrp === undefined ? { $exists: false } : product.mrp,
           ...(row.active !== undefined ? { active: product.active === undefined ? { $exists: false } : product.active } : {}),
+          ...(row.active !== undefined ? { status: product.status === undefined ? { $exists: false } : product.status } : {}),
           ...(row.mrp === undefined ? { $or: [{ mrp: { $exists: false } }, { mrp: null }, { mrp: { $gte: row.price } }] } : {}),
         }, {
           $set: {
             price: row.price,
             ...(row.mrp !== undefined ? { mrp: row.mrp } : {}),
-            ...(row.active !== undefined ? { active: row.active } : {}),
+            ...(row.active !== undefined ? { active: row.active, status: row.active ? "active" : "inactive" } : {}),
             updatedAt: new Date(),
           },
         }, { returnDocument: "after" })

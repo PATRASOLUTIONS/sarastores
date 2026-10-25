@@ -7,6 +7,7 @@ export interface StoredStoreLocation {
   id?: string
   shopName?: string
   storeCode?: string
+  stockRevision?: number
   locationType?: "store" | "warehouse" | null
   locationDescription?: string
   city?: string
