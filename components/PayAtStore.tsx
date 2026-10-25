@@ -97,19 +97,25 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
   </div>
 }
 
-export function PayAtStoreDialog({ storeName, orderReference, amount, customerPhone, storeNotified, submitting, onSubmit, onClose }: {
+export function PayAtStoreDialog({ storeName, orderReference, amount, customerPhone, storeNotified, submitting, initialTransaction, onTransactionChange, onSubmit, onClose }: {
   storeName: string
   orderReference: string
   amount: number
   customerPhone: string
   storeNotified: boolean
   submitting: boolean
+  initialTransaction?: { platform: StorePaymentPlatform | ""; transactionId: string }
+  onTransactionChange?: (value: { platform: StorePaymentPlatform | ""; transactionId: string }) => void
   onSubmit: (platform: StorePaymentPlatform, transactionId: string) => void
   onClose: () => void
 }) {
-  const [platform, setPlatform] = useState<StorePaymentPlatform | "">("")
-  const [transactionId, setTransactionId] = useState("")
+  const [platform, setPlatform] = useState<StorePaymentPlatform | "">(initialTransaction?.platform || "")
+  const [transactionId, setTransactionId] = useState(initialTransaction?.transactionId || "")
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    onTransactionChange?.({ platform, transactionId })
+  }, [platform, transactionId, onTransactionChange])
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

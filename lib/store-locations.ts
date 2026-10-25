@@ -7,6 +7,7 @@ export interface StoredStoreLocation {
   id?: string
   shopName?: string
   storeCode?: string
+  locationType?: "store" | "warehouse" | null
   locationDescription?: string
   city?: string
   state?: string
@@ -21,6 +22,12 @@ export interface StoredStoreLocation {
   isActive?: boolean
   createdAt?: Date
   updatedAt?: Date
+}
+
+/** Older locations without a type remain retail stores. */
+export const ACTIVE_RETAIL_STORE_FILTER = {
+  isActive: true,
+  $or: [{ locationType: "store" as const }, { locationType: { $exists: false } }, { locationType: null }],
 }
 
 /**
@@ -101,7 +108,7 @@ function toStoreLocation(doc: WithId<StoredStoreLocation>): StoreLocation | null
 export async function getAllStoreLocations(): Promise<StoreLocation[]> {
   try {
     const collection = await getCollection<StoredStoreLocation>("store_locations")
-    const docs = await collection.find({ isActive: true }).sort({ shopName: 1 }).toArray()
+    const docs = await collection.find(ACTIVE_RETAIL_STORE_FILTER).sort({ shopName: 1 }).toArray()
     return docs
       .map(toStoreLocation)
       .filter((store): store is StoreLocation => store !== null && store.citySlug.length > 0)

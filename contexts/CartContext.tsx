@@ -16,6 +16,8 @@ import { toast } from "react-hot-toast"
 import { cartLimitError } from "@/lib/cart-limits"
 import { CHECKOUT_CART_INTENT, CHECKOUT_CART_SELECTION_ID, mergeCheckoutCart } from "@/lib/checkout-cart"
 import { usePathname } from "next/navigation"
+import { cartLineKey, findCartLine, type CartLineIdentity } from "@/lib/cart-line"
+import { purchaseAvailabilityError, purchaseStock, purchaseLimit } from "@/lib/purchase-validation"
 
 export interface CartItem {
   color: string | null
@@ -26,6 +28,11 @@ export interface CartItem {
   image: string
   quantity: number
   stock?: number
+  maxPurchaseQuantity?: number
+  sku?: string
+  variantId?: string
+  ram?: string
+  storage?: string
   type?: "software" | "hardware"
   packSize?: number
   validityYears?: number
@@ -69,6 +76,7 @@ type CartContextValue = {
   refreshItemPrices: (prices: Record<string, number>, stocks?: Record<string, number>) => void
   removeFromCart: (id: string) => void
   clearCart: () => void
+  completePurchase: (items: Array<CartLineIdentity & { quantity: number }>, orderId: string) => Promise<void>
   saveOrder: (order: Omit<Order, "id" | "createdAt">) => Promise<Order>
   getOrders: () => Promise<Order[]>
   getOrder: (orderId: string) => Promise<Order | undefined>
@@ -177,6 +185,10 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
 
   // Debounce timer for the `cart` -> server sync effect.
   const cartUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const addingLines = useRef(new Set<string>())
+  const lastAddAt = useRef(new Map<string, number>())
+  const lastQuantityAt = useRef(new Map<string, number>())
+  const cartSyncQueue = useRef<Promise<void>>(Promise.resolve())
 
   // `isMounted` keeps late-arriving fetches from clobbering state after a
   // provider unmount (e.g. HMR, route transitions).
@@ -194,6 +206,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   // ----- helpers -----------------------------------------------------------
 
   const safeSetCart = useCallback((next: CartItem[]) => {
+    cartRef.current = next
     setCartState((prev) => {
       if (JSON.stringify(prev) === JSON.stringify(next)) return prev
       return next
@@ -216,6 +229,20 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   )
 
   // ----- single loader -----------------------------------------------------
+
+  const saveAccountCart = useCallback(async (snapshot: CartItem[], requireSave = false) => {
+    if (userId === "guest" || checkoutCartPendingRef.current) return
+    const save = cartSyncQueue.current.catch(() => {}).then(async () => {
+      if (activeUserIdRef.current !== userId) return
+      const response = await fetch("/api/cart", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: snapshot }),
+      })
+      if (!response.ok) throw new Error("Your cart could not be saved")
+    })
+    cartSyncQueue.current = save
+    try { await save } catch (error) { if (requireSave) throw error }
+  }, [userId])
 
   const loadCartFromDatabase = useCallback(async (): Promise<void> => {
     // Guard: must have a real userId to load (not "guest", not null)
@@ -284,7 +311,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       if (guestItems.length === 0) return serverItems
       const merged = [...serverItems]
       for (const g of guestItems) {
-        const i = merged.findIndex((item) => item.id === g.id)
+        const i = merged.findIndex((item) => cartLineKey(item) === cartLineKey(g))
         if (i >= 0) {
           merged[i] = { ...merged[i], quantity: (merged[i].quantity || 1) + (g.quantity || 1) }
         } else {
@@ -494,7 +521,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       const response = await fetch("/api/cart/checkout-selection", {
         method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId, action: includePrevious ? "include" : "wishlist", items: current,
-          previousItems: previous.map(item => ({ id: item.id || (item as CartItem & { productId?: string }).productId, quantity: item.quantity })) }),
+          previousItems: previous.map(item => ({ ...item, id: item.id || (item as CartItem & { productId?: string }).productId })) }),
       })
       const data = await response.json().catch(() => null)
       if (!response.ok || !data?.success) throw new Error(data?.error || "Your cart choice could not be saved. Please retry.")
@@ -611,29 +638,36 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
 
   const removeFromCart = useCallback(
     (id: string) => {
-      setCartState((prev) => {
-        const removed = prev.find((item) => item.id === id)
-        if (removed) analytics.removeFromCart(toAnalyticsItem(removed))
-        const next = prev.filter((item) => item.id !== id)
-        persistLocal(next)
-        return next
-      })
+      const removed = findCartLine(cartRef.current, id)
+      if (!removed) return
+      const next = cartRef.current.filter(item => cartLineKey(item) !== cartLineKey(removed))
+      safeSetCart(next)
+      persistLocal(next)
+      void saveAccountCart(next)
+      analytics.removeFromCart(toAnalyticsItem(removed))
     },
-    [persistLocal],
+    [persistLocal, safeSetCart, saveAccountCart],
   )
 
   const addToCart = useCallback(
     async (product: CartItem) => {
+      const owner = activeUserIdRef.current
+      const lineKey = cartLineKey(product)
+      const actionKey = `${owner}:${lineKey}`
+      if (addingLines.current.has(actionKey) || Date.now() - (lastAddAt.current.get(actionKey) || 0) < 500) return false
+      addingLines.current.add(actionKey)
+      try {
       // Guests keep their cart in localStorage under `cart_guest`; it is merged
       // into the account cart on login. Forcing login here was the single
       // largest drop-off in the funnel.
       const prev = cartRef.current
-      const initialError = cartLimitError(prev.some((item) => item.id === product.id)
-        ? prev.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + product.quantity } : item)
+      const initialError = cartLimitError(prev.some((item) => cartLineKey(item) === lineKey)
+        ? prev.map((item) => cartLineKey(item) === lineKey ? { ...item, quantity: item.quantity + product.quantity } : item)
         : [...prev, product])
       if (initialError) { toast.error(initialError); return false }
       let stock = product.stock
       let price = product.price
+      let maxPurchaseQuantity = product.maxPurchaseQuantity
       try {
         const response = await fetch(`/api/${product.type === "software" ? "software" : "products"}/${encodeURIComponent(product.id)}`)
         if (!response.ok) throw new Error("Product availability could not be checked. Please try again.")
@@ -643,17 +677,21 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
           typeof current.price !== "number" || !Number.isFinite(current.price) || current.price <= 0) {
           throw new Error("Product price and availability could not be verified.")
         }
-        if (typeof current.stock === "number") stock = current.stock
+        const unavailable = purchaseAvailabilityError(current, product.type === "software")
+        if (unavailable) throw new Error(unavailable)
+        stock = purchaseStock(current, product.type === "software") ?? undefined
+        maxPurchaseQuantity = purchaseLimit(current)
         if (typeof current.price === "number" && current.price > 0) price = current.price
       } catch (error) {
         console.error("[Cart] Availability check failed:", error)
         toast.error(error instanceof Error ? error.message : "Product availability could not be checked")
         return false
       }
+      if (activeUserIdRef.current !== owner) return false
       const currentCart = cartRef.current
       const updatedCart = (() => {
         const prev = currentCart
-        const existingIndex = prev.findIndex((item) => item.id === product.id)
+        const existingIndex = prev.findIndex((item) => cartLineKey(item) === lineKey)
         let next: CartItem[]
         if (existingIndex >= 0) {
           next = [...prev]
@@ -661,7 +699,8 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
             ...next[existingIndex],
             price,
             stock,
-            quantity: (next[existingIndex].quantity || 1) + (product.quantity || 1),
+            maxPurchaseQuantity,
+            quantity: next[existingIndex].quantity + product.quantity,
             ...(product.type && { type: product.type }),
             ...(product.packSize && { packSize: product.packSize }),
             ...(product.validityYears && { validityYears: product.validityYears }),
@@ -674,10 +713,11 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
             ...prev,
             {
               ...product,
-              quantity: product.quantity || 1,
+              quantity: product.quantity,
               type: product.type || "hardware",
               price,
               stock,
+              maxPurchaseQuantity,
               ...(product.maxDevices !== undefined && { maxDevices: product.maxDevices }),
               ...(product.validity !== undefined && { validity: product.validity }),
             },
@@ -686,93 +726,149 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
         return next
       })()
       const error = cartLimitError(updatedCart)
-      const nextQuantity = updatedCart.find((item) => item.id === product.id)?.quantity || 0
-      if (error || (typeof stock === "number" && nextQuantity > stock)) {
-        toast.error(error || `Only ${stock} units of this product are available.`)
+      const nextQuantity = updatedCart.filter(item => item.id === product.id).reduce((sum, item) => sum + item.quantity, 0)
+      if (error || nextQuantity > (maxPurchaseQuantity ?? purchaseLimit({})) || (typeof stock === "number" && nextQuantity > stock)) {
+        toast.error(error || (nextQuantity > (maxPurchaseQuantity ?? purchaseLimit({}))
+          ? `You can purchase up to ${maxPurchaseQuantity} units of this product.` : `Only ${stock} units of this product are available.`))
         return false
       }
-      cartRef.current = updatedCart
-      setCartState(updatedCart)
+      safeSetCart(updatedCart)
       persistLocal(updatedCart)
+      await saveAccountCart(updatedCart)
 
-      if (user?.id && user.id !== "guest" && !checkoutCartPendingRef.current) {
-        try {
-          await fetch("/api/cart", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user.id, items: updatedCart }),
-          })
-        } catch {
-          // network error — localStorage is the primary fallback
-        }
-      }
-
-      analytics.addToCart(toAnalyticsItem(product, product.quantity || 1))
+      lastAddAt.current.set(actionKey, Date.now())
+      analytics.addToCart(toAnalyticsItem(product, product.quantity))
       return true
+      } finally { addingLines.current.delete(actionKey) }
     },
-    [persistLocal, user],
+    [persistLocal, safeSetCart, saveAccountCart],
   )
 
   const updateQuantity = useCallback(
     (id: string, quantity: number) => {
-      if (quantity <= 0) {
-        removeFromCart(id)
-        return true
-      }
-      const item = cartRef.current.find((item) => item.id === id)
-      const next = cartRef.current.map((item) => item.id === id ? { ...item, quantity } : item)
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > purchaseLimit({})) { toast.error("Quantity must be a positive whole number within the purchase limit."); return false }
+      const item = findCartLine(cartRef.current, id)
+      if (!item) return false
+      if (quantity === item.quantity) return true
+      const actionKey = `${activeUserIdRef.current}:${cartLineKey(item)}`
+      if (Date.now() - (lastQuantityAt.current.get(actionKey) || 0) < 300) return false
+      const next = cartRef.current.map(existing => cartLineKey(existing) === cartLineKey(item) ? { ...existing, quantity } : existing)
       const error = cartLimitError(next)
       const reducing = !!item && Number.isSafeInteger(quantity) && quantity > 0 && quantity < item.quantity
-      if (!reducing && (error || (typeof item?.stock === "number" && quantity > item.stock))) {
-        toast.error(error || `Only ${item?.stock} units of this product are available.`)
+      const totalQuantity = next.filter(existing => existing.id === item.id).reduce((sum, existing) => sum + existing.quantity, 0)
+      const maximum = item.maxPurchaseQuantity ?? purchaseLimit({})
+      if (!reducing && (error || totalQuantity > maximum || (typeof item.stock === "number" && totalQuantity > item.stock))) {
+        toast.error(error || (totalQuantity > maximum ? `You can purchase up to ${maximum} units of this product.` : `Only ${item.stock} units of this product are available.`))
         return false
       }
-      cartRef.current = next
-      setCartState(next)
+      safeSetCart(next)
+      lastQuantityAt.current.set(actionKey, Date.now())
       persistLocal(next)
+      void saveAccountCart(next)
       return true
     },
-    [persistLocal, removeFromCart],
+    [persistLocal, safeSetCart, saveAccountCart],
   )
 
   const clearCart = useCallback(() => {
-    setCartState([])
+    if (!cartRef.current.length) return
+    safeSetCart([])
     persistLocal([])
-  }, [persistLocal])
+    void saveAccountCart([])
+  }, [persistLocal, safeSetCart, saveAccountCart])
+
+  const completedCartPurchases = useRef(new Set<string>())
+  const completePurchase = useCallback(async (items: Array<CartLineIdentity & { quantity: number }>, orderId: string) => {
+    if (activeUserIdRef.current !== userId) return
+    const completionKey = `sara_cart_purchase:${userId}:${orderId}`
+    if (completedCartPurchases.current.has(completionKey)) return
+    try { if (localStorage.getItem(completionKey)) return } catch { /* The in-memory guard still prevents repeated callbacks. */ }
+    completedCartPurchases.current.add(completionKey)
+    try { localStorage.setItem(completionKey, "1") } catch { /* Keep the in-memory guard. */ }
+    const bought = new Map<string, number>()
+    for (const item of items) {
+      if (!Number.isSafeInteger(item.quantity) || item.quantity < 1) continue
+      const line = cartLineKey(item)
+      bought.set(line, (bought.get(line) || 0) + item.quantity)
+    }
+    const current = cartRef.current
+    const next = current.flatMap(item => {
+      const quantity = item.quantity - (bought.get(cartLineKey(item)) || 0)
+      return quantity > 0 ? [{ ...item, quantity }] : []
+    })
+    if (next.length === current.length && next.every((item, index) => item.quantity === current[index].quantity)) return
+    safeSetCart(next)
+    persistLocal(next)
+    await saveAccountCart(next)
+  }, [safeSetCart, persistLocal, saveAccountCart, userId])
 
   const refreshItemPrices = useCallback((prices: Record<string, number>, stocks: Record<string, number> = {}) => {
-    setCartState((previous) => {
-      let changed = false
-      const next = previous.map((item) => {
-        const price = prices[item.id]
-        const stock = stocks[item.id]
-        const validPrice = Number.isFinite(price) && price > 0
-        const validStock = Number.isFinite(stock) && stock >= 0
-        if ((!validPrice || price === item.price) && (!validStock || stock === item.stock)) return item
-        changed = true
-        return { ...item, ...(validPrice ? { price } : {}), ...(validStock ? { stock } : {}) }
-      })
-      if (!changed) return previous
-      persistLocal(next)
-      return next
+    const previous = cartRef.current
+    let changed = false
+    const next = previous.map((item) => {
+      const price = prices[item.id]
+      const stock = stocks[item.id]
+      const validPrice = Number.isFinite(price) && price > 0
+      const validStock = Number.isFinite(stock) && stock >= 0
+      if ((!validPrice || price === item.price) && (!validStock || stock === item.stock)) return item
+      changed = true
+      return { ...item, ...(validPrice ? { price } : {}), ...(validStock ? { stock } : {}) }
     })
-  }, [persistLocal])
+    if (!changed) return
+    safeSetCart(next)
+    persistLocal(next)
+  }, [persistLocal, safeSetCart])
+
+  const availabilityKey = JSON.stringify([...new Map(cart.map(item => [item.id, item.type || "hardware"])).entries()].sort())
+  useEffect(() => {
+    const identities: Array<[string, string]> = JSON.parse(availabilityKey)
+    if (!identities.length || isLoading) return
+    const controller = new AbortController()
+    let refreshing = false
+    const refresh = async () => {
+      if (refreshing || document.visibilityState === "hidden") return
+      refreshing = true
+      try {
+        const prices: Record<string, number> = {}
+        const stocks: Record<string, number> = {}
+        const hardware = identities.filter(([, type]) => type !== "software").map(([id]) => id)
+        if (hardware.length) {
+          const response = await fetch("/api/products/bulk", { method: "POST", signal: controller.signal,
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: hardware }) })
+          if (!response.ok) throw new Error("Product availability could not be refreshed")
+          const products = await response.json()
+          if (!Array.isArray(products)) throw new Error("Invalid availability response")
+          for (const id of hardware) {
+            const product = products.find(product => product.id === id || product._id === id)
+            stocks[id] = product && !purchaseAvailabilityError(product) ? purchaseStock(product) ?? 0 : 0
+            if (product && typeof product.price === "number" && product.price > 0) prices[id] = product.price
+          }
+        }
+        for (const [id, type] of identities) {
+          if (type !== "software") continue
+          const response = await fetch(`/api/software/${encodeURIComponent(id)}`, { signal: controller.signal })
+          if (response.status === 404) { stocks[id] = 0; continue }
+          if (!response.ok) throw new Error("Software availability could not be refreshed")
+          const data = await response.json()
+          const product = data.product || data
+          if (purchaseAvailabilityError(product, true)) { stocks[id] = 0; continue }
+          const stock = purchaseStock(product, true)
+          if (stock !== null) stocks[id] = stock
+          if (typeof product.price === "number" && product.price > 0) prices[id] = product.price
+        }
+        if (!controller.signal.aborted) refreshItemPrices(prices, stocks)
+      } catch { /* Keep the last display snapshot; checkout always revalidates. */ }
+      finally { refreshing = false }
+    }
+    void refresh()
+    const timer = setInterval(() => void refresh(), 30000)
+    window.addEventListener("focus", refresh)
+    return () => { controller.abort(); clearInterval(timer); window.removeEventListener("focus", refresh) }
+  }, [availabilityKey, isLoading, refreshItemPrices])
 
   const syncCartWithDatabase = useCallback(async (requireSave = false) => {
-    if (!user || user.id === "guest" || checkoutCartPendingRef.current) return
-    const snapshot = cartRef.current
-    try {
-      const response = await fetch("/api/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, items: snapshot }),
-      })
-      if (!response.ok) throw new Error("Your cart could not be saved")
-    } catch (error) {
-      if (requireSave) throw error
-      // network error — localStorage is primary
-    }
-  }, [user])
+    await saveAccountCart(cartRef.current, requireSave)
+  }, [saveAccountCart])
 
   useEffect(() => registerBeforeLogout(async () => {
     if (cartUpdateTimeoutRef.current) clearTimeout(cartUpdateTimeoutRef.current)
@@ -780,7 +876,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     if (!await abandonCheckoutCart()) throw new Error("Checkout cart preservation is incomplete")
     // A pending choice already saved the entire combined selection. Keep it
     // even if the combined cart exceeds limits for a single purchase.
-    const selection = (items: CartItem[]) => JSON.stringify(items.map(item => [item.id, item.quantity]))
+    const selection = (items: CartItem[]) => JSON.stringify(items.map(item => [cartLineKey(item), item.quantity]))
     const alreadySaved = checkoutStageSavedRef.current
       && selection(cartRef.current) === selection(preservedCartRef.current)
     if (!hadPendingChoice && !alreadySaved) await syncCartWithDatabase(true)
@@ -935,6 +1031,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       refreshItemPrices,
       removeFromCart,
       clearCart,
+      completePurchase,
       saveOrder,
       getOrders,
       getOrder,
@@ -951,6 +1048,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       refreshItemPrices,
       removeFromCart,
       clearCart,
+      completePurchase,
       saveOrder,
       getOrders,
       getOrder,

@@ -1,6 +1,7 @@
 import { ObjectId, type ClientSession } from "mongodb"
 import { z } from "zod"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
+import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 
 /**
  * Per-store stock, keyed by the store code from /admin/store-locations and the
@@ -42,34 +43,52 @@ export interface StockNeed {
  * item code cannot be held by any store, so it rules every store out; a store
  * without a store code has no stock and is never returned.
  */
-export async function storesHoldingStock(needs: StockNeed[]): Promise<Set<string>> {
+export interface StoreItemAvailability {
+  itemCode: string
+  required: number
+  available: number
+}
+
+export async function getStoreStockAvailability(needs: StockNeed[], session?: ClientSession) {
   const stores = await getCollection<{ _id: ObjectId; storeCode?: string }>("store_locations")
   const active = await stores.find(
-    { isActive: { $ne: false }, storeCode: { $type: "string", $ne: "" } },
-    { projection: { storeCode: 1 } },
+    ACTIVE_RETAIL_STORE_FILTER,
+    { projection: { storeCode: 1 }, session },
   ).toArray()
-  if (needs.length === 0) return new Set(active.map(store => store._id.toString()))
-  if (needs.some(need => !need.sku)) return new Set()
 
   const required = new Map<string, number>()
-  for (const need of needs) required.set(need.sku!, (required.get(need.sku!) ?? 0) + need.quantity)
+  for (const need of needs) if (need.sku) required.set(need.sku, (required.get(need.sku) ?? 0) + need.quantity)
 
-  const rows = await (await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)).find(
-    { sku: { $in: [...required.keys()] }, storeCode: { $in: active.map(store => store.storeCode!) } },
-    { projection: { storeCode: 1, sku: 1, quantity: 1 } },
-  ).toArray()
-  const held = new Map(rows.map(row => [`${row.storeCode}\u0000${row.sku}`, Number(row.quantity) || 0]))
+  const rows = required.size ? await (await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)).find(
+    { sku: { $in: [...required.keys()] }, storeCode: { $in: active.flatMap(store => store.storeCode?.trim() ? [store.storeCode.trim()] : []) } },
+    { projection: { storeCode: 1, sku: 1, quantity: 1 }, session },
+  ).toArray() : []
+  const held = new Map(rows.map(row => [`${row.storeCode}\u0000${row.sku}`,
+    Number.isSafeInteger(row.quantity) && row.quantity >= 0 ? row.quantity : 0]))
+  const byStore: Record<string, StoreItemAvailability[]> = {}
+  const storeIds = new Set<string>()
+  for (const store of active) {
+    const id = store._id.toString()
+    const code = store.storeCode?.trim()
+    const details = [...required].map(([itemCode, quantity]) => ({
+      itemCode, required: quantity, available: code ? held.get(`${code}\u0000${itemCode}`) ?? 0 : 0,
+    }))
+    byStore[id] = details
+    if (!needs.some(need => !need.sku) && (needs.length === 0 || Boolean(code)) &&
+      details.every(item => item.available >= item.required)) storeIds.add(id)
+  }
+  return { storeIds, byStore }
+}
 
-  return new Set(active
-    .filter(store => [...required].every(([sku, quantity]) => (held.get(`${store.storeCode}\u0000${sku}`) ?? 0) >= quantity))
-    .map(store => store._id.toString()))
+export async function storesHoldingStock(needs: StockNeed[], session?: ClientSession): Promise<Set<string>> {
+  return (await getStoreStockAvailability(needs, session)).storeIds
 }
 
 /** Item codes for the given product ids, read from the catalogue. */
 export async function itemCodesFor(productIds: string[]): Promise<Map<string, string | null>> {
   const objectIds = productIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id))
   const products = await (await getCollection<{ _id: ObjectId | string; id?: string; sku?: string }>(COLLECTIONS.PRODUCTS)).find(
-    { $or: [{ _id: { $in: objectIds } }, { id: { $in: productIds } }] },
+    { $or: [{ _id: { $in: objectIds } }, { _id: { $in: productIds } }, { id: { $in: productIds } }] },
     { projection: { sku: 1, id: 1 } },
   ).toArray()
   const codes = new Map<string, string | null>(productIds.map(id => [id, null]))

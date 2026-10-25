@@ -5,15 +5,21 @@ import { getCollection } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { priceOrder, type IncomingItem, type PricingSuccess } from "@/lib/order-pricing"
 import { quoteRedemption } from "@/lib/loyalty"
+import { CartQuantitySchema } from "@/lib/validation"
+import { cartLineKey } from "@/lib/cart-line"
 
 export const CheckoutQuoteSchema = z.object({
   items: z.array(z.object({
     id: z.string().max(200).optional(),
     productId: z.string().max(200).optional(),
     sku: z.string().max(200).nullish(),
-    quantity: z.coerce.number().int().positive().max(1000000),
+    quantity: CartQuantitySchema,
     color: z.string().max(100).nullish(),
     size: z.string().max(100).nullish(),
+    variantId: z.string().max(200).nullish(), ram: z.string().max(100).nullish(), storage: z.string().max(100).nullish(),
+    type: z.string().max(50).nullish(),
+    packSize: z.union([z.string(), z.number()]).nullish(), validityYears: z.union([z.string(), z.number()]).nullish(),
+    kgenVariantId: z.string().max(200).nullish(),
   })).min(1).max(100),
   couponCode: z.string().max(100).nullish(),
   redeemPoints: z.number().int().nonnegative().max(1000000).default(0),
@@ -34,7 +40,14 @@ export function checkoutFingerprint(
   amount: number,
 ): string {
   return hashCheckoutToken(JSON.stringify({
-    items: [...pricing.items].sort((a, b) => a.id.localeCompare(b.id)),
+    items: [...pricing.items].sort((a, b) => a.id.localeCompare(b.id) || cartLineKey(a).localeCompare(cartLineKey(b))).map(priced => {
+      const item = { ...priced }
+      delete item.sku
+      if (!item.ram) delete item.ram
+      if (!item.storage) delete item.storage
+      if (!item.variantId) delete item.variantId
+      return item
+    }),
     couponCode: pricing.coupon?.code || null,
     fulfilment: { method: options.fulfilment?.method || "delivery", storeId: options.fulfilment?.storeId || null },
     redeemPoints: options.redeemPoints || 0,
@@ -98,10 +111,11 @@ export async function createCheckoutIntent(
   return token
 }
 
-export async function getCheckoutIntent(orderId: string, token: string, userId: string | null) {
+export async function getCheckoutIntent(orderId: string, token: string, userId: string | null, includeCompleted = false) {
   const collection = await getCollection<CheckoutIntent>("checkout_intents")
   return collection.findOne({
-    _id: orderId, tokenHash: hashCheckoutToken(token), userId, expiresAt: { $gt: new Date() },
+    _id: orderId, tokenHash: hashCheckoutToken(token), userId,
+    ...(includeCompleted ? { $or: [{ expiresAt: { $gt: new Date() } }, { status: "consumed" as const }] } : { expiresAt: { $gt: new Date() } }),
   })
 }
 

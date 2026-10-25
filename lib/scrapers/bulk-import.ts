@@ -2,6 +2,7 @@ import { z } from "zod"
 
 export const MAX_SCRAPER_IMPORT_BYTES = 3 * 1024 * 1024
 export const MAX_SCRAPER_IMPORT_ROWS = 500
+export const scraperItemNumberKey = (value: string) => value.trim().toUpperCase()
 export const SCRAPER_TEMPLATE = [{
   itemno: "REFSAM1187",
   "product link": "https://www.amazon.in/dp/B000000000",
@@ -48,11 +49,21 @@ export function sheetCellLink(cell: { l?: { Target?: unknown }; f?: unknown } | 
   if (match && /^https?:\/\//i.test(match[1])) return normalizeScraperUrl(match[1])
   return null
 }
-const normalizeColumn = (column: string) => column.toLowerCase().replace(/[\s_-]/g, "")
+const normalizeColumn = (column: string) => column.toLowerCase().replace(/[.\s_-]/g, "")
 
 export function scraperColumnField(column: string): keyof ScraperImportRow | undefined {
   const key = normalizeColumn(column)
   return Object.hasOwn(COLUMN_FIELDS, key) ? COLUMN_FIELDS[key] : undefined
+}
+
+export function scraperRowValues(row: Record<string, unknown>): ScraperImportRow {
+  const fields = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeColumn(key), value == null ? "" : String(value).trim()]))
+  return {
+    itemno: fields.itemno || fields.itemnumber || fields.sku || "",
+    name: fields.name || "", category: fields.category || "", subCategory: fields.subcategory || "",
+    charDesc: fields.chardesc || "", brand: fields.brand || "",
+    url: normalizeScraperUrl(fields.productlink || fields.url || fields.shortlink || fields.link || ""),
+  }
 }
 
 export interface ScraperImportIssue {
@@ -66,15 +77,16 @@ export function validateScraperRows(
   data: Record<string, unknown>[],
   supportedUrl?: (url: string) => boolean,
   rowNumbers?: number[],
+  skippedRowNumbers?: ReadonlySet<number>,
 ): { rows: ScraperImportRow[]; issues: ScraperImportIssue[]; error?: string } {
   if (!data.length || data.length > MAX_SCRAPER_IMPORT_ROWS) {
     return { rows: [], issues: [], error: `Provide between 1 and ${MAX_SCRAPER_IMPORT_ROWS} rows` }
   }
-  const seen = new Set<string>()
   const rows: ScraperImportRow[] = []
   const issues: ScraperImportIssue[] = []
   data.forEach((row, index) => {
     const rowNumber = rowNumbers?.[index] ?? index + 2
+    if (skippedRowNumbers?.has(rowNumber)) return
     const fields = Object.fromEntries(Object.entries(row).map(([key, value]) => [
       normalizeColumn(key),
       value == null ? "" : String(value).trim(),
@@ -85,15 +97,7 @@ export function validateScraperRows(
       const alias = aliases.find(key => fields[key]) ?? aliases.find(key => sourceColumns[key] !== undefined)
       issues.push({ row: rowNumber, field, column: alias ? sourceColumns[alias] : undefined, message })
     }
-    const candidate = {
-      itemno: fields.itemno || fields.itemnumber || fields.sku,
-      name: fields.name,
-      category: fields.category,
-      subCategory: fields.subcategory,
-      charDesc: fields.chardesc ?? "",
-      brand: fields.brand,
-      url: normalizeScraperUrl(fields.productlink || fields.url || fields.shortlink || fields.link || ""),
-    }
+    const candidate = scraperRowValues(row)
     const result = ScraperImportRowSchema.safeParse(candidate)
     if (!result.success) {
       for (const issue of result.error.issues) {
@@ -102,11 +106,6 @@ export function validateScraperRows(
       }
     } else {
       rows.push(result.data)
-    }
-    if (candidate.itemno) {
-      const key = candidate.itemno.toLowerCase()
-      if (seen.has(key)) addIssue("itemno", `duplicate itemno ${candidate.itemno}`)
-      seen.add(key)
     }
     if (supportedUrl && ScraperImportRowSchema.shape.url.safeParse(candidate.url).success && !supportedUrl(candidate.url)) {
       addIssue("url", `Unsupported product link: ${candidate.url}`)

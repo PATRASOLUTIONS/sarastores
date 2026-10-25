@@ -7,6 +7,7 @@ import { CheckoutCartSelectionSchema } from "@/lib/validation"
 import { mergeCheckoutCart } from "@/lib/checkout-cart"
 import { priceOrder } from "@/lib/order-pricing"
 import type { CartItem } from "@/contexts/CartContext"
+import { cartLineKey } from "@/lib/cart-line"
 
 type SavedCart = { userId: string; items: CartItem[]; createdAt?: Date; updatedAt?: Date;
   checkoutSelectionId?: string; checkoutSelectionAction?: "include" | "wishlist";
@@ -14,7 +15,7 @@ type SavedCart = { userId: string; items: CartItem[]; createdAt?: Date; updatedA
 type SavedWishlist = { userId: string; items: string[]; createdAt?: Date; updatedAt?: Date }
 
 const signature = (items: Array<{ id?: string; productId?: string; quantity: number }>) =>
-  JSON.stringify(items.map(item => [item.id || item.productId, Number(item.quantity)]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))))
+  JSON.stringify(items.map(item => [cartLineKey(item), Number(item.quantity)]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))))
 
 export async function POST(request: NextRequest) {
   try {

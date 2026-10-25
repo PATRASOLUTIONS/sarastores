@@ -87,7 +87,7 @@ export function StoreLocator() {
   const [selectedBrand, setSelectedBrand] = useState("all")
   const [sort, setSort] = useState("nearest")
   const [selectedStore, setSelectedStore] = useState<string | null>(null)
-  const [showAll, setShowAll] = useState(false)
+  const [showAll, setShowAll] = useState(true)
   const [view, setView] = useState<"map" | "list">("map")
   const [mapReset, setMapReset] = useState(0)
   const [gpsLocation, setGpsLocation] = useState<Coordinates | null>(null)
@@ -125,7 +125,7 @@ export function StoreLocator() {
       setIsDataLoading(true)
       setDataError(null)
       try {
-        const response = await fetch("/api/stores", { signal: controller.signal })
+        const response = await fetch("/api/stores", { signal: controller.signal, cache: "no-store" })
         const data: unknown = await response.json()
         if (!response.ok || !data || typeof data !== "object" || !("success" in data) || data.success !== true ||
           !("stores" in data) || !Array.isArray(data.stores) || !data.stores.every(isStore)) {
@@ -213,7 +213,7 @@ export function StoreLocator() {
   }
 
   useEffect(() => {
-    setShowAll(false)
+    setShowAll(true)
     setSelectedStore(null)
   }, [searchQuery, selectedCity, selectedType, selectedBrand, radiusKm, userLocation])
 

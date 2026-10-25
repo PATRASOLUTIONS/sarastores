@@ -15,6 +15,8 @@ import { cleanProductName } from "@/utils/cleanProductName"
 import { isOfferLive } from "@/lib/offer-sections"
 import styles from "@/app/cart/cart.module.css"
 import { cartLimitError } from "@/lib/cart-limits"
+import { cartLineKey } from "@/lib/cart-line"
+import { purchaseStock, MAX_PURCHASE_QUANTITY } from "@/lib/purchase-validation"
 import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
@@ -68,7 +70,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const idsKey = JSON.stringify([...new Set(cart.filter((item) => item.type !== "software").map((item) => item.id))].sort())
 
   useEffect(() => {
-    const ids = cart.map((item) => item.id)
+    const ids = cart.map(cartLineKey)
     const added = ids.filter((id) => !knownIds.current.has(id))
     knownIds.current = new Set(ids)
     setSelectedIds((previous) => [...previous.filter((id) => ids.includes(id)), ...added])
@@ -166,13 +168,14 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   }, [cart, products, settings, settingsLoading, settingsError])
 
   const unavailable = cart.some((item) => {
-    if (item.type === "software") return false
+    const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
+    if (item.type === "software") return typeof item.stock === "number" && item.stock < quantity
     const product = products[item.id]
     return !detailsLoading && !detailsError && (!product || product.price <= 0 ||
-      (typeof product.stock === "number" && product.stock < item.quantity))
+      (purchaseStock(product) ?? 0) < quantity)
   })
   const limitError = cartLimitError(cart.map((item) => ({ ...item, price: products[item.id]?.price ?? item.price })))
-  const checkoutBlocked = cart.length === 0 || !!limitError
+  const checkoutBlocked = cart.length === 0 || !!limitError || unavailable
   const proceedToCheckout = () => {
     if (checkoutBlocked) return
     if (detailsLoading || settingsLoading) {
@@ -187,16 +190,18 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
       toast.error("Shipping charges are temporarily unavailable. Refresh the page before continuing.")
       return
     }
-    if (unavailable) toast.error("Some items are unavailable in the requested quantity. You can review checkout, but update these items before placing an order.")
+    if (unavailable) { toast.error("Remove unavailable items or reduce their quantity before checkout."); return }
     router.push("/checkout")
   }
   const rail = suggestions.filter((product) => !cart.some((item) => item.id === product.id)).slice(0, 6)
 
   const removeItem = (id: string) => { removeFromCart(id); toast.success("Item removed from cart") }
   const moveToWishlist = async (id: string) => {
+    const item = cart.find(item => cartLineKey(item) === id)
+    if (!item) return
     setPendingWishlist((previous) => [...previous, id])
     try {
-      if (isInWishlist(id) || await addToWishlist(id)) removeFromCart(id)
+      if (isInWishlist(item.id) || await addToWishlist(item.id)) removeFromCart(id)
     } finally {
       setPendingWishlist((previous) => previous.filter((value) => value !== id))
     }
@@ -231,7 +236,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
         <div className={styles.cartLayout}>
           <section className={styles.items} aria-label="Cart items">
             <div className={styles.bulkActions}>
-              <label><input ref={selectAll} type="checkbox" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : cart.map((item) => item.id))} />
+              <label><input ref={selectAll} type="checkbox" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : cart.map(cartLineKey))} />
                 Select All ({cart.length} items)</label>
               <button type="button" disabled={selectedIds.length === 0} onClick={() => {
                 selectedIds.forEach((id) => removeFromCart(id)); toast.success("Selected items removed")
@@ -239,40 +244,48 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               <span className="sr-only">Selection applies to bulk removal. Checkout includes every cart item.</span>
             </div>
             <ul>{cart.map((item) => {
+              const lineKey = cartLineKey(item)
+              const otherQuantity = cart.filter(line => line.id === item.id && cartLineKey(line) !== lineKey)
+                .reduce((sum, line) => sum + line.quantity, 0)
               const product = products[item.id]
               const price = product?.price ?? item.price
               const mrp = product?.mrp
               const saving = typeof mrp === "number" && Number.isFinite(mrp) && mrp > price ? (mrp - price) * item.quantity : 0
               const percentOff = typeof mrp === "number" && mrp > price ? Math.round((mrp - price) / mrp * 100) : 0
-              const limit = typeof product?.stock === "number" ? Math.max(0, product.stock) : item.stock ?? Number.MAX_SAFE_INTEGER
-              const available = product && (product.stock === undefined || product.stock >= item.quantity) && product.price > 0
+              const stock = item.type === "software" ? item.stock ?? MAX_PURCHASE_QUANTITY : purchaseStock(product || {}) ?? 0
+              const limit = Math.max(0, Math.min(stock, item.maxPurchaseQuantity ?? MAX_PURCHASE_QUANTITY) - otherQuantity)
+              const available = item.quantity <= limit && (item.type === "software" || !!product && product.price > 0)
               const name = cleanProductName(item.name)
               const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(product?.slug || item.id)}`
-              return <li key={item.id} className={styles.cartItem}>
-                <input type="checkbox" checked={selectedIds.includes(item.id)} aria-label={`Select ${name}`} onChange={() => setSelectedIds((previous) =>
-                  previous.includes(item.id) ? previous.filter((id) => id !== item.id) : [...previous, item.id])} />
+              return <li key={lineKey} className={styles.cartItem}>
+                <input type="checkbox" checked={selectedIds.includes(lineKey)} aria-label={`Select ${name}`} onChange={() => setSelectedIds((previous) =>
+                  previous.includes(lineKey) ? previous.filter((id) => id !== lineKey) : [...previous, lineKey])} />
                 <Link href={href} className={styles.productImage}><CartProductImage src={item.image} name={name} /></Link>
                 <div className={styles.itemCopy}>
                   <Link href={href}><h2>{name}</h2></Link>
+                  {(item.color || item.size || item.ram || item.storage) && <p>
+                    {[item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`,
+                      item.ram && `RAM: ${item.ram}`, item.storage && `Storage: ${item.storage}`].filter(Boolean).join(" · ")}
+                  </p>}
                   {item.type === "software" ? <p>{item.validity || (item.validityYears ? `${item.validityYears} years` : "Digital product")}</p> :
                     product?.sku && <p>SKU: {product.sku}</p>}
-                  <p className={available || item.type === "software" ? styles.inStock : styles.stockNotice}>
-                    <CheckCircle2 size={12} />{item.type === "software" ? "Digital delivery" : detailsLoading ? "Checking availability..." : detailsError ? "Availability unavailable" : available ? "In stock" : "Unavailable in this quantity"}
+                  <p className={available ? styles.inStock : styles.stockNotice}>
+                    <CheckCircle2 size={12} />{item.type === "software" ? available ? "Digital delivery" : "Unavailable in this quantity" : detailsLoading ? "Checking availability..." : detailsError ? "Availability unavailable" : available ? "In stock" : "Unavailable in this quantity"}
                   </p>
                   <p className={styles.delivery}><Truck size={12} />{item.type === "software" ? "Delivery details confirmed at checkout" : "Delivery confirmed at checkout"}</p>
                 </div>
                 <div className={styles.quantity} aria-label={`Quantity for ${name}`}>
-                  <button type="button" disabled={item.quantity <= 1} aria-label={`Decrease quantity of ${name}`} onClick={() => updateQuantity(item.id, item.quantity - 1)}><Minus size={12} /></button>
+                  <button type="button" disabled={item.quantity <= 1} aria-label={`Decrease quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity - 1)}><Minus size={12} /></button>
                   <span>{item.quantity}</span>
-                  <button type="button" disabled={item.quantity >= limit || detailsLoading} aria-label={`Increase quantity of ${name}`} onClick={() => updateQuantity(item.id, item.quantity + 1)}><Plus size={12} /></button>
+                  <button type="button" disabled={item.quantity >= limit || detailsLoading} aria-label={`Increase quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity + 1)}><Plus size={12} /></button>
                 </div>
                 <div className={styles.linePrice}>
                   <strong>{money(price * item.quantity)}</strong>
                   {saving > 0 && <><del>{money((mrp || price) * item.quantity)}</del><span>{percentOff}% off</span><p>You save {money(saving)}</p></>}
                 </div>
                 <div className={styles.itemActions}>
-                  <button type="button" disabled={pendingWishlist.includes(item.id)} onClick={() => void moveToWishlist(item.id)}>Move to Wishlist</button>
-                  <span aria-hidden="true">|</span><button type="button" onClick={() => removeItem(item.id)}>Remove</button>
+                  <button type="button" disabled={pendingWishlist.includes(lineKey)} onClick={() => void moveToWishlist(lineKey)}>Move to Wishlist</button>
+                  <span aria-hidden="true">|</span><button type="button" onClick={() => removeItem(lineKey)}>Remove</button>
                 </div>
               </li>
             })}</ul>

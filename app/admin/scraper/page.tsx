@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   AlertTriangle,
@@ -21,7 +21,8 @@ import { apiFetch } from "@/lib/api-client"
 import SelectWithAdd from "@/components/admin/SelectWithAdd"
 import BulkScraperImport from "@/components/admin/BulkScraperImport"
 import { SAP_OWNED_FIELDS, SCRAPER_LABELS, type ScraperSource } from "@/lib/scrapers/types"
-import { normalizeScraperUrl } from "@/lib/scrapers/bulk-import"
+import { normalizeScraperUrl, scraperItemNumberKey } from "@/lib/scrapers/bulk-import"
+import { checkScraperItemNumbers } from "@/lib/scrapers/check-items-client"
 import { z } from "zod"
 
 interface ScrapedProduct {
@@ -189,6 +190,33 @@ export default function AdminScraperPage() {
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null)
   const [product, setProduct] = useState<ScrapedProduct | null>(null)
   const [savedSlug, setSavedSlug] = useState<string | null>(null)
+  const actionInFlight = useRef(false)
+  const [itemCheck, setItemCheck] = useState<{ key: string; status: "checking" | "ready" | "exists" | "error"; message?: string } | null>(null)
+  const checkedItemno = scraperItemNumberKey(step === "review" ? product?.sap.sku || "" : sku)
+  useEffect(() => {
+    if (!checkedItemno || step === "done") { setItemCheck(null); return }
+    const controller = new AbortController()
+    setItemCheck({ key: checkedItemno, status: "checking" })
+    const timer = setTimeout(() => {
+      void checkScraperItemNumbers([checkedItemno], controller.signal).then(existing => {
+        if (!controller.signal.aborted) setItemCheck({ key: checkedItemno, status: existing.has(checkedItemno) ? "exists" : "ready" })
+      }).catch(cause => {
+        if (!controller.signal.aborted) setItemCheck({ key: checkedItemno, status: "error", message: cause instanceof Error ? cause.message : "Could not check item number" })
+      })
+    }, 300)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [checkedItemno, step])
+  const checkNewItem = async (value: string) => {
+    const key = scraperItemNumberKey(value)
+    if ((await checkScraperItemNumbers([key])).has(key)) {
+      setItemCheck({ key, status: "exists" })
+      setError({ message: `${key}: Already exists — skipped. 0 item numbers will be added.` })
+      toast.error("Already exists — skipped")
+      return false
+    }
+    setItemCheck({ key, status: "ready" })
+    return true
+  }
   const [taxonomy, setTaxonomy] = useState<Taxonomy>({
     brands: [],
     categories: [],
@@ -229,18 +257,22 @@ export default function AdminScraperPage() {
       return
     }
 
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusy(true)
     setError(null)
     setProduct(null)
     try {
+      if (!await checkNewItem(sku)) return
       const next = await fetchScrapedProduct(normalizeScraperUrl(url))
-      next.sap.sku = sku.trim()
+      next.sap.sku = scraperItemNumberKey(sku)
       setProduct(next)
       setStep("review")
       toast.success(`Fetched from ${SCRAPER_LABELS[source]}`)
     } catch (cause) {
       setError({ message: cause instanceof Error ? cause.message : "Could not reach the scraper" })
     } finally {
+      actionInFlight.current = false
       setBusy(false)
     }
   }
@@ -254,10 +286,13 @@ export default function AdminScraperPage() {
       toast.error("Enter the SAP item number first")
       return
     }
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusy(true)
     setError(null)
     setProduct(null)
     try {
+      if (!await checkNewItem(sku)) return
       const form = new FormData()
       form.append("file", file)
       const res = await apiFetch("/api/scrape/pdf", { method: "POST", body: form })
@@ -267,13 +302,14 @@ export default function AdminScraperPage() {
         return
       }
       const next = body.product as ScrapedProduct
-      next.sap.sku = sku.trim()
+      next.sap.sku = scraperItemNumberKey(sku)
       setProduct(next)
       setStep("review")
       toast.success(`Imported ${Object.keys(next.technicalDetails).length} specs from the PDF`)
-    } catch {
-      setError({ message: "Could not upload the PDF" })
+    } catch (cause) {
+      setError({ message: cause instanceof Error ? cause.message : "Could not upload the PDF" })
     } finally {
+      actionInFlight.current = false
       setBusy(false)
     }
   }
@@ -290,90 +326,32 @@ export default function AdminScraperPage() {
       return
     }
 
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusy(true)
     try {
-      // 1. Create or update the product record.
-      const existingRes = await apiFetch(
-        `/api/products?sku=${encodeURIComponent(sap.sku)}&include_inactive=true`,
-      )
-      const existingBody = await existingRes.json()
-      const existing = Array.isArray(existingBody)
-        ? existingBody[0]
-        : (existingBody?.products ?? [])[0]
-
-      const payload = {
-        sku: sap.sku,
-        itemno: sap.sku,
-        name: sap.name,
-        brand: sap.brand,
-        category: sap.category,
-        subCategory: sap.subCategory,
-        char_desc: sap.charDesc,
-        description: product.description,
-        price: sap.price ?? 0,
-        mrp: product.mrp ?? sap.price ?? 0,
-        image: product.images[0] ?? "",
-        images: product.images.slice(0, 8),
-        stock: product.inStock ? 10 : 0,
-        active: false,
-        source: product.source,
-      }
-
-      let productId = existing?.id
-      if (existing) {
-        await apiFetch(`/api/products/${existing.id}`, { method: "PATCH", json: payload })
-      } else {
-        const created = await apiFetch("/api/products", { method: "POST", json: payload })
-        const createdBody = await created.json()
-        if (!created.ok) {
-          toast.error(createdBody?.error || "Could not create the product")
-          return
-        }
-        productId = createdBody?.id ?? createdBody?.product?.id
-      }
-
-      // 2. Push enrichment into the specification record.
-      const specRes = await apiFetch("/api/products/specifications/upload", {
-        method: "POST",
-        json: {
-          specifications: [
-            {
-              sku: sap.sku,
-              name: sap.name,
-              category: sap.category,
-              subCategory: sap.subCategory,
-              char_desc: sap.charDesc,
-              manufacturer_name: sap.brand,
-              mrp: product.mrp ?? sap.price,
-              overview: product.description,
-              from_manufacturer: product.manufacturerInfo,
-              technical_details: product.technicalDetails,
-              gallery_images: product.images,
-              specification_images: product.manufacturerImages,
-              included_components: product.whatsIncluded,
-              features: product.features,
-              reviews: product.reviews,
-            },
-          ],
-        },
-      })
-      const specBody = await specRes.json()
-      if (specBody?.skipped > 0) {
-        toast.error(specBody?.errors?.[0] || "Specification was skipped")
+      if (!await checkNewItem(sap.sku)) return
+      const response = await apiFetch("/api/scrape/publish", { method: "POST", json: {
+        mode: "draft", product,
+        row: { itemno: sap.sku, name: sap.name, category: sap.category, subCategory: sap.subCategory,
+          charDesc: sap.charDesc, brand: sap.brand, url: product.sourceUrl },
+      } })
+      const body = await response.json().catch(() => null)
+      if (!response.ok || !body?.success) throw new Error(body?.error || "Could not save")
+      if (body.skipped) {
+        setItemCheck({ key: scraperItemNumberKey(sap.sku), status: "exists" })
+        toast.error("Already exists — skipped. 0 item numbers added.")
         return
       }
-
-      const slugRes = await apiFetch(
-        `/api/products?sku=${encodeURIComponent(sap.sku)}&include_inactive=true`,
-      )
-      const slugBody = await slugRes.json()
-      const saved = Array.isArray(slugBody) ? slugBody[0] : (slugBody?.products ?? [])[0]
-      setSavedSlug(saved?.slug ?? productId ?? null)
+      if (body.added !== true || typeof body.itemno !== "string") throw new Error("The server did not confirm this item was added")
+      setProduct({ ...product, sap: { ...sap, sku: body.itemno } })
+      setSavedSlug(body.product?.slug ?? body.product?.id ?? null)
       setStep("done")
       toast.success("Saved to catalogue and specifications")
-    } catch {
-      toast.error("Could not save")
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not save")
     } finally {
+      actionInFlight.current = false
       setBusy(false)
     }
   }
@@ -404,6 +382,13 @@ export default function AdminScraperPage() {
       </div>
 
       <BulkScraperImport fetchProduct={fetchScrapedProduct} supportedUrl={url => detectSource(url) !== null} />
+
+      {step !== "done" && checkedItemno && <p role="status" className="rounded-lg border bg-white p-3 text-sm">
+        <strong>Manual entry {checkedItemno}: </strong>
+        {!itemCheck || itemCheck.key !== checkedItemno || itemCheck.status === "checking" ? "Checking item number..."
+          : itemCheck.status === "exists" ? "Already exists — skipped. 0 ready to add, 1 skipped."
+            : itemCheck.status === "error" ? itemCheck.message : "New item number. 1 ready to add, 0 skipped."}
+      </p>}
 
       <ol className="flex flex-wrap items-center gap-2 text-sm">
         {(
@@ -436,6 +421,7 @@ export default function AdminScraperPage() {
             <label className="block text-sm font-semibold text-gray-700">
               SAP item number *
               <input
+                disabled={busy}
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
                 placeholder="e.g. REFSAM1187"
@@ -451,6 +437,7 @@ export default function AdminScraperPage() {
               <div className="relative mt-1">
                 <Link2 className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
+                  disabled={busy}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleFetch()}
@@ -475,7 +462,7 @@ export default function AdminScraperPage() {
           <button
             type="button"
             onClick={handleFetch}
-            disabled={busy || !sku.trim() || !source}
+            disabled={busy || !sku.trim() || !source || (itemCheck?.key === checkedItemno && itemCheck.status === "exists")}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -791,7 +778,7 @@ export default function AdminScraperPage() {
         <section className="rounded-xl border border-green-200 bg-green-50 p-6">
           <h2 className="flex items-center gap-2 text-lg font-bold text-green-900">
             <CheckCircle2 className="h-5 w-5" />
-            {product.sap.sku} saved
+            1 item number added: {product.sap.sku}
           </h2>
           <p className="mt-1 text-sm text-green-800">
             The product was created as <b>inactive</b>. Review the specification sheet, then

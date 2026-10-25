@@ -5,6 +5,8 @@ import { z } from "zod"
 import { priceOrder } from "@/lib/order-pricing"
 import { MAX_CART_PRODUCTS } from "@/lib/cart-limits"
 import { ObjectId } from "mongodb"
+import { CartQuantitySchema } from "@/lib/validation"
+import { cartLineKey, type CartLineIdentity } from "@/lib/cart-line"
 
 type StoredCartItem = {
   id?: string
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest) {
       name: z.string().optional(),
       title: z.string().optional(),
       price: z.union([z.number(), z.string()]),
-      quantity: z.coerce.number().int().positive().safe(),
+      quantity: CartQuantitySchema,
       image: z.string().optional(),
       imageUrl: z.string().optional(),
       category: z.string().optional(),
@@ -101,7 +103,9 @@ export async function POST(request: NextRequest) {
     }).passthrough().refine((item) => item.productId || item.id, "Product ID is required")
 
     const cartSchema = z.object({
-      items: z.array(cartItemSchema).max(MAX_CART_PRODUCTS, "You can add up to 20 different products to your cart."),
+      // A preserved checkout may contain both 20-line selections. Allow
+      // trimming that saved cart; priceOrder still rejects new oversized carts.
+      items: z.array(cartItemSchema).max(MAX_CART_PRODUCTS * 2, "Your cart contains too many purchase options."),
     })
 
     const parsed = cartSchema.safeParse(body)
@@ -113,17 +117,21 @@ export async function POST(request: NextRequest) {
     }
 
     const { items } = parsed.data
+    const collection = await getCollection("carts")
+    const existingCart = await collection.findOne({ userId })
+    const previousItems = (Array.isArray(existingCart?.items) ? existingCart.items : []) as
+      Array<CartLineIdentity & { price: number | string; quantity: number }>
+    const previous = new Map(previousItems.map(item => [cartLineKey(item), item]))
+    const onlyRemovingOrReducing = new Set(items.map(cartLineKey)).size === items.length && items.every(item => {
+      const saved = previous.get(cartLineKey(item))
+      return saved && item.quantity <= Number(saved.quantity)
+    })
     const pricing = items.length ? await priceOrder(items, { userId }) : null
-    if (pricing && !pricing.ok) return NextResponse.json({ error: pricing.error }, { status: 400 })
+    if (pricing && !pricing.ok && !onlyRemovingOrReducing) return NextResponse.json({ error: pricing.error }, { status: 400 })
     const validatedItems = pricing?.ok ? items.map((item, index) => ({
       ...item, id: pricing.items[index].id, productId: pricing.items[index].id,
       price: pricing.items[index].price, quantity: pricing.items[index].quantity,
-    })) : []
-
-    const collection = await getCollection("carts")
-
-    // Check if cart exists
-    const existingCart = await collection.findOne({ userId })
+    })) : items.map(item => ({ ...item, price: previous.get(cartLineKey(item))?.price || item.price }))
 
     if (existingCart) {
       // Update existing cart

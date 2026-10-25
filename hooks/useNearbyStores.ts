@@ -6,6 +6,7 @@ import { calculateDistance, coordinates, geocodePincode, type Coordinates } from
 
 export interface NearbyStore {
   id: string
+  storeCode?: string
   name: string
   address: string
   city: string
@@ -55,7 +56,6 @@ export function useNearbyStores(
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    if (stores.length > 0) return
     let cancelled = false
     setLoading(true)
     setError("")
@@ -77,7 +77,14 @@ export function useNearbyStores(
       }
     })()
     return () => { cancelled = true }
-  }, [stores.length, attempt, url, allStores])
+  }, [attempt, url, allStores])
+
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden) setAttempt(value => value + 1) }
+    const timer = setInterval(refresh, 30000)
+    window.addEventListener("focus", refresh)
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh) }
+  }, [])
 
   const ranked = useMemo<RankedStore[]>(() => {
     const homeCity = checkoutCity(deliveryCity || "")

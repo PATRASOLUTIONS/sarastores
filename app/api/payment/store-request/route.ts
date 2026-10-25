@@ -15,6 +15,7 @@ const headers = { "Cache-Control": "private, no-store" }
 
 const StorePaymentRequestSchema = CheckoutQuoteSchema.extend({
   storeId: z.string().min(1).max(100),
+  expectedAmount: z.number().int().positive().optional(),
   customer: z.object({
     firstName: z.string().optional(),
     lastName: z.string().optional(),
@@ -47,6 +48,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid request" }, { status: 400, headers })
     }
     const { items, couponCode, redeemPoints, fulfilment, storeId, customer } = parsed.data
+    if (fulfilment?.method !== "pickup") {
+      return NextResponse.json({ error: "Home delivery requires online payment. Pay at Store is available only for store pickup." }, { status: 400, headers })
+    }
     const nameParts = customer.name.split(/\s+/)
     const contact = CheckoutContactSchema.safeParse({ ...customer,
       firstName: customer.firstName || nameParts[0],
@@ -73,6 +77,9 @@ export async function POST(request: NextRequest) {
 
     const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints })
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400, headers })
+    if (parsed.data.expectedAmount !== undefined && Math.round(quote.amount * 100) !== parsed.data.expectedAmount) {
+      return NextResponse.json({ error: "Your checkout total changed. Review it before requesting store payment." }, { status: 409, headers })
+    }
     const hardware = quote.pricing.items.filter(item => item.type !== "software")
     if (hardware.length) {
       const codes = await itemCodesFor(hardware.map(item => item.id))

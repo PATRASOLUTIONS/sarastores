@@ -6,9 +6,11 @@ import { createGuestAccessToken, hashGuestAccessToken } from "@/lib/guest-order"
 import { redeemPoints, quoteRedemption, reverseOrderPoints } from "@/lib/loyalty"
 import { generateOrderId } from "@/lib/order-id"
 import { priceOrder, consumeOrderCoupon } from "@/lib/order-pricing"
+import { storesHoldingStock } from "@/lib/store-stock"
+import { CartQuantitySchema } from "@/lib/validation"
 import { verifyRazorpayPayment } from "@/lib/razorpay"
 import { z } from "zod"
-import { checkoutFingerprint, getCheckoutIntent, persistCheckoutOrder, CheckoutConflictError, type CheckoutIntent } from "@/lib/checkout-payment"
+import { checkoutFingerprint, getCheckoutIntent, hashCheckoutToken, persistCheckoutOrder, CheckoutConflictError, type CheckoutIntent } from "@/lib/checkout-payment"
 import { fulfillSoftwareOrder } from "@/lib/software-fulfillment"
 import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfillment"
 import { initiateHostedCheckout, notifyHostedGuestOrder } from "@/lib/hosted-checkout"
@@ -18,6 +20,10 @@ import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
 import { GuestCheckoutCustomerSchema, CheckoutContactSchema } from "@/lib/validation"
+import { validateCheckoutCustomer } from "@/lib/checkout-customer"
+import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
+import { ObjectId } from "mongodb"
+import { deriveCity, derivePincode } from "@/lib/store-address"
 
 export const dynamic = "force-dynamic"
 
@@ -345,7 +351,7 @@ export async function POST(request: NextRequest) {
         id: z.string().optional(),
         productId: z.string().optional(),
         sku: z.string().nullish(),
-        quantity: z.union([z.number(), z.string()]),
+        quantity: CartQuantitySchema,
         type: z.string().nullish(),
         // The cart sends these as explicit nulls for non-integration items, and the
         // software fields arrive as numbers, so both shapes must be accepted.
@@ -361,6 +367,7 @@ export async function POST(request: NextRequest) {
         validity: z.string().nullish(),
         color: z.string().nullish(),
         size: z.string().nullish(),
+        variantId: z.string().nullish(), ram: z.string().nullish(), storage: z.string().nullish(),
       })).min(1, 'Order must contain at least one item'),
       customer: z.object({
         firstName: z.string().optional(),
@@ -386,6 +393,7 @@ export async function POST(request: NextRequest) {
       }).optional(),
       paymentMethod: z.enum(["cash", "cod", "cash-on-delivery", "online", "razorpay", "pinelabs", "paytm", "instore", "store-payment"]).optional(),
       paymentDetails: z.record(z.unknown()).optional(),
+      expectedAmount: z.number().int().positive().optional(),
       fulfilment: z.object({
         method: z.enum(["delivery", "pickup"]),
         storeId: z.string().optional(),
@@ -405,7 +413,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { items, customer, shippingAddress, paymentMethod, paymentDetails } = parsed.data
+    const { items, customer, paymentMethod, paymentDetails } = parsed.data
     const nameParts = (customer.name || "").trim().split(/\s+/)
     const contact = CheckoutContactSchema.safeParse({ ...customer,
       firstName: customer.firstName || nameParts[0],
@@ -422,10 +430,36 @@ export async function POST(request: NextRequest) {
       Object.assign(customer, details.data)
     }
     const method = paymentMethod || "cash"
+    const userId = session?.user?.id ?? null
+    // The same checkout capability may recover a committed order after the
+    // response was lost. It must never create a second order or consume stock twice.
+    const recoveryId = method === "store-payment" ? paymentDetails?.requestId : paymentDetails?.orderId
+    const recoveryToken = method === "store-payment" ? paymentDetails?.requestToken : paymentDetails?.checkoutToken
+    if (["online", "razorpay", "store-payment"].includes(method) && typeof recoveryId === "string" && typeof recoveryToken === "string") {
+      const consumed = await getCheckoutIntent(recoveryId, recoveryToken, userId, true)
+      const paymentMatches = consumed?.method === "razorpay" && consumed.paymentId === (paymentDetails?.paymentId || paymentDetails?.transactionId)
+      if (consumed?.status === "consumed" && consumed.orderId && (paymentMatches || consumed.method === "store-payment")) {
+        const existing = await (await getCollection("orders")).findOne({ orderId: consumed.orderId, userId })
+        const storeMatches = consumed.method === "store-payment" && existing?.storePayment?.platform === paymentDetails?.platform
+          && existing?.storePayment?.transactionId === paymentDetails?.transactionId
+        if (existing && (paymentMatches || storeMatches)) {
+          const order = normalizeId(existing)
+          delete order.guestAccessTokenHash
+          const guestToken = hashCheckoutToken(`guest-order:${consumed._id}:${recoveryToken}`)
+          return NextResponse.json({ success: true, orderId: existing.orderId, order,
+            ...(isGuest && hashGuestAccessToken(guestToken) === existing.guestAccessTokenHash ? { guestAccessToken: guestToken } : {}),
+          }, { headers: { "Cache-Control": "private, no-store" } })
+        }
+      }
+    }
+    if (parsed.data.fulfilment && !["online", "razorpay", "pinelabs", "paytm", "store-payment"].includes(method)) {
+      return NextResponse.json({ error: "Choose online payment, or Pay at Store for pickup." }, { status: 400 })
+    }
+    const deliveryValidation = await validateCheckoutCustomer(customer, parsed.data.fulfilment?.method, isGuest)
+    if (!deliveryValidation.ok) return NextResponse.json({ error: deliveryValidation.error }, { status: 400 })
     if (["cash", "cod", "cash-on-delivery"].includes(method) && !cashOnDeliveryEnabled()) {
       return NextResponse.json({ error: "Cash on Delivery is currently unavailable. Please choose another payment method." }, { status: 403 })
     }
-    const userId = session?.user?.id ?? null
     if (!isGuest && (paymentMethod === "pinelabs" || paymentMethod === "paytm")) {
       const limit = await checkRateLimit(request, RATE_LIMITS.ORDERS)
       if (!limit.success) return NextResponse.json({ error: RATE_LIMITS.ORDERS.message }, { status: 429 })
@@ -450,6 +484,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { items: validatedItems, subtotal, tax, shipping, total, coupon } = pricing
+    const pickupLocation = parsed.data.fulfilment?.method === "pickup"
+      ? await (await getCollection("store_locations")).findOne({ _id: new ObjectId(parsed.data.fulfilment.storeId!), ...ACTIVE_RETAIL_STORE_FILTER })
+      : null
+    if (parsed.data.fulfilment?.method === "pickup" && !pickupLocation) return NextResponse.json({ error: "The pickup store is unavailable." }, { status: 409 })
+    const pickupAddress = pickupLocation ? String(pickupLocation.locationDescription || "") : ""
+    const trustedFulfilment = pickupLocation ? {
+      method: "pickup", storeId: pickupLocation._id.toString(), storeCode: String(pickupLocation.storeCode || ""),
+      storeName: String(pickupLocation.shopName || ""), storeAddress: pickupAddress, storePhone: String(pickupLocation.mobileNo || ""),
+    } : { method: "delivery", ...(parsed.data.fulfilment?.storeId ? { storeId: parsed.data.fulfilment.storeId } : {}) }
 
     // Quote the rewards discount before payment verification, because the
     // customer was charged the reduced amount. Guests cannot redeem.
@@ -467,6 +510,9 @@ export async function POST(request: NextRequest) {
     }
 
     const payableTotal = Math.max(0, total - (loyalty?.discount ?? 0))
+    if (parsed.data.expectedAmount !== undefined && Math.round(payableTotal * 100) !== parsed.data.expectedAmount) {
+      return NextResponse.json({ error: "Your checkout total changed. Review it before paying." }, { status: 409 })
+    }
     // An order only reaches a paid state once the payment is confirmed server-side.
     const hosted = method === "pinelabs" || method === "paytm"
     let status = "pending"
@@ -530,6 +576,9 @@ export async function POST(request: NextRequest) {
       }
       status = "confirmed"
     } else if (method === "store-payment") {
+      if (parsed.data.fulfilment?.method !== "pickup") {
+        return NextResponse.json({ error: "Pay at Store is available only for store pickup. Choose online payment for home delivery." }, { status: 400 })
+      }
       if (!storePaymentEnabled()) {
         return NextResponse.json({ error: "Pay at store is not available" }, { status: 403 })
       }
@@ -546,6 +595,7 @@ export async function POST(request: NextRequest) {
       }
       checkoutIntent = await getCheckoutIntent(requestId, requestToken, userId)
       if (!checkoutIntent || checkoutIntent.method !== "store-payment" || checkoutIntent.status !== "created" || !checkoutIntent.store ||
+        checkoutIntent.store.id !== parsed.data.fulfilment.storeId ||
         checkoutIntent.fingerprint !== fingerprint || checkoutIntent.amount !== Math.round(payableTotal * 100)) {
         return NextResponse.json({ error: "Your pay at store request has changed or expired. Please place the order again." }, { status: 409 })
       }
@@ -571,9 +621,11 @@ export async function POST(request: NextRequest) {
     // The store was already sent this reference, so the order keeps it.
     const orderId = checkoutIntent?.method === "store-payment" ? checkoutIntent._id : await generateOrderId()
 
-    // Guests get a one-time capability token; order ids are sequential and so
-    // are never sufficient on their own to read an order.
-    const guestAccessToken = isGuest ? createGuestAccessToken() : null
+    // Guests need a high-entropy capability; sequential order ids never grant access.
+    // Paid checkout capabilities reproduce the same guest link during recovery.
+    const checkoutCapability = checkoutIntent?.method === "razorpay" ? paymentDetails?.checkoutToken : checkoutIntent?.method === "store-payment" ? paymentDetails?.requestToken : null
+    const guestAccessToken = isGuest ? checkoutIntent && typeof checkoutCapability === "string"
+      ? hashCheckoutToken(`guest-order:${checkoutIntent._id}:${checkoutCapability}`) : createGuestAccessToken() : null
 
     const newOrder = {
       orderId,
@@ -595,7 +647,11 @@ export async function POST(request: NextRequest) {
         zipCode: customer.zipCode || "",
         country: customer.country || "India",
       },
-      shippingAddress: shippingAddress || {
+      shippingAddress: pickupLocation ? {
+        name: customer.name || "", street: pickupAddress,
+        city: String(pickupLocation.city || deriveCity(pickupAddress)), state: String(pickupLocation.state || ""),
+        zip: String(pickupLocation.pincode || derivePincode(pickupAddress)), country: "India",
+      } : {
         name: customer.name || `${customer.firstName || ""} ${customer.lastName || ""}`.trim(),
         street: customer.address || "",
         city: customer.city || "",
@@ -615,7 +671,7 @@ export async function POST(request: NextRequest) {
       ...(storePayment ? { storePayment } : {}),
       // Store pickup is recorded here; reserving the unit against store stock
       // waits on the SAP inventory feed (see docs/brd/PENDING-EXTERNAL-INTEGRATIONS.md).
-      fulfilment: parsed.data.fulfilment ?? { method: "delivery" },
+      fulfilment: trustedFulfilment,
       subtotal,
       tax,
       shipping,
@@ -662,9 +718,26 @@ export async function POST(request: NextRequest) {
     }
 
     const insertedId = await persistCheckoutOrder(newOrder, checkoutIntent, async (transaction) => {
+      const latest = await priceOrder(items, { userId, couponCode: parsed.data.coupon?.code,
+        fulfilment: parsed.data.fulfilment, session: transaction })
+      if (!latest.ok) throw new CheckoutConflictError(latest.error)
+      if (method === "store-payment" && checkoutIntent?.store) {
+        const holding = await storesHoldingStock(latest.items.filter(item => item.type !== "software")
+          .map(item => ({ sku: item.sku || null, quantity: item.quantity })), transaction)
+        if (!holding.has(checkoutIntent.store.id)) {
+          throw new CheckoutConflictError("Pay at store is unavailable for the requested quantities. Please choose home delivery and pay online.")
+        }
+      }
+      if (latest.total !== pricing.total || latest.shipping !== pricing.shipping || latest.tax !== pricing.tax
+        || latest.subtotal !== pricing.subtotal || latest.couponDiscount !== pricing.couponDiscount
+        || checkoutFingerprint(latest, { fulfilment: parsed.data.fulfilment, redeemPoints: parsed.data.redeemPoints }, payableTotal)
+        !== checkoutFingerprint(pricing, { fulfilment: parsed.data.fulfilment, redeemPoints: parsed.data.redeemPoints }, payableTotal)) {
+        throw new CheckoutConflictError("Prices or checkout charges changed. Please review checkout before retrying.")
+      }
       if (hosted) return
       if (coupon) {
-        const consumption = await consumeOrderCoupon(items, coupon, userId, transaction)
+        const consumption = await consumeOrderCoupon(items, coupon, userId, transaction,
+          parsed.data.fulfilment?.method === "pickup" ? "store" : "overall")
         if (!consumption.ok) throw new CheckoutConflictError(consumption.error)
       }
       if (userId && loyalty) {

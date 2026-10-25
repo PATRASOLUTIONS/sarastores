@@ -3,6 +3,7 @@ import { getCollection } from "@/lib/db-service"
 import { storePaymentEnabled } from "@/lib/payment-config"
 import { firstMobile, getStorePaymentWhatsAppSettings } from "@/lib/store-payment"
 import { deriveCity, derivePincode, storeCoordinates } from "@/lib/store-address"
+import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 
 export const dynamic = "force-dynamic"
 
@@ -19,7 +20,7 @@ export async function GET() {
   if (!storePaymentEnabled()) return NextResponse.json({ success: true, stores: [] }, { headers })
   try {
     const [stores, settings] = await Promise.all([
-      (await getCollection("store_locations")).find({ isActive: true }).sort({ shopName: 1 }).toArray(),
+      (await getCollection("store_locations")).find(ACTIVE_RETAIL_STORE_FILTER).sort({ shopName: 1 }).toArray(),
       getStorePaymentWhatsAppSettings(),
     ])
     return NextResponse.json({

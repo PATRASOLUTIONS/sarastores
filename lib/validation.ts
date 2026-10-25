@@ -131,6 +131,10 @@ export const quantitySchema = z.number()
   .positive('Quantity must be positive')
   .max(1000, 'Maximum quantity exceeded');
 
+export const CartQuantitySchema = z.union([
+  z.number(), z.string().trim().regex(/^[1-9]\d*$/, 'Quantity must be a positive whole number').transform(Number),
+]).pipe(quantitySchema);
+
 const spinNumber = z.union([z.number(), z.string().trim().min(1)])
   .transform(Number).pipe(z.number().finite());
 const spinDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
@@ -642,6 +646,7 @@ export const DirectProductUpdateSchema = UpdateProductSchema.pick({
 }).extend({
   comparePrice: priceSchema.optional(),
   stock: z.number().int().min(0).max(10000000).optional(),
+  maxPurchaseQuantity: quantitySchema.optional(),
   category: z.string().max(200).optional(),
   subcategory: z.string().max(200).optional(),
   images: z.array(urlSchema).max(5).optional(),
@@ -731,11 +736,16 @@ export const CheckoutCartSelectionSchema = z.object({
   action: z.enum(['preserve', 'include', 'wishlist']),
   items: z.array(z.object({
     id: z.string().min(1), name: z.string(), price: z.number().finite().nonnegative(),
-    quantity: z.number().int().positive().safe(), image: z.string().default(''),
+    quantity: quantitySchema, image: z.string().default(''),
     color: z.string().nullable().default(null), size: z.string().nullable().default(null),
     type: z.enum(['hardware', 'software']).optional(),
   }).passthrough()).min(1).max(20),
-  previousItems: z.array(z.object({ id: z.string().min(1), quantity: z.number().int().positive().safe() })).max(20),
+  previousItems: z.array(z.object({ id: z.string().min(1), quantity: quantitySchema,
+    sku: z.string().nullish(), variantId: z.string().nullish(), color: z.string().nullish(), size: z.string().nullish(),
+    ram: z.string().nullish(), storage: z.string().nullish(), type: z.string().nullish(),
+    kgenVariantId: z.string().nullish(), packSize: z.union([z.string(), z.number()]).nullish(),
+    validityYears: z.union([z.string(), z.number()]).nullish(),
+  })).max(40),
 });
 
 export const EmployeeCreationResponseSchema = z.object({
@@ -846,6 +856,7 @@ export const StoreQrAnalyticsQuerySchema = z.object({
   storeId: StoreObjectIdSchema.optional(),
 }).strict();
 export const CreateStoreLocationSchema = z.object({
+  locationType: z.enum(["store", "warehouse"]).optional(),
   shopName: z.string().trim().min(1).max(200),
   storeCode: z.string().trim().max(50, "Store code must be 50 characters or fewer").optional(),
   locationDescription: z.string().trim().max(2000).default(""),

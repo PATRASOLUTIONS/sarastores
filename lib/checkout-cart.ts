@@ -1,4 +1,5 @@
 import type { CartItem } from "@/contexts/CartContext"
+import { cartLineKey } from "@/lib/cart-line"
 
 export const CHECKOUT_CART_INTENT = "checkoutCartBeforeSignIn"
 export const CHECKOUT_CART_SELECTION_ID = "checkoutCartSelectionId"
@@ -6,7 +7,7 @@ export const CHECKOUT_CART_SELECTION_ID = "checkoutCartSelectionId"
 export function mergeCheckoutCart(current: CartItem[], previous: CartItem[]): CartItem[] {
   const merged = current.map(item => ({ ...item }))
   for (const item of previous) {
-    const index = merged.findIndex(existing => existing.id === item.id)
+    const index = merged.findIndex(existing => cartLineKey(existing) === cartLineKey(item))
     if (index < 0) merged.push({ ...item })
     else merged[index].quantity += Number(item.quantity)
   }

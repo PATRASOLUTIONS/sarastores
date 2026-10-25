@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb"
 import { getCollection } from "@/lib/db-service"
+import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 import { sendEmail } from "@/lib/email"
 import { escapeHtml } from "@/lib/html"
 import { normaliseIndianPhone } from "@/lib/marketing/whatsapp"
@@ -64,7 +65,7 @@ export function firstMobile(raw: unknown): string {
 
 export async function loadPaymentStore(storeId: string): Promise<PaymentStore | null> {
   if (!ObjectId.isValid(storeId)) return null
-  const store = await (await getCollection("store_locations")).findOne({ _id: new ObjectId(storeId), isActive: true })
+  const store = await (await getCollection("store_locations")).findOne({ _id: new ObjectId(storeId), ...ACTIVE_RETAIL_STORE_FILTER })
   if (!store) return null
   const managers = (await getStorePaymentWhatsAppSettings()).storeManagers
   return {

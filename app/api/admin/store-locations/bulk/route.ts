@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
         const saved = await collection.bulkWrite(parsed.data.stores.map(store => ({
           updateOne: {
             filter: { shopName: store.shopName },
-            update: { $set: { ...store, updatedAt: now }, $setOnInsert: { createdAt: now } },
+            update: { $set: { ...store, updatedAt: now }, $setOnInsert: { createdAt: now, ...(!store.locationType ? { locationType: "store" } : {}) } },
             upsert: true,
           },
         })), { session, ordered: true })

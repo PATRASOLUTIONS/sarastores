@@ -30,6 +30,7 @@ interface StoreLocation {
   id: string
   shopName: string
   storeCode: string
+  locationType: "store" | "warehouse"
   locationDescription: string
   googleMapLocation: string
   mobileNo: string
@@ -44,6 +45,7 @@ interface StoreLocation {
 const EMPTY_STORE: Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'> = {
   shopName: "",
   storeCode: "",
+  locationType: "store",
   locationDescription: "",
   googleMapLocation: "",
   mobileNo: "",
@@ -91,6 +93,16 @@ const StoreForm = ({
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
             placeholder="Enter shop name"
           />
+        </div>
+
+        <div>
+          <label htmlFor="locationType" className="block text-sm font-medium text-gray-700 mb-2">Location type</label>
+          <select id="locationType" value={store.locationType} onChange={e => onChange('locationType', e.target.value as "store" | "warehouse")}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500">
+            <option value="store">Store</option>
+            <option value="warehouse">Warehouse</option>
+          </select>
+          <p className="mt-2 text-sm text-gray-500">Active stores appear in the store locator and checkout. Warehouses supply delivery stock and are hidden from customers.</p>
         </div>
 
         {/* Store Code */}
@@ -223,7 +235,7 @@ const StoreForm = ({
             className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
           <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
-            Store is Active
+            Location is Active
           </label>
         </div>
       </div>
@@ -286,6 +298,7 @@ export default function StoreLocationsPage() {
       { 
         "Shop Name": "Sara Mobiles - Main Branch",
         "Store Code": "BLR001",
+        "Location Type": "store",
         "Location Description": "No.4/7, Shop No. 2, Ground Floor, Main Road, City Center, Bangalore - 560001",
         "Google Map Location": "https://maps.google.com/?q=12.9716,77.5946",
         "Mobile No": "9876543210",
@@ -297,6 +310,7 @@ export default function StoreLocationsPage() {
       { 
         "Shop Name": "Sara Mobiles - City Mall",
         "Store Code": "BLR002",
+        "Location Type": "store",
         "Location Description": "Shop No. 15, First Floor, City Mall, MG Road, Bangalore - 560002",
         "Google Map Location": "https://maps.google.com/?q=12.9756,77.6066",
         "Mobile No": "9876543211",
@@ -311,6 +325,7 @@ export default function StoreLocationsPage() {
     ws['!cols'] = [
       { wch: 30 }, // Shop Name
       { wch: 15 }, // Store Code
+      { wch: 15 }, // Location Type
       { wch: 60 }, // Location Description
       { wch: 50 }, // Google Map Location
       { wch: 15 }, // Mobile No
@@ -336,6 +351,7 @@ export default function StoreLocationsPage() {
     const exportData = stores.map(store => ({
       "Shop Name": store.shopName,
       "Store Code": store.storeCode,
+      "Location Type": store.locationType,
       "Location Description": store.locationDescription,
       "Google Map Location": store.googleMapLocation,
       "Mobile No": store.mobileNo,
@@ -347,7 +363,7 @@ export default function StoreLocationsPage() {
 
     const ws = XLSX.utils.json_to_sheet(exportData)
     ws['!cols'] = [
-      { wch: 30 }, { wch: 15 }, { wch: 60 }, { wch: 50 }, { wch: 15 }, 
+      { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 60 }, { wch: 50 }, { wch: 15 },
       { wch: 20 }, { wch: 40 }, { wch: 30 }, { wch: 10 },
     ]
     
@@ -377,6 +393,9 @@ export default function StoreLocationsPage() {
       }
 
       const storesPayload = jsonData.map((row) => ({
+        ...(String(row["Location Type"] ?? row.locationType ?? "").trim()
+          ? { locationType: String(row["Location Type"] ?? row.locationType).trim().toLowerCase() }
+          : {}),
         shopName: String(row["Shop Name"] || row.shopName || "").trim(),
         // A blank cell keeps the store's current code rather than erasing it.
         ...(String(row["Store Code"] ?? row.storeCode ?? "").trim()
@@ -461,7 +480,7 @@ export default function StoreLocationsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          shopName: editingStore.shopName, storeCode: editingStore.storeCode, locationDescription: editingStore.locationDescription,
+          shopName: editingStore.shopName, storeCode: editingStore.storeCode, locationType: editingStore.locationType, locationDescription: editingStore.locationDescription,
           googleMapLocation: editingStore.googleMapLocation, mobileNo: editingStore.mobileNo,
           shopTiming: editingStore.shopTiming, shopImage: editingStore.shopImage,
           emailId: editingStore.emailId, isActive: editingStore.isActive,
@@ -699,6 +718,7 @@ export default function StoreLocationsPage() {
                 <p className="text-xs font-medium text-gray-500 mb-3 flex items-center gap-1">
                   <Hash className="w-3.5 h-3.5" />
                   {store.storeCode || "No store code"}
+                  <span className="ml-2 rounded bg-slate-100 px-2 py-0.5">{store.locationType === "warehouse" ? "Warehouse" : "Store"}</span>
                 </p>
 
                 <div className="space-y-3">
@@ -823,6 +843,7 @@ export default function StoreLocationsPage() {
               <ul className="text-sm text-blue-600 space-y-1">
                 <li>• Shop Name (required)</li>
                 <li>• Store Code (unique per store)</li>
+                <li>• Location Type (store or warehouse; blank preserves the existing type)</li>
                 <li>• Location Description</li>
                 <li>• Google Map Location</li>
                 <li>• Mobile No</li>

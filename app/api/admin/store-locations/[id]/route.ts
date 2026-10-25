@@ -41,13 +41,14 @@ export async function GET(
         id: store._id.toString(),
         shopName: store.shopName || "",
         storeCode: store.storeCode || "",
+        locationType: store.locationType || "store",
         locationDescription: store.locationDescription || "",
         googleMapLocation: store.googleMapLocation || "",
         mobileNo: store.mobileNo || "",
         shopTiming: store.shopTiming || "9:00 AM - 9:00 PM",
         shopImage: store.shopImage || "",
         emailId: store.emailId || "",
-        isActive: store.isActive !== false,
+        isActive: store.isActive === true,
         createdAt: store.createdAt,
         updatedAt: store.updatedAt
       }

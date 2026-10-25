@@ -16,6 +16,8 @@ import {
   Tag,
 } from "lucide-react"
 import { useCart } from "@/hooks/useCart"
+import { cartLineKey } from "@/lib/cart-line"
+import { cartLimitError } from "@/lib/cart-limits"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { toast } from "react-hot-toast"
@@ -67,15 +69,7 @@ export default function CartSidebar() {
   const freeDelivery = hardwareSubtotal === 0 || hardwareSubtotal >= threshold || fee === 0
   const remainingForFreeDelivery = Math.max(0, threshold - hardwareSubtotal)
 
-  const handleQuantity = (id: string, color: string | null, size: string | null, next: number) => {
-    if (next < 1) {
-      removeFromCart(id)
-      toast.success("Item removed from cart")
-      return
-    }
-    // `useCart` updates by id only, so re-use the same path
-    void color
-    void size
+  const handleQuantity = (id: string, next: number) => {
     updateQuantity(id, next)
   }
 
@@ -85,6 +79,9 @@ export default function CartSidebar() {
   }
 
   const handleProceedToBuy = () => {
+    if (!cart.length) { toast.error("Your cart is empty"); return }
+    const error = cartLimitError(cart)
+    if (error) { toast.error(error); return }
     closeCart()
     router.push("/checkout")
   }
@@ -190,7 +187,7 @@ export default function CartSidebar() {
               ) : (
                 <ul className="space-y-3">
                   {cart.map((item) => {
-                    const lineKey = `${item.id}-${item.color || ""}-${item.size || ""}`
+                    const lineKey = cartLineKey(item)
                     const isHighlighted = highlightId === item.id
                     return (
                       <li
@@ -252,8 +249,9 @@ export default function CartSidebar() {
                             <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
                               <button
                                 onClick={() =>
-                                  handleQuantity(item.id, item.color, item.size, item.quantity - 1)
+                                  handleQuantity(lineKey, item.quantity - 1)
                                 }
+                                disabled={item.quantity <= 1}
                                 aria-label="Decrease quantity"
                                 className="p-1.5 text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
                               >
@@ -264,7 +262,7 @@ export default function CartSidebar() {
                               </span>
                               <button
                                 onClick={() =>
-                                  handleQuantity(item.id, item.color, item.size, item.quantity + 1)
+                                  handleQuantity(lineKey, item.quantity + 1)
                                 }
                                 aria-label="Increase quantity"
                                 className="p-1.5 text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
@@ -274,7 +272,7 @@ export default function CartSidebar() {
                             </div>
 
                             <button
-                              onClick={() => handleRemove(item.id, item.name)}
+                              onClick={() => handleRemove(lineKey, item.name)}
                               aria-label="Remove from cart"
                               className="text-[11.5px] font-semibold text-rose-600 hover:text-rose-700 inline-flex items-center gap-1 px-2 py-1 rounded-md hover:bg-rose-50 transition-colors"
                             >

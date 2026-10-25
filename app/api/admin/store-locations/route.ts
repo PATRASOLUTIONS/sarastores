@@ -20,13 +20,14 @@ export async function GET() {
       id: store._id.toString(),
       shopName: store.shopName || "",
       storeCode: store.storeCode || "",
+      locationType: store.locationType || "store",
       locationDescription: store.locationDescription || "",
       googleMapLocation: store.googleMapLocation || "",
       mobileNo: store.mobileNo || "",
       shopTiming: store.shopTiming || "9:00 AM - 9:00 PM",
       shopImage: store.shopImage || "",
       emailId: store.emailId || "",
-      isActive: store.isActive !== false,
+      isActive: store.isActive === true,
       createdAt: store.createdAt,
       updatedAt: store.updatedAt
     }))
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = CreateStoreLocationSchema.safeParse(await request.json())
     if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
-    const storeData = { ...parsed.data, createdAt: new Date(), updatedAt: new Date() }
+    const storeData = { ...parsed.data, locationType: parsed.data.locationType || ("store" as const), createdAt: new Date(), updatedAt: new Date() }
     const collection = await getCollection<StoredStoreLocation>(COLLECTION)
     if (storeData.storeCode && await collection.findOne({ storeCode: storeData.storeCode }, { projection: { _id: 1 } })) {
       return NextResponse.json({ success: false, message: `Store code ${storeData.storeCode} is already used by another store` }, { status: 409 })

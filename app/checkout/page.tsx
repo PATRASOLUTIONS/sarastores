@@ -13,7 +13,6 @@ import { useSettingsData } from "@/hooks/useSettingsData"
 import { cleanProductName, shortProductTitle } from "@/utils/cleanProductName"
 import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/PaymentGateway"
 import CheckoutPaymentOptions, { PaymentProviderLogo } from "@/components/CheckoutPaymentOptions"
-import InStorePurchase from "@/components/InStorePurchase"
 import { PayAtStoreDialog, PayAtStoreStorePicker, type PayAtStoreChoice } from "@/components/PayAtStore"
 import { useStoreStock } from "@/hooks/useStoreStock"
 import { StorePaymentRequestResponseSchema, type StorePaymentPlatform, type StorePaymentRequestResponse } from "@/types/store-payment"
@@ -24,8 +23,10 @@ import FulfilmentSelector, {
 import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { cartLimitError } from "@/lib/cart-limits"
+import { cartLineKey } from "@/lib/cart-line"
 import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
+import { readCheckoutRecovery, clearCheckoutRecovery, PurchasedItemsSchema, readHostedCheckout, clearHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
 import { apiFetch, apiFetchJson } from "@/lib/api-client"
 import { CouponQuoteSchema } from "@/lib/coupon-validation"
 import { z } from "zod"
@@ -77,7 +78,7 @@ const money = (value: number) =>
     : value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function CheckoutPage() {
-  const { cart, clearCart, removeFromCart, refreshItemPrices, isLoading: cartLoading,
+  const { cart, completePurchase, removeFromCart, refreshItemPrices, isLoading: cartLoading,
     checkoutCartPending, previousCart, previousCartLoaded, checkoutCartError, resolvingCheckoutCart,
     prepareCheckoutSignIn, resolveCheckoutCart, abandonCheckoutCart, loadCartFromDatabase } = useCart()
   const { user, isLoading: authLoading } = useAuth()
@@ -95,10 +96,15 @@ export default function CheckoutPage() {
   const wishlistMoveInProgress = useRef(false)
   const orderLock = useSubmitLock()
   const couponLock = useSubmitLock()
+  const checkoutValidationLock = useSubmitLock()
+  const storeRequestLock = useSubmitLock()
   const [orderPlaced, setOrderPlaced] = useState(false)
   const [orderId, setOrderId] = useState("")
   const [placedOrder, setPlacedOrder] = useState<OrderConfirmation | null>(null)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
+  const [paymentRecovery, setPaymentRecovery] = useState<CheckoutRecovery | null>(null)
+  const [recoveringPayment, setRecoveringPayment] = useState(false)
+  const recoveryLock = useSubmitLock()
 
   // Form data
   const [customerData, setCustomerData] = useState(EMPTY_CUSTOMER)
@@ -106,6 +112,8 @@ export default function CheckoutPage() {
   const editedCustomerFields = useRef(new Set<string>())
   const accountId = user?.id
   const checkoutOwner = accountId || "guest"
+  const checkoutOwnerRef = useRef(checkoutOwner)
+  checkoutOwnerRef.current = checkoutOwner
   const restoredDraftOwner = useRef<string | null>(null)
   const [draftOwner, setDraftOwner] = useState<string | null>(null)
   const draftReady = !authLoading && draftOwner === checkoutOwner
@@ -166,11 +174,12 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<"online" | "cash-on-delivery" | "instore" | "store-payment">("online")
   const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
   const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
-  const [codEnabled, setCodEnabled] = useState(false)
-  const [instoreEnabled, setInstoreEnabled] = useState(false)
   const [storePaymentEnabled, setStorePaymentEnabled] = useState(false)
   const [payStore, setPayStore] = useState<PayAtStoreChoice | null>(null)
   const [storeRequest, setStoreRequest] = useState<StorePaymentRequestResponse | null>(null)
+  const [storeRequestContext, setStoreRequestContext] = useState<string | null>(null)
+  const [storeTransaction, setStoreTransaction] = useState<{ platform: StorePaymentPlatform | ""; transactionId: string }>({ platform: "", transactionId: "" })
+  const [draftStorageError, setDraftStorageError] = useState(false)
   const [storeRequestLoading, setStoreRequestLoading] = useState(false)
   const [storeDialogOpen, setStoreDialogOpen] = useState(false)
   const [paymentConfigError, setPaymentConfigError] = useState("")
@@ -181,7 +190,8 @@ export default function CheckoutPage() {
   const [pincodeRulesAttempt, setPincodeRulesAttempt] = useState(0)
   const nationwideDelivery = pincodeRules?.mode === "all"
   const [hostedReturn, setHostedReturn] = useState<{ orderId: string; checkoutToken: string; storeOrderId: string;
-    total: number; tax: number; shipping: number; guestAccessToken?: string } | null>(null)
+    total: number; tax: number; shipping: number; guestAccessToken?: string;
+    items?: z.infer<typeof PurchasedItemsSchema>; owner?: string } | null>(null)
   const [hostedStatus, setHostedStatus] = useState("")
   const [hostedRecoveryBlocked, setHostedRecoveryBlocked] = useState(false)
   const [hostedStatusAttempt, setHostedStatusAttempt] = useState(0)
@@ -218,15 +228,8 @@ export default function CheckoutPage() {
         const config = PaymentConfigurationSchema.parse(await response.json())
         if (controller.signal.aborted) return
         setPaymentProviders(config.providers)
-        setPaymentProvider(config.defaultProvider)
-        setCodEnabled(config.codEnabled)
-        setInstoreEnabled(config.instoreEnabled)
+        setPaymentProvider(previous => previous && config.providers.includes(previous) ? previous : config.defaultProvider)
         setStorePaymentEnabled(config.storePaymentEnabled)
-        if (!config.defaultProvider) {
-          if (config.codEnabled) setPaymentMethod("cash-on-delivery")
-          else if (config.instoreEnabled) setPaymentMethod("instore")
-          else if (config.storePaymentEnabled) setPaymentMethod("store-payment")
-        }
       } catch (error) {
         if (controller.signal.aborted) return
         console.error("[Checkout] Gateway configuration failed:", error)
@@ -236,14 +239,9 @@ export default function CheckoutPage() {
       }
     })()
     try {
-      const stored = sessionStorage.getItem("sara_hosted_checkout")
+      const saved = readHostedCheckout()
       const returnedId = new URLSearchParams(window.location.search).get("paymentReturn")
-      if (stored) {
-        const saved = z.object({
-          orderId: z.string(), checkoutToken: z.string().min(20), storeOrderId: z.string(),
-          guestAccessToken: z.string().optional(),
-          total: z.number().finite().nonnegative(), tax: z.number().finite().nonnegative(), shipping: z.number().finite().nonnegative(),
-        }).parse(JSON.parse(stored))
+      if (saved) {
         if (returnedId && returnedId !== saved.orderId) throw new Error("Payment return does not match this checkout")
         setHostedReturn(saved)
       } else if (returnedId) {
@@ -276,7 +274,10 @@ export default function CheckoutPage() {
         if (!response.ok) throw new Error("Payment confirmation is unavailable. Retry before paying again.")
         const data = HostedPaymentStatusSchema.parse(json)
         if (data.status === "completed") {
-          sessionStorage.removeItem("sara_hosted_checkout")
+          if (checkoutOwnerRef.current !== checkoutOwner || (hostedReturn.owner && hostedReturn.owner !== checkoutOwner)) {
+            throw new Error("Return to the account that started this payment before recovering it.")
+          }
+          clearHostedCheckout()
           clearCheckoutDraft(checkoutOwner)
           setOrderId(data.orderId)
           setOrderPlaced(true)
@@ -292,13 +293,13 @@ export default function CheckoutPage() {
               console.error("[Checkout] Hosted purchase analytics failed:", error)
             }
           }
-          clearCart()
+          if (hostedReturn.items) await completePurchase(hostedReturn.items, data.orderId)
           router.replace(`/thank-you?orderId=${encodeURIComponent(data.orderId)}${hostedReturn.guestAccessToken
             ? `&token=${encodeURIComponent(hostedReturn.guestAccessToken)}` : ""}`)
           return
         }
         if (data.status === "failed") {
-          sessionStorage.removeItem("sara_hosted_checkout")
+          clearHostedCheckout()
           setHostedReturn(null)
           setHostedStatus("The gateway confirmed that payment failed. You can retry; your cart has been kept.")
           setPaymentPending(false)
@@ -317,13 +318,47 @@ export default function CheckoutPage() {
     }
     void check()
     return () => { controller.abort(); if (timer) clearTimeout(timer) }
-  }, [hostedReturn, authLoading, hostedStatusAttempt, clearCart, router, cart, checkoutOwner])
+  }, [hostedReturn, authLoading, hostedStatusAttempt, completePurchase, router, cart, checkoutOwner])
 
   // Click & Pick: home delivery or collection from a SARA store.
   const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
   const [pickupStore, setPickupStore] = useState<PickupStore | null>(null)
   const isPickup = fulfilmentMethod === "pickup"
   const storeStock = useStoreStock(cart)
+  const [deliveryFallbackStoreId, setDeliveryFallbackStoreId] = useState<string | null>(null)
+  const fulfilmentStoreId = isPickup ? pickupStore?.id : deliveryFallbackStoreId || undefined
+  const pickupUnavailable = Boolean(pickupStore && storeStock.storeIds && !storeStock.storeIds.has(pickupStore.id))
+  const freeDeliveryFallback = Boolean(storeStock.deliveryAvailable && storeStock.storeIds && (
+    storeStock.storeIds.size === 0 || pickupUnavailable || (deliveryFallbackStoreId && !storeStock.storeIds.has(deliveryFallbackStoreId))
+  ))
+  const allowStorePayment = isPickup && storePaymentEnabled && Boolean(pickupStore && storeStock.storeIds?.has(pickupStore.id)) && !storeStock.error
+  const changeFulfilmentMethod = (method: FulfilmentMethod) => {
+    if (method === "pickup") setDeliveryFallbackStoreId(null)
+    else if (pickupUnavailable && pickupStore) setDeliveryFallbackStoreId(pickupStore.id)
+    if (method === "delivery") {
+      setPaymentMethod("online")
+      setPayStore(null)
+      setStoreDialogOpen(false)
+    }
+    setFulfilmentMethod(method)
+  }
+  useEffect(() => {
+    if (paymentMethod === "cash-on-delivery" || paymentMethod === "instore" ||
+      (paymentMethod === "store-payment" && draftReady && (!isPickup || (!allowStorePayment && !storeStock.loading && Boolean(storeStock.storeIds))))) {
+      setPaymentMethod("online")
+      setPayStore(null)
+    }
+  }, [paymentMethod, isPickup, allowStorePayment, storeStock.loading, storeStock.storeIds, draftReady])
+  useEffect(() => {
+    if (draftReady && !paymentConfigLoading && !paymentConfigError && (!paymentProvider || !paymentProviders.includes(paymentProvider))) {
+      setPaymentProvider(paymentProviders[0] || null)
+    }
+  }, [draftReady, paymentConfigLoading, paymentConfigError, paymentProvider, paymentProviders])
+  useEffect(() => {
+    if (deliveryFallbackStoreId && storeStock.storeIds && !storeStock.loading && !storeStock.byStore[deliveryFallbackStoreId]) {
+      setDeliveryFallbackStoreId(null)
+    }
+  }, [deliveryFallbackStoreId, storeStock.storeIds, storeStock.loading, storeStock.byStore])
 
   // Guest checkout: the shopper explicitly opts out of signing in.
   const [continueAsGuest, setContinueAsGuest] = useState(false)
@@ -353,15 +388,16 @@ export default function CheckoutPage() {
   // Coupon state and derived totals
   const [couponCode, setCouponCode] = useState("")
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string } | null>(null)
+  const restoredCoupon = useRef<{ code: string; name: string } | null>(null)
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
   useEffect(() => {
     if (authLoading || restoredDraftOwner.current === checkoutOwner) return
     let draft = readCheckoutDraft(checkoutOwner)
     // Carry the guest form through checkout's explicit sign-in handoff.
-    if (!draft && accountId) {
+    if (accountId) {
       try {
-        if (sessionStorage.getItem(CHECKOUT_CART_INTENT)) draft = readCheckoutDraft("guest")
+        if (sessionStorage.getItem(CHECKOUT_CART_INTENT)) draft = readCheckoutDraft("guest") || draft
       } catch { /* Account autofill still works without browser storage. */ }
     }
     editedCustomerFields.current.clear()
@@ -379,6 +415,17 @@ export default function CheckoutPage() {
     setAddressType(draft?.addressType || "home")
     setSelectedAddressId(draft?.selectedAddressId || null)
     setCouponCode(draft?.couponCode || "")
+    restoredCoupon.current = draft?.appliedCoupon || null
+    setFulfilmentMethod(draft?.fulfilmentMethod || "delivery")
+    setPickupStore(draft?.pickupStore || null)
+    setDeliveryFallbackStoreId(draft?.deliveryFallbackStoreId || null)
+    setPaymentMethod(draft?.paymentMethod || "online")
+    if (draft?.paymentProvider) setPaymentProvider(draft.paymentProvider)
+    setRedeemPoints(accountId ? draft?.redeemPoints || 0 : 0)
+    setStoreRequest(draft?.storeRequest || null)
+    setStoreRequestContext(draft?.storeRequestContext || null)
+    setStoreTransaction(draft?.storeTransaction || { platform: "", transactionId: "" })
+    setPaymentRecovery(readCheckoutRecovery(checkoutOwner))
     restoredDraftOwner.current = checkoutOwner
     setDraftOwner(checkoutOwner)
   }, [authLoading, accountId, checkoutOwner])
@@ -388,13 +435,23 @@ export default function CheckoutPage() {
     // old account's form into a new account during authentication hydration.
     if (!draftReady || restoredDraftOwner.current !== checkoutOwner) return
     if (orderPlaced) { clearCheckoutDraft(checkoutOwner); return }
-    saveCheckoutDraft(checkoutOwner, {
+    const saved = saveCheckoutDraft(checkoutOwner, {
       version: 1, customer: customerData, continueAsGuest, editingAddress,
       addressType, selectedAddressId, couponCode, editedFields: [...editedCustomerFields.current],
+      fulfilmentMethod, pickupStore, deliveryFallbackStoreId, paymentMethod: paymentMethod === "store-payment" ? "store-payment" : "online",
+      paymentProvider, redeemPoints, storeRequest, storeRequestContext, storeTransaction, appliedCoupon,
     })
+    setDraftStorageError(!saved)
   }, [draftReady, checkoutOwner, customerData, continueAsGuest, editingAddress,
-    addressType, selectedAddressId, couponCode, orderPlaced])
-  const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [item.id, item.quantity, item.price])])
+    addressType, selectedAddressId, couponCode, orderPlaced, fulfilmentMethod, pickupStore, deliveryFallbackStoreId,
+    paymentMethod, paymentProvider, redeemPoints, storeRequest, storeRequestContext, storeTransaction, appliedCoupon])
+  const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [cartLineKey(item), item.quantity, item.price])])
+  const quoteContext = JSON.stringify([couponContext, appliedCoupon?.code, redeemPoints, fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback])
+  const currentQuoteContext = useRef(quoteContext)
+  currentQuoteContext.current = quoteContext
+  const [verifiedQuote, setVerifiedQuote] = useState<{ context: string; subtotal: number; tax: number;
+    shipping: number; total: number; amount: number } | null>(null)
+  const currentQuote = verifiedQuote?.context === quoteContext ? verifiedQuote : null
   const couponContextRef = useRef(couponContext)
   useEffect(() => {
     if (couponContextRef.current === couponContext) return
@@ -402,6 +459,14 @@ export default function CheckoutPage() {
     setAppliedCoupon(null)
     setCouponDiscount(0)
   }, [couponContext])
+
+  useEffect(() => {
+    if (!draftReady || cartLoading || !restoredCoupon.current) return
+    setAppliedCoupon(restoredCoupon.current)
+    restoredCoupon.current = null
+    // Only the selection survives refresh; the server recalculates its value.
+    setCouponDiscount(0)
+  }, [draftReady, cartLoading, couponContext])
 
   // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
   const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross } = cart.reduce((acc, item) => {
@@ -425,14 +490,14 @@ export default function CheckoutPage() {
   const hardwareGST = hardwareBaseTotal * 0.18
 
   // Subtotal (tax-exclusive base amount)
-  const subtotal = softwareBaseTotal + hardwareBaseTotal
+  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal
 
   // Gross totals (base + GST)
   const softwareTotal = softwareBaseTotal + softwareGST
   const hardwareTotal = hardwareBaseTotal + hardwareGST
 
   // Total tax (software + hardware)
-  const tax = softwareGST + hardwareGST
+  const tax = currentQuote?.tax ?? softwareGST + hardwareGST
 
   // Only apply shipping if there are hardware items in the cart
   const hasHardware = cart.some(item => item.type !== 'software')
@@ -441,20 +506,25 @@ export default function CheckoutPage() {
     const hardwareGrossSubtotal = hardwareGross
     shipping = (hardwareGrossSubtotal > 0 && hardwareGrossSubtotal < freeShippingThreshold) ? shippingFee : 0
   }
+  if (!isPickup && freeDeliveryFallback) shipping = 0
+  if (currentQuote) shipping = currentQuote.shipping
 
   // Apply coupon discount (if any) on gross amounts (softwareTotal + hardwareTotal)
   const preCouponTotal = softwareTotal + hardwareTotal
   const discountedTotal = Math.max(0, preCouponTotal - couponDiscount)
 
   // Calculate final total (after coupon and adding shipping)
-  const total = discountedTotal + shipping
+  const total = currentQuote?.total ?? discountedTotal + shipping
 
   // Indicative only — /api/orders recomputes and debits the points.
-  const payableTotal = Math.max(0, total - loyaltyDiscount)
+  const payableTotal = currentQuote?.amount ?? Math.round(Math.max(0, total - loyaltyDiscount) * 100) / 100
   const productDiscount = cart.reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
   const totalMrp = preCouponTotal + productDiscount
-  const unavailableItem = cart.find((item) => item.type !== "software" &&
-    typeof item.stock === "number" && item.stock < item.quantity)
+  const unavailableItem = cart.find(item => {
+    const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
+    return ((!isPickup || item.type === "software") && typeof item.stock === "number" && item.stock < quantity)
+      || (typeof item.maxPurchaseQuantity === "number" && item.maxPurchaseQuantity < quantity)
+  })
   const cartError = cartLimitError(cart) || (unavailableItem
     ? `${unavailableItem.name} is unavailable in the requested quantity. Reduce its quantity or remove it before placing an order.`
     : null)
@@ -561,7 +631,7 @@ export default function CheckoutPage() {
   // empty" while AuthContext is still hydrating, so the redirect is deferred and
   // cancelled if the cart arrives.
   useEffect(() => {
-    if (authLoading || cartLoading || orderPlaced || hostedReturn || hostedRecoveryBlocked || cart.length > 0) return
+    if (authLoading || !draftReady || cartLoading || orderPlaced || paymentRecovery || hostedReturn || hostedRecoveryBlocked || cart.length > 0) return
 
     const timer = setTimeout(() => {
       toast.error("Your cart is empty")
@@ -569,7 +639,7 @@ export default function CheckoutPage() {
     }, 1500)
 
     return () => clearTimeout(timer)
-  }, [authLoading, cartLoading, cart.length, orderPlaced, hostedReturn, hostedRecoveryBlocked, router])
+  }, [authLoading, draftReady, cartLoading, cart.length, orderPlaced, paymentRecovery, hostedReturn, hostedRecoveryBlocked, router])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -708,7 +778,7 @@ export default function CheckoutPage() {
     }
   }
 
-  const moveItemToWishlist = async (productId: string) => {
+  const moveItemToWishlist = async (lineKey: string) => {
     if (wishlistMoveInProgress.current || checkoutCartPending || paymentPending || hostedReturn
       || hostedRecoveryBlocked || isProcessing || storeRequestLoading) return
     if (!user) {
@@ -716,8 +786,11 @@ export default function CheckoutPage() {
       return
     }
     const owner = user.id
+    const item = cart.find(item => cartLineKey(item) === lineKey)
+    if (!item) return
+    const productId = item.id
     wishlistMoveInProgress.current = true
-    setMovingWishlistId(productId)
+    setMovingWishlistId(lineKey)
     try {
       const response = await apiFetch("/api/wishlist", {
         method: "POST", json: { productId },
@@ -726,7 +799,7 @@ export default function CheckoutPage() {
       if (!response.ok) throw new Error(data?.message || "Could not save this item to your wishlist.")
       if (currentAccountId.current !== owner) return
       // An already-wishlisted item is also safely saved for later.
-      removeFromCart(productId)
+      removeFromCart(lineKey)
       window.dispatchEvent(new Event("wishlist-updated"))
       toast.success("Item moved to wishlist")
     } catch (error) {
@@ -824,6 +897,8 @@ export default function CheckoutPage() {
   }
 
   const validateCheckout = async () => {
+    if (!checkoutValidationLock.acquire()) return false
+    try {
     if (addressesLoading || profileLoading || addressMutation.current) {
       toast.error("Please wait for your account addresses to finish loading or saving.")
       return false
@@ -835,13 +910,54 @@ export default function CheckoutPage() {
       return false
     }
     if (applyingCoupon) { toast.error("Please wait for your coupon to be checked."); return false }
+    if (storeStock.error || !storeStock.storeIds) {
+      toast.error(storeStock.error || "Please wait for store stock to be checked."); return false
+    }
+    if (!isPickup && !storeStock.deliveryAvailable) {
+      toast.error(storeStock.availabilityError || "Your requested quantities are unavailable for home delivery."); return false
+    }
+    if (isPickup && (!pickupStore || !storeStock.storeIds?.has(pickupStore.id))) {
+      toast.error(storeStock.deliveryAvailable ? "The requested quantity is unavailable at this store. Choose free home delivery or another store."
+        : "The requested quantity is unavailable at this store."); return false
+    }
     if (hasHardware && !isPickup && (isLoadingSettings || settingsError || !settingsData)) {
       toast.error("Delivery charges could not be confirmed. Please refresh and try again.")
       return false
     }
     if (!await validateStep1()) return false
+    const response = await apiFetch("/api/cart/validate", {
+      method: "POST", json: { items: cart, couponCode: appliedCoupon?.code || null, redeemPoints,
+        fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId } },
+      signal: AbortSignal.timeout(15000),
+    })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) { toast.error(data?.error || "Product stock and prices could not be validated."); return false }
+    const result = z.object({ success: z.literal(true), amount: z.number().finite().nonnegative(),
+      pricing: z.object({ subtotal: z.number().finite(), tax: z.number().finite(), shipping: z.number().finite(),
+        total: z.number().finite(), couponDiscount: z.number().finite(),
+        items: z.array(z.object({ id: z.string(), price: z.number().finite().positive() })),
+      }),
+    }).safeParse(data)
+    if (!result.success) { toast.error("Product validation could not be completed. Please retry."); return false }
+    if (couponContextRef.current !== couponContext || currentQuoteContext.current !== quoteContext) {
+      toast.error("Your checkout changed. Please review it and retry."); return false
+    }
+    const quote = result.data
+    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
+    const changedPrices = quote.pricing.items.some(item => cart.some(current => current.id === item.id &&
+      current.price !== item.price))
+    refreshItemPrices(Object.fromEntries(quote.pricing.items.map(item => [item.id, item.price])))
+    setCouponDiscount(quote.pricing.couponDiscount)
+    if (changedPrices || Math.round(quote.amount * 100) !== Math.round(payableTotal * 100)) {
+      toast.error("Prices or checkout charges changed. Review the updated total and retry.")
+      return false
+    }
     analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
     return true
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Checkout validation failed. Please retry.")
+      return false
+    } finally { checkoutValidationLock.release() }
   }
 
   // Apply coupon handler
@@ -852,7 +968,8 @@ export default function CheckoutPage() {
     try {
       const payload = {
         code: couponCode.trim(),
-        cart: cart.map((i) => ({ id: i.id, quantity: i.quantity })),
+        cart: cart.map(i => ({ ...i })),
+        fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId },
       }
       const data = await apiFetchJson("/api/coupons/validate", {
         method: "POST",
@@ -879,6 +996,8 @@ export default function CheckoutPage() {
         userId: user?.id,
         items: cart.map((item) => ({
           id: item.id,
+          sku: item.sku, variantId: item.variantId, ram: item.ram, storage: item.storage,
+          color: item.color, size: item.size,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
@@ -919,6 +1038,7 @@ export default function CheckoutPage() {
         },
         fulfilment: {
           method: fulfilmentMethod,
+          ...(fulfilmentStoreId ? { storeId: fulfilmentStoreId } : {}),
           ...(isPickup && pickupStore
             ? {
                 storeId: pickupStore.id,
@@ -972,14 +1092,13 @@ export default function CheckoutPage() {
       }
   }
 
-  const handlePlaceOrder = async (paymentDetails?: CheckoutPaymentDetails) => {
-    if (cartError) { toast.error(cartError); return }
-    if (!orderLock.acquire()) return
+  const handlePlaceOrder = async (paymentDetails?: CheckoutPaymentDetails, savedOrderData?: Record<string, unknown>) => {
+    if (!savedOrderData && cartError) { toast.error(cartError); return false }
+    if (!orderLock.acquire()) return false
     setIsProcessing(true)
     try {
-      const orderData = buildOrderData(paymentDetails)
+      const orderData: Record<string, unknown> = savedOrderData ? { ...savedOrderData, paymentMethod: paymentDetails?.method, paymentDetails } : buildOrderData(paymentDetails)
 
-      if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Sending order data:", orderData)
 
       const response = await fetch("/api/orders", {
         method: "POST",
@@ -990,19 +1109,17 @@ export default function CheckoutPage() {
       })
 
       const result = await response.json()
-      if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Order response:", result)
 
       if (result.success) {
+        if (checkoutOwnerRef.current !== checkoutOwner) throw new Error("Return to the account that started this checkout to recover its order.")
         const newOrderId = result.orderId
         if (typeof newOrderId !== "string" || !newOrderId) throw new Error("Order created but its reference is unavailable. Please contact support before paying again.")
         const confirmation = OrderConfirmationSchema.safeParse(result.order)
         if (confirmation.success) setPlacedOrder(confirmation.data)
         else console.error("[Checkout] Created order returned incomplete confirmation details:", confirmation.error)
         setOrderId(newOrderId)
-        clearCheckoutDraft(checkoutOwner)
-        setOrderPlaced(true)
 
-        // Returned only once, so persist it before anything else can fail.
+        // Keep the guest access link available if navigation is interrupted.
         const token: string | null = result.guestAccessToken || null
         if (token) {
           setGuestAccessToken(token)
@@ -1013,20 +1130,25 @@ export default function CheckoutPage() {
           }
         }
 
-        analytics.purchase({
+        try { analytics.purchase({
           transactionId: newOrderId,
           value: total,
           tax,
           shipping,
           coupon: appliedCoupon?.code ?? null,
           items: cart.map((i) => toAnalyticsItem(i)),
-        })
+        }) } catch { /* Analytics must never interrupt a completed purchase. */ }
 
         toast.success('Order placed successfully!')
 
-        if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Clearing cart after successful order")
-        clearCart()
+        const purchased = PurchasedItemsSchema.safeParse(orderData.items)
+        if (purchased.success) await completePurchase(purchased.data, newOrderId)
+        clearCheckoutDraft(checkoutOwner)
+        clearCheckoutRecovery(checkoutOwner)
+        setPaymentRecovery(null)
+        setOrderPlaced(true)
         router.replace(`/thank-you?orderId=${encodeURIComponent(newOrderId)}${token ? `&token=${encodeURIComponent(token)}` : ""}`)
+        return true
       } else {
         if (paymentDetails?.method === "store-payment" && response.status === 409 && /request/i.test(String(result.error))) {
           // The cart, coupon or store changed since the store was messaged; a fresh request is needed.
@@ -1038,22 +1160,51 @@ export default function CheckoutPage() {
     } catch (error) {
       console.error("ByteWise Testing Point Error placing order:", error)
       toast.error(error instanceof Error ? error.message : "Failed to place order. Please try again.")
+      return false
     } finally {
       orderLock.release()
       setIsProcessing(false)
     }
   }
 
-  const handlePaymentSuccess = (paymentDetails: CheckoutPaymentDetails) => {
+  const handlePaymentSuccess = async (paymentDetails: CheckoutPaymentDetails, savedOrderData?: Record<string, unknown>) => {
+    if (checkoutOwnerRef.current !== checkoutOwner) throw new Error("Return to the account that started this payment; its recovery details are saved.")
     // Directly place order on payment success without showing confirmation
-    return handlePlaceOrder(paymentDetails)
+    const recovery = readCheckoutRecovery(checkoutOwner)
+    const saved = await handlePlaceOrder(paymentDetails, recovery?.orderData || savedOrderData)
+    if (!saved) throw new Error("Payment received. Recover this checkout before paying again.")
   }
 
-  const activeStoreRequest = storeRequest && storeRequest.store.id === payStore?.id ? storeRequest : null
+  const recoverPayment = async () => {
+    if (!paymentRecovery || !recoveryLock.acquire()) return
+    setRecoveringPayment(true)
+    try {
+      const response = await apiFetch("/api/payment/verify", { method: "POST", json: paymentRecovery.receipt })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error || "Payment confirmation is unavailable. Keep your payment reference and contact support; do not pay again.")
+      const details = { method: "razorpay", status: "completed", paymentId: paymentRecovery.receipt.razorpay_payment_id,
+        orderId: paymentRecovery.receipt.razorpay_order_id, checkoutToken: paymentRecovery.receipt.checkoutToken }
+      await handlePlaceOrder(details, paymentRecovery.orderData)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Payment recovery failed. Do not pay again.")
+    } finally { setRecoveringPayment(false); recoveryLock.release() }
+  }
+
+  const paymentRequestContext = JSON.stringify([quoteContext, customerData])
+  const paymentRequestContextRef = useRef(paymentRequestContext)
+  paymentRequestContextRef.current = paymentRequestContext
+  const activeStoreRequest = storeRequest && storeRequest.store.id === pickupStore?.id && storeRequestContext === paymentRequestContext ? storeRequest : null
 
   // Messages the chosen store; the order itself is created once the shopper submits the transaction ID.
   const requestStorePayment = async () => {
-    if (activeStoreRequest) { setStoreDialogOpen(true); return }
+    if (!storeRequestLock.acquire()) return
+    setStoreRequestLoading(true)
+    try {
+    if (!allowStorePayment) { toast.error("Pay at store is unavailable for these quantities. Choose another payment option."); return }
+    if (activeStoreRequest) {
+      if (await validateCheckout()) setStoreDialogOpen(true)
+      return
+    }
     if (!payStore) { toast.error(isPickup ? "Choose a pickup store first" : "Choose the store you want to pay"); return }
     if (!/^[6-9]\d{9}$/.test(customerData.phone.trim())) {
       toast.error("Enter a valid 10-digit mobile number so the store can call you")
@@ -1066,11 +1217,12 @@ export default function CheckoutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cart.map(item => ({ id: item.id, quantity: item.quantity, color: item.color, size: item.size })),
+          items: cart.map(item => ({ ...item })),
           couponCode: appliedCoupon?.code || null,
           redeemPoints,
-          fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id },
+          fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId },
           storeId: payStore.id,
+          expectedAmount: Math.round(payableTotal * 100),
           customer: {
             firstName: customerData.firstName,
             lastName: customerData.lastName,
@@ -1091,13 +1243,16 @@ export default function CheckoutPage() {
         const message = json && typeof json === "object" && "error" in json && typeof json.error === "string" ? json.error : ""
         throw new Error(message || "Could not send your order to the store. Please try again.")
       }
+      if (storeRequest?.requestId !== parsed.data.requestId) setStoreTransaction({ platform: "", transactionId: "" })
       setStoreRequest(parsed.data)
-      setStoreDialogOpen(true)
+      setStoreRequestContext(paymentRequestContext)
+      if (paymentRequestContextRef.current === paymentRequestContext) setStoreDialogOpen(true)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send your order to the store. Please try again.")
     } finally {
       setStoreRequestLoading(false)
     }
+    } finally { setStoreRequestLoading(false); storeRequestLock.release() }
   }
 
   const submitStorePayment = (platform: StorePaymentPlatform, transactionId: string) => {
@@ -1218,7 +1373,7 @@ export default function CheckoutPage() {
             {!previousCartLoaded && !checkoutCartError && <p role="status" className="mt-3 text-sm">Loading your saved cart...</p>}
             {previousCartLoaded && previousCart.length === 0 && <p className="mt-3 text-sm">Your saved cart is empty. Continue with your current products.</p>}
             {previousCartLoaded && <ul className="mt-4 space-y-3">
-              {previousCart.map(item => <li key={item.id} className="flex items-center gap-3 rounded-lg bg-white p-3">
+              {previousCart.map(item => <li key={cartLineKey(item)} className="flex items-center gap-3 rounded-lg bg-white p-3">
                 <CartProductImage src={item.image} name={item.name} className="h-14 w-14 rounded object-contain" />
                 <div className="min-w-0 flex-1"><p className="font-medium text-slate-900">{shortProductTitle(item.name)}</p>
                   <p className="text-sm text-slate-600">Quantity: {item.quantity} · ₹{money(Number(item.price) * item.quantity)}</p></div>
@@ -1243,7 +1398,7 @@ export default function CheckoutPage() {
           <fieldset disabled={checkoutCartPending || paymentPending || !!hostedReturn || hostedRecoveryBlocked || isProcessing || addressSaving || !!movingWishlistId} className={styles.layout}>
             <legend className="sr-only">Checkout details and payment</legend>
             {/* Customer Details - Left side */}
-            <div className={styles.detailsColumn}>
+            <div className={styles.detailsColumn} inert={Boolean(paymentRecovery) || paymentPending || isProcessing || storeRequestLoading}>
               {(
                 <section className={styles.panel} aria-labelledby="delivery-address-heading">
                   <h2 id="delivery-address-heading" className={styles.sectionTitle}>
@@ -1537,7 +1692,7 @@ export default function CheckoutPage() {
               <section className={styles.panel} aria-labelledby="delivery-options-heading">
                 <h2 id="delivery-options-heading" className={styles.sectionTitle}><span>2</span>Delivery Options</h2>
                 <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
-                <FulfilmentSelector method={fulfilmentMethod} onMethodChange={setFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
+                <FulfilmentSelector method={fulfilmentMethod} onMethodChange={changeFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
                   deliveryPincode={customerData.pincode} deliveryCity={customerData.city} stock={storeStock}
                   deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
                   <div className={styles.deliveryNotice}><Truck size={34} /><div>
@@ -1559,24 +1714,25 @@ export default function CheckoutPage() {
                     </span>
                     Payment Method
                   </h2>
-                  <p className={styles.sectionHint}>Choose a payment gateway, then select UPI, cards or another available option on its secure checkout.</p>
+                  <p className={styles.sectionHint}>{isPickup ? "Pay online or choose Pay at Store after selecting a store with your items in stock."
+                    : "Pay online with UPI, cards or another available option at the secure payment gateway."}</p>
                   {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
+                  {draftStorageError && <p role="alert" className="text-sm text-amber-800">Your browser could not save checkout details. Keep this tab open until your order is confirmed.</p>}
                   {paymentConfigLoading && <p role="status" className={styles.sectionHint}>Loading online payment gateways...</p>}
                   {!paymentConfigLoading && !paymentConfigError && !paymentProviders.length && (() => {
-                    const offline = [codEnabled && "cash on delivery", instoreEnabled && "in-store purchase", storePaymentEnabled && "pay at store"]
+                    const offline = [allowStorePayment && "pay at store"]
                       .filter((option): option is string => !!option)
                     return <p className={styles.sectionHint}>Online payments are currently unavailable. {offline.length
                       ? `Choose ${offline.length > 1 ? `${offline.slice(0, -1).join(", ")} or ${offline.at(-1)}` : offline[0]}.`
                       : "Please try again later."}</p>
                   })()}
-                  <CheckoutPaymentOptions providers={paymentProviders} codEnabled={codEnabled} instoreEnabled={instoreEnabled}
-                    storePaymentEnabled={storePaymentEnabled}
+                  <CheckoutPaymentOptions providers={paymentProviders} codEnabled={false} instoreEnabled={false}
+                    storePaymentEnabled={allowStorePayment}
                     selected={paymentMethod === "online" ? paymentProvider : paymentMethod}
                     onChange={choice => {
-                      if (choice === "cash-on-delivery" || choice === "instore" || choice === "store-payment") {
-                        if (choice === "cash-on-delivery" && !codEnabled) return
-                        if (choice === "instore" && !instoreEnabled) return
-                        if (choice === "store-payment" && !storePaymentEnabled) return
+                      if (choice === "cash-on-delivery" || choice === "instore") return
+                      if (choice === "store-payment") {
+                        if (!allowStorePayment) return
                         setPaymentMethod(choice)
                       } else {
                         setPaymentProvider(choice)
@@ -1588,36 +1744,18 @@ export default function CheckoutPage() {
                       value={payStore} onChange={setPayStore} />
                   </CheckoutPaymentOptions>
 
-                  {/* In-store Purchase Verification */}
-                  {paymentMethod === "instore" && instoreEnabled && (
-                    <div className="mt-6">
-                      <InStorePurchase
-                        beforeVerify={validateCheckout}
-                        checkout={{
-                          items: cart,
-                          couponCode: appliedCoupon?.code || null,
-                          redeemPoints,
-                          fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id },
-                        }}
-                        onVerified={(verifiedData) => {
-                          return handlePlaceOrder({
-                            method: "instore",
-                            status: "completed",
-                            employeeId: verifiedData.employeeId,
-                            verifiedEmail: verifiedData.email,
-                            approvalId: verifiedData.approvalId,
-                            approvalToken: verifiedData.approvalToken,
-                          })
-                        }}
-                      />
-                    </div>
-                  )}
                 </section>
               )}
             </div>
 
             {/* Order Summary - Right side */}
             <aside className={`space-y-4 ${styles.summaryColumn}`}>
+              {paymentRecovery && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p>A payment was received. Your original checkout details are saved. Recover this order before making another payment.</p>
+                <p className="mt-1">Payment reference: {paymentRecovery.receipt.razorpay_payment_id}</p>
+                <button type="button" disabled={recoveringPayment || isProcessing || paymentPending} onClick={() => void recoverPayment()}
+                  className="mt-2 font-semibold underline disabled:opacity-50">{recoveringPayment ? "Recovering payment..." : "Recover payment"}</button>
+              </div>}
               <div className={styles.summary}>
                 <div className={styles.summaryHeader}>
                   <h2 className="font-heading text-[15px] font-bold text-[#0F2557]">
@@ -1631,10 +1769,11 @@ export default function CheckoutPage() {
                 {/* Cart Items */}
                 <div className={styles.summaryItems}>
                   {cart.map((item) => {
+                    const lineKey = cartLineKey(item)
                     const title = shortProductTitle(item.name) || "Product"
                     const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(item.id)}`
                     return (
-                    <div key={item.id} className={styles.summaryRow}>
+                    <div key={lineKey} className={styles.summaryRow}>
                       <a href={href} target="_blank" rel="noopener noreferrer" className={styles.summaryImage} aria-label={`Open ${title} in a new tab`}>
                         <CartProductImage src={item.image} name={title} />
                       </a>
@@ -1644,6 +1783,10 @@ export default function CheckoutPage() {
                           {title}
                         </a>
                         <p className="text-xs text-gray-500 mb-1">Qty: {item.quantity}</p>
+                        {(item.color || item.size || item.ram || item.storage) && <p className="text-xs text-gray-600">
+                          {[item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`,
+                            item.ram && `RAM: ${item.ram}`, item.storage && `Storage: ${item.storage}`].filter(Boolean).join(" · ")}
+                        </p>}
                         {item.type === 'software' && (
                           <div className="text-xs text-gray-600 space-y-0.5">
                             <p className="flex items-center gap-1">
@@ -1655,14 +1798,14 @@ export default function CheckoutPage() {
                           </div>
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                          <button type="button" onClick={() => void moveItemToWishlist(item.id)}
+                          <button type="button" onClick={() => void moveItemToWishlist(lineKey)}
                             disabled={!!movingWishlistId || storeRequestLoading}
                             aria-label={`Move ${title} to wishlist`}
                             className="inline-flex items-center gap-1 text-xs font-medium text-[#1560BD] hover:underline disabled:opacity-50">
                             <Heart className="h-3.5 w-3.5" />
-                            {movingWishlistId === item.id ? "Moving..." : "Move to wishlist"}
+                            {movingWishlistId === lineKey ? "Moving..." : "Move to wishlist"}
                           </button>
-                          <button type="button" onClick={() => setItemToRemove({ id: item.id, name: title })}
+                          <button type="button" onClick={() => setItemToRemove({ id: lineKey, name: title })}
                             disabled={!!movingWishlistId || storeRequestLoading}
                             aria-label={`Remove ${title}`}
                             className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:underline disabled:opacity-50">
@@ -1796,7 +1939,7 @@ export default function CheckoutPage() {
                 )}
                 {paymentMethod === "store-payment" ? (
                   <button type="button" onClick={() => void requestStorePayment()}
-                    disabled={storeRequestLoading || isProcessing || !storePaymentEnabled}
+                    disabled={storeRequestLoading || isProcessing || !allowStorePayment}
                     className="flex w-full items-center justify-center rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
                     {storeRequestLoading ? "Sending to store..."
                       : activeStoreRequest ? "Enter transaction ID"
@@ -1805,6 +1948,8 @@ export default function CheckoutPage() {
                   </button>
                 ) : paymentMethod !== "instore" ? <PaymentGateway
                   key={`${paymentMethod}:${paymentProvider}`}
+                  checkoutOwner={checkoutOwner}
+                  onPaymentReceived={recovery => { if (checkoutOwnerRef.current === checkoutOwner) setPaymentRecovery(recovery) }}
                   compact
                   paymentMethod={paymentMethod}
                   provider={paymentProvider}
@@ -1813,8 +1958,10 @@ export default function CheckoutPage() {
                   amount={payableTotal}
                   beforePayment={validateCheckout}
                   orderDetails={{ customer: customerData, items: cart, coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
-                    redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: pickupStore?.id }, total: payableTotal }}
+                    redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId }, total: payableTotal }}
                   onSuccess={handlePaymentSuccess}
+                  disabled={Boolean(paymentRecovery || recoveringPayment || cartError || storeStock.error) || !storeStock.storeIds ||
+                    (isPickup ? !pickupStore || !storeStock.storeIds.has(pickupStore.id) : !storeStock.deliveryAvailable)}
                   onCancel={() => toast.error("Payment cancelled")}
                 /> : <a href="#payment-method-heading" className={styles.primaryButton}>Verify in-store purchase <ArrowRight size={16} /></a>}
 
@@ -1870,6 +2017,8 @@ export default function CheckoutPage() {
           customerPhone={customerData.phone.trim()}
           storeNotified={activeStoreRequest.notified.whatsapp || activeStoreRequest.notified.email}
           submitting={isProcessing}
+          initialTransaction={storeTransaction}
+          onTransactionChange={setStoreTransaction}
           onSubmit={(platform, transactionId) => void submitStorePayment(platform, transactionId)}
           onClose={() => setStoreDialogOpen(false)}
         />

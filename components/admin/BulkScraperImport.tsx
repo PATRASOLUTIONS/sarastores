@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
-import { MAX_SCRAPER_IMPORT_BYTES, scraperColumnField, sheetCellLink, validateScraperRows, SCRAPER_TEMPLATE, type ScraperImportRow } from "@/lib/scrapers/bulk-import"
+import { MAX_SCRAPER_IMPORT_BYTES, MAX_SCRAPER_IMPORT_ROWS, ScraperImportRowSchema, scraperColumnField, scraperItemNumberKey, scraperRowValues, sheetCellLink, validateScraperRows, SCRAPER_TEMPLATE, type ScraperImportRow } from "@/lib/scrapers/bulk-import"
+import { checkScraperItemNumbers } from "@/lib/scrapers/check-items-client"
 import type { ScrapedProduct } from "@/lib/scrapers/types"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface QueueItem {
   row: ScraperImportRow
-  status: "pending" | "running" | "success" | "error"
+  status: "pending" | "running" | "success" | "error" | "skipped"
   message?: string
 }
 
@@ -26,7 +26,6 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
   fetchProduct: (url: string) => Promise<ScrapedProduct>
   supportedUrl: (url: string) => boolean
 }) {
-  const router = useRouter()
   const [items, setItems] = useState<QueueItem[]>([])
   const [running, setRunning] = useState(false)
   const [reading, setReading] = useState(false)
@@ -36,12 +35,15 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
   const [sheet, setSheet] = useState<ImportSheet | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorPage, setEditorPage] = useState(1)
+  const [finished, setFinished] = useState(false)
+  const [skippedSheetRows, setSkippedSheetRows] = useState<Set<number>>(new Set())
+  const preparing = useRef(false)
   const stop = useRef(false)
   const inFlight = useRef(false)
   const editorRef = useRef<HTMLDivElement>(null)
   const sheetValidation = useMemo(
-    () => sheet ? validateScraperRows(sheet.rows, supportedUrl, sheet.rowNumbers) : null,
-    [sheet, supportedUrl],
+    () => sheet ? validateScraperRows(sheet.rows, supportedUrl, sheet.rowNumbers, skippedSheetRows) : null,
+    [sheet, supportedUrl, skippedSheetRows],
   )
   useEffect(() => {
     if (!running) return
@@ -64,31 +66,57 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
       toast.error("Could not download the Excel template")
     }
   }
-  const prepareSheet = (data: ImportSheet) => {
-    const validation = validateScraperRows(data.rows, supportedUrl, data.rowNumbers)
-    if (validation.error) {
-      setError(validation.error)
+  const prepareSheet = async (data: ImportSheet) => {
+    if (preparing.current || inFlight.current) return
+    if (!data.rows.length || data.rows.length > MAX_SCRAPER_IMPORT_ROWS) {
+      setError(`Provide between 1 and ${MAX_SCRAPER_IMPORT_ROWS} rows`)
       setSheet(null)
       return
     }
-    const first = validation.issues[0]
-    if (first) {
-      setItems([])
-      setError(`Row ${first.row}: ${first.message}`)
-      setEditorPage(Math.floor(data.rowNumbers.indexOf(first.row) / 25) + 1)
+    preparing.current = true
+    setReading(true)
+    setFinished(false)
+    setItems([])
+    try {
+      const candidates = data.rows.map(scraperRowValues)
+      const codes = candidates.filter(row => ScraperImportRowSchema.shape.itemno.safeParse(row.itemno).success).map(row => row.itemno)
+      const existing = codes.length ? await checkScraperItemNumbers(codes) : new Set<string>()
+      const seen = new Set<string>()
+      const skippedNumbers = new Set<number>()
+      const queue = candidates.map<QueueItem>(row => {
+        const key = scraperItemNumberKey(row.itemno)
+        const duplicate = seen.has(key)
+        if (ScraperImportRowSchema.shape.itemno.safeParse(row.itemno).success) seen.add(key)
+        return existing.has(key) ? { row, status: "skipped", message: "Already exists — skipped" }
+          : duplicate ? { row, status: "skipped", message: "Duplicate item number in this sheet — skipped" }
+            : { row, status: "pending", message: "New item number — ready to add" }
+      })
+      queue.forEach((item, index) => { if (item.status === "skipped") skippedNumbers.add(data.rowNumbers[index]) })
+      setSkippedSheetRows(skippedNumbers)
+      const validation = validateScraperRows(data.rows, supportedUrl, data.rowNumbers, skippedNumbers)
+      const first = validation.issues[0]
+      if (first) {
+        setError(`Row ${first.row}: ${first.message}`)
+        setEditorPage(Math.floor(data.rowNumbers.indexOf(first.row) / 25) + 1)
+        setEditorOpen(true)
+        return
+      }
+      setItems(queue)
+      setPage(1)
+      setFileName(data.fileName)
+      setError("")
+      setEditorOpen(false)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not check item numbers. Please retry.")
       setEditorOpen(true)
-      return
-    }
-    setItems(validation.rows.map(row => ({ row, status: "pending" })))
-    setPage(1)
-    setFileName(data.fileName)
-    setError("")
-    setEditorOpen(false)
+    } finally { preparing.current = false; setReading(false) }
   }
   const upload = async (file: File) => {
     setReading(true)
     setError("")
     setItems([])
+    setFinished(false)
+    setSkippedSheetRows(new Set())
     setFileName("")
     setSheet(null)
     setEditorOpen(false)
@@ -132,7 +160,7 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
         rowNumbers: data.map((row, index) => typeof row.__rowNum__ === "number" ? row.__rowNum__ + 1 : index + 2),
       }
       setSheet(editable)
-      prepareSheet(editable)
+      await prepareSheet(editable)
     } catch (cause) {
       console.warn("[Bulk Scraper] Invalid spreadsheet", cause)
       setError(cause instanceof Error ? cause.message : "Could not read spreadsheet")
@@ -142,62 +170,71 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
   }
   const run = async () => {
     if (inFlight.current) return
-    if (!window.confirm("Run scraper for all pending/failed items, auto-approve specifications and publish them to Products? Existing prices and stock are preserved; new products start with zero stock.")) return
+    if (!window.confirm(`Run scraper for ${remaining} new/pending item numbers and publish them to Products? Existing item numbers will be skipped. New products start with zero stock.`)) return
     inFlight.current = true
     stop.current = false
     setRunning(true)
+    setFinished(false)
     const update = (index: number, status: QueueItem["status"], message?: string) =>
       setItems(current => current.map((item, i) => i === index ? { ...item, status, message } : item))
     let published = items.filter(item => item.status === "success").length
     try {
       for (let i = 0; i < items.length; i++) {
         if (stop.current) break
-        if (items[i].status === "success") continue
-        update(i, "running", "Scraping and publishing...")
+        if (items[i].status === "success" || items[i].status === "skipped") continue
+        update(i, "running", "Checking item number...")
         try {
+          if ((await checkScraperItemNumbers([items[i].row.itemno])).has(scraperItemNumberKey(items[i].row.itemno))) {
+            update(i, "skipped", "Already exists — skipped")
+            continue
+          }
+          update(i, "running", "Scraping and publishing...")
           const product = await fetchProduct(items[i].row.url)
           const response = await apiFetch("/api/scrape/publish", {
             method: "POST", json: { row: items[i].row, product },
           })
           const body = await response.json()
           if (!response.ok || !body.success) throw new Error(body.error || "Could not publish product")
-          update(i, "success", "Published; specifications approved")
+          if (body.skipped) { update(i, "skipped", body.message || "Already exists — skipped"); continue }
+          if (body.added !== true) throw new Error("The server did not confirm this item was added")
+          update(i, "success", "Added; specifications approved")
           published++
         } catch (cause) {
           console.error("[Bulk Scraper] Item failed", { itemno: items[i].row.itemno, cause })
           update(i, "error", cause instanceof Error ? cause.message : "Scrape failed")
         }
       }
-      if (published === items.length) {
-        toast.success(`Published ${published} products and approved their specifications`)
-        router.push("/admin/products")
-      }
+      toast.success(`${published} item numbers added${stop.current ? "; run stopped" : "; run finished"}. Review skipped and failed rows below.`)
     } finally {
       inFlight.current = false
       setRunning(false)
+      setFinished(true)
     }
   }
-  const remaining = items.filter(item => item.status !== "success").length
+  const remaining = items.filter(item => item.status === "pending" || item.status === "error").length
+  const added = items.filter(item => item.status === "success").length
+  const skipped = items.filter(item => item.status === "skipped").length
+  const failed = items.filter(item => item.status === "error").length
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="text-lg font-bold">Bulk import from Excel</h2>
       <p className="text-sm text-gray-600">
         Upload only <strong>itemno</strong> and <strong>product link</strong>.
-        Up to 500 rows / 3 MB. Upload only prepares the queue; Run Scraper processes every item and automatically approves its specifications.
+        Up to 500 rows / 3 MB. Upload checks item numbers and prepares the queue; Run Scraper processes new items and automatically approves their specifications.
         Scraped values create the initial record; update name, division, category, segment and brand later from Products → Metadata Update.
-        Existing prices and stock are preserved; new products start with zero stock. You will be taken to Products when all rows succeed.
+        Existing item numbers are skipped, including inactive products. Repeated item numbers in the sheet are processed once. New products start with zero stock. Results stay here after the run finishes.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={template} className="rounded-lg border px-4 py-2 text-sm font-semibold">Download Excel template</button>
         <label className="rounded-lg border px-4 py-2 text-sm font-semibold">
-          {reading ? "Reading..." : "Upload Excel"}
+          {reading ? "Reading / checking item numbers..." : "Upload Excel"}
           <input type="file" accept=".xlsx,.xls" disabled={running || reading} className="ml-3 text-sm" onChange={event => {
             const file = event.target.files?.[0]
             event.target.value = ""
             if (file) void upload(file)
           }} />
         </label>
-        {sheet && items.every(item => item.status === "pending") && <button type="button" disabled={running || reading} onClick={() => setEditorOpen(true)} className="rounded-lg border px-4 py-2 text-sm font-semibold">
+        {sheet && !finished && items.every(item => item.status === "pending" || item.status === "skipped") && <button type="button" disabled={running || reading} onClick={() => setEditorOpen(true)} className="rounded-lg border px-4 py-2 text-sm font-semibold">
           Edit uploaded sheet
         </button>}
         <button type="button" disabled={running || reading || editorOpen || !remaining} onClick={run} className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -254,6 +291,7 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
                     const errorId = `scraper-sheet-${index}-${columnIndex}-error`
                     return <td key={column} className="border-b p-2 align-top">
                       <textarea
+                        disabled={reading}
                         aria-label={`Row ${rowNumber}, ${column}`}
                         aria-invalid={issues.length > 0}
                         aria-describedby={issues.length ? errorId : undefined}
@@ -263,6 +301,7 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
                           const value = event.target.value
                           setSheet(current => current ? { ...current, rows: current.rows.map((values, i) => i === index ? { ...values, [column]: value } : values) } : current)
                           setItems([])
+                          setSkippedSheetRows(new Set())
                           setError("Sheet edited. Validate & use sheet before running the scraper.")
                         }}
                         className={`w-full min-w-[220px] resize-y rounded border bg-white p-2 ${issues.length ? "border-red-500" : "border-gray-300"}`}
@@ -282,20 +321,26 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={() => setEditorOpen(false)} className="rounded-lg border px-4 py-2">Close editor</button>
-              <button type="button" onClick={() => prepareSheet(sheet)} className="rounded-lg bg-gray-900 px-4 py-2 font-semibold text-white">Validate &amp; use sheet</button>
+              <button type="button" disabled={reading} onClick={() => void prepareSheet(sheet)} className="rounded-lg bg-gray-900 px-4 py-2 font-semibold text-white disabled:opacity-50">{reading ? "Checking item numbers..." : "Validate & use sheet"}</button>
             </div>
           </div>
         </DialogContent>
       </Dialog>}
       {!!items.length && <>
         <p aria-live="polite" className="text-sm">
-          {fileName}: {items.filter(item => item.status === "success").length} published, {items.filter(item => item.status === "error").length} failed, {items.filter(item => item.status === "pending").length} pending.
+          {fileName}: {items.length} rows, {remaining} ready to add / retry, {skipped} skipped, {added} added, {failed} failed.
           {running && " Keep this page open until processing finishes."}
         </p>
+        {!running && !finished && remaining === 0 && <p role="status" className="text-sm text-amber-800">
+          No new item numbers to add. All {skipped} rows were skipped.
+        </p>}
+        {finished && <p role="status" className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-900">
+          {stop.current ? "Run stopped" : "Scraper run completed"}: {added} item numbers added, {skipped} skipped, {failed} failed, {items.filter(item => item.status === "pending").length} pending.
+        </p>}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead><tr><th className="p-2">Item number</th><th className="p-2">Product link</th><th className="p-2">Status</th><th className="p-2">Result</th></tr></thead>
-            <tbody>{items.slice((page - 1) * 25, page * 25).map(item => <tr key={item.row.itemno} className="border-t">
+            <tbody>{items.slice((page - 1) * 25, page * 25).map((item, index) => <tr key={`${page}-${index}-${item.row.itemno}`} className="border-t">
               <td className="p-2">{item.row.itemno}</td><td className="max-w-xs truncate p-2" title={item.row.url}>{item.row.url}</td><td className="p-2">{item.status}</td>
               <td className={`p-2 ${item.status === "error" ? "text-red-700" : ""}`}>{item.message || "Ready"}</td>
             </tr>)}</tbody>
