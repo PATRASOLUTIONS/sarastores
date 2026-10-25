@@ -7,6 +7,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Heart, Star, Shield } from "lucide-react"
 import CompareProductButton from "@/components/CompareProductButton"
+import { useRouter } from "next/navigation"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useCart } from "@/hooks/useCart"
 import { toast } from "react-hot-toast"
@@ -58,6 +59,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
   const productId = product.id
   const [isAdding, setIsAdding] = useState(false)
   const [isWishlistLoading, setIsWishlistLoading] = useState(false)
+  const router = useRouter()
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const isWishlisted = isInWishlist(productId)
   const { addToCart } = useCart()

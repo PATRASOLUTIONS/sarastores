@@ -537,9 +537,9 @@ export default function Header() {
           </button>
 
           {/* Logo */}
-          <Link href="/" className="flex-shrink-0 flex items-center gap-3" aria-label="Sara Mobiles and Electronics - Home">
+          <Link href="/" className="min-w-0 flex-shrink md:flex-shrink-0 flex items-center gap-3" aria-label="Sara Mobiles and Electronics - Home">
             <div className="text-lg md:text-2xl font-heading font-bold">
-              {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-9 md:h-12 w-auto object-contain" priority unoptimized />}
+              {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-7 sm:h-9 md:h-12 max-w-full w-auto object-contain" priority unoptimized />}
             </div>
           </Link>
 
@@ -734,7 +734,7 @@ export default function Header() {
           </div>
 
           {/* Right Side Actions */}
-          <div className="flex items-center gap-3 md:gap-5 flex-shrink-0">
+          <div className="flex items-center gap-1 md:gap-5 flex-shrink-0">
             {/* Deliver-to pincode - reference places this beside the account menu */}
             <div className="order-1 hidden lg:block">
               <DeliverToPincode variant="light" />

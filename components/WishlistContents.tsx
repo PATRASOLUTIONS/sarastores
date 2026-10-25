@@ -8,7 +8,7 @@ import { useWishlist, type WishlistItem } from "@/hooks/useWishlist"
 import { useCart } from "@/hooks/useCart"
 import { toast } from "react-hot-toast"
 
-export default function WishlistPage() {
+export default function WishlistContents() {
   const { wishlist, isLoading, removeFromWishlist } = useWishlist()
   const { addToCart } = useCart()
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())

@@ -27,8 +27,12 @@ const wishlistRequests = new Map<string, Promise<WishlistItem[]>>()
 const GUEST_WISHLIST_KEY = "wishlist_guest"
 const guestItemSchema = z.object({
   id: z.string().min(1), name: z.string(), price: z.number().finite().nonnegative(),
-  image: z.string().optional(), type: z.enum(["hardware", "software"]).optional(),
-}).passthrough()
+  image: z.string().nullish().transform(value => value || "/placeholder.svg"),
+  type: z.enum(["hardware", "software"]).optional(),
+  slug: z.string().optional(), sku: z.string().optional(),
+  description: z.string().nullish().transform(value => value ?? undefined),
+  category: z.string().nullish().transform(value => value ?? undefined),
+})
 
 function readGuestWishlist(): WishlistItem[] {
   try {
@@ -135,8 +139,10 @@ export function useWishlist() {
           item = parsed.data as WishlistItem
         }
         if (activeOwner.current !== "guest") return false
+        const parsed = guestItemSchema.safeParse({ ...item, id: productId })
+        if (!parsed.success) throw new Error("Product could not be saved")
         const current = readGuestWishlist()
-        saveGuestWishlist([...current.filter(existing => existing.id !== productId), { ...item, id: productId }])
+        saveGuestWishlist([...current.filter(existing => existing.id !== productId), parsed.data])
         toast.success("Added to wishlist")
         return true
       }
