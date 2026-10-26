@@ -1,4 +1,17 @@
 import * as XLSX from "xlsx"
+import type { SkippedStockRecord } from "@/lib/store-stock-preview"
+import type { StoreStockUploadRow } from "@/lib/store-stock"
+
+export function skippedStockWorkbook(rows: StoreStockUploadRow[], skipped: SkippedStockRecord[]) {
+  const sheet = XLSX.utils.json_to_sheet(skipped.map(record => {
+    const row = rows[record.index]
+    return { "Item No.": row.itemCode, "Store Code": row.storeCode, Quantity: row.quantity, Reason: record.reason }
+  }))
+  sheet["!cols"] = [{ wch: 22 }, { wch: 18 }, { wch: 12 }, { wch: 40 }]
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, "Skipped Rows")
+  return workbook
+}
 
 const key = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
 const itemHeaders = ["itemcode", "itemno", "itemnumber", "sku"]

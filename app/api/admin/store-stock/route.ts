@@ -9,7 +9,11 @@ import {
   recomputeProductStock, STORE_STOCK_COLLECTION, StoreStockUploadSchema, type StoreStockRow,
 } from "@/lib/store-stock"
 
+import { createStockPreview, STOCK_PREVIEW_PAGE_SIZE, type StockPreviewPlan, type SkippedStockRecord } from "@/lib/store-stock-preview"
+
 const LIST_LIMIT = 20
+class StockPreviewChanged extends Error {}
+
 
 async function storeNames() {
   const stores = await (await getCollection<StoredStoreLocation>("store_locations"))
@@ -81,25 +85,13 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = StoreStockUploadSchema.safeParse(await request.json())
     if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
-    const { rows, replaceStores } = parsed.data
-
-    const seen = new Set<string>()
-    const duplicates = rows.filter(row => {
-      const key = `${stockCodeKey(row.storeCode)}\u0000${stockCodeKey(row.itemCode)}`
-      if (seen.has(key)) return true
-      seen.add(key)
-      return false
-    })
-    if (duplicates.length) {
-      const sample = duplicates.slice(0, 5).map(row => `${row.itemCode} @ ${row.storeCode}`).join(", ")
-      return NextResponse.json({ success: false, message: `The same item appears more than once for a store: ${sample}` }, { status: 400 })
-    }
+    const { rows, replaceStores, preview, previewPage, previewToken } = parsed.data
 
     const storeCodes = [...new Set(rows.map(row => row.storeCode))]
     const itemCodes = [...new Set(rows.map(row => row.itemCode))]
     const [knownStores, products] = await Promise.all([
       (await getCollection<StoredStoreLocation>("store_locations")).find({ storeCode: { $in: storeCodes } },
-        { projection: { storeCode: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
+        { projection: { storeCode: 1, shopName: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
       (await getCollection<StockCatalogueProduct & { _id: unknown }>(COLLECTIONS.PRODUCTS)).find(stockItemFilter(itemCodes),
         { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
     ])
@@ -121,20 +113,40 @@ export async function POST(request: NextRequest) {
     const unknownItems = itemCodes.filter(code => !itemsByCode.has(stockCodeKey(code)))
     const valid = rows.flatMap(row => {
       const storeCode = storesByCode.get(stockCodeKey(row.storeCode)), itemCode = itemsByCode.get(stockCodeKey(row.itemCode))
-      return storeCode && itemCode ? [{ ...row, storeCode, itemCode }] : []
+      return storeCode && itemCode ? [{ ...row, uploadedItemCode: row.itemCode, storeCode, itemCode }] : []
     })
     const resolvedPairs = new Set(valid.map(row => `${row.storeCode}\u0000${row.itemCode}`))
     if (resolvedPairs.size !== valid.length) return NextResponse.json({ success: false, message: "The same product is listed under multiple Item No./SKU aliases for one store. Keep one quantity per item and store." }, { status: 400 })
+    const skippedRecords: SkippedStockRecord[] = rows.flatMap((row, index) => {
+      const storeKnown = storesByCode.has(stockCodeKey(row.storeCode)), itemKnown = itemsByCode.has(stockCodeKey(row.itemCode))
+      return storeKnown && itemKnown ? [] : [{ index, reason: !storeKnown && !itemKnown ? "Unknown Item No. and Store Code" : !storeKnown ? "Unknown Store Code" : "Unknown Item No." }]
+    })
+    const protectedStores = new Set(skippedRecords.flatMap(record => {
+      const code = storesByCode.get(stockCodeKey(rows[record.index].storeCode))
+      return code ? [code] : []
+    }))
+    const replacementStores = replaceStores ? [...new Set(valid.map(row => row.storeCode))].filter(code => !protectedStores.has(code)) : []
+    const plan: StockPreviewPlan = { valid, replacementStores, skippedRecords,
+      storeNames: new Map(knownStores.map(store => [store.storeCode!, store.shopName || store.storeCode!])),
+      identities: [...knownStores.map(store => `store:${String(store._id)}:${store.storeCode}`), ...products.map(product => `product:${String(product._id)}:${stockItemCode(product)}`)],
+    }
     const report = {
       unknownStores: unknownStores.slice(0, LIST_LIMIT), unknownStoreCount: unknownStores.length,
       unknownItems: unknownItems.slice(0, LIST_LIMIT), unknownItemCount: unknownItems.length,
-      skippedRows: rows.length - valid.length,
+      skippedRows: skippedRecords.length, skippedRecords,
+      preservedStores: replaceStores ? [...protectedStores].slice(0, LIST_LIMIT) : [],
+      preservedStoreCount: replaceStores ? protectedStores.size : 0,
     }
-    if (unknownStores.length || unknownItems.length) {
-      return NextResponse.json({ success: false, message: "Unknown item or store codes found. Correct them and upload again; no stock was changed.", ...report }, { status: 400 })
-    }
-    if (valid.length === 0) {
-      return NextResponse.json({ success: false, message: "No row matched a known store code and item code; nothing was saved", ...report }, { status: 400 })
+    const responsePreview = (snapshot: Awaited<ReturnType<typeof createStockPreview>>) => ({
+      changes: snapshot.changes.slice(previewPage * STOCK_PREVIEW_PAGE_SIZE, (previewPage + 1) * STOCK_PREVIEW_PAGE_SIZE),
+      totalChanges: snapshot.changes.length, previewPage, pageSize: STOCK_PREVIEW_PAGE_SIZE, previewToken: snapshot.previewToken,
+    })
+    if (preview || !valid.length) {
+      const snapshot = await createStockPreview(plan)
+      if (previewToken && previewToken !== snapshot.previewToken) throw new StockPreviewChanged()
+      return NextResponse.json({ success: true, preview, saved: 0, stores: new Set(valid.map(row => row.storeCode)).size,
+        validRows: valid.length, zeroedItems: snapshot.changes.filter(row => row.source === "omitted").length, productsUpdated: 0,
+        ...responsePreview(snapshot), ...report })
     }
 
     const stock = await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)
@@ -150,39 +162,23 @@ export async function POST(request: NextRequest) {
         const claimed = await locations.updateMany({ storeCode: { $in: replacedStores } },
           { $inc: { stockRevision: 1 } }, { session })
         if (claimed.matchedCount < replacedStores.length) throw new Error("A store changed during upload; retry the sheet")
-        const skusByStore = new Map<string, string[]>()
-        for (const row of valid) skusByStore.set(row.storeCode, [...(skusByStore.get(row.storeCode) ?? []), row.itemCode])
-
-        const zeroedSkus = replaceStores ? await stock.distinct("sku", {
-          $or: replacedStores.map(storeCode => ({ storeCode, sku: { $nin: skusByStore.get(storeCode)! }, quantity: { $gt: 0 } })),
-        }, { session }) : []
-
-        await stock.bulkWrite([
-          ...valid.map(row => ({
-            updateOne: {
-              filter: { storeCode: row.storeCode, sku: row.itemCode },
-              update: { $set: { quantity: row.quantity, updatedAt: now } },
-              upsert: true,
-            },
-          })),
-          ...(replaceStores ? replacedStores.map(storeCode => ({
-            updateMany: {
-              filter: { storeCode, sku: { $nin: skusByStore.get(storeCode)! }, quantity: { $gt: 0 } },
-              update: { $set: { quantity: 0, updatedAt: now } },
-            },
-          })) : []),
-        ], { session, ordered: true })
-
-        const affected = [...new Set([...valid.map(row => row.itemCode), ...zeroedSkus.map(String)])]
+        const snapshot = await createStockPreview(plan, session)
+        if (previewToken && previewToken !== snapshot.previewToken) throw new StockPreviewChanged()
+        await stock.bulkWrite(snapshot.changes.map(row => ({
+          updateOne: { filter: { storeCode: row.storeCode, sku: row.sku },
+            update: { $set: { quantity: row.currentStoreStock, updatedAt: now } }, upsert: row.source === "upload" },
+        })), { session, ordered: true })
+        const affected = [...new Set(snapshot.changes.map(row => row.sku))]
         const productsUpdated = await recomputeProductStock(affected, session)
-        return { saved: valid.length, stores: replacedStores.length, zeroedItems: zeroedSkus.length, productsUpdated }
+        return { saved: valid.length, validRows: valid.length, stores: replacedStores.length, zeroedItems: snapshot.changes.filter(row => row.source === "omitted").length, productsUpdated, ...responsePreview(snapshot) }
       })
       if (!result) throw new Error("Store stock upload did not commit")
-      return NextResponse.json({ success: true, message: "Store stock updated", ...result, ...report })
+      return NextResponse.json({ success: true, preview: false, message: "Store stock updated", ...result, ...report })
     } finally {
       await session.endSession()
     }
   } catch (error) {
+    if (error instanceof StockPreviewChanged) return NextResponse.json({ success: false, message: "Stock or catalogue details changed since this preview. Refresh the preview before applying." }, { status: 409 })
     if (error instanceof SyntaxError) return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
     return handleApiError(error, "Failed to upload store stock; no rows were saved")
   }

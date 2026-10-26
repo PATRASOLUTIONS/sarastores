@@ -20,6 +20,9 @@ export interface StoreStockRow {
 
 export const StoreStockUploadSchema = z.object({
   replaceStores: z.boolean().default(false),
+  preview: z.boolean().default(false),
+  previewPage: z.number().int().min(0).max(10000).default(0),
+  previewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   rows: z.array(z.object({
     itemCode: z.string().trim().min(1, "Every row needs an item code").max(100),
     storeCode: z.string().trim().min(1, "Every row needs a store code").max(50),
