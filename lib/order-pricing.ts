@@ -61,6 +61,7 @@ export type PricedItem = {
   ram?: string | null
   storage?: string | null
   division?: string
+  itemNumbers?: string[]
 }
 
 export type PricingSuccess = {
@@ -71,7 +72,7 @@ export type PricingSuccess = {
   shipping: number
   gross: number
   couponDiscount: number
-  coupon: { code: string; name: string; discount: number } | null
+  coupon: { code: string; name: string; discount: number; couponRemovable?: boolean } | null
   total: number
   gifts?: GiftAward[]
 }
@@ -85,6 +86,9 @@ export type CouponDetails =
 
 interface PricingCatalogueProduct extends PurchaseProduct {
   division?: string
+  itemno?: string | number
+  itemNo?: string | number
+  raw?: Record<string, unknown>
   _id?: ObjectId | string
   id?: string
   sku?: string
@@ -114,6 +118,7 @@ interface PricingCatalogueProduct extends PurchaseProduct {
 }
 
 interface PricingCoupon {
+  couponRemovable?: boolean
   code: string
   name: string
   active: boolean
@@ -229,7 +234,7 @@ async function computeCouponDiscount(
   catalogue: Map<string, PricingCatalogueProduct>,
   userId: string | null,
   session?: ClientSession,
-): Promise<{ ok: true; coupon: { code: string; name: string; discount: number }; details: CouponDetails } | { ok: false; error: string }> {
+): Promise<{ ok: true; coupon: NonNullable<PricingSuccess["coupon"]>; details: CouponDetails } | { ok: false; error: string }> {
   const couponsCol = await getCollection<PricingCoupon>(COLLECTIONS.COUPONS)
   const coupon = await couponsCol.findOne({ code: code.toUpperCase().trim(), active: true }, { session })
   if (!coupon) return { ok: false, error: "Coupon not found or inactive" }
@@ -316,7 +321,7 @@ async function computeCouponDiscount(
   discount = Math.min(Math.round(discount), round2(eligibleSubtotal))
   if (discount <= 0) return { ok: false, error: "No discount from this coupon" }
 
-  return { ok: true, coupon: { code: coupon.code, name: coupon.name, discount }, details }
+  return { ok: true, coupon: { code: coupon.code, name: coupon.name, discount, couponRemovable: coupon.couponRemovable !== false }, details }
 }
 
 export async function priceCatalogueCart(
@@ -396,6 +401,9 @@ export async function priceCatalogueCart(
       color: raw.color || null,
       size: raw.size || null,
       sku: doc.sku || null,
+      itemNumbers: [doc.itemno, doc.itemNo, doc.raw?.itemno, doc.raw?.["Item No."], doc.raw?.["Item No"], doc.raw?.["ITEM NO"]]
+        .map(value => typeof value === "string" || typeof value === "number" ? toText(value) : null)
+        .filter((value): value is string => !!value),
       ram: raw.ram || null,
       storage: raw.storage || null,
       ...(doc.division ? { division: doc.division } : {}),

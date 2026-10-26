@@ -394,8 +394,8 @@ export default function CheckoutPage() {
 
   // Coupon state and derived totals
   const [couponCode, setCouponCode] = useState("")
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string } | null>(null)
-  const restoredCoupon = useRef<{ code: string; name: string } | null>(null)
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string; couponRemovable?: boolean } | null>(null)
+  const restoredCoupon = useRef<{ code: string; name: string; couponRemovable?: boolean } | null>(null)
   const [couponDiscount, setCouponDiscount] = useState(0)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
   useEffect(() => {
@@ -455,7 +455,7 @@ export default function CheckoutPage() {
   const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [cartLineKey(item), item.quantity, item.price])])
   const cartGifts = useCartGifts(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId })
   const quoteContext = JSON.stringify([couponContext, appliedCoupon?.code, redeemPoints, fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback,
-    cartGifts.declinedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
+    cartGifts.declinedGiftPromotions, cartGifts.selectedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
   const currentQuoteContext = useRef(quoteContext)
   currentQuoteContext.current = quoteContext
   const [verifiedQuote, setVerifiedQuote] = useState<{ context: string; subtotal: number; tax: number;
@@ -471,11 +471,38 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (!draftReady || cartLoading || !restoredCoupon.current) return
-    setAppliedCoupon(restoredCoupon.current)
+    const savedCoupon = restoredCoupon.current
+    // Re-read the current removal policy instead of trusting a saved draft.
+    setAppliedCoupon({ ...savedCoupon, couponRemovable: false })
     restoredCoupon.current = null
-    // Only the selection survives refresh; the server recalculates its value.
     setCouponDiscount(0)
-  }, [draftReady, cartLoading, couponContext])
+    const controller = new AbortController()
+    let settled = false
+    setApplyingCoupon(true)
+    void apiFetchJson("/api/coupons/validate", {
+      method: "POST",
+      json: { code: savedCoupon.code, cart, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId } },
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
+    }, value => CouponQuoteSchema.parse(value)).then(data => {
+      if (controller.signal.aborted || couponContextRef.current !== couponContext) return
+      settled = true
+      setAppliedCoupon({ code: data.code, name: data.name, couponRemovable: data.couponRemovable })
+      setCouponDiscount(data.discount)
+    }).catch(error => {
+      if (controller.signal.aborted) return
+      settled = true
+      setAppliedCoupon(null)
+      setCouponDiscount(0)
+      toast.error(error instanceof Error ? error.message : "Could not restore coupon")
+    }).finally(() => {
+      if (!controller.signal.aborted) setApplyingCoupon(false)
+    })
+    return () => {
+      controller.abort()
+      if (!settled) restoredCoupon.current = savedCoupon
+      setApplyingCoupon(false)
+    }
+  }, [draftReady, cartLoading, couponContext, cart, fulfilmentMethod, fulfilmentStoreId])
 
   // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
   const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross } = cart.reduce((acc, item) => {
@@ -938,6 +965,7 @@ export default function CheckoutPage() {
     const response = await apiFetch("/api/cart/validate", {
       method: "POST", json: { items: cart, couponCode: appliedCoupon?.code || null, redeemPoints,
         declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+        selectedGiftPromotions: cartGifts.selectedGiftPromotions,
         fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId } },
       signal: AbortSignal.timeout(15000),
     })
@@ -992,7 +1020,7 @@ export default function CheckoutPage() {
         signal: AbortSignal.timeout(12_000),
       }, value => CouponQuoteSchema.parse(value))
       if (couponContextRef.current !== couponContext) throw new Error("Your cart changed. Apply the coupon again.")
-      setAppliedCoupon({ code: data.code, name: data.name })
+      setAppliedCoupon({ code: data.code, name: data.name, couponRemovable: data.couponRemovable })
       setCouponDiscount(data.discount)
       toast.success(`Applied ${data.code}`)
     } catch (e) {
@@ -1010,6 +1038,7 @@ export default function CheckoutPage() {
       return {
         userId: user?.id,
         declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+        selectedGiftPromotions: cartGifts.selectedGiftPromotions,
         expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
         items: cart.map((item) => ({
           id: item.id,
@@ -1237,6 +1266,7 @@ export default function CheckoutPage() {
           couponCode: appliedCoupon?.code || null,
           redeemPoints,
           declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+          selectedGiftPromotions: cartGifts.selectedGiftPromotions,
           expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
           fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId },
           storeId: payStore.id,
@@ -1884,8 +1914,9 @@ export default function CheckoutPage() {
                             <div className="text-xs text-green-700">{appliedCoupon.name} • Saved ₹{couponDiscount.toLocaleString("en-IN")}</div>
                           </div>
                         </div>
-                        <button
+                        {appliedCoupon.couponRemovable !== false ? <button
                           onClick={() => {
+                            if (appliedCoupon.couponRemovable === false) return
                             setAppliedCoupon(null)
                             setCouponDiscount(0)
                             setCouponCode("")
@@ -1894,7 +1925,7 @@ export default function CheckoutPage() {
                           className="text-red-600 hover:text-red-800 text-sm font-medium"
                         >
                           Remove
-                        </button>
+                        </button> : <span className="text-xs text-green-700">Cannot be removed</span>}
                       </div>
                       {couponDiscount > 0 && (
                         <div className="flex justify-between text-green-700 mt-2">
@@ -1984,6 +2015,7 @@ export default function CheckoutPage() {
                   beforePayment={validateCheckout}
                   orderDetails={{ customer: customerData, items: cart, coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
                     declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+                    selectedGiftPromotions: cartGifts.selectedGiftPromotions,
                     expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
                     redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId }, total: payableTotal }}
                   onSuccess={handlePaymentSuccess}

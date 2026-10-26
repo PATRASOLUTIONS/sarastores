@@ -13,10 +13,17 @@ export type Gift = z.infer<typeof GiftResponseSchema>
 export const GiftAwardSchema = z.object({
   promotionId: z.string(), code: z.string(), promotionName: z.string(), giftId: z.string(), sku: z.string(),
   name: z.string(), photo: z.string(), price: money, mrp: money, quantity: z.number().int().min(1).max(100),
+  giftAutoAdd: z.boolean().default(true), giftRemovable: z.boolean().default(true),
 })
 export type GiftAward = z.infer<typeof GiftAwardSchema>
 export const GiftAwardsResponseSchema = z.object({ success: z.literal(true), gifts: z.array(GiftAwardSchema) })
 export const DeclinedGiftPromotionsSchema = z.array(z.string().max(100)).max(100).default([])
+export const SelectedGiftPromotionsSchema = DeclinedGiftPromotionsSchema
+export function isGiftSelected(gift: { promotionId: string; giftAutoAdd?: boolean; giftRemovable?: boolean }, declined: string[], selected: string[] = []) {
+  if (gift.giftAutoAdd !== false && gift.giftRemovable === false) return true
+  if (declined.includes(gift.promotionId)) return false
+  return gift.giftAutoAdd !== false || selected.includes(gift.promotionId)
+}
 export const ExpectedGiftsSchema = z.array(GiftAwardSchema.pick({ promotionId: true, giftId: true, sku: true, quantity: true })).max(100)
 export function giftSelectionSignature(gifts: { promotionId: string; giftId: string; sku: string; quantity: number }[]) {
   return JSON.stringify([...gifts].sort((a, b) => a.promotionId.localeCompare(b.promotionId))

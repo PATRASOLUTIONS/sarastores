@@ -7,7 +7,7 @@ import { priceOrder, type IncomingItem, type PricingSuccess } from "@/lib/order-
 import { quoteRedemption } from "@/lib/loyalty"
 import { CartQuantitySchema } from "@/lib/validation"
 import { cartLineKey } from "@/lib/cart-line"
-import { DeclinedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
+import { DeclinedGiftPromotionsSchema, SelectedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
 import { quoteGiftPromotions } from "@/lib/gift-promotions"
 
 export const CheckoutQuoteSchema = z.object({
@@ -31,6 +31,7 @@ export const CheckoutQuoteSchema = z.object({
   }).optional(),
   currency: z.literal("INR").default("INR"),
   declinedGiftPromotions: DeclinedGiftPromotionsSchema,
+  selectedGiftPromotions: SelectedGiftPromotionsSchema,
   expectedGifts: ExpectedGiftsSchema.optional(),
 })
 
@@ -48,6 +49,7 @@ export function checkoutFingerprint(
       const item = { ...priced }
       delete item.sku
       delete item.division
+      delete item.itemNumbers
       if (!item.ram) delete item.ram
       if (!item.storage) delete item.storage
       if (!item.variantId) delete item.variantId
@@ -64,11 +66,11 @@ export function checkoutFingerprint(
 
 export async function quoteCheckout(
   items: IncomingItem[],
-  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string }; redeemPoints?: number; declinedGiftPromotions?: string[]; expectedGifts?: { promotionId: string; giftId: string; sku: string; quantity: number }[] },
+  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string }; redeemPoints?: number; declinedGiftPromotions?: string[]; selectedGiftPromotions?: string[]; expectedGifts?: { promotionId: string; giftId: string; sku: string; quantity: number }[] },
 ) {
   const pricing = await priceOrder(items, options)
   if (!pricing.ok) return pricing
-  pricing.gifts = await quoteGiftPromotions(pricing.items, options.userId, options.declinedGiftPromotions)
+  pricing.gifts = await quoteGiftPromotions(pricing.items, options.userId, options.declinedGiftPromotions, undefined, options.selectedGiftPromotions)
   if (options.expectedGifts && giftSelectionSignature(options.expectedGifts) !== giftSelectionSignature(pricing.gifts)) return { ok: false as const, error: "Free gifts changed. Refresh the gift selection before paying." }
   let amount = pricing.total
   if (options.redeemPoints) {

@@ -84,7 +84,7 @@ async function createStoreRequest(request: NextRequest) {
       return NextResponse.json({ error: "This store cannot take pay-at-store orders yet. Please choose another store." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
     }
 
-    const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints, declinedGiftPromotions: parsed.data.declinedGiftPromotions, expectedGifts: parsed.data.expectedGifts })
+    const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints, declinedGiftPromotions: parsed.data.declinedGiftPromotions, selectedGiftPromotions: parsed.data.selectedGiftPromotions, expectedGifts: parsed.data.expectedGifts })
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400, headers })
     if (parsed.data.expectedAmount !== undefined && Math.round(quote.amount * 100) !== parsed.data.expectedAmount) {
       return NextResponse.json({ error: "Your checkout total changed. Review it before requesting store payment." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })

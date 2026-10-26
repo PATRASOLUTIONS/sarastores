@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { ObjectId } from "mongodb"
+import { renderToStaticMarkup } from "react-dom/server"
 import { sourceLoader } from "./source-loader.mjs"
 
 const promoId = new ObjectId()
@@ -10,6 +11,18 @@ const base = { _id: promoId, type: "buy_get_product", code: "FREEBAG", name: "Fr
   usageCount: 0, usageLimit: 0, perCustomerLimit: 0, usageByUser: [] }
 const lines = [{ id: "p1", sku: "LAP-001", division: "Computers", quantity: 2, price: 1000, name: "Laptop", type: "hardware" }]
 const cursor = rows => ({ sort() { return this }, limit() { return this }, toArray: async () => rows })
+
+test("failed gift checks expose the error and retry even while the quote remains unresolved", () => {
+  const CartGifts = sourceLoader().load("components/cart/CartGifts.tsx").default
+  const quote = { loading: true, error: "Could not check free gifts", offers: [], retry() {} }
+  const html = renderToStaticMarkup(CartGifts({ quote }))
+  assert.match(html, /role="alert"/)
+  assert.match(html, /Could not check free gifts/)
+  assert.match(html, /Retry/)
+  assert.doesNotMatch(html, /Checking free gifts/)
+  assert.match(renderToStaticMarkup(CartGifts({ quote, disabled: true })), /disabled=""/)
+  assert.match(renderToStaticMarkup(CartGifts({ quote: { ...quote, error: "" } })), /role="status"/)
+})
 function fixture(promotions = [{ ...structuredClone(base), _id: promoId }], gifts = [structuredClone(gift)]) {
   const redemptions = new Map()
   const collections = {
@@ -74,6 +87,71 @@ test("specific SKU and division scopes use trusted catalogue metadata and match 
   assert.equal(giftQuantity({ ...base, applyScope: "divisions", divisions: [" computers "] }, lines, null), 1)
   assert.equal(giftQuantity({ ...base, applyScope: "divisions", divisions: ["Appliances"] }, lines, null), 0)
   assert.equal(giftQuantity({ ...base, applyScope: "products", productIds: ["p2"] }, lines, null), 0)
+})
+
+test("multiple SKU and item-number selections combine qualifying units without counting a product twice", () => {
+  const { giftQuantity } = fixture()
+  const promotion = { ...base, applyScope: "skus", skus: ["lap-001", "item-2", "alias-2"] }
+  const items = [{ ...lines[0], quantity: 1 }, { ...lines[0], id: "p2", sku: "OTHER", itemNumbers: ["ITEM-2", "ALIAS-2"], quantity: 1 }, { ...lines[0], id: "p3", sku: "EXCLUDED", quantity: 8 }]
+  assert.equal(giftQuantity(promotion, items, null), 1)
+  assert.equal(giftQuantity({ ...promotion, buyQty: 1 }, items, null), 2)
+})
+
+test("catalogue pricing supplies item-number aliases from the database and ignores forged cart metadata", async () => {
+  const product = { _id: "p1", sku: "LAP-001", itemno: "ITEM-1", itemNo: 123, raw: { "Item No.": "RAW-1" }, name: "Laptop", price: 1000, stock: 20, active: true }
+  const loader = sourceLoader({ "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products" }, getCollection: async name => ({ find: () => cursor(name === "products" ? [product] : []) }) } })
+  const result = await loader.load("lib/order-pricing.ts").priceCatalogueCart([{ id: "p1", quantity: 2, itemNumbers: ["FORGED"] }])
+  assert.equal(result.ok, true)
+  assert.deepEqual(Array.from(result.items[0].itemNumbers), ["ITEM-1", "123", "RAW-1"])
+  assert.equal(fixture().giftQuantity({ ...base, applyScope: "skus", skus: ["FORGED"] }, result.items, null), 0)
+})
+
+test("gift cart settings default to automatic/removable, survive edits and reject manual non-removable mode", () => {
+  const { CreateCouponSchema, CouponPatchSchema, StoredCouponFieldsSchema } = sourceLoader().load("lib/coupon-validation.ts")
+  const parsed = CreateCouponSchema.parse({ code: base.code, name: base.name, type: base.type, giftId: base.giftId, buyQty: base.buyQty, getQty: base.getQty, startDate: base.startDate, endDate: base.endDate })
+  assert.equal(parsed.giftAutoAdd, true); assert.equal(parsed.giftRemovable, true)
+  const patch = CouponPatchSchema.parse({ name: "Renamed" })
+  assert.equal(Object.hasOwn(patch, "giftAutoAdd"), false)
+  const edited = StoredCouponFieldsSchema.parse({ ...parsed, startDate: parsed.startDate.toISOString(), endDate: parsed.endDate.toISOString(), giftAutoAdd: false, ...patch })
+  assert.equal(edited.giftAutoAdd, false)
+  assert.equal(StoredCouponFieldsSchema.safeParse({ ...edited, startDate: edited.startDate.toISOString(), endDate: edited.endDate.toISOString(), giftRemovable: false }).success, false)
+})
+
+test("manual gifts are available to choose but are awarded only after explicit opt-in", async () => {
+  const fx = fixture([{ ...base, giftAutoAdd: false }])
+  assert.equal((await fx.quoteGiftPromotions(lines, null)).length, 0)
+  const available = await fx.quoteGiftPromotions(lines, null, [], undefined, [], true)
+  assert.equal(available.length, 1); assert.equal(available[0].giftAutoAdd, false)
+  assert.equal((await fx.quoteGiftPromotions(lines, null, [], undefined, [String(promoId)])).length, 1)
+  assert.equal((await fx.quoteGiftPromotions(lines, null, [String(promoId)], undefined, [String(promoId)])).length, 0)
+})
+
+test("non-removable gifts ignore forged declines on the server but still require eligible products", async () => {
+  const fx = fixture([{ ...base, giftRemovable: false }])
+  const awards = await fx.quoteGiftPromotions(lines, null, [String(promoId)])
+  assert.equal(awards.length, 1); assert.equal(awards[0].giftRemovable, false)
+  assert.equal((await fx.quoteGiftPromotions([{ ...lines[0], quantity: 1 }], null, [String(promoId)])).length, 0)
+})
+
+test("checkout quotes carry manual opt-in and reject an omitted mandatory gift", async () => {
+  const pricing = { ok: true, items: lines, total: 2000 }
+  const quote = fx => sourceLoader({ "@/lib/order-pricing": { priceOrder: async () => structuredClone(pricing) }, "@/lib/gift-promotions": { quoteGiftPromotions: fx.quoteGiftPromotions } }).load("lib/checkout-payment.ts")
+  const manual = quote(fixture([{ ...base, giftAutoAdd: false }]))
+  assert.equal((await manual.quoteCheckout(lines, { userId: null })).pricing.gifts.length, 0)
+  const payload = manual.CheckoutQuoteSchema.parse({ items: lines, selectedGiftPromotions: [String(promoId)] })
+  assert.equal((await manual.quoteCheckout(lines, { ...payload, userId: null })).pricing.gifts.length, 1)
+  const locked = quote(fixture([{ ...base, giftRemovable: false }]))
+  assert.equal((await locked.quoteCheckout(lines, { userId: null, declinedGiftPromotions: [String(promoId)], expectedGifts: [] })).ok, false)
+})
+
+test("cart renders manual Add free gift and hides removal controls for mandatory gifts", () => {
+  const CartGifts = sourceLoader().load("components/cart/CartGifts.tsx").default
+  const offer = { ...gift, promotionId: String(promoId), quantity: 1, giftAutoAdd: false, giftRemovable: true }
+  const quote = { loading: false, error: "", offers: [offer], declinedGiftPromotions: [], selectedGiftPromotions: [], restore() {}, remove() {} }
+  assert.match(renderToStaticMarkup(CartGifts({ quote })), /Add free gift/)
+  assert.match(renderToStaticMarkup(CartGifts({ quote: { ...quote, selectedGiftPromotions: [String(promoId)] } })), /Remove gift/)
+  const locked = renderToStaticMarkup(CartGifts({ quote: { ...quote, offers: [{ ...offer, giftAutoAdd: true, giftRemovable: false }], declinedGiftPromotions: [String(promoId)] } }))
+  assert.match(locked, /Cannot be removed/); assert.doesNotMatch(locked, /Remove gift|Add gift back/)
 })
 
 test("validity dates include the final Indian day, and reject future, expired or malformed promotions", () => {
@@ -145,6 +223,11 @@ test("removal choices survive refresh, merge on sign-in and reset only after a c
   choices.clearCartGiftChoices("owner")
   assert.equal(choices.readCartGiftChoices("owner").length, 0)
   assert.equal(choices.readCartGiftChoices("another-owner").length, 0)
+  data.set("sara_cart_gift_selections:guest", JSON.stringify([String(promoId)]))
+  assert.equal(choices.readCartGiftSelections("owner", "guest")[0], String(promoId))
+  assert.equal(choices.readCartGiftSelections("owner")[0], String(promoId))
+  choices.clearCartGiftChoices("owner")
+  assert.equal(choices.readCartGiftSelections("owner").length, 0)
 })
 
 test("gift catalogue API guards both listing and mutation before database access", async () => {

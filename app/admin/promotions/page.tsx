@@ -26,6 +26,9 @@ interface CouponForm {
   brands?: string
   divisions?: string
   giftId?: string | null
+  giftAutoAdd?: boolean
+  giftRemovable?: boolean
+  couponRemovable?: boolean
   startDate?: string
   endDate?: string
   noEndDate: boolean
@@ -218,7 +221,7 @@ export default function PromotionsAdminPage() {
         skus:
           form.applyScope === "skus" && form.skus
             ? form.skus
-                .split(",")
+                .split(/[,;\n\r]+/)
                 .map((s) => s.trim())
                 .filter(Boolean)
             : [],
@@ -289,6 +292,9 @@ export default function PromotionsAdminPage() {
       brands: (c.brands || []).join(","),
       divisions: (c.divisions || []).join(","),
       giftId: c.giftId,
+      giftAutoAdd: c.giftAutoAdd ?? true,
+      giftRemovable: c.giftRemovable ?? true,
+      couponRemovable: c.couponRemovable ?? true,
       startDate: inputDate(c.startDate, c.type === "buy_get_product"),
       endDate: inputDate(c.endDate, c.type === "buy_get_product"),
       noEndDate: !!c.noEndDate,
@@ -446,7 +452,16 @@ export default function PromotionsAdminPage() {
                 <option value="">Select a gift</option>{gifts.map(gift => <option key={gift.id} value={gift.id}>{gift.sku} — {gift.name}</option>)}
               </select>
               {giftsError && <p role="alert" className="mt-1 text-sm text-red-700">{giftsError}</p>}
-              <p className="mt-2 text-xs text-gray-600">Added to cart automatically; customers can remove it. Each X eligible units earns Y gifts, up to 100 free units per offer per order. Dates use Indian time.</p>
+              <div className="mt-3 space-y-2">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.giftAutoAdd !== false} onChange={event => setForm({ ...form, giftAutoAdd: event.target.checked, ...(event.target.checked ? {} : { giftRemovable: true }) })} />Add free gift to cart by default</label>
+                <label htmlFor="gift-cart-removal" className="block text-sm">Free gift removal from cart</label>
+                <select id="gift-cart-removal" className="w-full rounded border p-2" disabled={form.giftAutoAdd === false} value={form.giftRemovable === false ? "locked" : "allowed"} onChange={event => setForm({ ...form, giftRemovable: event.target.value === "allowed" })}>
+                  <option value="allowed">Can be deleted from cart</option>
+                  <option value="locked">Cannot be deleted from cart</option>
+                </select>
+                <p className="text-xs text-gray-600">When automatic adding is off, customers can choose Add free gift in cart or checkout and can remove it. Automatic gifts follow the selected removal option.</p>
+              </div>
+              <p className="mt-2 text-xs text-gray-600">Each X eligible units earns Y gifts, up to 100 free units per offer per order. Dates use Indian time.</p>
               <Link className="text-xs text-blue-700 underline" href="/admin/gifts">Add or edit gift products</Link>
             </div>}
             {form.type === "percentage" && (
@@ -471,7 +486,7 @@ export default function PromotionsAdminPage() {
                 <option value="products">Specific products (IDs)</option>
                 {form.type !== "buy_get_product" && <option value="categories">Specific categories (IDs)</option>}
                 {form.type !== "buy_get_product" && <option value="brands">Specific brands</option>}
-                <option value="skus">Specific SKUs</option>
+                <option value="skus">{form.type === "buy_get_product" ? "Specific SKUs / item numbers" : "Specific SKUs"}</option>
                 <option value="divisions">Specific divisions</option>
               </select>
             </div>
@@ -597,12 +612,15 @@ export default function PromotionsAdminPage() {
             )}
             {form.applyScope === "skus" && (
               <div className="md:col-span-2">
-                <label className="text-sm">SKUs (comma-separated)</label>
-                <input
+                <label className="text-sm" htmlFor="promotion-skus">{form.type === "buy_get_product" ? "SKUs / item numbers" : "SKUs"} (comma-separated or one per line)</label>
+                <textarea
+                  id="promotion-skus"
+                  rows={3}
                   className="w-full border rounded px-2 py-2"
                   value={form.skus}
                   onChange={(e) => setForm({ ...form, skus: e.target.value })}
                 />
+                {form.type === "buy_get_product" && <p className="mt-1 text-xs text-gray-600">Enter multiple SKUs or item numbers. Quantities across matching products combine toward Buy X; each product is counted once.</p>}
               </div>
             )}
             {form.applyScope === "brands" && (
@@ -667,6 +685,14 @@ export default function PromotionsAdminPage() {
               <p className="text-xs text-gray-500 mt-1">Maximum times per customer (0 = unlimited)</p>
               {form.type === "buy_get_product" && <p className="text-xs text-gray-500">An account is required when a per-customer limit is set. With 0, guests can receive gifts too. Usage is counted only when a gift is included in the order.</p>}
             </div>
+            {form.type !== "buy_get_product" && <div className="md:col-span-2">
+              <label htmlFor="coupon-cart-removal" className="text-sm">Coupon removal from cart</label>
+              <select id="coupon-cart-removal" className="mt-1 w-full rounded border p-2" value={form.couponRemovable === false ? "locked" : "allowed"} onChange={event => setForm({ ...form, couponRemovable: event.target.value === "allowed" })}>
+                <option value="allowed">Can be deleted from cart</option>
+                <option value="locked">Cannot be deleted from cart</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-600">Controls whether customers can remove this coupon after applying it at checkout.</p>
+            </div>}
             <div className="md:col-span-2">
               <label className="text-sm">Active</label>
               <label className="ml-2">

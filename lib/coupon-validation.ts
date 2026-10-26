@@ -19,6 +19,9 @@ const fields = z.object({
   skus: ids,
   divisions: ids,
   giftId: z.string().trim().max(100).nullish().transform(value => value?.toUpperCase() || null),
+  giftAutoAdd: z.boolean().default(true),
+  giftRemovable: z.boolean().default(true),
+  couponRemovable: z.boolean().default(true),
   startDate: date,
   endDate: date,
   noEndDate: z.boolean().default(false),
@@ -38,6 +41,7 @@ function validateCoupon(value: CouponInput, context: z.RefinementCtx) {
     issue("buyQty", "Valid positive Buy and Get quantities are required")
   }
   if (value.type === "buy_get_product") {
+    if (!value.giftAutoAdd && !value.giftRemovable) issue("giftRemovable", "Manual gifts must be removable")
     if (!["all", "products", "skus", "divisions"].includes(value.applyScope)) issue("applyScope", "Choose all products, specific products, SKUs or divisions for free gifts")
     if (!value.giftId) issue("giftId", "Select the free gift SKU")
     if (!value.startDate) issue("startDate", "Choose Valid from")
@@ -68,4 +72,5 @@ export const CouponMutationSchema = z.object({ success: z.literal(true), coupon:
 export const CouponDeleteSchema = z.object({ success: z.literal(true) })
 export const CouponQuoteSchema = z.object({
   success: z.literal(true), code: z.string().min(1), name: z.string(), discount: z.number().finite().positive(),
+  couponRemovable: z.boolean().default(true),
 })

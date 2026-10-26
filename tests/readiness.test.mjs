@@ -2310,6 +2310,19 @@ test("coupon preview ignores forged price and identity and agrees with charged p
   assert.equal(fixture.writes(), 0)
 })
 
+test("coupon preview returns the stored removal policy and allows legacy coupons to be removed", async () => {
+  for (const policy of [undefined, true, false]) {
+    const fixture = couponFixture(policy === undefined ? {} : { couponRemovable: policy })
+    const items = [{ id: fixture.products[0]._id.toString(), quantity: 1 }]
+    const response = await fixture.route.POST(fixture.request(items))
+    assert.equal(response.status, 200)
+    assert.equal((await response.json()).couponRemovable, policy !== false)
+    const quote = await fixture.pricing.quoteCoupon(items, "FIXTURE", null)
+    assert.equal(quote.ok, true)
+    assert.equal(quote.coupon.couponRemovable, policy !== false)
+  }
+})
+
 test("coupon preview resolves native, legacy, SKU and software identifiers with scoped catalogue prices", async () => {
   const fixture = couponFixture({ applyScope: "skus", skus: ["fixture-software"] })
   const response = await fixture.route.POST(fixture.request([
@@ -2506,6 +2519,18 @@ test("partial coupon edits preserve inactive flags, eligible categories, dates a
   assert.equal(body.coupon.usageCount, 9)
   assert.equal(body.coupon.usageByUser[0].count, 9)
   assert.ok(fixture.stored().updatedAt.getTime() > previousTime)
+})
+
+test("coupon removal policy is saved, preserved by partial edits and can be changed", async () => {
+  const fixture = couponAdminFixture()
+  const route = fixture.loader.load("app/api/coupons/[id]/route.ts")
+  for (const patch of [{ couponRemovable: false }, { name: "Updated" }, { couponRemovable: true }]) {
+    const response = await route.PUT(fixture.request(patch), fixture.context)
+    assert.equal(response.status, 200)
+    assert.equal((await response.json()).coupon.couponRemovable, patch.couponRemovable === true)
+  }
+  assert.equal(fixture.stored().usageCount, 9)
+  assert.equal((await route.PUT(fixture.request({ couponRemovable: "false" }), fixture.context)).status, 400)
 })
 
 test("coupon write schemas reject forged usage, invalid dates and percentage or buy-get terms", async () => {

@@ -63,7 +63,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const giftQuote = useCartGifts(embedded ? [] : cart.filter(item => selectedIds.includes(cartLineKey(item))), user?.id || "guest")
+  const giftQuote = useCartGifts(embedded ? [] : cart, user?.id || "guest")
   const knownIds = useRef(new Set<string>())
   const selectAll = useRef<HTMLInputElement>(null)
   const [suggestions, setSuggestions] = useState<Product[]>([])

@@ -22,7 +22,7 @@ const checkoutDraftSchema = z.object({
   addressType: z.enum(["home", "work", "other"]),
   selectedAddressId: z.string().nullable(),
   couponCode: z.string(),
-  appliedCoupon: z.object({ code: z.string(), name: z.string() }).nullable().default(null),
+  appliedCoupon: z.object({ code: z.string(), name: z.string(), couponRemovable: z.boolean().default(true) }).nullable().default(null),
   savedAt: z.number().nonnegative().default(0),
   fulfilmentMethod: z.enum(["delivery", "pickup"]).default("delivery"),
   pickupStore: z.object({ id: z.string(), name: z.string(), address: z.string(), city: z.string(), phone: z.string(), hours: z.string(),

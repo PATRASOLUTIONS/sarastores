@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     const cart = await priceCatalogueCart(parsed.data.items, undefined, parsed.data.fulfilment?.method === "pickup" ? "store" : "overall")
     if (!cart.ok) return NextResponse.json({ error: cart.error }, { status: 400 })
-    const gifts = await quoteGiftPromotions(cart.items, session?.user.id || null)
+    const gifts = await quoteGiftPromotions(cart.items, session?.user.id || null, [], undefined, [], true)
     return NextResponse.json({ success: true, gifts }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (error) { return handleApiError(error, "Free gifts could not be checked. Please retry.") }
 }

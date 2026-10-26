@@ -1,6 +1,6 @@
 import { type ClientSession, ObjectId } from "mongodb"
 import { getCollection } from "@/lib/db-service"
-import { GiftAwardSchema, type GiftAward, type Gift } from "@/lib/gift-validation"
+import { GiftAwardSchema, isGiftSelected, type GiftAward, type Gift } from "@/lib/gift-validation"
 import type { PricedItem } from "@/lib/order-pricing"
 
 interface GiftPromotion {
@@ -9,6 +9,7 @@ interface GiftPromotion {
   startDate?: Date | string | null; endDate?: Date | string | null; noEndDate?: boolean
   buyQty?: number; getQty?: number; usageCount?: number; usageLimit?: number; perCustomerLimit?: number
   usageByUser?: { userId: string; count: number; lastUsed?: Date }[]
+  giftAutoAdd?: boolean; giftRemovable?: boolean
 }
 
 export function giftQuantity(promotion: GiftPromotion, items: PricedItem[], userId: string | null, now = new Date()): number {
@@ -31,7 +32,7 @@ export function giftQuantity(promotion: GiftPromotion, items: PricedItem[], user
     switch (promotion.applyScope || "all") {
       case "all": return true
       case "products": return promotion.productIds?.includes(item.id)
-      case "skus": return !!item.sku && promotion.skus?.some(sku => lower(sku) === lower(item.sku!))
+      case "skus": return promotion.skus?.some(sku => [item.sku, ...(item.itemNumbers || [])].some(value => !!value && lower(sku) === lower(value)))
       case "divisions": return !!item.division && promotion.divisions?.some(division => lower(division) === lower(item.division!))
       default: return false
     }
@@ -40,17 +41,18 @@ export function giftQuantity(promotion: GiftPromotion, items: PricedItem[], user
   return Math.min(100, Math.floor(units / buyQty) * getQty)
 }
 
-export async function quoteGiftPromotions(items: PricedItem[], userId: string | null, declined: string[] = [], session?: ClientSession): Promise<GiftAward[]> {
+export async function quoteGiftPromotions(items: PricedItem[], userId: string | null, declined: string[] = [], session?: ClientSession, selected: string[] = [], includeAvailable = false): Promise<GiftAward[]> {
   if (!items.length) return []
   const promotions = await (await getCollection<GiftPromotion>("coupons")).find({ type: "buy_get_product", active: true }, { session }).sort({ createdAt: 1, _id: 1 }).limit(100).toArray()
   const qualifying = promotions.map(promotion => ({ promotion, quantity: giftQuantity(promotion, items, userId) }))
-    .filter(({ promotion, quantity }) => quantity > 0 && !declined.includes(promotion._id.toString()))
+    .filter(({ promotion, quantity }) => quantity > 0 && (includeAvailable || isGiftSelected({ ...promotion, promotionId: promotion._id.toString() }, declined, selected)))
   if (!qualifying.length) return []
   const gifts = await (await getCollection<Omit<Gift, "id"> & { _id: string }>("gift_items")).find({ _id: { $in: qualifying.map(({ promotion }) => promotion.giftId!) }, active: true }, { session }).toArray()
   return qualifying.flatMap(({ promotion, quantity }) => {
     const gift = gifts.find(gift => gift._id === promotion.giftId)
     if (!gift) return []
-    const parsed = GiftAwardSchema.safeParse({ ...gift, giftId: gift._id, promotionId: promotion._id.toString(), code: promotion.code, promotionName: promotion.name, quantity })
+    const parsed = GiftAwardSchema.safeParse({ ...gift, giftId: gift._id, promotionId: promotion._id.toString(), code: promotion.code, promotionName: promotion.name, quantity,
+      giftAutoAdd: promotion.giftAutoAdd ?? true, giftRemovable: promotion.giftRemovable ?? true })
     return parsed.success ? [parsed.data] : []
   })
 }
