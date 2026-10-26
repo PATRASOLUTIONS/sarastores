@@ -6,7 +6,7 @@ import { CheckCircle, MapPin, Store, Truck, Zap } from "lucide-react"
 import { analytics } from "@/lib/analytics"
 import { checkoutCity } from "@/lib/checkout-region"
 import { useSettingsData } from "@/hooks/useSettingsData"
-import { formatDistance, useNearbyStores } from "@/hooks/useNearbyStores"
+import { formatDistance, type useNearbyStores } from "@/hooks/useNearbyStores"
 import { farStoreMessage, type StoreStockState } from "@/hooks/useStoreStock"
 import styles from "./FulfilmentSelector.module.css"
 
@@ -38,8 +38,7 @@ export default function FulfilmentSelector({
   selectedStore,
   onStoreChange,
   deliveryFeeLabel = "Charges confirmed at payment",
-  deliveryPincode = "",
-  deliveryCity = "",
+  nearby,
   stock,
   children,
 }: {
@@ -48,14 +47,12 @@ export default function FulfilmentSelector({
   selectedStore: PickupStore | null
   onStoreChange: (store: PickupStore | null) => void
   deliveryFeeLabel?: string
-  /** The shopper's delivery address, used to put the nearest stores first. */
-  deliveryPincode?: string
-  deliveryCity?: string
+  nearby: ReturnType<typeof useNearbyStores>
   /** Whole-cart eligibility and per-item quantities for every active store. */
   stock: StoreStockState
   children?: ReactNode
 }) {
-  const { stores: nearbyStores, loading: storesLoading, error: storesError, retry: retryStores, pincode, nearestId: nearbyNearestId } = useNearbyStores(deliveryPincode, deliveryCity, { allStores: true })
+  const { stores: nearbyStores, loading: storesLoading, error: storesError, retry: retryStores, pincode, nearestId: nearbyNearestId } = nearby
   const rankedStores = useMemo(
     () => nearbyStores.filter(store => stock.storeIds?.has(store.id)),
     [nearbyStores, stock.storeIds],
@@ -80,7 +77,6 @@ export default function FulfilmentSelector({
     }
   }, [selectedStore, nearbyStores, storesLoading, storesError, onStoreChange])
   const [city, setCity] = useState("")
-  const [expanded, setExpanded] = useState(true)
   const { data: settings } = useSettingsData()
   const genericPhoto = settings?.storefrontImage || "/store-locator/storefront.webp"
 
@@ -96,9 +92,9 @@ export default function FulfilmentSelector({
   const visibleStores = useMemo(
     () => {
       const filtered = city ? rankedStores.filter((store) => (checkoutCity(store.city) || store.city.trim()) === city) : rankedStores
-      return expanded ? filtered : filtered.slice(0, 3)
+      return filtered
     },
-    [rankedStores, city, expanded],
+    [rankedStores, city],
   )
 
   return (
@@ -144,7 +140,7 @@ export default function FulfilmentSelector({
       </p>}
       {method === "pickup" && <div className={styles.stores}>
           <div className={styles.storeHeading}><h3>{pincode ? `Available pickup stores near ${pincode}` : "Available pickup stores"}</h3>
-            <button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? "Show fewer stores" : "View All Stores"}</button>
+            <span className="text-xs text-slate-500">Scroll to see all stores</span>
           </div>
           {loading ? (
             <p className="text-sm text-gray-600">Loading stores…</p>
@@ -156,7 +152,7 @@ export default function FulfilmentSelector({
             </p>
           ) : (
             <>
-              {expanded && <label className={styles.cityFilter}>
+              <label className={styles.cityFilter}>
                 Filter by city
                 <select
                   aria-label="Pickup city"
@@ -173,10 +169,10 @@ export default function FulfilmentSelector({
                     </option>
                   ))}
                 </select>
-              </label>}
+              </label>
 
               {farMessage && <p role="note" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{farMessage}</p>}
-              <ul className={styles.storeGrid}>
+              <ul className={styles.storeGrid} aria-label="Available pickup stores" tabIndex={0}>
                 {visibleStores.map((store) => {
                   const isSelected = method === "pickup" && selectedStore?.id === store.id
                   const available = stock.storeIds?.has(store.id) === true

@@ -15,6 +15,7 @@ import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/Paymen
 import CheckoutPaymentOptions, { PaymentProviderLogo } from "@/components/CheckoutPaymentOptions"
 import { PayAtStoreDialog, PayAtStoreStorePicker, type PayAtStoreChoice } from "@/components/PayAtStore"
 import { useStoreStock } from "@/hooks/useStoreStock"
+import { useNearbyStores } from "@/hooks/useNearbyStores"
 import { StorePaymentRequestResponseSchema, type StorePaymentPlatform, type StorePaymentRequestResponse } from "@/types/store-payment"
 import FulfilmentSelector, {
   type FulfilmentMethod,
@@ -345,6 +346,7 @@ export default function CheckoutPage() {
   const [pickupStore, setPickupStore] = useState<PickupStore | null>(null)
   const isPickup = fulfilmentMethod === "pickup"
   const storeStock = useStoreStock(cart)
+  const nearbyStores = useNearbyStores(customerData.pincode, customerData.city, { allStores: true })
   const [deliveryFallbackStoreId, setDeliveryFallbackStoreId] = useState<string | null>(null)
   const fulfilmentStoreId = isPickup ? pickupStore?.id : deliveryFallbackStoreId || undefined
   const pickupUnavailable = Boolean(pickupStore && storeStock.storeIds && !storeStock.storeIds.has(pickupStore.id))
@@ -1768,7 +1770,7 @@ export default function CheckoutPage() {
                 onToggle={() => setExpandedStep(previous => previous === 2 ? null : 2)}>
                 <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
                 <FulfilmentSelector method={fulfilmentMethod} onMethodChange={changeFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
-                  deliveryPincode={customerData.pincode} deliveryCity={customerData.city} stock={storeStock}
+                  nearby={nearbyStores} stock={storeStock}
                   deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
                   <div className={styles.deliveryNotice}><Truck size={34} /><div>
                     <small>{isPickup ? "Store pickup" : "Home delivery service area"}</small>
