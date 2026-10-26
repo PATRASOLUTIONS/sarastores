@@ -1860,7 +1860,7 @@ export default function CheckoutPage() {
                   <div><dt>{isPickup ? "Contact details" : "Delivery address"}</dt><dd>{addressSummary}</dd></div>
                   <div><dt>Delivery option</dt><dd>{deliverySummary}</dd></div>
                   <div><dt>Payment method</dt><dd>{paymentSummary}</dd></div>
-                  <div><dt>Order total</dt><dd>?{money(payableTotal)}</dd></div>
+                  <div><dt>Order total</dt><dd>{money(payableTotal)}</dd></div>
                 </dl>
                 <p className="mt-4 text-sm text-gray-600">Review your items in the order summary, then place your order.</p>
               </CheckoutSection>

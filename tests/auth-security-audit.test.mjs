@@ -569,6 +569,25 @@ test("verification-email resend requires authentication", async () => {
   assert.equal(response.status, 401); assert.equal(app.mail.length, 0)
 })
 
+test("signup and resend deliver visible verification links matching the stored token", async () => {
+  const app = harness({ record: { ...account, emailVerified: false }, env: { NEXT_PUBLIC_SITE_URL: "sarastores.com/" } })
+  const signup = await app.loader.load("app/api/auth/signup/route.ts").POST(app.request(registration(), "/api/auth/signup"))
+  assert.equal(signup.status, 200)
+  app.adopt(await app.login())
+  const resend = await app.loader.load("app/api/auth/verify-email/route.ts").POST(app.request({}, "/api/auth/verify-email"))
+  assert.equal(resend.status, 200)
+  assert.equal(app.mail.length, 2)
+  for (const message of app.mail) {
+    const url = new URL(message.html.match(/href="([^"]+)"/)[1].replaceAll("&amp;", "&"))
+    assert.equal(url.origin, "https://sarastores.com")
+    assert.equal(url.pathname, "/api/auth/verify-email")
+    const user = app.records.find(record => record._id.toString() === url.searchParams.get("userId"))
+    assert.equal(url.searchParams.get("token"), user.emailVerificationToken)
+    assert.ok(message.text.includes(url.toString()))
+    assert.ok(message.html.includes(`>${url.toString().replaceAll("&", "&amp;")}<`))
+  }
+})
+
 for (const [file, method] of [["app/api/account/addresses/route.ts", "GET"], ["app/api/admin/dashboard/route.ts", "GET"], ["app/api/users/[id]/route.ts", "GET"]]) {
   test(`direct anonymous API access is denied: ${file}`, async () => {
     const app = harness(); const response = await app.loader.load(file)[method](app.request(undefined, "/api/test", {}, "GET"), { params: Promise.resolve({ id: accountId.toString() }) })
