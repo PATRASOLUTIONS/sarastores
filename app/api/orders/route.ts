@@ -3,6 +3,7 @@ import { getCollection, normalizeId } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { createGuestAccessToken, hashGuestAccessToken } from "@/lib/guest-order"
+import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
 import { redeemPoints, quoteRedemption, reverseOrderPoints } from "@/lib/loyalty"
 import { generateOrderId } from "@/lib/order-id"
 import { priceOrder, consumeOrderCoupon } from "@/lib/order-pricing"
@@ -34,6 +35,7 @@ export const dynamic = "force-dynamic"
 interface OrderListDocument {
   id: string
   userId?: string
+  customerId?: string
   orderId?: string
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -140,6 +142,8 @@ export async function GET(request: NextRequest) {
     const orderScope = await getOrderAdminScope(session)
     const isStaff = !isAdminRole && orderScope.kind !== "none"
 
+    await linkGuestOrdersToAccount(session.user)
+
     const employeeId = isAdminRole ? request.nextUrl.searchParams.get("employeeId") : null
     const limit = request.nextUrl.searchParams.get("limit")
     const couponCode = isAdminRole ? request.nextUrl.searchParams.get("couponCode") : null
@@ -161,17 +165,19 @@ export async function GET(request: NextRequest) {
     const collection = await getCollection("orders")
 
     let query: Record<string, unknown> = {}
-    if (userId) query = { ...query, userId }
+    if (userId) query = { $or: [{ userId }, { userId: { $in: [null, ""] }, customerId: userId }] }
     if (isStaff) {
       query = { ...query, ...orderScope.filter }
     }
     if (employeeId) {
       query = {
-        ...query,
-        $or: [
-          { "paymentDetails.employeeId": employeeId },
-          { "paymentDetails.verifiedEmail": employeeId },
-          { employeeId }
+        $and: [
+          query,
+          { $or: [
+            { "paymentDetails.employeeId": employeeId },
+            { "paymentDetails.verifiedEmail": employeeId },
+            { employeeId }
+          ] },
         ]
       }
     }
@@ -189,7 +195,7 @@ export async function GET(request: NextRequest) {
     const orders = await ordersQuery.toArray()
 
     const normalizedOrders = normalizeId(orders).map((order: OrderListDocument) => ({
-      userId: order.userId || null,
+      userId: order.userId || order.customerId || null,
       id: order.id,
       orderId: order.orderId || null,
       date: order.createdAt || new Date().toISOString(),

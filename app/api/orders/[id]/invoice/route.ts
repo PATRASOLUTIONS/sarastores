@@ -5,6 +5,7 @@ import autoTable, { type Table } from "jspdf-autotable"
 import { getSession } from "@/lib/auth"
 import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
+import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -18,6 +19,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!id) {
       return NextResponse.json({ error: "Order ID is required" }, { status: 400 })
     }
+
+    if (session) await linkGuestOrdersToAccount(session.user)
 
     const collection = await getCollection("orders")
 
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
     const ownerId = order.userId || order.customerId
     const isOwner = !!session && !!ownerId && String(ownerId) === session.user.id
-    const isGuestHolder = !ownerId && verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
+    const isGuestHolder = verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
     const isAdmin = orderWithinAdminScope(await getOrderAdminScope(session), order)
     if (!isOwner && !isGuestHolder && !isAdmin) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 })

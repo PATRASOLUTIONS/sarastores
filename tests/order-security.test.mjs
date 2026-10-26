@@ -23,8 +23,9 @@ function matches(document, filter) {
     if (key === "$or") return value.some(part => matches(document, part))
     const actual = key.split(".").reduce((result, name) => result?.[name], document)
     if (value && typeof value === "object" && !(value instanceof ObjectId)) {
-      if ("$in" in value) return value.$in.includes(actual)
+      if ("$in" in value) return value.$in.includes(actual ?? null)
       if ("$exists" in value) return (actual !== undefined) === value.$exists
+      if ("$regex" in value) return typeof actual === "string" && new RegExp(value.$regex, value.$options).test(actual)
     }
     return String(actual) === String(value)
   })
@@ -35,6 +36,19 @@ function securityLoader(account = staff, storeAccess = "selected", storeIds = ["
   let fulfilled = 0
   const collection = {
     findOne: async filter => matches(storedOrder, filter) ? storedOrder : null,
+    updateMany: async (filter, mutation) => {
+      if (!matches(storedOrder, filter)) return { modifiedCount: 0 }
+      storedOrder = { ...storedOrder, ...mutation.$set }
+      return { modifiedCount: 1 }
+    },
+    find: filter => {
+      const cursor = {
+        sort: () => cursor,
+        limit: () => cursor,
+        toArray: async () => matches(storedOrder, filter) ? [storedOrder] : [],
+      }
+      return cursor
+    },
     findOneAndUpdate: async (filter, mutation) => {
       writes.push(filter)
       return matches(storedOrder, filter) ? { ...storedOrder, ...mutation.$set } : null
@@ -52,7 +66,9 @@ function securityLoader(account = staff, storeAccess = "selected", storeIds = ["
     },
     "@/lib/db-service": {
       createObjectId: value => new ObjectId(value),
-      normalizeId: value => ({ ...value, id: value._id.toString() }),
+      normalizeId: value => Array.isArray(value)
+        ? value.map(document => ({ ...document, id: document._id.toString() }))
+        : ({ ...value, id: value._id.toString() }),
       getCollection: async name => name === "users"
         ? { findOne: async filter => {
           assert.equal(String(filter._id), staff.id)
@@ -69,7 +85,7 @@ function securityLoader(account = staff, storeAccess = "selected", storeIds = ["
     }, SoftwareFulfillmentError: class extends Error {} },
     "@/lib/emailTemplates": { getEmailTemplate: () => "", getEmailSubject: () => "", getEmailTemplateId: () => "" },
   })
-  return { loader, writes, fulfilled: () => fulfilled }
+  return { loader, writes, fulfilled: () => fulfilled, setAccount: value => { account = value } }
 }
 
 for (const source of ["orders", "partner_orders"]) {
@@ -161,6 +177,87 @@ test("anonymous and unrelated customer requests do not disclose order data", asy
     const response = await securityLoader(account).loader.load("app/api/orders/[id]/route.ts").GET(req(), ctx)
     assert.equal(response.status, account ? 404 : 401)
   }
+})
+
+test("guest linking uses verified email, preserves order data and never reassigns an owner", async () => {
+  const account = { id: "customer-account", email: "buyer+shop@example.invalid", emailVerified: true }
+  const documents = [
+    { ...order, userId: null, customer: { email: "  BUYER+SHOP@EXAMPLE.INVALID  " } },
+    { ...order, userId: undefined, customer: { email: account.email } },
+    { ...order, userId: "another-account", customer: { email: account.email } },
+    { ...order, userId: null, customerId: "already-linked", customer: { email: account.email } },
+    { ...order, userId: null, partnerId: "partner", customer: { email: account.email } },
+    { ...order, userId: null, customer: { email: "buyer+shop@exampleXinvalid" } },
+    { ...order, userId: null, customer: { email: "someone-else@example.invalid" } },
+  ]
+  const originals = documents.map(document => ({ ...document }))
+  let mutations = 0
+  const linking = sourceLoader({
+    "@/lib/db-service": { getCollection: async name => {
+      assert.equal(name, "orders")
+      return { updateMany: async (filter, mutation) => {
+        for (const document of documents) {
+          if (matches(document, filter)) { Object.assign(document, mutation.$set); mutations++ }
+        }
+      } }
+    } },
+  }).load("lib/guest-order-linking.ts")
+  for (const unverified of [false, undefined]) {
+    await linking.linkGuestOrdersToAccount({ ...account, emailVerified: unverified })
+    assert.equal(mutations, 0)
+  }
+  await linking.linkGuestOrdersToAccount(account)
+  assert.equal(mutations, 2)
+  for (let i = 0; i < documents.length; i++) {
+    const { customerId, guestLinkedAt, ...unchanged } = documents[i]
+    const { customerId: originalCustomerId, ...original } = originals[i]
+    assert.deepEqual(unchanged, original)
+    assert.equal(customerId, i < 2 ? account.id : originalCustomerId)
+    assert.equal(!!guestLinkedAt, i < 2)
+  }
+  await linking.linkGuestOrdersToAccount(account)
+  assert.equal(mutations, 2)
+})
+
+test("verified customers can open and invoice a guest order before visiting order history", async () => {
+  const guest = sourceLoader().load("lib/guest-order.ts")
+  const token = guest.createGuestAccessToken()
+  const account = { id: "new-account", role: "user", email: "customer@example.invalid", emailVerified: true }
+  for (const route of ["app/api/orders/[id]/route.ts", "app/api/orders/[id]/invoice/route.ts"]) {
+    const fixture = securityLoader(account, "none", [], "orders", {
+      ...order, userId: null, guestAccessTokenHash: guest.hashGuestAccessToken(token),
+    })
+    const handler = fixture.loader.load(route).GET
+    assert.equal((await handler(req(), ctx)).status, 200)
+    // The original emailed tracking link remains usable after linking.
+    fixture.setAccount(null)
+    assert.equal((await handler(req("GET", undefined, `/api/orders/${id}?token=${token}`), ctx)).status, 200)
+    assert.equal((await handler(req("GET", undefined, `/api/orders/${id}?token=wrong`), ctx)).status, 404)
+  }
+})
+
+test("unverified and unrelated accounts cannot claim a guest order by email", async () => {
+  for (const account of [
+    { id: "unverified", role: "user", email: "customer@example.invalid", emailVerified: false },
+    { id: "unrelated", role: "user", email: "other@example.invalid", emailVerified: true },
+  ]) {
+    for (const route of ["app/api/orders/[id]/route.ts", "app/api/orders/[id]/invoice/route.ts"]) {
+      const fixture = securityLoader(account, "none", [], "orders", { ...order, userId: null })
+      assert.equal((await fixture.loader.load(route).GET(req(), ctx)).status, 404)
+    }
+  }
+})
+
+test("order history includes matching guest orders and ignores a requested foreign account", async () => {
+  const account = { id: "new-account", role: "user", email: "customer@example.invalid", emailVerified: true }
+  const fixture = securityLoader(account, "none", [], "orders", { ...order, userId: null })
+  const response = await fixture.loader.load("app/api/orders/route.ts").GET(req("GET", undefined, "/api/orders?userId=another-account"))
+  assert.equal(response.status, 200)
+  const orders = await response.json()
+  assert.equal(orders.length, 1)
+  assert.equal(orders[0].userId, account.id)
+  assert.equal(orders[0].orderId, order.orderId)
+  assert.equal(orders[0].guestAccessTokenHash, undefined)
 })
 
 test("bulk-update cannot bypass a denied store scope by overriding the order id filter", async () => {

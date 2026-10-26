@@ -6,6 +6,7 @@ import { requireAdmin, getSession } from "@/lib/auth"
 import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
+import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
 import { rebuildCustomerProfile, recordEvent, EARNING_STATUSES } from "@/lib/customer-profile"
 import { awardPointsForOrder, reverseOrderPoints } from "@/lib/loyalty"
 import { notifyOrderStatus } from "@/lib/push"
@@ -34,6 +35,8 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    if (session) await linkGuestOrdersToAccount(session.user)
 
     let collection = await getCollection<OrderDocument>("orders")
     let orderId
@@ -76,7 +79,7 @@ export async function GET(
     const ownerId = normalizedOrder.userId || normalizedOrder.customerId || null
     const isOwner = !!session && !!ownerId && String(ownerId) === session.user.id
     const isGuestHolder =
-      !ownerId && verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
+      verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
 
     if (!isAdminUser && !isOwner && !isGuestHolder) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 })

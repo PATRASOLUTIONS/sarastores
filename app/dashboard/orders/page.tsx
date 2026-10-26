@@ -224,6 +224,16 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-5">
+      {user && user.emailVerified !== true && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-[#0F2557]">
+          <p>
+            Placed an order as a guest? Verify your account email to add orders placed with {user.email} to your order history.
+          </p>
+          <Link href="/verify-email" className="mt-2 inline-block font-semibold underline underline-offset-2">
+            Verify email
+          </Link>
+        </div>
+      )}
       {/* ── Heading, search, tabs ───────────────────────────── */}
       <section className="rounded-xl border border-gray-200 bg-white">
         <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-4">
