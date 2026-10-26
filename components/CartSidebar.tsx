@@ -336,7 +336,7 @@ export default function CartSidebar() {
                   className="w-full bg-gradient-to-r from-brand-accent to-orange-500 hover:from-brand-accent-hover hover:to-orange-600 text-white font-bold text-[14px] py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
                 >
                   <Tag className="h-4 w-4" />
-                  Proceed to Buy
+                  Buy Now
                 </button>
 
                 <Link
