@@ -23,6 +23,12 @@ export const phoneSchema = z.string()
 export const pincodeSchema = z.string()
   .regex(/^\d{6}$/, 'Invalid pincode. Must be 6 digits');
 
+export const DeliveryLocationRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('grant'), consent: z.literal(true), adult: z.literal(true), version: z.string().max(100) }).strict(),
+  z.object({ action: z.literal('resolve'), receipt: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180) }).strict(),
+  z.object({ action: z.literal('withdraw'), receipt: z.string().uuid() }).strict(),
+]);
+
 export const PincodeModeSchema = z.enum(['blocked', 'allowed', 'both', 'all']);
 export const PincodeListTypeSchema = z.enum(['allowed', 'blocked']);
 export const PincodeEntrySchema = z.object({

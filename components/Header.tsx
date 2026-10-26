@@ -895,6 +895,10 @@ export default function Header() {
 
       </div>
 
+      <div className="section-container flex items-center justify-between gap-3 border-t border-gray-100 py-1 lg:hidden">
+        <DeliverToPincode variant="light" />
+        <span className="text-right text-[11px] text-gray-500">Choose your delivery area</span>
+      </div>
       <MegaMenu />
     </motion.header>
 

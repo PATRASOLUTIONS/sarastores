@@ -7,7 +7,7 @@
     "dev": "next dev",
     "dev:3005": "next dev -p 3005",
     "lint": "eslint .",
-    "test": "node --test tests/audit.test.mjs tests/marketing-migration.test.mjs tests/readiness.test.mjs tests/auth-client-session.test.mjs tests/auth-security-audit.test.mjs tests/return-path.test.mjs tests/recaptcha.test.mjs tests/payment-gateways.test.mjs tests/pincode-management.test.mjs tests/order-security.test.mjs tests/bulk-catalog-import.test.mjs tests/email-templates.test.mjs tests/security-hardening.test.mjs tests/markup-nesting.test.mjs tests/route-guards.test.mjs tests/store-payment.test.mjs tests/consent-memory.test.mjs tests/store-stock.test.mjs tests/gift-promotions.test.mjs tests/cart-coupon.test.mjs tests/active-brands.test.mjs",
+    "test": "node --test tests/audit.test.mjs tests/marketing-migration.test.mjs tests/readiness.test.mjs tests/auth-client-session.test.mjs tests/auth-security-audit.test.mjs tests/return-path.test.mjs tests/recaptcha.test.mjs tests/payment-gateways.test.mjs tests/pincode-management.test.mjs tests/order-security.test.mjs tests/bulk-catalog-import.test.mjs tests/email-templates.test.mjs tests/security-hardening.test.mjs tests/markup-nesting.test.mjs tests/route-guards.test.mjs tests/store-payment.test.mjs tests/consent-memory.test.mjs tests/store-stock.test.mjs tests/gift-promotions.test.mjs tests/cart-coupon.test.mjs tests/active-brands.test.mjs tests/delivery-location.test.mjs",
     "test:auth": "node --test tests/auth-security-audit.test.mjs tests/auth-client-session.test.mjs tests/recaptcha.test.mjs tests/return-path.test.mjs tests/route-guards.test.mjs tests/security-hardening.test.mjs tests/audit.test.mjs",
     "start": "next start",
     "check:deployment": "node scripts/check-deployment-env.mjs",
