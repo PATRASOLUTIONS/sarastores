@@ -8,6 +8,8 @@ import { storePaymentEnabled } from "@/lib/payment-config"
 import { getStorePaymentWhatsAppSettings, loadPaymentStore, notifyStoreOfPaymentRequest, STORE_PAYMENT_REQUEST_TTL_MS } from "@/lib/store-payment"
 import { itemCodesFor, storesHoldingStock } from "@/lib/store-stock"
 import { GuestCheckoutCustomerSchema, CheckoutContactSchema } from "@/lib/validation"
+import { idempotentCheckout } from "@/lib/checkout-idempotency"
+import { handleApiError } from "@/lib/api-error"
 
 export const dynamic = "force-dynamic"
 
@@ -31,6 +33,13 @@ const StorePaymentRequestSchema = CheckoutQuoteSchema.extend({
 })
 
 export async function POST(request: NextRequest) {
+  try {
+  const session = await getSession()
+  return await idempotentCheckout(request, session?.user.id || null, "store-request", () => createStoreRequest(request))
+  } catch (error) { return handleApiError(error, "Your store request could not be confirmed. Keep your checkout and contact support before retrying.") }
+}
+
+async function createStoreRequest(request: NextRequest) {
   try {
     if (!storePaymentEnabled()) {
       return NextResponse.json({ error: "Pay at store is not available" }, { status: 403, headers })
@@ -72,20 +81,20 @@ export async function POST(request: NextRequest) {
     const store = await loadPaymentStore(storeId)
     if (!store) return NextResponse.json({ error: "Selected store is unavailable" }, { status: 404, headers })
     if (!store.phone && !store.email) {
-      return NextResponse.json({ error: "This store cannot take pay-at-store orders yet. Please choose another store." }, { status: 409, headers })
+      return NextResponse.json({ error: "This store cannot take pay-at-store orders yet. Please choose another store." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
     }
 
     const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints })
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400, headers })
     if (parsed.data.expectedAmount !== undefined && Math.round(quote.amount * 100) !== parsed.data.expectedAmount) {
-      return NextResponse.json({ error: "Your checkout total changed. Review it before requesting store payment." }, { status: 409, headers })
+      return NextResponse.json({ error: "Your checkout total changed. Review it before requesting store payment." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
     }
     const hardware = quote.pricing.items.filter(item => item.type !== "software")
     if (hardware.length) {
       const codes = await itemCodesFor(hardware.map(item => item.id))
       const holding = await storesHoldingStock(hardware.map(item => ({ sku: codes.get(item.id) ?? null, quantity: item.quantity })))
       if (!holding.has(store.id)) {
-        return NextResponse.json({ error: "This store does not have every item in stock. Please choose another store or pay online." }, { status: 409, headers })
+        return NextResponse.json({ error: "This store does not have every item in stock. Please choose another store or pay online." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
       }
     }
 

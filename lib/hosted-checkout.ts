@@ -28,6 +28,7 @@ interface HostedOrder {
   loyalty: { pointsRedeemed: number; discount: number } | null
   paymentDetails: { status: string; method: string; orderId: string; paymentId?: string }
   paymentMethod: string
+  fulfilment?: { method?: string; storeId?: string }
 }
 
 export function notifyHostedGuestOrder(orderId: string, email: string, guestAccessToken: string) {
@@ -68,7 +69,7 @@ export async function initiateHostedCheckout(
 
 async function consumeHostedDiscounts(order: HostedOrder, session: ClientSession) {
   if (order.coupon) {
-    const result = await consumeOrderCoupon(order.items, order.coupon, order.userId, session)
+    const result = await consumeOrderCoupon(order.items, order.coupon, order.userId, session, order.fulfilment?.method === "pickup" ? "store" : "overall")
     if (!result.ok) throw new CheckoutConflictError(result.error)
   }
   if (order.userId && order.loyalty) {

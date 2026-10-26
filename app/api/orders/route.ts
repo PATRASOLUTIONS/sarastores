@@ -24,6 +24,8 @@ import { validateCheckoutCustomer } from "@/lib/checkout-customer"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 import { ObjectId } from "mongodb"
 import { deriveCity, derivePincode } from "@/lib/store-address"
+import { idempotentCheckout } from "@/lib/checkout-idempotency"
+import { handleApiError } from "@/lib/api-error"
 
 export const dynamic = "force-dynamic"
 
@@ -327,6 +329,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+  const session = await getSession()
+  const body = await request.clone().json().catch(() => null)
+  const hosted = body?.paymentMethod === "pinelabs" || body?.paymentMethod === "paytm"
+  return await idempotentCheckout(request, session?.user.id || null, "order", () => createOrder(request), hosted)
+  } catch (error) { return handleApiError(error, "Your order could not be confirmed. Keep your checkout and contact support before paying again.") }
+}
+
+async function createOrder(request: NextRequest) {
+  try {
     const session = await getSession()
     const isGuest = !session?.user?.id
 
@@ -487,7 +498,8 @@ export async function POST(request: NextRequest) {
     const pickupLocation = parsed.data.fulfilment?.method === "pickup"
       ? await (await getCollection("store_locations")).findOne({ _id: new ObjectId(parsed.data.fulfilment.storeId!), ...ACTIVE_RETAIL_STORE_FILTER })
       : null
-    if (parsed.data.fulfilment?.method === "pickup" && !pickupLocation) return NextResponse.json({ error: "The pickup store is unavailable." }, { status: 409 })
+    if (parsed.data.fulfilment?.method === "pickup" && !pickupLocation) return NextResponse.json({ error: "The pickup store is unavailable." }, { status: 409,
+      headers: method === "pinelabs" || method === "paytm" ? { "Checkout-Retry-Safe": "true" } : {} })
     const pickupAddress = pickupLocation ? String(pickupLocation.locationDescription || "") : ""
     const trustedFulfilment = pickupLocation ? {
       method: "pickup", storeId: pickupLocation._id.toString(), storeCode: String(pickupLocation.storeCode || ""),
@@ -511,7 +523,8 @@ export async function POST(request: NextRequest) {
 
     const payableTotal = Math.max(0, total - (loyalty?.discount ?? 0))
     if (parsed.data.expectedAmount !== undefined && Math.round(payableTotal * 100) !== parsed.data.expectedAmount) {
-      return NextResponse.json({ error: "Your checkout total changed. Review it before paying." }, { status: 409 })
+      return NextResponse.json({ error: "Your checkout total changed. Review it before paying." }, { status: 409,
+        headers: method === "pinelabs" || method === "paytm" ? { "Checkout-Retry-Safe": "true" } : {} })
     }
     // An order only reaches a paid state once the payment is confirmed server-side.
     const hosted = method === "pinelabs" || method === "paytm"
@@ -867,7 +880,8 @@ export async function POST(request: NextRequest) {
       console.error("[Orders POST] Hosted payment initiation failed:", error.message)
       return NextResponse.json({ error: error instanceof PaymentConfigurationError
         ? "Selected payment gateway is not configured or is disabled"
-        : "Payment gateway is unavailable. No payment has been confirmed." }, { status: 503 })
+        : "Payment gateway is unavailable. No payment has been confirmed." }, { status: 503,
+          headers: error instanceof PaymentConfigurationError ? { "Checkout-Retry-Safe": "true" } : {} })
     }
     if (error instanceof CheckoutConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 })

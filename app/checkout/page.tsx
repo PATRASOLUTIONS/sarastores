@@ -27,6 +27,7 @@ import { cartLineKey } from "@/lib/cart-line"
 import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
 import { readCheckoutRecovery, clearCheckoutRecovery, PurchasedItemsSchema, readHostedCheckout, clearHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
+import { prepareCheckoutAttempt, clearCheckoutAttempt, resolveCheckoutAttempt } from "@/lib/checkout-attempt"
 import { apiFetch, apiFetchJson } from "@/lib/api-client"
 import { CouponQuoteSchema } from "@/lib/coupon-validation"
 import { z } from "zod"
@@ -278,6 +279,7 @@ export default function CheckoutPage() {
             throw new Error("Return to the account that started this payment before recovering it.")
           }
           clearHostedCheckout()
+          clearCheckoutAttempt(checkoutOwner)
           clearCheckoutDraft(checkoutOwner)
           setOrderId(data.orderId)
           setOrderPlaced(true)
@@ -300,6 +302,7 @@ export default function CheckoutPage() {
         }
         if (data.status === "failed") {
           clearHostedCheckout()
+          clearCheckoutAttempt(checkoutOwner)
           setHostedReturn(null)
           setHostedStatus("The gateway confirmed that payment failed. You can retry; your cart has been kept.")
           setPaymentPending(false)
@@ -1145,6 +1148,7 @@ export default function CheckoutPage() {
         if (purchased.success) await completePurchase(purchased.data, newOrderId)
         clearCheckoutDraft(checkoutOwner)
         clearCheckoutRecovery(checkoutOwner)
+        clearCheckoutAttempt(checkoutOwner)
         setPaymentRecovery(null)
         setOrderPlaced(true)
         router.replace(`/thank-you?orderId=${encodeURIComponent(newOrderId)}${token ? `&token=${encodeURIComponent(token)}` : ""}`)
@@ -1213,10 +1217,7 @@ export default function CheckoutPage() {
     if (!await validateCheckout()) return
     setStoreRequestLoading(true)
     try {
-      const response = await fetch("/api/payment/store-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const attempt = await prepareCheckoutAttempt(checkoutOwner, "store-request", {
           items: cart.map(item => ({ ...item })),
           couponCode: appliedCoupon?.code || null,
           redeemPoints,
@@ -1235,16 +1236,22 @@ export default function CheckoutPage() {
             zipCode: customerData.pincode,
             country: customerData.country,
           },
-        }),
+        }, {})
+      const response = await fetch("/api/payment/store-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body: JSON.stringify(attempt.body),
       })
       const json: unknown = await response.json().catch(() => null)
       const parsed = StorePaymentRequestResponseSchema.safeParse(json)
       if (!response.ok || !parsed.success) {
+        if ([400, 403, 404, 429].includes(response.status) || response.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
         const message = json && typeof json === "object" && "error" in json && typeof json.error === "string" ? json.error : ""
         throw new Error(message || "Could not send your order to the store. Please try again.")
       }
       if (storeRequest?.requestId !== parsed.data.requestId) setStoreTransaction({ platform: "", transactionId: "" })
       setStoreRequest(parsed.data)
+      resolveCheckoutAttempt(checkoutOwner)
       setStoreRequestContext(paymentRequestContext)
       if (paymentRequestContextRef.current === paymentRequestContext) setStoreDialogOpen(true)
     } catch (error) {

@@ -7,6 +7,7 @@ import type { IncomingItem } from "@/lib/order-pricing"
 import { RazorpayOrderResponseSchema, RazorpayVerificationResponseSchema, type RazorpayCheckoutOptions } from "@/types/razorpay"
 import { HostedCheckoutResponseSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
 import { paymentRecoveryStorageAvailable, readCheckoutRecovery, saveCheckoutRecovery, readHostedCheckout, saveHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
+import { prepareCheckoutAttempt, clearCheckoutAttempt } from "@/lib/checkout-attempt"
 
 declare global {
   interface Window {
@@ -114,12 +115,16 @@ export default function PaymentGateway({
       if (readHostedCheckout()) {
         throw new Error("A previous payment needs confirmation. Refresh checkout before paying again.")
       }
+      const orderSnapshot = getHostedOrderData()
+      const attempt = await prepareCheckoutAttempt(checkoutOwner, provider,
+        { ...orderSnapshot, paymentMethod: provider, expectedAmount: Math.round(amount * 100) }, orderSnapshot)
       const response = await fetch("/api/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...getHostedOrderData(), paymentMethod: provider, expectedAmount: Math.round(amount * 100) }),
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body: JSON.stringify(attempt.body),
       })
       const json: unknown = await response.json()
       if (!response.ok) {
+        if ([400, 403, 404, 429].includes(response.status) || response.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
         const failure = json as { error?: string }
         throw new Error(failure.error || "Payment could not be started")
       }
@@ -128,7 +133,7 @@ export default function PaymentGateway({
         orderId: data.checkout.orderId, checkoutToken: data.checkout.checkoutToken,
         storeOrderId: data.orderId, guestAccessToken: data.guestAccessToken,
         total: data.total, tax: data.tax, shipping: data.shipping,
-        items: (orderDetails?.items || []).map(item => ({ ...item, quantity: Number(item.quantity) })),
+        items: (attempt.orderData.items as IncomingItem[] || []).map(item => ({ ...item, quantity: Number(item.quantity) })),
         owner: checkoutOwner,
       })
       if (!saved) throw new Error(`Payment checkout ${data.orderId} was created, but its recovery details could not be saved. Keep this tab open and contact support before paying.`)
@@ -177,29 +182,8 @@ export default function PaymentGateway({
       const itemNames = orderDetails?.items?.map((item) => item.name).join(", ") || ""
       const itemTypes = orderDetails?.items?.map((item) => item.type || "hardware").join(", ") || ""
 
-      const razorpayNotes = {
-        customer_name: orderDetails?.customer?.firstName + " " + orderDetails?.customer?.lastName || "",
-        customer_email: orderDetails?.customer?.email || "",
-        customer_phone: orderDetails?.customer?.phone || "",
-        customer_address: orderDetails?.customer?.address || "",
-        customer_city: orderDetails?.customer?.city || "",
-        customer_state: orderDetails?.customer?.state || "",
-        customer_zipcode: orderDetails?.customer?.pincode || orderDetails?.customer?.zipCode || "",
-        customer_country: orderDetails?.customer?.country || "India",
-        order_amount: amount.toString(),
-        order_items_count: orderDetails?.items?.length?.toString() || "0",
-        item_names: itemNames.substring(0, 255), // Razorpay has 255 char limit per field
-        item_types: itemTypes,
-        payment_method: "razorpay",
-      }
-
       // Create order on backend. The server re-prices the cart and decides the amount.
-      const orderResponse = await fetch("/api/payment/create-order", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const attempt = await prepareCheckoutAttempt(checkoutOwner, "razorpay", {
           items: (orderDetails?.items || []).map((item) => ({
             id: item.id || item.productId,
             productId: item.productId,
@@ -217,12 +201,15 @@ export default function PaymentGateway({
           customer: { ...orderDetails?.customer, zipCode: orderDetails?.customer?.pincode || orderDetails?.customer?.zipCode },
           currency: "INR",
           expectedAmount: Math.round(amount * 100),
-          receipt: `order_${Date.now()}`,
-          notes: razorpayNotes,
-        }),
+        }, orderSnapshot)
+      const orderResponse = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body: JSON.stringify(attempt.body),
       })
 
       if (!orderResponse.ok) {
+        if ([400, 403, 404, 429].includes(orderResponse.status) || orderResponse.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
         const failure = await orderResponse.json().catch(() => null)
         throw new Error(failure?.error || "Failed to create payment order")
       }
@@ -238,7 +225,7 @@ export default function PaymentGateway({
         handler: async (response) => {
           try {
             const recovery = {
-              savedAt: Date.now(), orderData: orderSnapshot,
+              savedAt: Date.now(), orderData: attempt.orderData,
               receipt: { ...response, checkoutToken: orderData.checkoutToken },
             }
             const saved = saveCheckoutRecovery(checkoutOwner, recovery)
@@ -274,7 +261,7 @@ export default function PaymentGateway({
               checkoutToken: orderData.checkoutToken,
             }
 
-            await onSuccess(paymentDetails, orderSnapshot)
+            await onSuccess(paymentDetails, attempt.orderData)
             setIsProcessing(false)
           } catch (error) {
             console.error("Payment verification error:", error)

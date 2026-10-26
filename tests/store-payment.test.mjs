@@ -6,7 +6,7 @@ import { sourceLoader } from "./source-loader.mjs"
 
 const storeId = new ObjectId().toString()
 const store = { id: storeId, name: "Fixture Store", phone: "9876543210", email: "store@example.invalid", address: "Fixture Road" }
-const customer = { name: "Synthetic Shopper", email: "shopper@example.invalid", phone: "9123456780", address: "1 Fixture Street", city: "Bengaluru", state: "Karnataka", zipCode: "560001" }
+const customer = { name: "Arun Kumar", email: "shopper@example.com", phone: "9123456780", address: "1 Fixture Street", city: "Bengaluru", state: "Karnataka", zipCode: "560001", country: "India" }
 const quote = {
   ok: true, amount: 1234, fingerprint: "fixture-fingerprint",
   pricing: { items: [{ id: "p1", name: "Fixture TV", price: 1234, quantity: 1 }], total: 1234 },
@@ -14,13 +14,14 @@ const quote = {
 const post = (body, path = "/api/payment/store-request") => new NextRequest(`https://fixture.invalid${path}`, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 })
-const requestBody = { items: [{ id: "p1", quantity: 1 }], fulfilment: { method: "delivery" }, storeId, customer }
+const requestBody = { items: [{ id: "p1", quantity: 1 }], fulfilment: { method: "pickup", storeId }, storeId, customer }
 
 function requestLoader({ env = {}, loaded = store, limited = false, stocked = true } = {}) {
   const intents = []
   const notifications = []
   const loader = sourceLoader({
     "@/lib/auth": { getSession: async () => null },
+    "@/lib/checkout-idempotency": { idempotentCheckout: async (_request, _userId, _scope, work) => work() },
     "@/lib/rate-limit": {
       checkRateLimit: async () => limited ? { success: false, retryAfter: 30 } : { success: true },
       RATE_LIMITS: { ORDERS: { message: "Too many orders" } },
@@ -60,7 +61,7 @@ test("pay at store request binds a 24h intent to the store and messages it with 
   assert.equal(notifiedStore.id, storeId)
   assert.equal(summary.orderId, "SARAECOM-555001")
   assert.equal(summary.total, 1234)
-  assert.match(summary.delivery, /Home delivery: 1 Fixture Street, Bengaluru/)
+  assert.match(summary.delivery, /Store pickup at Fixture Store.*1 Fixture Street, Bengaluru/)
   assert.equal(summary.customer.phone, customer.phone)
   assert.deepEqual([...summary.offers], [])
   const recipients = fixture.notifications[0][2]
@@ -95,7 +96,9 @@ test("pay at store request is refused when disabled, rate limited, invalid, for 
   ]
   for (const [options, body, status] of cases) {
     const fixture = requestLoader(options)
-    assert.equal((await fixture.route.POST(post(body))).status, status, JSON.stringify(options))
+    const response = await fixture.route.POST(post(body))
+    assert.equal(response.status, status, JSON.stringify(options))
+    if (status === 409) assert.equal(response.headers.get("Checkout-Retry-Safe"), "true")
     assert.equal(fixture.notifications.length, 0)
     assert.equal(fixture.intents.length, 0)
   }
@@ -266,7 +269,8 @@ test("pay at store lists every active store live from store locations and flags 
   const response = await load({}).GET()
   assert.equal(response.headers.get("cache-control"), "no-store")
   const { stores } = await response.json()
-  assert.deepEqual({ ...filter }, { isActive: true })
+  assert.equal(filter.isActive, true)
+  assert.deepEqual(JSON.parse(JSON.stringify(filter.$or)), [{ locationType: "store" }, { locationType: { $exists: false } }, { locationType: null }])
   assert.deepEqual(stores.map(store => [store.name, store.acceptsPayAtStore]), [["Jayanagar", true], ["Hubballi", true], ["No Contact", false]])
   assert.deepEqual([stores[0].city, stores[0].pincode, stores[0].latitude, stores[0].hours], ["Bengaluru", "560011", 12.93, "10 AM - 9 PM"])
   assert.equal(stores[1].city, "Hubballi", "stores outside the delivery region are still offered")
