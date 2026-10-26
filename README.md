@@ -1,4 +1,4 @@
-# SARA Electronics
+# SARA Electronics.
 
 Next.js App Router storefront and administration application, with a separate Expo mobile project. See [CLAUDE.md](CLAUDE.md) for development conventions; older documents may describe superseded behaviour.
 
