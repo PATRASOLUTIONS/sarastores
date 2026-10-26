@@ -702,6 +702,7 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     },
     context: {
       sessionStorage: { getItem: () => null },
+      localStorage: { getItem: () => null, setItem() {} },
       window: { location: { search: "" }, addEventListener() {}, removeEventListener() {} },
       document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} },
       setInterval: () => 1, clearInterval() {},

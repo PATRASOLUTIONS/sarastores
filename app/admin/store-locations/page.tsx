@@ -269,6 +269,8 @@ export default function StoreLocationsPage() {
   const [editingStore, setEditingStore] = useState<StoreLocation | null>(null)
   const [newStore, setNewStore] = useState<Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'>>(EMPTY_STORE)
   const [searchQuery, setSearchQuery] = useState("")
+  const [deletingStoreId, setDeletingStoreId] = useState<string | null>(null)
+  const deletionInProgress = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -502,26 +504,38 @@ export default function StoreLocationsPage() {
     }
   }
 
-  // Delete store
-  const handleDeleteStore = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this store?")) return
+  // Permanently delete the selected store record.
+  const handleDeleteStore = async (store: StoreLocation) => {
+    if (deletionInProgress.current) return
+    if (!confirm(`Permanently delete "${store.shopName}"${store.storeCode ? ` (${store.storeCode})` : ""}? This removes the location from the database and cannot be undone.`)) return
+
+    deletionInProgress.current = true
+    setDeletingStoreId(store.id)
 
     const toastId = toast.loading("Deleting store...")
     try {
-      const res = await apiFetch(`/api/admin/store-locations/${id}`, {
-        method: "DELETE"
+      const res = await apiFetch(`/api/admin/store-locations/${encodeURIComponent(store.id)}`, {
+        method: "DELETE",
+        signal: AbortSignal.timeout(12_000),
       })
 
       const result = await res.json()
 
-      if (result.success) {
-        toast.success("Store deleted successfully!", { id: toastId })
-        fetchStores()
+      if (res.ok && result.success === true) {
+        setStores(previous => previous.filter(location => location.id !== store.id))
+        if (editingStore?.id === store.id) {
+          setEditingStore(null)
+          setShowEditModal(false)
+        }
+        toast.success("Store permanently deleted", { id: toastId })
       } else {
         toast.error(result.message || "Failed to delete store", { id: toastId })
       }
     } catch (error) {
       toast.error("Failed to delete store", { id: toastId })
+    } finally {
+      deletionInProgress.current = false
+      setDeletingStoreId(null)
     }
   }
 
@@ -767,8 +781,9 @@ export default function StoreLocationsPage() {
                 )}
 
                 {/* Action Buttons */}
-                <div className="mt-4 pt-4 border-t flex items-center gap-2">
+                <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-2">
                   <button
+                    disabled={deletingStoreId !== null}
                     onClick={() => {
                       setEditingStore(store)
                       setShowEditModal(true)
@@ -779,6 +794,7 @@ export default function StoreLocationsPage() {
                     Edit
                   </button>
                   <button
+                    disabled={deletingStoreId !== null}
                     onClick={() => handleToggleActive(store)}
                     className={`flex-1 px-4 py-2.5 rounded-xl transition-colors font-medium flex items-center justify-center gap-2 text-sm ${
                       store.isActive 
@@ -789,10 +805,15 @@ export default function StoreLocationsPage() {
                     {store.isActive ? 'Deactivate' : 'Activate'}
                   </button>
                   <button
-                    onClick={() => handleDeleteStore(store.id)}
-                    className="px-3 py-2.5 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors"
+                    type="button"
+                    onClick={() => handleDeleteStore(store)}
+                    disabled={deletingStoreId !== null}
+                    aria-label={`Permanently delete ${store.shopName}`}
+                    title="Permanently delete this store"
+                    className="w-full px-3 py-2.5 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="w-4 h-4" />
+                    {deletingStoreId === store.id ? "Deleting..." : "Delete"}
                   </button>
                 </div>
               </div>

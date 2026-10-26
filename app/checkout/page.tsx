@@ -32,7 +32,9 @@ import { useCartGifts, clearCartGiftChoices } from "@/hooks/useCartGifts"
 import CartGifts from "@/components/cart/CartGifts"
 import { GiftAwardSchema, giftSelectionSignature } from "@/lib/gift-validation"
 import { apiFetch, apiFetchJson } from "@/lib/api-client"
-import { CouponQuoteSchema } from "@/lib/coupon-validation"
+import { useCartCoupon } from "@/hooks/useCartCoupon"
+import { clearCartCoupon } from "@/lib/cart-coupon"
+import CartCoupon from "@/components/cart/CartCoupon"
 import { z } from "zod"
 import styles from "./checkout.module.css"
 import CartProductImage from "@/components/CartProductImage"
@@ -99,7 +101,6 @@ export default function CheckoutPage() {
   const [movingWishlistId, setMovingWishlistId] = useState<string | null>(null)
   const wishlistMoveInProgress = useRef(false)
   const orderLock = useSubmitLock()
-  const couponLock = useSubmitLock()
   const checkoutValidationLock = useSubmitLock()
   const storeRequestLock = useSubmitLock()
   const [orderPlaced, setOrderPlaced] = useState(false)
@@ -284,6 +285,7 @@ export default function CheckoutPage() {
           clearHostedCheckout()
           clearCheckoutAttempt(checkoutOwner)
           clearCartGiftChoices(checkoutOwner)
+          clearCartCoupon(checkoutOwner)
           clearCheckoutDraft(checkoutOwner)
           setOrderId(data.orderId)
           setOrderPlaced(true)
@@ -393,11 +395,8 @@ export default function CheckoutPage() {
   }, [settingsData])
 
   // Coupon state and derived totals
-  const [couponCode, setCouponCode] = useState("")
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string; couponRemovable?: boolean } | null>(null)
-  const restoredCoupon = useRef<{ code: string; name: string; couponRemovable?: boolean } | null>(null)
-  const [couponDiscount, setCouponDiscount] = useState(0)
-  const [applyingCoupon, setApplyingCoupon] = useState(false)
+  const coupon = useCartCoupon(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId }, !authLoading && !cartLoading)
+  const { couponCode, setCouponCode, appliedCoupon, couponDiscount, setCouponDiscount, applyingCoupon } = coupon
   useEffect(() => {
     if (authLoading || restoredDraftOwner.current === checkoutOwner) return
     let draft = readCheckoutDraft(checkoutOwner)
@@ -422,7 +421,6 @@ export default function CheckoutPage() {
     setAddressType(draft?.addressType || "home")
     setSelectedAddressId(draft?.selectedAddressId || null)
     setCouponCode(draft?.couponCode || "")
-    restoredCoupon.current = draft?.appliedCoupon || null
     setFulfilmentMethod(draft?.fulfilmentMethod || "delivery")
     setPickupStore(draft?.pickupStore || null)
     setDeliveryFallbackStoreId(draft?.deliveryFallbackStoreId || null)
@@ -462,47 +460,7 @@ export default function CheckoutPage() {
     shipping: number; total: number; amount: number } | null>(null)
   const currentQuote = verifiedQuote?.context === quoteContext ? verifiedQuote : null
   const couponContextRef = useRef(couponContext)
-  useEffect(() => {
-    if (couponContextRef.current === couponContext) return
-    couponContextRef.current = couponContext
-    setAppliedCoupon(null)
-    setCouponDiscount(0)
-  }, [couponContext])
-
-  useEffect(() => {
-    if (!draftReady || cartLoading || !restoredCoupon.current) return
-    const savedCoupon = restoredCoupon.current
-    // Re-read the current removal policy instead of trusting a saved draft.
-    setAppliedCoupon({ ...savedCoupon, couponRemovable: false })
-    restoredCoupon.current = null
-    setCouponDiscount(0)
-    const controller = new AbortController()
-    let settled = false
-    setApplyingCoupon(true)
-    void apiFetchJson("/api/coupons/validate", {
-      method: "POST",
-      json: { code: savedCoupon.code, cart, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId } },
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
-    }, value => CouponQuoteSchema.parse(value)).then(data => {
-      if (controller.signal.aborted || couponContextRef.current !== couponContext) return
-      settled = true
-      setAppliedCoupon({ code: data.code, name: data.name, couponRemovable: data.couponRemovable })
-      setCouponDiscount(data.discount)
-    }).catch(error => {
-      if (controller.signal.aborted) return
-      settled = true
-      setAppliedCoupon(null)
-      setCouponDiscount(0)
-      toast.error(error instanceof Error ? error.message : "Could not restore coupon")
-    }).finally(() => {
-      if (!controller.signal.aborted) setApplyingCoupon(false)
-    })
-    return () => {
-      controller.abort()
-      if (!settled) restoredCoupon.current = savedCoupon
-      setApplyingCoupon(false)
-    }
-  }, [draftReady, cartLoading, couponContext, cart, fulfilmentMethod, fulfilmentStoreId])
+  couponContextRef.current = couponContext
 
   // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
   const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross } = cart.reduce((acc, item) => {
@@ -946,6 +904,7 @@ export default function CheckoutPage() {
       return false
     }
     if (applyingCoupon) { toast.error("Please wait for your coupon to be checked."); return false }
+    if (coupon.error) { toast.error(coupon.error); return false }
     if (cartGifts.loading || cartGifts.error) { toast.error(cartGifts.error || "Please wait for free gifts to be checked."); return false }
     if (storeStock.error || !storeStock.storeIds) {
       toast.error(storeStock.error || "Please wait for store stock to be checked."); return false
@@ -1001,37 +960,6 @@ export default function CheckoutPage() {
       toast.error(error instanceof Error ? error.message : "Checkout validation failed. Please retry.")
       return false
     } finally { checkoutValidationLock.release() }
-  }
-
-  // Apply coupon handler
-  const handleApplyCoupon = async () => {
-    if (!couponCode.trim()) return
-    if (!couponLock.acquire()) return
-    setApplyingCoupon(true)
-    try {
-      const payload = {
-        code: couponCode.trim(),
-        cart: cart.map(i => ({ ...i })),
-        fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId },
-      }
-      const data = await apiFetchJson("/api/coupons/validate", {
-        method: "POST",
-        json: payload,
-        signal: AbortSignal.timeout(12_000),
-      }, value => CouponQuoteSchema.parse(value))
-      if (couponContextRef.current !== couponContext) throw new Error("Your cart changed. Apply the coupon again.")
-      setAppliedCoupon({ code: data.code, name: data.name, couponRemovable: data.couponRemovable })
-      setCouponDiscount(data.discount)
-      toast.success(`Applied ${data.code}`)
-    } catch (e) {
-      setAppliedCoupon(null)
-      setCouponDiscount(0)
-      console.error("ByteWise Testing Point apply coupon error:", e)
-      toast.error(e instanceof Error ? e.message : "Failed to apply coupon")
-    } finally {
-      couponLock.release()
-      setApplyingCoupon(false)
-    }
   }
 
   const buildOrderData = (paymentDetails?: CheckoutPaymentDetails) => {
@@ -1192,6 +1120,7 @@ export default function CheckoutPage() {
         clearCheckoutDraft(checkoutOwner)
         clearCheckoutRecovery(checkoutOwner)
         clearCartGiftChoices(checkoutOwner)
+        clearCartCoupon(checkoutOwner)
         clearCheckoutAttempt(checkoutOwner)
         setPaymentRecovery(null)
         setOrderPlaced(true)
@@ -1877,65 +1806,7 @@ export default function CheckoutPage() {
 
                 {/* Coupon input */}
                 <CartGifts quote={cartGifts} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
-                <div id="checkout-coupon" className="mb-4 scroll-mt-48 p-3 border rounded-lg bg-gray-50">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Have a Coupon Code?</label>
-                  {!appliedCoupon ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                        onKeyPress={(e) => e.key === 'Enter' && handleApplyCoupon()}
-                        placeholder="Enter coupon code"
-                        className="w-40 px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                        disabled={applyingCoupon}
-                      />
-                      <button
-                        onClick={handleApplyCoupon}
-                        disabled={applyingCoupon || !couponCode.trim()}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {applyingCoupon && (
-                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                        )}
-                        {applyingCoupon ? "Applying..." : "Apply"}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                          <div>
-                            <div className="text-sm font-semibold text-green-900">{appliedCoupon.code}</div>
-                            <div className="text-xs text-green-700">{appliedCoupon.name} • Saved ₹{couponDiscount.toLocaleString("en-IN")}</div>
-                          </div>
-                        </div>
-                        {appliedCoupon.couponRemovable !== false ? <button
-                          onClick={() => {
-                            if (appliedCoupon.couponRemovable === false) return
-                            setAppliedCoupon(null)
-                            setCouponDiscount(0)
-                            setCouponCode("")
-                            toast.success("Coupon removed")
-                          }}
-                          className="text-red-600 hover:text-red-800 text-sm font-medium"
-                        >
-                          Remove
-                        </button> : <span className="text-xs text-green-700">Cannot be removed</span>}
-                      </div>
-                      {couponDiscount > 0 && (
-                        <div className="flex justify-between text-green-700 mt-2">
-                          <span>Coupon Discount</span>
-                          <span>-₹{couponDiscount.toLocaleString("en-IN")}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <CartCoupon id="checkout-coupon" coupon={coupon} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
 
                 {catalogueLoading && <p role="status" className="text-xs text-gray-600">Refreshing prices and stock...</p>}
                 {catalogueError && <p role="alert" className="text-xs text-red-700">{catalogueError} <button type="button" className="underline" onClick={() => setCatalogueAttempt(attempt => attempt + 1)}>Retry product details</button> <Link href="/cart" className="underline">Edit cart</Link></p>}

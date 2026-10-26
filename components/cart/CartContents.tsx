@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRight, CheckCircle2, CreditCard, Headphones, Minus, Percent, Plus, ShieldCheck, ShoppingCart, Star, Tag, Trash2, Truck } from "lucide-react"
+import { ArrowRight, CheckCircle2, CreditCard, Headphones, Minus, Plus, ShieldCheck, ShoppingCart, Star, Tag, Trash2, Truck } from "lucide-react"
 import { toast } from "react-hot-toast"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -23,6 +23,8 @@ import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import CartGifts from "@/components/cart/CartGifts"
 import { useCartGifts } from "@/hooks/useCartGifts"
 import { useAuth } from "@/contexts/AuthContext"
+import { useCartCoupon } from "@/hooks/useCartCoupon"
+import CartCoupon from "@/components/cart/CartCoupon"
 
 type Product = {
   id: string
@@ -53,7 +55,8 @@ const isProduct = (value: unknown): value is Product => {
 export default function CartContents({ embedded = false }: { embedded?: boolean }) {
   const marketing = useMarketingContent("cart")
   const { cart, addToCart, updateQuantity, refreshItemPrices, removeFromCart, isLoading } = useCart()
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
+  const coupon = useCartCoupon(cart, user?.id || "guest", { method: "delivery" }, !authLoading && !isLoading)
   const { addToWishlist, isInWishlist } = useWishlist()
   const { data: settings, error: settingsError, isLoading: settingsLoading } = useSettingsData()
   const router = useRouter()
@@ -183,6 +186,10 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const checkoutBlocked = cart.length === 0 || !!limitError || unavailable
   const proceedToCheckout = () => {
     if (checkoutBlocked) return
+    if (coupon.applyingCoupon || coupon.error) {
+      toast.error(coupon.error || "Please wait for your coupon to be checked.")
+      return
+    }
     if (detailsLoading || settingsLoading) {
       toast.error("Prices and delivery charges are still loading. Please try again in a moment.")
       return
@@ -297,6 +304,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
           </section>
           <aside className={styles.summaryColumn}>
             {!embedded && <CartGifts quote={giftQuote} />}
+            <CartCoupon coupon={coupon} />
             <section className={styles.summary} aria-labelledby="price-details">
               <h2 id="price-details">Price Details</h2>
               {limitError && <p role="alert" className={styles.error}>{limitError}</p>}
@@ -305,15 +313,14 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               <dl>
                 <div><dt>Total MRP ({cart.length} items)</dt><dd>{money(totals.mrp)}</dd></div>
                 <div className={styles.discount}><dt>Discount</dt><dd>− {money(totals.savings)}</dd></div>
-                <div><dt>Coupon Discount</dt><dd>At checkout</dd></div>
-                <div className={styles.coupon}><dt><Link href="/checkout#checkout-coupon"><Percent size={15} />Apply Coupon</Link></dt></div>
+                <div className={styles.discount}><dt>Coupon Discount</dt><dd>{coupon.applyingCoupon ? "Checking..." : coupon.couponDiscount > 0 ? `− ${money(coupon.couponDiscount)}` : money(0)}</dd></div>
                 <div className={styles.shipping}><dt>Delivery Charges</dt><dd className={totals.validShipping && totals.shipping === 0 ? styles.discount : undefined}>
                   {totals.validShipping ? totals.shipping === 0 ? "FREE" : money(totals.shipping) : "Calculating..."}</dd></div>
-                <div className={styles.total}><dt>Total Amount<small>Inclusive of all taxes</small></dt><dd>{totals.validShipping ? money(totals.total) : money(totals.gross)}{!totals.validShipping && <small>Before delivery</small>}</dd></div>
+                <div className={styles.total}><dt>Total Amount<small>Inclusive of all taxes</small></dt><dd>{money(Math.max(0, (totals.validShipping ? totals.total : totals.gross) - coupon.couponDiscount))}{!totals.validShipping && <small>Before delivery</small>}</dd></div>
               </dl>
               <button type="button" className={styles.primaryButton} disabled={checkoutBlocked} onClick={proceedToCheckout}>Proceed to Checkout <ArrowRight size={16} /></button>
               {unavailable && <p role="alert" className={styles.stockNotice}>You can review checkout. Remove unavailable items or reduce their quantities before placing an order.</p>}
-              {totals.savings > 0 && <p className={styles.savings}><Tag size={18} />You are saving {money(totals.savings)} on this order!</p>}
+              {totals.savings + coupon.couponDiscount > 0 && <p className={styles.savings}><Tag size={18} />You are saving {money(totals.savings + coupon.couponDiscount)} on this order!</p>}
               <p className={styles.summaryNote}>Totals cover all cart items. Coupons and final availability are confirmed at checkout.</p>
             </section>
             <section className={styles.offers} aria-labelledby="available-offers">
