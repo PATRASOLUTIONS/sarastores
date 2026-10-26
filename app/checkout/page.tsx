@@ -37,6 +37,7 @@ import { clearCartCoupon } from "@/lib/cart-coupon"
 import CartCoupon from "@/components/cart/CartCoupon"
 import { z } from "zod"
 import styles from "./checkout.module.css"
+import CheckoutSection from "./CheckoutSection"
 import CartProductImage from "@/components/CartProductImage"
 import { CHECKOUT_CITIES, checkoutCity } from "@/lib/checkout-region"
 import { indianStates } from "@/lib/indiaData"
@@ -126,6 +127,16 @@ export default function CheckoutPage() {
   const [profileError, setProfileError] = useState("")
   const [profileAttempt, setProfileAttempt] = useState(0)
   const [editingAddress, setEditingAddress] = useState(true)
+  const [expandedStep, setExpandedStep] = useState<1 | 2 | 3 | 4 | null>(1)
+  const [confirmedDelivery, setConfirmedDelivery] = useState<string | null>(null)
+  const [confirmedPayment, setConfirmedPayment] = useState<string | null>(null)
+  const initialAddressAdvance = useRef<string | null>(null)
+  const openCheckoutStep = (step: 1 | 2 | 3 | 4) => {
+    setExpandedStep(step)
+    requestAnimationFrame(() => document.getElementById(
+      ["delivery-address-heading", "delivery-options-heading", "payment-method-heading", "checkout-review-heading"][step - 1],
+    )?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
   const [addressNotice, setAddressNotice] = useState("")
   const [savedAddresses, setSavedAddresses] = useState<SavedDeliveryAddress[]>([])
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
@@ -415,6 +426,10 @@ export default function CheckoutPage() {
       }
     }
     setCustomerData(draft?.customer || EMPTY_CUSTOMER)
+    setExpandedStep(1)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    initialAddressAdvance.current = null
     setCustomerErrors({})
     setContinueAsGuest(draft?.continueAsGuest || false)
     setEditingAddress(draft?.editingAddress ?? true)
@@ -596,7 +611,7 @@ export default function CheckoutPage() {
         setSelectedAddressId(selected => selected && result.data.addresses.some(address => address.id === selected)
           ? selected : null)
         if (result.data.addresses[0] && editedCustomerFields.current.size === 0) {
-          selectAddress(result.data.addresses[0])
+          selectAddress(result.data.addresses[0], false)
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -638,6 +653,8 @@ export default function CheckoutPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     editedCustomerFields.current.add(name)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
     if (name === "state") editedCustomerFields.current.add("city")
     setCustomerData((prev) => ({
       ...prev,
@@ -677,6 +694,7 @@ export default function CheckoutPage() {
     }
     setCustomerErrors(errors)
     setEditingAddress(true)
+    openCheckoutStep(1)
     requestAnimationFrame(() => document.getElementById(String(parsed.error.issues[0].path[0]))?.focus())
     toast.error(parsed.error.issues[0].message)
     return false
@@ -685,29 +703,43 @@ export default function CheckoutPage() {
     for (const field of ["address", "city", "pincode"]) editedCustomerFields.current.add(field)
     setCustomerData(previous => ({ ...previous, address: "", city: "", pincode: "", state: "Karnataka" }))
     setEditingAddress(true)
+    openCheckoutStep(1)
     setAddressNotice("")
     setSelectedAddressId(null)
     setAddressType("home")
   }
 
-  const selectAddress = (address: SavedDeliveryAddress) => {
+  const selectAddress = (address: SavedDeliveryAddress, advance = true) => {
     setCustomerErrors({})
     const { id, type, ...details } = address
     for (const field of Object.keys(details)) editedCustomerFields.current.add(field)
     setCustomerData(previous => ({ ...previous, ...details }))
     setSelectedAddressId(id)
     setAddressType(type)
-    setEditingAddress(false)
+    const complete = CheckoutContactSchema.omit({ email: true }).safeParse(details).success
+    setEditingAddress(!complete)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    if (advance) openCheckoutStep(complete ? 2 : 1)
     setAddressNotice("")
   }
 
   const useEnteredAddress = () => {
+    if (!user && !continueAsGuest) { toast.error("Choose to sign in or continue as a guest"); return }
     if (!validateContactDetails()) return
+    if (isPickup && user) {
+      setEditingAddress(false)
+      openCheckoutStep(2)
+      return
+    }
     const result = SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType })
     if (!result.success) { toast.error(result.error.issues[0].message); return }
     setCustomerData(previous => ({ ...previous, ...result.data }))
     setSelectedAddressId(null)
     setEditingAddress(false)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    openCheckoutStep(2)
   }
 
   const saveAddress = async () => {
@@ -771,6 +803,62 @@ export default function CheckoutPage() {
       }
     }
   }
+
+  const parsedContact = CheckoutContactSchema.safeParse(customerData)
+  const addressComplete = draftReady && !editingAddress && Boolean(user || continueAsGuest)
+    && parsedContact.success
+    && ((isPickup && !!user) || SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType }).success)
+  const deliveryContext = JSON.stringify([{ ...customerData, ...(parsedContact.success ? parsedContact.data : {}) }, fulfilmentMethod, pickupStore?.id,
+    cart.map(item => [cartLineKey(item), item.quantity])])
+  const deliveryComplete = addressComplete && confirmedDelivery === deliveryContext
+  const paymentContext = JSON.stringify([deliveryContext, paymentMethod, paymentProvider])
+  const paymentAvailable = paymentMethod === "store-payment" ? allowStorePayment
+    : paymentMethod === "online" && !!paymentProvider && paymentProviders.includes(paymentProvider)
+  const paymentComplete = deliveryComplete && paymentAvailable && confirmedPayment === paymentContext
+
+  useEffect(() => {
+    if (!draftReady || profileLoading || addressesLoading || pincodeRulesLoading) return
+    if (initialAddressAdvance.current === checkoutOwner) return
+    if (addressComplete) {
+      initialAddressAdvance.current = checkoutOwner
+      setExpandedStep(2)
+    } else if (!editingAddress) setEditingAddress(true)
+  }, [draftReady, checkoutOwner, profileLoading, addressesLoading, pincodeRulesLoading, addressComplete, editingAddress])
+
+  useEffect(() => {
+    if (expandedStep === null || expandedStep === 1) return
+    if (!addressComplete) setExpandedStep(1)
+    else if (expandedStep > 2 && !deliveryComplete) setExpandedStep(2)
+    else if (expandedStep === 4 && !paymentComplete) setExpandedStep(3)
+  }, [expandedStep, addressComplete, deliveryComplete, paymentComplete])
+
+  const continueDelivery = async () => {
+    if (!addressComplete) { openCheckoutStep(1); return }
+    if (storeStock.loading || !storeStock.storeIds) { toast.error("Please wait for store stock to be checked."); return }
+    if (storeStock.error) { toast.error(storeStock.error); return }
+    if (isPickup && (!pickupStore || !storeStock.storeIds.has(pickupStore.id))) {
+      toast.error("Choose a pickup store with your items in stock."); return
+    }
+    if (!isPickup && !storeStock.deliveryAvailable) {
+      toast.error(storeStock.availabilityError || "Your requested quantities are unavailable for home delivery."); return
+    }
+    if (!await validateStep1()) { openCheckoutStep(1); return }
+    setConfirmedDelivery(deliveryContext)
+    setConfirmedPayment(null)
+    openCheckoutStep(3)
+  }
+  const continuePayment = () => {
+    if (paymentConfigLoading || paymentConfigError || !paymentAvailable) {
+      toast.error(paymentConfigError || "Choose an available payment method."); return
+    }
+    setConfirmedPayment(paymentContext)
+    openCheckoutStep(4)
+  }
+  const addressSummary = addressComplete
+    ? `${customerData.firstName} ${customerData.lastName} · ${isPickup ? customerData.phone : `${customerData.address}, ${customerData.city} ${customerData.pincode}`}`
+    : "Enter your contact and delivery details"
+  const deliverySummary = isPickup ? `Store pickup${pickupStore ? ` · ${pickupStore.name}` : " · Choose a store"}` : "Home delivery"
+  const paymentSummary = paymentMethod === "store-payment" ? "Pay at Store" : paymentProvider ? PAYMENT_PROVIDER_LABELS[paymentProvider] : "Choose a payment method"
 
   const moveItemToWishlist = async (lineKey: string) => {
     if (wishlistMoveInProgress.current || checkoutCartPending || paymentPending || hostedReturn
@@ -1326,7 +1414,7 @@ export default function CheckoutPage() {
             </div>
             <ol className={styles.tracker} aria-label="Checkout progress">
               {CHECKOUT_TRACKER.map((label, index) => {
-                const done = index === 0
+                const done = index === (expandedStep ?? (!addressComplete ? 1 : !deliveryComplete ? 2 : !paymentComplete ? 3 : 4)) - 1
                 return (
                   <li key={label} aria-current={done ? "step" : undefined}>
                     <span>{index + 1}</span><strong>{label}</strong>
@@ -1383,14 +1471,10 @@ export default function CheckoutPage() {
             {/* Customer Details - Left side */}
             <div className={styles.detailsColumn} inert={Boolean(paymentRecovery) || paymentPending || isProcessing || storeRequestLoading}>
               {(
-                <section className={styles.panel} aria-labelledby="delivery-address-heading">
-                  <h2 id="delivery-address-heading" className={styles.sectionTitle}>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1560BD] text-[11px] font-bold text-white">
-                      1
-                    </span>
-                    Delivery Address
-                    {!editingAddress && <button type="button" className="ml-auto text-xs font-medium text-[#0054F0]" onClick={startNewAddress}>+ Add New Address</button>}
-                  </h2>
+                <CheckoutSection id="delivery-address" number={1} title="Delivery Address" summary={addressSummary}
+                  expanded={expandedStep === 1} completed={addressComplete}
+                  onToggle={() => setExpandedStep(previous => previous === 1 ? null : 1)}>
+                  {!editingAddress && <button type="button" className="mb-3 text-xs font-medium text-[#0054F0]" onClick={startNewAddress}>+ Add New Address</button>}
                   <p className={styles.sectionHint}>{user ? "Choose a saved address or save a new one for future checkouts." : "Enter your delivery details below."}</p>
                   {profileLoading && <p role="status" className="mb-4 text-sm text-gray-600">Loading your saved account details...</p>}
                   {profileError && <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -1410,7 +1494,7 @@ export default function CheckoutPage() {
                         </span>
                       </button>
                       <div className={styles.addressActions}>
-                        <button type="button" onClick={() => { selectAddress(address); setEditingAddress(true) }}>Edit</button>
+                        <button type="button" onClick={() => { selectAddress(address, false); setEditingAddress(true); openCheckoutStep(1) }}>Edit</button>
                         <button type="button" onClick={() => void removeAddress(address.id)} disabled={addressSaving}>Remove</button>
                       </div>
                     </div>)}
@@ -1424,7 +1508,7 @@ export default function CheckoutPage() {
                           <p>{customerData.address}</p><p>{customerData.city} - {customerData.pincode}, {customerData.state}</p>
                           <p>Mobile: {customerData.phone}</p>
                         </div>
-                        <button type="button" onClick={() => setEditingAddress(true)}>Edit</button>
+                        <button type="button" onClick={() => { setEditingAddress(true); openCheckoutStep(1) }}>Edit</button>
                       </div>
                       <button type="button" className={styles.newAddressCard} onClick={startNewAddress}><span>+</span><strong>Add a delivery address</strong><small>Keep your contact details and enter another address.</small></button>
                     </div>
@@ -1657,23 +1741,31 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                   )}
-                  {!isPickup && <div className={styles.addressFormActions}>
-                    {user && <button type="button" onClick={() => void saveAddress()} disabled={addressSaving || addressesLoading}>
+                  <div className={styles.addressFormActions}>
+                    {user && !isPickup && <button type="button" onClick={() => void saveAddress()} disabled={addressSaving || addressesLoading}>
                       {addressSaving ? "Saving address..." : selectedAddressId ? "Save address changes" : "Save delivery address"}
                     </button>}
-                    <button type="button" onClick={useEnteredAddress}>{user ? "Use without saving" : "Use this address"}</button>
+                    <button type="button" onClick={useEnteredAddress}>{isPickup && user ? "Continue to Delivery Options" : user ? "Use without saving & continue" : "Use this address & continue"}</button>
+                    {user && !isPickup && <button type="button" onClick={() => {
+                      if (!validateContactDetails()) return
+                      changeFulfilmentMethod("pickup")
+                      setEditingAddress(false)
+                      openCheckoutStep(2)
+                    }}>Choose store pickup</button>}
                     {selectedAddressId && <button type="button" onClick={() => {
                       const original = savedAddresses.find(address => address.id === selectedAddressId)
                       if (original) selectAddress(original)
                     }}>Cancel edit</button>}
                     {!user && <small>Sign in to save addresses for future checkouts.</small>}
-                  </div>}
+                  </div>
                   </fieldset>
-                </section>
+                  {!editingAddress && <div className={styles.stepContinue}><button type="button" onClick={() => openCheckoutStep(2)} disabled={!addressComplete}>Continue to Delivery Options <ArrowRight size={15} /></button></div>}
+                </CheckoutSection>
               )}
 
-              <section className={styles.panel} aria-labelledby="delivery-options-heading">
-                <h2 id="delivery-options-heading" className={styles.sectionTitle}><span>2</span>Delivery Options</h2>
+              <CheckoutSection id="delivery-options" number={2} title="Delivery Options" summary={deliverySummary}
+                expanded={expandedStep === 2} completed={deliveryComplete} disabled={!addressComplete}
+                onToggle={() => setExpandedStep(previous => previous === 2 ? null : 2)}>
                 <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
                 <FulfilmentSelector method={fulfilmentMethod} onMethodChange={changeFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
                   deliveryPincode={customerData.pincode} deliveryCity={customerData.city} stock={storeStock}
@@ -1687,16 +1779,14 @@ export default function CheckoutPage() {
                 {!isPickup && pincodeRulesLoading && <p role="status" className={styles.sectionHint}>Loading delivery availability...</p>}
                 {!isPickup && pincodeRulesError && <p role="alert" className="mt-3 text-sm text-red-700">{pincodeRulesError} <button type="button"
                   onClick={() => setPincodeRulesAttempt(value => value + 1)} className="underline">Retry delivery availability</button></p>}
-              </section>
+                <div className={styles.stepContinue}><button type="button" onClick={() => void continueDelivery()}
+                  disabled={profileLoading || addressesLoading || storeStock.loading || pincodeRulesLoading}>Continue to Payment <ArrowRight size={15} /></button></div>
+              </CheckoutSection>
 
               {(
-                <section className={styles.panel} aria-labelledby="payment-method-heading">
-                  <h2 id="payment-method-heading" className={styles.sectionTitle}>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1560BD] text-[11px] font-bold text-white">
-                      3
-                    </span>
-                    Payment Method
-                  </h2>
+                <CheckoutSection id="payment-method" number={3} title="Payment Method" summary={paymentSummary}
+                  expanded={expandedStep === 3} completed={paymentComplete} disabled={!deliveryComplete}
+                  onToggle={() => setExpandedStep(previous => previous === 3 ? null : 3)}>
                   <p className={styles.sectionHint}>{isPickup ? "Pay online or choose Pay at Store after selecting a store with your items in stock."
                     : "Pay online with UPI, cards or another available option at the secure payment gateway."}</p>
                   {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
@@ -1727,8 +1817,21 @@ export default function CheckoutPage() {
                       value={payStore} onChange={setPayStore} />
                   </CheckoutPaymentOptions>
 
-                </section>
+                  <div className={styles.stepContinue}><button type="button" onClick={continuePayment}
+                    disabled={paymentConfigLoading || !paymentAvailable}>Continue to Review <ArrowRight size={15} /></button></div>
+                </CheckoutSection>
               )}
+              <CheckoutSection id="checkout-review" number={4} title="Review & Place Order"
+                summary="Confirm your details and place your order" expanded={expandedStep === 4} completed={false} disabled={!paymentComplete}
+                onToggle={() => setExpandedStep(previous => previous === 4 ? null : 4)}>
+                <dl className={styles.stepReview}>
+                  <div><dt>{isPickup ? "Contact details" : "Delivery address"}</dt><dd>{addressSummary}</dd></div>
+                  <div><dt>Delivery option</dt><dd>{deliverySummary}</dd></div>
+                  <div><dt>Payment method</dt><dd>{paymentSummary}</dd></div>
+                  <div><dt>Order total</dt><dd>?{money(payableTotal)}</dd></div>
+                </dl>
+                <p className="mt-4 text-sm text-gray-600">Review your items in the order summary, then place your order.</p>
+              </CheckoutSection>
             </div>
 
             {/* Order Summary - Right side */}
@@ -1805,7 +1908,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Coupon input */}
-                <CartGifts quote={cartGifts} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
+                <CartGifts quote={cartGifts} compact disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
                 <CartCoupon id="checkout-coupon" coupon={coupon} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
 
                 {catalogueLoading && <p role="status" className="text-xs text-gray-600">Refreshing prices and stock...</p>}
@@ -1864,7 +1967,11 @@ export default function CheckoutPage() {
                     }}
                   />
                 )}
-                {paymentMethod === "store-payment" ? (
+                {!paymentComplete || expandedStep !== 4 ? <button type="button" className={`w-full ${styles.primaryButton}`}
+                  onClick={() => openCheckoutStep(!addressComplete ? 1 : !deliveryComplete ? 2 : !paymentComplete ? 3 : 4)}>
+                  {!addressComplete ? "Complete Delivery Address" : !deliveryComplete ? "Choose Delivery Options" : !paymentComplete ? "Choose Payment Method" : "Review & Place Order"}
+                  <ArrowRight size={16} />
+                </button> : paymentMethod === "store-payment" ? (
                   <button type="button" onClick={() => void requestStorePayment()}
                     disabled={storeRequestLoading || isProcessing || !allowStorePayment}
                     className="flex w-full items-center justify-center rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
