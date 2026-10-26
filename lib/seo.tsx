@@ -9,6 +9,7 @@
  */
 
 import { Metadata } from 'next';
+import { getConfiguredSiteOrigin } from '@/lib/site-origin';
 
 // ============================================
 // Types
@@ -87,7 +88,7 @@ interface OrganizationSEO {
 export const siteConfig: SiteConfig = {
   name: 'Sara Electronics',
   description: 'Your one-stop shop for electronics, appliances, and more. Quality products at competitive prices with fast delivery across India.',
-  url: process.env.NEXT_PUBLIC_SITE_URL || 'https://sarastores.com',
+  url: getConfiguredSiteOrigin() || 'https://sarastores.com',
   ogImage: '/og',
   twitter: '@saraelectronics',
   locale: 'en_IN',
