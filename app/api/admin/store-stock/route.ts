@@ -4,6 +4,7 @@ import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { handleApiError } from "@/lib/api-error"
 import type { StoredStoreLocation } from "@/lib/store-locations"
+import { stockCodeKey, stockItemAliases, stockItemCode, stockItemFilter, type StockCatalogueProduct } from "@/lib/stock-item-code"
 import {
   recomputeProductStock, STORE_STOCK_COLLECTION, StoreStockUploadSchema, type StoreStockRow,
 } from "@/lib/store-stock"
@@ -28,14 +29,13 @@ export async function GET(request: NextRequest) {
     const itemCode = searchParams.get("itemCode")?.trim()
 
     if (itemCode) {
-      const [rows, product] = await Promise.all([
-        stock.find({ sku: itemCode }).sort({ storeCode: 1 }).toArray(),
-        (await getCollection<{ name?: string; stock?: number; sku?: string }>(COLLECTIONS.PRODUCTS))
-          .findOne({ sku: itemCode }, { projection: { name: 1, stock: 1, sku: 1 } }),
-      ])
+      const product = await (await getCollection<StockCatalogueProduct & { name?: string; stock?: number }>(COLLECTIONS.PRODUCTS))
+        .findOne(stockItemFilter([itemCode]), { collation: { locale: "en", strength: 2 } })
+      const canonicalCode = product ? stockItemCode(product) || itemCode : itemCode
+      const rows = await stock.find({ sku: canonicalCode }).sort({ storeCode: 1 }).toArray()
       return NextResponse.json({
         success: true,
-        product: product ? { name: product.name || "", sku: product.sku || itemCode, stock: Number(product.stock) || 0 } : null,
+        product: product ? { name: product.name || "", sku: canonicalCode, stock: Number(product.stock) || 0 } : null,
         rows: rows.map(row => ({
           storeCode: row.storeCode,
           storeName: names.get(row.storeCode)?.name || "Unknown store",
@@ -73,8 +73,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - upload a stock sheet. Each store in the sheet is replaced in full:
-// its items missing from the sheet are set to 0.
+// POST - update listed item/store pairs; full-store replacement is explicit.
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
@@ -82,11 +81,11 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = StoreStockUploadSchema.safeParse(await request.json())
     if (!parsed.success) return NextResponse.json({ success: false, message: parsed.error.issues[0].message }, { status: 400 })
-    const { rows } = parsed.data
+    const { rows, replaceStores } = parsed.data
 
     const seen = new Set<string>()
     const duplicates = rows.filter(row => {
-      const key = `${row.storeCode}\u0000${row.itemCode}`
+      const key = `${stockCodeKey(row.storeCode)}\u0000${stockCodeKey(row.itemCode)}`
       if (seen.has(key)) return true
       seen.add(key)
       return false
@@ -98,15 +97,34 @@ export async function POST(request: NextRequest) {
 
     const storeCodes = [...new Set(rows.map(row => row.storeCode))]
     const itemCodes = [...new Set(rows.map(row => row.itemCode))]
-    const [knownStores, knownItems] = await Promise.all([
-      (await getCollection<StoredStoreLocation>("store_locations")).distinct("storeCode", { storeCode: { $in: storeCodes } }),
-      (await getCollection<{ sku?: string }>(COLLECTIONS.PRODUCTS)).distinct("sku", { sku: { $in: itemCodes } }),
+    const [knownStores, products] = await Promise.all([
+      (await getCollection<StoredStoreLocation>("store_locations")).find({ storeCode: { $in: storeCodes } },
+        { projection: { storeCode: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
+      (await getCollection<StockCatalogueProduct & { _id: unknown }>(COLLECTIONS.PRODUCTS)).find(stockItemFilter(itemCodes),
+        { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
     ])
-    const storeSet = new Set(knownStores.map(String))
-    const itemSet = new Set(knownItems.map(String))
-    const unknownStores = storeCodes.filter(code => !storeSet.has(code))
-    const unknownItems = itemCodes.filter(code => !itemSet.has(code))
-    const valid = rows.filter(row => storeSet.has(row.storeCode) && itemSet.has(row.itemCode))
+    const storesByCode = new Map(knownStores.map(store => [stockCodeKey(store.storeCode!), store.storeCode!]))
+    if (storesByCode.size !== knownStores.length) return NextResponse.json({ success: false, message: "Multiple stores share the same store code. Correct Store Locations before uploading." }, { status: 400 })
+    const itemsByCode = new Map<string, string>()
+    const owners = new Map<string, string>()
+    for (const product of products) {
+      const canonical = stockItemCode(product)
+      if (!canonical) continue
+      for (const alias of stockItemAliases(product)) {
+        const key = stockCodeKey(alias)
+        if (owners.has(key) && owners.get(key) !== String(product._id)) return NextResponse.json({ success: false, message: `Item No. ${alias} matches multiple products. Correct the catalogue before uploading.` }, { status: 400 })
+        owners.set(key, String(product._id))
+        itemsByCode.set(key, canonical)
+      }
+    }
+    const unknownStores = storeCodes.filter(code => !storesByCode.has(stockCodeKey(code)))
+    const unknownItems = itemCodes.filter(code => !itemsByCode.has(stockCodeKey(code)))
+    const valid = rows.flatMap(row => {
+      const storeCode = storesByCode.get(stockCodeKey(row.storeCode)), itemCode = itemsByCode.get(stockCodeKey(row.itemCode))
+      return storeCode && itemCode ? [{ ...row, storeCode, itemCode }] : []
+    })
+    const resolvedPairs = new Set(valid.map(row => `${row.storeCode}\u0000${row.itemCode}`))
+    if (resolvedPairs.size !== valid.length) return NextResponse.json({ success: false, message: "The same product is listed under multiple Item No./SKU aliases for one store. Keep one quantity per item and store." }, { status: 400 })
     const report = {
       unknownStores: unknownStores.slice(0, LIST_LIMIT), unknownStoreCount: unknownStores.length,
       unknownItems: unknownItems.slice(0, LIST_LIMIT), unknownItemCount: unknownItems.length,
@@ -135,9 +153,9 @@ export async function POST(request: NextRequest) {
         const skusByStore = new Map<string, string[]>()
         for (const row of valid) skusByStore.set(row.storeCode, [...(skusByStore.get(row.storeCode) ?? []), row.itemCode])
 
-        const zeroedSkus = await stock.distinct("sku", {
+        const zeroedSkus = replaceStores ? await stock.distinct("sku", {
           $or: replacedStores.map(storeCode => ({ storeCode, sku: { $nin: skusByStore.get(storeCode)! }, quantity: { $gt: 0 } })),
-        }, { session })
+        }, { session }) : []
 
         await stock.bulkWrite([
           ...valid.map(row => ({
@@ -147,12 +165,12 @@ export async function POST(request: NextRequest) {
               upsert: true,
             },
           })),
-          ...replacedStores.map(storeCode => ({
+          ...(replaceStores ? replacedStores.map(storeCode => ({
             updateMany: {
               filter: { storeCode, sku: { $nin: skusByStore.get(storeCode)! }, quantity: { $gt: 0 } },
               update: { $set: { quantity: 0, updatedAt: now } },
             },
-          })),
+          })) : []),
         ], { session, ordered: true })
 
         const affected = [...new Set([...valid.map(row => row.itemCode), ...zeroedSkus.map(String)])]

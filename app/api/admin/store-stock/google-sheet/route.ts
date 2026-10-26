@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { requireAdmin } from "@/lib/auth"
 import { handleApiError } from "@/lib/api-error"
-import { readPriceSpreadsheet, googleSheetExportUrl, fetchGoogleSheet, readBoundedSheet } from "@/lib/product-price-import"
+import { googleSheetExportUrl, fetchGoogleSheet, readBoundedSheet } from "@/lib/product-price-import"
+import { readStoreStockSpreadsheet } from "@/lib/store-stock-import"
 
 const requestSchema = z.object({ sheetId: z.string().trim().min(1).max(2048) }).strict()
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Google Sheet could not be downloaded; share it as \"Anyone with the link can view\"" }, { status: response.status === 404 ? 404 : 502 })
     }
     try {
-      const rows = readPriceSpreadsheet(await readBoundedSheet(response))
+      const rows = readStoreStockSpreadsheet(await readBoundedSheet(response))
       return NextResponse.json({ success: true, rows })
     } catch (error) {
       return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Invalid Google Sheet" }, { status: 400 })

@@ -5,6 +5,7 @@ import * as XLSX from "xlsx"
 import { toast } from "react-hot-toast"
 import { AlertTriangle, Download, FileSpreadsheet, RefreshCw, Search, Upload } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
+import { parseStoreStockRows, readStoreStockSpreadsheet } from "@/lib/store-stock-import"
 
 interface StoreSummary {
   storeCode: string
@@ -34,22 +35,11 @@ interface ItemLookup {
   rows: { storeCode: string; storeName: string; quantity: number; updatedAt: string }[]
 }
 
-const ITEM_COLUMNS = ["Item Code", "ItemCode", "itemcode", "Item No.", "Item No", "itemno", "SKU", "sku"]
-const QUANTITY_COLUMNS = ["Quantity", "quantity", "Qty", "qty", "QTY"]
-const STORE_COLUMNS = ["Store Code", "StoreCode", "storecode", "storeCode"]
-
-function readCell(row: Record<string, unknown>, columns: string[]): string {
-  for (const column of columns) {
-    const value = row[column]
-    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim()
-  }
-  return ""
-}
-
 export default function StockCheckPage() {
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [replaceStores, setReplaceStores] = useState(false)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [itemCode, setItemCode] = useState("")
   const [lookup, setLookup] = useState<ItemLookup | null>(null)
@@ -78,9 +68,9 @@ export default function StockCheckPage() {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { "Item Code": "T000946", "Quantity": 5, "Store Code": "BLR001" },
-      { "Item Code": "T000909", "Quantity": 2, "Store Code": "BLR001" },
-      { "Item Code": "T000946", "Quantity": 3, "Store Code": "BLR002" },
+      { "Item No.": "T000946", "Quantity": 5, "Store Code": "BLR001" },
+      { "Item No.": "T000909", "Quantity": 2, "Store Code": "BLR001" },
+      { "Item No.": "T000946", "Quantity": 3, "Store Code": "BLR002" },
     ])
     ws["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 15 }]
     const wb = XLSX.utils.book_new()
@@ -96,7 +86,7 @@ export default function StockCheckPage() {
       if (!data.success) throw new Error(data.message || data.error)
       if (!data.rows.length) { toast.error("No store stock to export", { id: toastId }); return }
       const ws = XLSX.utils.json_to_sheet(data.rows.map((row: { itemCode: string; quantity: number; storeCode: string; storeName: string }) => ({
-        "Item Code": row.itemCode, "Quantity": row.quantity, "Store Code": row.storeCode, "Store Name": row.storeName,
+        "Item No.": row.itemCode, "Quantity": row.quantity, "Store Code": row.storeCode, "Store Name": row.storeName,
       })))
       ws["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 15 }, { wch: 35 }]
       const wb = XLSX.utils.book_new()
@@ -108,30 +98,13 @@ export default function StockCheckPage() {
     }
   }
 
-  // A store upload replaces its full inventory, so incomplete rows must
-  // never be silently dropped before the server zeros omitted items.
   const importRows = async (sheet: Record<string, unknown>[], toastId: string) => {
-    if (sheet.length === 0) { toast.error("No data found in the sheet", { id: toastId }); return }
-
-    const rows = []
-    let blankRows = 0
-    for (const [index, row] of sheet.entries()) {
-      const line = index + 2
-      const code = readCell(row, ITEM_COLUMNS)
-      const storeCode = readCell(row, STORE_COLUMNS)
-      const quantityText = readCell(row, QUANTITY_COLUMNS)
-      if (!code && !storeCode && !quantityText) { blankRows++; continue }
-      if (!code || !storeCode || !quantityText) { toast.error(`Row ${line}: Item Code, Store Code and Quantity are required. Enter 0 explicitly for zero stock.`, { id: toastId }); return }
-      const quantity = Number(quantityText.replace(/,/g, ""))
-      if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > 1000000) { toast.error(`Row ${line}: quantity must be a whole number between 0 and 1,000,000`, { id: toastId }); return }
-      rows.push({ itemCode: code, storeCode, quantity })
-    }
-    if (rows.length === 0) { toast.error("No row has both an item code and a store code", { id: toastId }); return }
+    const { rows, blankRows } = parseStoreStockRows(sheet)
 
     const res = await apiFetch("/api/admin/store-stock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows }),
+      body: JSON.stringify({ rows, replaceStores }),
     })
     const data = await res.json()
     if (data.success) {
@@ -156,11 +129,7 @@ export default function StockCheckPage() {
     try {
       if (!/\.(xlsx|xls)$/i.test(file.name)) throw new Error("Choose an Excel .xlsx or .xls file")
       if (file.size > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB")
-      const workbook = XLSX.read(await file.arrayBuffer(), { sheetRows: 50002 })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      if (!sheet) throw new Error("Spreadsheet has no worksheet")
-      if (sheet["!fullref"]) throw new Error("Upload at most 50,000 rows")
-      await importRows(XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet), toastId)
+      await importRows(readStoreStockSpreadsheet(await file.arrayBuffer()), toastId)
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Failed to process Excel file", { id: toastId })
     } finally {
@@ -188,8 +157,8 @@ export default function StockCheckPage() {
       const data = await res.json()
       if (!data.success) { toast.error(data.message || data.error || "Failed to fetch Google Sheet", { id: toastId }); return }
       await importRows(data.rows, toastId)
-    } catch {
-      toast.error("Failed to import Google Sheet", { id: toastId })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to import Google Sheet", { id: toastId })
     } finally {
       uploadInFlight.current = false
       setUploading(false)
@@ -250,14 +219,18 @@ export default function StockCheckPage() {
             <RefreshCw className={`h-4 w-4 ${uploading ? "animate-spin" : ""}`} />Import from Google Sheet
           </button>
         </form>
+        <label className="mt-4 flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={replaceStores} disabled={uploading} onChange={event => setReplaceStores(event.target.checked)} />
+          Replace the complete inventory of stores listed in this sheet
+        </label>
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
-          <p className="mb-1 font-medium">Columns: Item Code, Quantity, Store Code</p>
-          <p>Item Code is the product SKU / Item No. Store Code comes from Store Locations.</p>
+          <p className="mb-1 font-medium">Columns: Item No., Store Code, Quantity</p>
+          <p>Item No. matches the catalogue Item No. or SKU. Store Code comes from Store Locations. Column names can use spaces, underscores or uppercase letters. Keep item numbers and store codes as text to preserve leading zeros.</p>
           <p>Every row needs an existing Item Code, Store Code and an explicit Quantity. Invalid or unknown codes stop the upload without changing stock.</p>
           <p>Google Sheets: share the sheet as &quot;Anyone with the link can view&quot;. The first tab is read.</p>
           <p className="mt-1 flex items-start gap-1 font-medium text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            Each store in the sheet is replaced in full: that store&apos;s items not listed in the sheet are set to 0.
+            {replaceStores ? "Full replacement is on: items omitted for a listed store are set to 0." : "Only the listed item/store quantities are updated. Other items and stores keep their stock."}
           </p>
         </div>
 
@@ -266,7 +239,7 @@ export default function StockCheckPage() {
             <p className="font-medium text-gray-900">
               {result.saved} rows saved for {result.stores} store(s) · {result.zeroedItems} item(s) set to 0 · {result.productsUpdated} product stock total(s) updated
             </p>
-            {result.blankRows > 0 && <p className="mt-1 text-amber-800">{result.blankRows} row(s) skipped because the item code or store code is empty.</p>}
+            {result.blankRows > 0 && <p className="mt-1 text-amber-800">{result.blankRows} completely blank row(s) ignored.</p>}
             {result.skippedRows > 0 && <p className="mt-1 text-amber-800">{result.skippedRows} row(s) skipped because the store code or item code is unknown.</p>}
             {result.unknownStoreCount > 0 && <p className="mt-1 text-red-700">
               Unknown store codes ({result.unknownStoreCount}): {result.unknownStores.join(", ")}{result.unknownStoreCount > result.unknownStores.length ? "…" : ""}
@@ -294,7 +267,7 @@ export default function StockCheckPage() {
           <div className="mt-4">
             <p className="mb-2 text-sm text-gray-700">Item {lookupCode}: cumulative uploaded stock <strong>{lookup.rows.reduce((total, row) => total + row.quantity, 0)}</strong>.</p>
             {lookup.product && lookup.product.stock !== lookup.rows.reduce((total, row) => total + row.quantity, 0) && <p role="alert" className="mb-2 rounded bg-amber-50 p-2 text-sm text-amber-900">
-              The product stock differs from its uploaded total. Upload a complete stock sheet for this item&apos;s stores to recalculate it.
+              The product stock differs from its uploaded total. Upload the current quantities for this item to recalculate its total.
             </p>}
             {lookup.product
               ? <p className="mb-2 text-sm text-gray-700"><strong>{lookup.product.name}</strong> · website stock <strong>{lookup.product.stock}</strong></p>

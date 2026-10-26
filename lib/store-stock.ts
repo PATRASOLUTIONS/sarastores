@@ -2,6 +2,7 @@ import { ObjectId, type ClientSession } from "mongodb"
 import { z } from "zod"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
+import { stockItemCode, stockItemFilter, type StockCatalogueProduct } from "@/lib/stock-item-code"
 
 /**
  * Per-store stock, keyed by the store code from /admin/store-locations and the
@@ -18,6 +19,7 @@ export interface StoreStockRow {
 }
 
 export const StoreStockUploadSchema = z.object({
+  replaceStores: z.boolean().default(false),
   rows: z.array(z.object({
     itemCode: z.string().trim().min(1, "Every row needs an item code").max(100),
     storeCode: z.string().trim().min(1, "Every row needs a store code").max(50),
@@ -36,6 +38,8 @@ export function storeFarDistanceKm(): number {
 export interface StockNeed {
   sku: string | null
   quantity: number
+  /** Catalogue Item No. shown to shoppers when it differs from the stock SKU. */
+  itemCode?: string | null
 }
 
 /**
@@ -57,7 +61,9 @@ export async function getStoreStockAvailability(needs: StockNeed[], session?: Cl
   ).toArray()
 
   const required = new Map<string, number>()
+  const displayCodes = new Map<string, string>()
   for (const need of needs) if (need.sku) required.set(need.sku, (required.get(need.sku) ?? 0) + need.quantity)
+  for (const need of needs) if (need.sku && need.itemCode) displayCodes.set(need.sku, need.itemCode)
 
   const rows = required.size ? await (await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)).find(
     { sku: { $in: [...required.keys()] }, storeCode: { $in: active.flatMap(store => store.storeCode?.trim() ? [store.storeCode.trim()] : []) } },
@@ -70,8 +76,8 @@ export async function getStoreStockAvailability(needs: StockNeed[], session?: Cl
   for (const store of active) {
     const id = store._id.toString()
     const code = store.storeCode?.trim()
-    const details = [...required].map(([itemCode, quantity]) => ({
-      itemCode, required: quantity, available: code ? held.get(`${code}\u0000${itemCode}`) ?? 0 : 0,
+    const details = [...required].map(([sku, quantity]) => ({
+      itemCode: displayCodes.get(sku) || sku, required: quantity, available: code ? held.get(`${code}\u0000${sku}`) ?? 0 : 0,
     }))
     byStore[id] = details
     if (!needs.some(need => !need.sku) && (needs.length === 0 || Boolean(code)) &&
@@ -87,13 +93,13 @@ export async function storesHoldingStock(needs: StockNeed[], session?: ClientSes
 /** Item codes for the given product ids, read from the catalogue. */
 export async function itemCodesFor(productIds: string[]): Promise<Map<string, string | null>> {
   const objectIds = productIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id))
-  const products = await (await getCollection<{ _id: ObjectId | string; id?: string; sku?: string }>(COLLECTIONS.PRODUCTS)).find(
+  const products = await (await getCollection<StockCatalogueProduct & { _id: ObjectId | string; id?: string }>(COLLECTIONS.PRODUCTS)).find(
     { $or: [{ _id: { $in: objectIds } }, { _id: { $in: productIds } }, { id: { $in: productIds } }] },
-    { projection: { sku: 1, id: 1 } },
+    { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1, id: 1 } },
   ).toArray()
   const codes = new Map<string, string | null>(productIds.map(id => [id, null]))
   for (const product of products) {
-    const sku = typeof product.sku === "string" && product.sku.trim() ? product.sku.trim() : null
+    const sku = stockItemCode(product)
     codes.set(product._id.toString(), sku)
     if (product.id) codes.set(product.id, sku)
   }
@@ -108,9 +114,15 @@ export async function recomputeProductStock(skus: string[], session?: ClientSess
     { $group: { _id: "$sku", total: { $sum: "$quantity" } } },
   ], { session }).toArray()
   const bySku = new Map(totals.map(row => [row._id, row.total]))
+  const requested = new Set(skus.map(code => code.trim().toUpperCase()))
+  const products = await (await getCollection<StockCatalogueProduct & { _id: ObjectId | string }>(COLLECTIONS.PRODUCTS)).find(
+    stockItemFilter(skus), { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 }, session, collation: { locale: "en", strength: 2 } },
+  ).toArray()
+  const updates = products.filter(product => requested.has(stockItemCode(product)?.toUpperCase() || ""))
+  if (!updates.length) return 0
   const now = new Date()
-  const result = await (await getCollection(COLLECTIONS.PRODUCTS)).bulkWrite(skus.map(sku => ({
-    updateMany: { filter: { sku }, update: { $set: { stock: bySku.get(sku) ?? 0, updatedAt: now } } },
+  const result = await (await getCollection<StockCatalogueProduct & { _id: ObjectId | string; stock?: number; updatedAt?: Date }>(COLLECTIONS.PRODUCTS)).bulkWrite(updates.map(product => ({
+    updateOne: { filter: { _id: product._id }, update: { $set: { stock: bySku.get(stockItemCode(product)!) ?? 0, updatedAt: now } } },
   })), { session, ordered: false })
   return result.modifiedCount
 }

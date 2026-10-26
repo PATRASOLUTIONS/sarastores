@@ -1799,6 +1799,15 @@ export default function CheckoutPage() {
                       ? `Choose ${offline.length > 1 ? `${offline.slice(0, -1).join(", ")} or ${offline.at(-1)}` : offline[0]}.`
                       : "Please try again later."}</p>
                   })()}
+                  {isPickup && pickupStore && <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                    <p className="font-semibold text-[#0f2557]">Pickup store: {pickupStore.name}</p>
+                    {pickupStore.storeCode && <p className="mt-1 text-xs text-slate-600">Store code: {pickupStore.storeCode}</p>}
+                    <p className="mt-1 text-xs text-slate-600">{pickupStore.address}</p>
+                    {(storeStock.byStore[pickupStore.id] || []).map(item => <p key={item.itemCode} className="mt-1 text-xs text-slate-600">
+                      Item No. {item.itemCode}: {item.available} in stock · {item.required} in your order
+                    </p>)}
+                    <p className="mt-2 text-xs text-slate-600">Pay online or choose Pay at Store for this pickup store.</p>
+                  </div>}
                   <CheckoutPaymentOptions providers={paymentProviders} codEnabled={false} instoreEnabled={false}
                     storePaymentEnabled={allowStorePayment}
                     selected={paymentMethod === "online" ? paymentProvider : paymentMethod}

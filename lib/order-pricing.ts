@@ -2,6 +2,7 @@ import { type ClientSession, ObjectId } from "mongodb"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { cartLimitError, MAX_CART_PRODUCTS } from "@/lib/cart-limits"
 import { storesHoldingStock } from "@/lib/store-stock"
+import { stockItemCode } from "@/lib/stock-item-code"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 import { cartLineKey } from "@/lib/cart-line"
 import { purchaseAvailabilityError, purchaseStock, purchaseLimit, type PurchaseProduct } from "@/lib/purchase-validation"
@@ -400,7 +401,7 @@ export async function priceCatalogueCart(
       validity: toText(doc.validity),
       color: raw.color || null,
       size: raw.size || null,
-      sku: doc.sku || null,
+      sku: stockItemCode(doc),
       itemNumbers: [doc.itemno, doc.itemNo, doc.raw?.itemno, doc.raw?.["Item No."], doc.raw?.["Item No"], doc.raw?.["ITEM NO"]]
         .map(value => typeof value === "string" || typeof value === "number" ? toText(value) : null)
         .filter((value): value is string => !!value),
@@ -477,7 +478,7 @@ export async function priceOrder(
   const { shippingFee, freeShippingThreshold } = await getShippingSettings(options.session)
   let shipping = hardwareGross > 0 && hardwareGross < freeShippingThreshold ? shippingFee : 0
   const needs = items.filter(i => i.type !== "software")
-    .map(i => ({ sku: catalogue.get(i.id)?.sku?.trim() || null, quantity: i.quantity }))
+    .map(i => ({ sku: i.sku || null, quantity: i.quantity }))
   const holding = needs.length ? await storesHoldingStock(needs, options.session) : null
   const requestedStoreId = options.fulfilment?.storeId
   if (requestedStoreId) {
