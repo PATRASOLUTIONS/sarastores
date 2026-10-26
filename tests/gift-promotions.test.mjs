@@ -3,6 +3,58 @@ import test from "node:test"
 import { ObjectId } from "mongodb"
 import { renderToStaticMarkup } from "react-dom/server"
 import { sourceLoader } from "./source-loader.mjs"
+import * as XLSX from "xlsx"
+
+function tpinWorkbook(rows, bookType = "xlsx") {
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Products")
+  return XLSX.write(workbook, { type: "array", bookType })
+}
+
+test("bulk TPIN Excel import reads the named column, preserves zeros and removes duplicates", () => {
+  const { importPromotionTpins } = sourceLoader().load("lib/promotion-tpin-import.ts")
+  for (const bookType of ["xlsx", "xls"]) {
+    const result = importPromotionTpins(tpinWorkbook([["Product", "TPIN Number"], ["Laptop", "00123"], ["Bag", "ITEM-2"], ["Duplicate", "item-2"], ["Blank", ""]], bookType))
+    assert.deepEqual(Array.from(result.tpins), ["00123", "ITEM-2"])
+    assert.equal(result.duplicates, 1)
+  }
+  const workbook = XLSX.utils.book_new()
+  const sheet = XLSX.utils.aoa_to_sheet([["TPIN"], [123]])
+  sheet.A2.z = "000000"
+  XLSX.utils.book_append_sheet(workbook, sheet, "Products")
+  assert.equal(importPromotionTpins(XLSX.write(workbook, { type: "array", bookType: "xlsx" })).tpins[0], "000123")
+})
+
+test("bulk TPIN import rejects wrong columns, empty lists, malformed identifiers and oversized sheets", () => {
+  const { importPromotionTpins } = sourceLoader().load("lib/promotion-tpin-import.ts")
+  for (const rows of [[["Price"], [123]], [["TPIN"]], [["TPIN"], ["one,two"]], [["TPIN"], ["x".repeat(201)]]]) {
+    assert.throws(() => importPromotionTpins(tpinWorkbook(rows)))
+  }
+  assert.throws(() => importPromotionTpins(tpinWorkbook([["TPIN"], ...Array.from({ length: 5001 }, (_, i) => [String(i)])])), /at most/)
+  assert.equal(importPromotionTpins(tpinWorkbook([["Item No."], ...Array.from({ length: 5000 }, (_, i) => [String(i)])])).tpins.length, 5000)
+})
+
+test("bulk imported TPINs and selected gift survive coupon creation and restrict gift eligibility", async () => {
+  const skus = Array.from(sourceLoader().load("lib/promotion-tpin-import.ts").importPromotionTpins(tpinWorkbook([["TPIN"], ["LAP-001"], ["ITEM-2"]])).tpins)
+  let stored
+  const loader = sourceLoader({
+    "@/lib/auth": { requireAdmin: async () => ({ ok: true, user: { id: "admin" } }) },
+    "@/lib/db-service": { COLLECTIONS: { COUPONS: "coupons" }, normalizeId: doc => { const { _id, ...fields } = doc; return { ...fields, id: String(_id) } },
+      getCollection: async name => name === "gift_items" ? { findOne: async query => query._id === gift._id ? gift : null } : {
+        findOne: async () => null, insertOne: async doc => { stored = { ...doc, _id: promoId }; return { insertedId: promoId } },
+      } },
+  })
+  const response = await loader.load("app/api/coupons/route.ts").POST(new Request("https://fixture.invalid/api/coupons", {
+    method: "POST", body: JSON.stringify({ code: base.code, name: base.name, type: base.type, giftId: base.giftId, applyScope: "skus", skus,
+      buyQty: 2, getQty: 1, startDate: "2020-01-01", endDate: "2099-01-01", active: true }),
+  }))
+  assert.equal(response.status, 200)
+  assert.deepEqual(Array.from((await response.json()).coupon.skus), skus)
+  assert.equal(stored.giftId, gift._id)
+  const { giftQuantity } = fixture()
+  assert.equal(giftQuantity(stored, lines, null), 1)
+  assert.equal(giftQuantity(stored, [{ ...lines[0], sku: "EXCLUDED" }], null), 0)
+})
 
 const promoId = new ObjectId()
 const gift = { _id: "FREE-BAG", sku: "FREE-BAG", name: "Laptop Bag", photo: "https://example.com/bag.jpg", price: 600, mrp: 999, active: true }
