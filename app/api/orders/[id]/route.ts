@@ -95,6 +95,7 @@ export async function GET(
       shipping: normalizedOrder.shipping || normalizedOrder.summary?.shipping || 0,
       coupon: normalizedOrder.coupon || null,
       items: normalizedOrder.items || [],
+      giftPromotions: normalizedOrder.giftPromotions || [],
       customer: normalizedOrder.customer || {},
       shippingAddress: normalizedOrder.shippingAddress || (normalizedOrder.customer?.address && typeof normalizedOrder.customer.address === 'object' ? {
         name: normalizedOrder.customer.name || "",

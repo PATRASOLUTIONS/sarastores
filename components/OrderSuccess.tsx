@@ -8,6 +8,7 @@ import { toast } from "react-hot-toast"
 import { useCart } from "@/hooks/useCart"
 import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import CartProductImage from "@/components/CartProductImage"
+import OrderGiftItems from "@/components/OrderGiftItems"
 import { orderJourneyStage, type OrderConfirmation } from "@/lib/order-confirmation"
 import styles from "./OrderSuccess.module.css"
 
@@ -105,6 +106,7 @@ export default function OrderSuccess({ order, guestToken }: { order: OrderConfir
           <span className={styles.itemImage}><CartProductImage src={item.image || undefined} name={cleanProductName(item.name)} /></span>
           <div><strong>{cleanProductName(item.name)}</strong><small>Qty: {item.quantity}</small></div><b>₹{money(item.price * item.quantity)}</b>
         </li>)}</ul>
+        <OrderGiftItems gifts={order.giftPromotions} />
         <div className={styles.total}><span>{paid ? "Total Paid" : "Order Total"}</span><strong>₹{money(order.total)}</strong></div>
       </section>
       <section className={styles.panel}><h2>{pickup ? "Pickup Details" : "Delivery Details"}</h2>

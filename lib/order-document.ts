@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb"
+import type { GiftAward } from "@/lib/gift-validation"
 
 export interface OrderStatusHistoryEntry {
   status: string
@@ -36,6 +37,7 @@ export interface OrderDocument {
   summary?: { total?: number; subtotal?: number; tax?: number; shipping?: number }
   coupon?: unknown
   items?: unknown[]
+  giftPromotions?: GiftAward[]
   customer?: {
     name?: string
     email?: string

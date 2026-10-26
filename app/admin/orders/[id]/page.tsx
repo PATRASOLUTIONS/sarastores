@@ -8,6 +8,7 @@ import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import type { GiftAward } from "@/lib/gift-validation"
+import OrderGiftItems from "@/components/OrderGiftItems"
 
 interface OrderItem {
   id?: string
@@ -936,10 +937,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
 
               <div className="border-t pt-4">
                 <h3 className="font-medium mb-3">Order Items</h3>
-                {!!order.giftPromotions?.length && <section className="mb-4 rounded border border-green-200 bg-green-50 p-3" aria-label="Free gifts to include">
-                  <h4 className="font-semibold text-green-900">Free gifts to include with this order</h4>
-                  {order.giftPromotions.map(gift => <p className="mt-1 text-sm" key={gift.promotionId}>{gift.name} · SKU {gift.sku} · Qty {gift.quantity} · FREE · {gift.code}</p>)}
-                </section>}
+                <OrderGiftItems gifts={order.giftPromotions} heading="Free gifts to include with this order" showPromotion />
                 <div className="space-y-4">
                   {order.items && Array.isArray(order.items) && order.items.length > 0 ? (
                     order.items.map((item, index) => (

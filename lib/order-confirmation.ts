@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { GiftAwardSchema } from "@/lib/gift-validation"
 
 const text = z.string().nullish()
 export const OrderConfirmationSchema = z.object({
@@ -11,6 +12,7 @@ export const OrderConfirmationSchema = z.object({
     id: text, productId: text, name: z.string(), image: text,
     price: z.number().finite().nonnegative(), quantity: z.number().int().positive(),
   })),
+  giftPromotions: z.array(GiftAwardSchema).optional(),
   customer: z.object({ firstName: text, lastName: text, name: text, email: text, phone: text }).optional(),
   shippingAddress: z.object({ name: text, street: text, city: text, state: text, zip: text, country: text }).optional(),
   paymentMethod: z.string(),
