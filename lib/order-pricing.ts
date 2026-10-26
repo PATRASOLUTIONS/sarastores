@@ -78,7 +78,7 @@ export type PricingSuccess = {
   gifts?: GiftAward[]
 }
 
-export type PricingResult = PricingSuccess | { ok: false; error: string }
+export type PricingResult = PricingSuccess | { ok: false; error: string; code?: "COUPON_UNAVAILABLE" }
 
 export type CouponDetails =
   | { type: "fixed"; value: number }
@@ -505,7 +505,7 @@ export async function priceOrder(
   let couponDiscount = 0
   if (options.couponCode) {
     const result = await computeCouponDiscount(options.couponCode, items, catalogue, options.userId, options.session)
-    if (!result.ok) return { ok: false, error: result.error }
+    if (!result.ok) return { ok: false, error: result.error, code: "COUPON_UNAVAILABLE" }
     coupon = result.coupon
     couponDiscount = result.coupon.discount
   }

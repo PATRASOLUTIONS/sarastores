@@ -99,6 +99,11 @@ export default function CheckoutPage() {
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentPending, setPaymentPending] = useState(false)
+  const startPaymentRef = useRef<(() => Promise<void>) | null>(null)
+  const [checkoutChange, setCheckoutChange] = useState<{
+    previousTotal: number; updatedTotal: number; pricesChanged: boolean; couponChanged: boolean;
+    couponMessage: string | null; action: "payment" | "store";
+  } | null>(null)
   const [itemToRemove, setItemToRemove] = useState<{ id: string; name: string } | null>(null)
   const [movingWishlistId, setMovingWishlistId] = useState<string | null>(null)
   const wishlistMoveInProgress = useRef(false)
@@ -121,6 +126,7 @@ export default function CheckoutPage() {
   const checkoutOwner = accountId || "guest"
   const checkoutOwnerRef = useRef(checkoutOwner)
   checkoutOwnerRef.current = checkoutOwner
+  useEffect(() => { setCheckoutChange(null) }, [checkoutOwner])
   const restoredDraftOwner = useRef<string | null>(null)
   const [draftOwner, setDraftOwner] = useState<string | null>(null)
   const draftReady = !authLoading && draftOwner === checkoutOwner
@@ -980,7 +986,7 @@ export default function CheckoutPage() {
     return true
   }
 
-  const validateCheckout = async () => {
+  const validateCheckout = async (action: "payment" | "store" = "payment") => {
     if (!checkoutValidationLock.acquire()) return false
     try {
     if (addressesLoading || profileLoading || addressMutation.current) {
@@ -1021,8 +1027,11 @@ export default function CheckoutPage() {
     const data = await response.json().catch(() => null)
     if (!response.ok) { toast.error(data?.error || "Product stock and prices could not be validated."); return false }
     const result = z.object({ success: z.literal(true), amount: z.number().finite().nonnegative(),
+      couponMessage: z.string().nullable().optional().default(null),
       pricing: z.object({ subtotal: z.number().finite(), tax: z.number().finite(), shipping: z.number().finite(),
         total: z.number().finite(), couponDiscount: z.number().finite(),
+        coupon: z.object({ code: z.string(), name: z.string(), discount: z.number().finite(),
+          couponRemovable: z.boolean().default(true) }).nullable().optional().default(null),
         items: z.array(z.object({ id: z.string(), price: z.number().finite().positive() })),
         gifts: z.array(GiftAwardSchema).default([]),
       }),
@@ -1035,15 +1044,27 @@ export default function CheckoutPage() {
     if (giftSelectionSignature(quote.pricing.gifts) !== giftSelectionSignature(cartGifts.gifts)) {
       cartGifts.retry(); toast.error("Your free gifts changed. Review the updated gifts before paying."); return false
     }
-    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
     const changedPrices = quote.pricing.items.some(item => cart.some(current => current.id === item.id &&
       current.price !== item.price))
-    refreshItemPrices(Object.fromEntries(quote.pricing.items.map(item => [item.id, item.price])))
-    setCouponDiscount(quote.pricing.couponDiscount)
-    if (changedPrices || Math.round(quote.amount * 100) !== Math.round(payableTotal * 100)) {
-      toast.error("Prices or checkout charges changed. Review the updated total and retry.")
+    const prices = Object.fromEntries(quote.pricing.items.map(item => [item.id, item.price]))
+    const updatedCart = cart.map(item => ({ ...item, price: prices[item.id] ?? item.price }))
+    const changedCoupon = Boolean(quote.couponMessage) || (appliedCoupon?.code ?? null) !== (quote.pricing.coupon?.code ?? null)
+      || Math.round(couponDiscount * 100) !== Math.round(quote.pricing.couponDiscount * 100)
+    const changedTotal = Math.round(quote.amount * 100) !== Math.round(payableTotal * 100)
+    const updatedCouponContext = JSON.stringify([user?.id ?? null, updatedCart.map(item => [cartLineKey(item), item.quantity, item.price])])
+    const updatedContext = JSON.stringify([updatedCouponContext, quote.pricing.coupon?.code, redeemPoints,
+      fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback, cartGifts.declinedGiftPromotions,
+      cartGifts.selectedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
+    if (changedPrices || changedCoupon || changedTotal) {
+      coupon.acceptCheckoutQuote(quote.pricing.coupon, updatedCart)
+      refreshItemPrices(prices)
+      setVerifiedQuote({ context: updatedContext, ...quote.pricing, amount: quote.amount })
+      setCheckoutChange({ previousTotal: payableTotal, updatedTotal: quote.amount, pricesChanged: changedPrices,
+        couponChanged: changedCoupon, couponMessage: quote.couponMessage, action })
       return false
     }
+    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
+    setCouponDiscount(quote.pricing.couponDiscount)
     analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
     return true
     } catch (error) {
@@ -1269,7 +1290,7 @@ export default function CheckoutPage() {
     try {
     if (!allowStorePayment) { toast.error("Pay at store is unavailable for these quantities. Choose another payment option."); return }
     if (activeStoreRequest) {
-      if (await validateCheckout()) setStoreDialogOpen(true)
+      if (await validateCheckout("store")) setStoreDialogOpen(true)
       return
     }
     if (!payStore) { toast.error(isPickup ? "Choose a pickup store first" : "Choose the store you want to pay"); return }
@@ -1277,7 +1298,7 @@ export default function CheckoutPage() {
       toast.error("Enter a valid 10-digit mobile number so the store can call you")
       return
     }
-    if (!await validateCheckout()) return
+    if (!await validateCheckout("store")) return
     setStoreRequestLoading(true)
     try {
       const attempt = await prepareCheckoutAttempt(checkoutOwner, "store-request", {
@@ -2002,6 +2023,8 @@ export default function CheckoutPage() {
                   onProcessingChange={setPaymentPending}
                   amount={payableTotal}
                   beforePayment={validateCheckout}
+                  startPaymentRef={startPaymentRef}
+                  onCheckoutChanged={async () => { await validateCheckout() }}
                   orderDetails={{ customer: customerData, items: cart, coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
                     declinedGiftPromotions: cartGifts.declinedGiftPromotions,
                     selectedGiftPromotions: cartGifts.selectedGiftPromotions,
@@ -2057,6 +2080,36 @@ export default function CheckoutPage() {
         </div>
       </main>
 
+        <Dialog open={!!checkoutChange} onOpenChange={open => { if (!open) setCheckoutChange(null) }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{checkoutChange?.pricesChanged ? "Product cost is updated" : "Your checkout total is updated"}</DialogTitle>
+              <DialogDescription>
+                We checked current prices and coupon availability before payment. Your cart now shows the updated value.
+              </DialogDescription>
+            </DialogHeader>
+            {checkoutChange?.couponChanged && <p className="text-sm text-amber-800">
+              {checkoutChange.couponMessage ? `Your coupon is no longer available: ${checkoutChange.couponMessage}` : "Your coupon discount has changed."}
+            </p>}
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between"><dt>Previous total</dt><dd>₹{money(checkoutChange?.previousTotal ?? 0)}</dd></div>
+              <div className="flex justify-between font-semibold"><dt>Updated total</dt><dd>₹{money(checkoutChange?.updatedTotal ?? 0)}</dd></div>
+            </dl>
+            <p className="text-sm">Do you want to continue with the updated total?</p>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setCheckoutChange(null)} className="rounded-md border px-4 py-2 text-sm">Review cart</button>
+              <button type="button" disabled={paymentPending || storeRequestLoading || applyingCoupon || cartGifts.loading}
+                onClick={() => {
+                  const action = checkoutChange?.action
+                  setCheckoutChange(null)
+                  if (action === "store") void requestStorePayment()
+                  else void startPaymentRef.current?.()
+                }} className="rounded-md bg-[#1560BD] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                Continue
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       {storeDialogOpen && activeStoreRequest && (
         <PayAtStoreDialog
           storeName={activeStoreRequest.store.name}

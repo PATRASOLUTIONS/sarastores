@@ -496,7 +496,7 @@ async function createOrder(request: NextRequest) {
       fulfilment: parsed.data.fulfilment,
     })
     if (!pricing.ok) {
-      return NextResponse.json({ error: pricing.error }, { status: 400 })
+      return NextResponse.json({ error: pricing.error, ...(pricing.code ? { code: pricing.code } : {}) }, { status: 400 })
     }
     pricing.gifts = await quoteGiftPromotions(pricing.items, userId, parsed.data.declinedGiftPromotions, undefined, parsed.data.selectedGiftPromotions)
     if (parsed.data.expectedGifts && giftSelectionSignature(parsed.data.expectedGifts) !== giftSelectionSignature(pricing.gifts)) return NextResponse.json({

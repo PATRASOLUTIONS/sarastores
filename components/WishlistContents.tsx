@@ -7,6 +7,7 @@ import { useProductSpecImages } from "@/hooks/useProductSpecImages"
 import { useWishlist, type WishlistItem } from "@/hooks/useWishlist"
 import { useCart } from "@/hooks/useCart"
 import { toast } from "react-hot-toast"
+import { isProductUnavailable } from "@/lib/product-availability"
 
 export default function WishlistContents() {
   const { wishlist, isLoading, removeFromWishlist } = useWishlist()
@@ -151,11 +152,11 @@ function WishlistCard({
 
             {/* Price chip on image */}
             <div className="absolute left-3 bottom-3 z-20 bg-white/95 dark:bg-slate-900/85 border px-3 py-1 rounded-lg text-sm font-semibold text-foreground shadow-sm">
-              ₹{product.price.toLocaleString("en-IN")}
+              {isProductUnavailable(product) ? "Currently unavailable" : `₹${product.price.toLocaleString("en-IN")}`}
             </div>
 
             {/* Discount pill */}
-            {product.discount && (
+            {!isProductUnavailable(product) && product.discount && (
               <div className="absolute right-3 top-3 z-20 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-xs font-bold">
                 -{product.discount}%
               </div>

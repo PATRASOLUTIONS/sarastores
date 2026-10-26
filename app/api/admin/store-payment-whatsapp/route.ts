@@ -4,7 +4,7 @@ import { getCollection } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
 import {
   firstMobile, getStorePaymentWhatsAppSettings, getStorePaymentNotificationConfiguration,
-  STORE_PAYMENT_SETTINGS_COLLECTION, STORE_PAYMENT_WHATSAPP_SETTINGS_ID,
+  STORE_PAYMENT_SETTINGS_COLLECTION, STORE_PAYMENT_WHATSAPP_SETTINGS_ID, STORE_PAYMENT_WHATSAPP_TEMPLATES,
 } from "@/lib/store-payment"
 import { StorePaymentWhatsAppSettingsSchema } from "@/types/store-payment"
 
@@ -31,9 +31,9 @@ export async function GET() {
     const [settings, stores] = await Promise.all([getStorePaymentWhatsAppSettings(), listStores()])
     return NextResponse.json({
       settings, stores, configuration: getStorePaymentNotificationConfiguration(), templates: {
-        store: !!process.env.STORE_ORDER_WHATSAPP_TEMPLATE?.trim(),
-        platformManager: !!process.env.PLATFORM_MANAGER_WHATSAPP_TEMPLATE?.trim(),
-        customer: !!process.env.CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE?.trim(),
+        store: !!STORE_PAYMENT_WHATSAPP_TEMPLATES.store,
+        platformManager: !!STORE_PAYMENT_WHATSAPP_TEMPLATES.platformManager,
+        customer: !!STORE_PAYMENT_WHATSAPP_TEMPLATES.customer,
       },
     }, { headers })
   } catch (error) {

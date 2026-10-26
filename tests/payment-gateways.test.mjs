@@ -645,12 +645,16 @@ test("checkout logo cards show only enabled gateways and keep offline choices in
   }
 })
 
-function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") {
+function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked", review = {}) {
   const states = []
   const effects = []
   const errors = []
   let index = 0
   let mounted = false
+  let cart = [{ id: "fixture-product", type: "software", name: "Synthetic Product", price: 118, quantity: 1 }]
+  let selectedCoupon = review.coupon || null
+  let discount = review.discount || 0
+  const validationCalls = []
   const slot = initial => {
     const current = index++
     if (!(current in states)) states[current] = initial
@@ -684,8 +688,13 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     "@/lib/checkout-draft": { EMPTY_CHECKOUT_CUSTOMER: { firstName: "", lastName: "", email: "", phone: "", address: "", city: "", state: "", pincode: "", country: "India" }, readCheckoutDraft: () => null, saveCheckoutDraft: () => true, clearCheckoutDraft() {} },
     "@/lib/checkout-recovery": { readHostedCheckout: () => null, readCheckoutRecovery: () => null },
     "@/hooks/useCart": { useCart: () => ({
-      cart: [{ id: "fixture-product", type: "software", name: "Synthetic Product", price: 118, quantity: 1 }],
-      clearCart() {}, removeFromCart() {}, refreshItemPrices() {}, isLoading: false,
+      cart,
+      clearCart() {}, removeFromCart() {}, refreshItemPrices(prices) { cart = cart.map(item => ({ ...item, price: prices[item.id] ?? item.price })) }, isLoading: false,
+    }) },
+    "@/hooks/useCartCoupon": { useCartCoupon: () => ({
+      couponCode: "", setCouponCode() {}, appliedCoupon: selectedCoupon, couponDiscount: discount,
+      applyingCoupon: false, error: "", setCouponDiscount(value) { discount = value },
+      acceptCheckoutQuote(value) { selectedCoupon = value; discount = value?.discount || 0 },
     }) },
     "@/contexts/AuthContext": { useAuth: () => ({ user: null, isLoading: false }) },
     "@/hooks/useSettingsData": { useSettingsData: () => ({ data: { shippingFee: 99, freeShippingThreshold: 1000 }, isLoading: false }) },
@@ -695,8 +704,12 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     "@/lib/analytics": { analytics: { beginCheckout() {} }, toAnalyticsItem: item => item },
     "react-hot-toast": { toast: { error: message => errors.push(message) } },
   }, {
-    fetch: async url => {
-      if (url === "/api/cart/validate") return Response.json({ success: true, amount: 118, pricing: { subtotal: 100, tax: 18, shipping: 0, total: 118, couponDiscount: 0, items: [{ id: "fixture-product", price: 118 }] } })
+    fetch: async (url, init) => {
+      if (url === "/api/cart/validate") {
+        validationCalls.push(url)
+        return Response.json(review.quote ? { ...review.quote, couponMessage: JSON.parse(init.body).couponCode ? review.quote.couponMessage : null }
+          : { success: true, amount: 118, pricing: { subtotal: 100, tax: 18, shipping: 0, total: 118, couponDiscount: 0, items: [{ id: "fixture-product", price: 118 }] } })
+      }
       if (url === "/api/blocked-pincodes") return Response.json({ mode: deliveryMode, blockedPincodes: ["400001"], allowedPincodes: [] })
       assert.equal(url, "/api/payment/config")
       return fail ? Response.json({ error: "Configuration unavailable" }, { status: 503 }) : Response.json(config)
@@ -707,6 +720,7 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
       window: { location: { search: "" }, addEventListener() {}, removeEventListener() {} },
       document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} },
       setInterval: () => 1, clearInterval() {},
+      requestAnimationFrame: () => 1,
       console: { ...console, error: (...args) => errors.push(args) },
     },
   })
@@ -715,7 +729,61 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
   render()
   mounted = true
   for (const effect of effects) effect()
-  return { render, errors }
+  return { render, errors, validationCalls, get cart() { return cart }, get coupon() { return selectedCoupon } }
+}
+
+async function continueToReview(fixture) {
+  const click = async label => {
+    const button = elements(fixture.render()).find(node => node.type === "button" &&
+      (node.props.children === label || (Array.isArray(node.props.children) && node.props.children[0] === label)))
+    assert.ok(button, `Missing checkout action: ${label}`)
+    await button.props.onClick()
+    await new Promise(setImmediate)
+  }
+  await click("Use this address & continue")
+  await click("Continue to Payment ")
+  await click("Continue to Review ")
+}
+
+for (const change of ["increase", "decrease", "expired coupon", "changed coupon"]) {
+  test(`checkout pauses for ${change}, refreshes the cart and only continues after review`, async () => {
+    const price = change === "increase" ? 236 : change === "decrease" ? 59 : 118
+    const coupon = change.includes("coupon") ? { code: "FIXTURE", name: "Fixture coupon", couponRemovable: true } : null
+    const discount = change === "changed coupon" ? 5 : 0
+    const review = { coupon, discount: coupon ? 10 : 0, quote: {
+      success: true, amount: price - discount, couponMessage: change === "expired coupon" ? "Coupon has expired" : null,
+      pricing: { subtotal: price / 1.18, tax: price - price / 1.18, shipping: 0, total: price - discount,
+        couponDiscount: discount, coupon: discount ? { ...coupon, discount } : null,
+        items: [{ id: "fixture-product", price }], gifts: [] },
+    } }
+    const fixture = checkoutOptionsFixture({ providers: ["razorpay"], defaultProvider: "razorpay", codEnabled: false }, false, "all", review)
+    await new Promise(setImmediate)
+    let fields = elements(fixture.render())
+    fields.find(node => node.type === "button" && node.props.children === "Continue as guest").props.onClick()
+    for (const [name, value] of Object.entries({ firstName: "Arun", lastName: "Kumar", email: "fixture@example.com", phone: "9876543210",
+      address: "Synthetic Street", state: "Karnataka", city: "Bengaluru", pincode: "560001" })) {
+      fields = elements(fixture.render())
+      fields.find(node => node.props?.id === name).props.onChange({ target: { name, value } })
+    }
+    await continueToReview(fixture)
+    const gateway = findElement(fixture.render(), "payment-gateway").props
+    assert.equal(await gateway.beforePayment(), false, JSON.stringify(fixture.errors))
+    assert.equal(fixture.cart[0].price, price)
+    assert.equal(fixture.coupon?.code ?? null, discount ? "FIXTURE" : null)
+    const popup = elements(fixture.render()).find(node => node.type === "dialog" && node.props.open === true)
+    assert.ok(popup, "Changed checkout must display a confirmation dialog")
+    assert.ok(elements(popup).some(node => node.props.children === "Do you want to continue with the updated total?"))
+    let payments = 0
+    const refreshedGateway = findElement(fixture.render(), "payment-gateway").props
+    refreshedGateway.startPaymentRef.current = async () => {
+      if (await findElement(fixture.render(), "payment-gateway").props.beforePayment()) payments++
+    }
+    assert.equal(payments, 0)
+    elements(popup).find(node => node.type === "button" && node.props.children === "Continue").props.onClick()
+    await new Promise(setImmediate)
+    assert.equal(payments, 1, JSON.stringify(fixture.errors))
+    assert.equal(fixture.validationCalls.length, 2, "Continue must recheck the live quote")
+  })
 }
 
 for (const mode of ["all", "blocked"]) {
@@ -734,6 +802,12 @@ for (const mode of ["all", "blocked"]) {
       const input = fields().find(node => node.props?.id === name)
       input.props.onChange({ target: { name, value } })
     }
+    await continueToReview(fixture)
+    if (mode === "blocked") {
+      assert.equal(findElement(fixture.render(), "payment-gateway"), null)
+      assert.ok(fixture.errors.some(error => String(error).includes("Bangalore and Mysore")), JSON.stringify(fixture.errors))
+      return
+    }
     const gateway = findElement(fixture.render(), "payment-gateway").props
     assert.equal(await gateway.beforePayment(), mode === "all", JSON.stringify(fixture.errors))
     if (mode === "blocked") assert.ok(fixture.errors.some(error => String(error).includes("Bangalore and Mysore")), JSON.stringify(fixture.errors))
@@ -744,11 +818,18 @@ test("home delivery uses the server default and only permits online provider han
   const config = { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true, instoreEnabled: true }
   const fixture = checkoutOptionsFixture(config)
   await new Promise(setImmediate)
+  elements(fixture.render()).find(node => node.type === "button" && node.props.children === "Continue as guest").props.onClick()
+  for (const [name, value] of Object.entries({ firstName: "Arun", lastName: "Kumar", email: "fixture@example.com", phone: "9876543210",
+    address: "Synthetic Street", state: "Karnataka", city: "Bengaluru", pincode: "560001" })) {
+    elements(fixture.render()).find(node => node.props?.id === name).props.onChange({ target: { name, value } })
+  }
+  await continueToReview(fixture)
   const options = () => findElement(fixture.render(), "checkout-options").props
   assert.deepEqual(Array.from(options().providers), config.providers)
   assert.equal(options().selected, "pinelabs")
   for (const provider of config.providers) {
     options().onChange(provider)
+    elements(fixture.render()).find(node => node.type === "button" && Array.isArray(node.props.children) && node.props.children[0] === "Continue to Review ").props.onClick()
     const gateway = findElement(fixture.render(), "payment-gateway").props
     assert.equal(options().selected, provider)
     assert.equal(gateway.provider, provider)
@@ -762,6 +843,7 @@ test("home delivery uses the server default and only permits online provider han
   assert.equal(options().selected, "paytm")
   assert.equal(findElement(fixture.render(), "in-store"), null)
   options().onChange("pinelabs")
+  elements(fixture.render()).find(node => node.type === "button" && Array.isArray(node.props.children) && node.props.children[0] === "Continue to Review ").props.onClick()
   assert.equal(findElement(fixture.render(), "payment-gateway").props.provider, "pinelabs")
 })
 

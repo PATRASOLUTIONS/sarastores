@@ -10,16 +10,20 @@ import { storePaymentPlatformLabel, StorePaymentWhatsAppSettingsSchema, type Sto
 export const STORE_PAYMENT_REQUEST_TTL_MS = 24 * 60 * 60 * 1000
 export const STORE_PAYMENT_SETTINGS_COLLECTION = "store_payment_settings"
 export const STORE_PAYMENT_WHATSAPP_SETTINGS_ID = "whatsapp"
+export const STORE_PAYMENT_WHATSAPP_TEMPLATES = {
+  store: "sara_store_new_order",
+  platformManager: "sara_platform_order_v2",
+  customer: "sara_order_confirmed_v2",
+} as const
 
 /** Configuration presence only: never expose credentials or contact providers. */
 export function getStorePaymentNotificationConfiguration() {
   const whatsappKeys = ["ASKEVA_API_KEY", "ASKEVA_API_URL"]
   const emailKeys = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"]
-  const templateKeys = ["STORE_ORDER_WHATSAPP_TEMPLATE", "PLATFORM_MANAGER_WHATSAPP_TEMPLATE", "CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE"]
   const configured = (name: string) => Boolean(process.env[name]?.trim())
   return {
     whatsapp: whatsappKeys.every(configured), email: emailKeys.every(configured),
-    missing: [...whatsappKeys, ...templateKeys, ...emailKeys].filter(name => !configured(name)),
+    missing: [...whatsappKeys, ...emailKeys].filter(name => !configured(name)),
   }
 }
 
@@ -110,10 +114,10 @@ function itemsLine(items: StorePaymentSummary["items"]): string {
  * Tells the chosen store manager and every platform manager that a customer wants to
  * pay through the store. Each audience has its own Meta-approved AskEva template:
  *
- * STORE_ORDER_WHATSAPP_TEMPLATE, eight body variables: order ID, customer name,
+ * sara_store_new_order, eight body variables: order ID, customer name,
  * customer phone, customer email, items, offers applied, delivery details, amount.
  *
- * PLATFORM_MANAGER_WHATSAPP_TEMPLATE, nine body variables: order ID, store name,
+ * sara_platform_order_v2, nine body variables: order ID, store name,
  * customer name, customer phone, customer email, items, offers applied, delivery
  * details, amount.
  *
@@ -125,8 +129,8 @@ export async function notifyStoreOfPaymentRequest(
   summary: StorePaymentSummary,
   recipients: StorePaymentRecipients = { notifyStoreManager: true, platformManagers: [] },
 ) {
-  const storeTemplate = process.env.STORE_ORDER_WHATSAPP_TEMPLATE?.trim()
-  const managerTemplate = process.env.PLATFORM_MANAGER_WHATSAPP_TEMPLATE?.trim()
+  const storeTemplate = STORE_PAYMENT_WHATSAPP_TEMPLATES.store
+  const managerTemplate = STORE_PAYMENT_WHATSAPP_TEMPLATES.platformManager
   const offers = summary.offers?.length ? summary.offers.join("; ") : "None"
   const customerParams = [summary.customer.name, summary.customer.phone, summary.customer.email || "-"]
   const orderParams = [itemsLine(summary.items), offers, summary.delivery, rupees(summary.total)]
@@ -134,19 +138,15 @@ export async function notifyStoreOfPaymentRequest(
   let whatsapp = false
   let managers = 0
   const storePhone = recipients.notifyStoreManager ? store.phone : ""
-  if (storePhone && storeTemplate) {
+  if (storePhone) {
     whatsapp = (await sendTemplate(storePhone, storeTemplate,
       [summary.orderId, ...customerParams, ...orderParams], "Store payment WhatsApp")).success
-  } else if (storePhone) {
-    console.error("[Store payment] STORE_ORDER_WHATSAPP_TEMPLATE is not set; WhatsApp to the store was skipped")
   }
   const others = recipients.platformManagers.filter(manager => manager.phone !== storePhone)
-  if (others.length && managerTemplate) {
+  if (others.length) {
     const results = await Promise.all(others.map(manager => sendTemplate(manager.phone, managerTemplate,
       [summary.orderId, store.name, ...customerParams, ...orderParams], "Platform manager WhatsApp")))
     managers = results.filter(result => result.success).length
-  } else if (others.length) {
-    console.error("[Store payment] PLATFORM_MANAGER_WHATSAPP_TEMPLATE is not set; WhatsApp to platform managers was skipped")
   }
 
   let email = false
@@ -220,17 +220,13 @@ function confirmedDelivery(order: ConfirmedOrder): string {
 
 /**
  * Tells the customer their pay-at-store order is confirmed. Uses the Meta-approved
- * AskEva template named by CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE whose body takes
+ * AskEva template sara_order_confirmed_v2 whose body takes
  * six variables in this order: customer name, order ID, items, amount paid, payment
  * (platform, transaction ID and store), delivery or pickup details.
  */
 export async function sendStorePaymentConfirmedWhatsApp(order: ConfirmedOrder) {
-  const template = process.env.CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE?.trim()
+  const template = STORE_PAYMENT_WHATSAPP_TEMPLATES.customer
   const phone = normaliseIndianPhone(String(order.customer?.phone || ""))
-  if (!template) {
-    console.error("[Store payment] CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE is not set; customer WhatsApp was skipped")
-    return { status: "skipped" as const }
-  }
   if (!phone) return { status: "skipped" as const }
   const items = (order.items ?? []).map(raw => {
     const item = raw as { name?: string; quantity?: number; price?: number }

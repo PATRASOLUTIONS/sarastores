@@ -14,6 +14,7 @@ import {
   Heart,
   MapPin,
   RefreshCw,
+  Share2,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -30,6 +31,7 @@ import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
 import { applicableOffers, isEmiOffer } from "@/lib/razorpay-offers"
 import { useBanners } from "@/hooks/useBanners"
 import { useCart } from "@/hooks/useCart"
+import { isProductUnavailable } from "@/lib/product-availability"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
@@ -450,10 +452,10 @@ export default function ProductDetailPage() {
           {cleanProductName(c.name)}
         </p>
         <p className="mt-1 text-[11px] font-bold text-gray-900">
-          ₹{Number(c.price).toLocaleString("en-IN")}
+          {isProductUnavailable(c) ? "Currently unavailable" : `₹${Number(c.price).toLocaleString("en-IN")}`}
         </p>
       </Link>
-      <button type="button" className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd]" onClick={async () => {
+      <button type="button" disabled={isProductUnavailable(c)} className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd] disabled:opacity-50" onClick={async () => {
         const added = await addToCart({ id: String(c.id), name: c.name, price: c.price, image: c.image, quantity: 1, color: null, size: null, stock: c.stock })
         if (added) toast.success(`${toastProductName(c.name)} added to cart`)
       }}>Add</button>
@@ -468,7 +470,7 @@ export default function ProductDetailPage() {
   const recordedRating = { rating: Number(product.rating || reviewSummary?.average) || (reviewRating.length ? reviewRating.reduce((sum: number, value: number) => sum + value, 0) / reviewRating.length : 0),
     count: Number(product.reviewsCount || reviewSummary?.count) || recordedReviews.length }
   const rating = reviewStats || recordedRating
-  const inStock = typeof product.stock === "number" ? product.stock > 0 : product.inStock !== false
+  const inStock = !isProductUnavailable(product)
   const wishlisted = isInWishlist(String(product.id))
   const freeShippingThreshold = Number(settings?.freeShippingThreshold ?? 10000)
   const freeDelivery = Number(product.price) >= freeShippingThreshold
@@ -482,8 +484,35 @@ export default function ProductDetailPage() {
     Boolean(variant && variant.active !== false && Number(variant.price) > 0 &&
       (typeof variant.stock !== "number" || variant.stock > 0))
 
+  const handleShare = async () => {
+    const url = `${window.location.origin}${window.location.pathname}`
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url)
+      } else {
+        const input = document.createElement("textarea")
+        input.value = url
+        input.style.position = "fixed"
+        input.style.opacity = "0"
+        input.setAttribute("readonly", "")
+        const previousFocus = document.activeElement
+        document.body.appendChild(input)
+        try {
+          input.select()
+          if (!document.execCommand("copy")) throw new Error("Copy failed")
+        } finally {
+          input.remove()
+          if (previousFocus instanceof HTMLElement) previousFocus.focus()
+        }
+      }
+      toast.success("Product link copied to clipboard")
+    } catch {
+      toast.error("Unable to copy the link. Please copy it from the address bar.")
+    }
+  }
+
   const handleAddToCart = async (buyNow: boolean) => {
-    if (adding) return
+    if (adding || !inStock) return
     setAdding(buyNow ? "buy" : "cart")
     try {
       const added = await addToCart({
@@ -574,6 +603,16 @@ export default function ProductDetailPage() {
                 {name}
               </h1>
 
+              <button
+                type="button"
+                onClick={handleShare}
+                title="Copy product link"
+                className="mt-3 inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-[13px] font-semibold text-[#1560BD] hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1560BD] focus-visible:ring-offset-2"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                Share
+              </button>
+
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="flex items-center gap-1.5">
                   <Stars rating={rating.rating} />
@@ -589,7 +628,7 @@ export default function ProductDetailPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                {discount >= 10 && (
+                {inStock && discount >= 10 && (
                   <span className="rounded bg-[#E11D2E] px-2 py-0.5 text-[11px] font-bold text-white">
                     {discount}% OFF
                   </span>
@@ -601,7 +640,7 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {inStock ? <><div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="font-heading text-2xl font-bold text-gray-900">
                   ₹{Number(product.price).toLocaleString("en-IN")}
                 </span>
@@ -614,7 +653,8 @@ export default function ProductDetailPage() {
                   </>
                 )}
               </div>
-              <p className="mt-1 text-[12px] text-gray-500">Inclusive of all taxes</p>
+              <p className="mt-1 text-[12px] text-gray-500">Inclusive of all taxes</p></> :
+                <p className="mt-4 text-sm font-semibold text-red-700">Currently unavailable</p>}
 
               {hasVariantSelectors && (
                 <div className="mt-5 space-y-4 border-t border-gray-100 pt-4">
@@ -704,7 +744,7 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {liveOffers.some(isEmiOffer) && (
+              {inStock && liveOffers.some(isEmiOffer) && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#1560BD]" />
                   <span className="text-[13px] font-medium text-gray-800">
@@ -945,8 +985,9 @@ export default function ProductDetailPage() {
       {/* Sticky mobile buy bar */}
       <div className="sticky bottom-0 z-30 flex items-center gap-3 border-t border-gray-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:hidden">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</p>
-          {discount > 0 && <p className="text-[11px] text-emerald-700">{discount}% off</p>}
+          {inStock ? <><p className="text-sm font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</p>
+          {discount > 0 && <p className="text-[11px] text-emerald-700">{discount}% off</p>}</> :
+            <p className="text-sm font-semibold text-red-700">Currently unavailable</p>}
         </div>
         <button
           type="button"
