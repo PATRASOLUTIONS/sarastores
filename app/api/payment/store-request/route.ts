@@ -84,7 +84,7 @@ async function createStoreRequest(request: NextRequest) {
       return NextResponse.json({ error: "This store cannot take pay-at-store orders yet. Please choose another store." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
     }
 
-    const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints })
+    const quote = await quoteCheckout(items, { couponCode, userId, fulfilment, redeemPoints, declinedGiftPromotions: parsed.data.declinedGiftPromotions, expectedGifts: parsed.data.expectedGifts })
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400, headers })
     if (parsed.data.expectedAmount !== undefined && Math.round(quote.amount * 100) !== parsed.data.expectedAmount) {
       return NextResponse.json({ error: "Your checkout total changed. Review it before requesting store payment." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
@@ -120,7 +120,8 @@ async function createStoreRequest(request: NextRequest) {
       orderId,
       customer: { name: customer.name, phone: customer.phone, email: customer.email },
       delivery,
-      items: quote.pricing.items.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+      items: [...quote.pricing.items.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+        ...(quote.pricing.gifts || []).map(gift => ({ name: `${gift.name} (FREE gift, SKU ${gift.sku})`, quantity: gift.quantity, price: 0 }))],
       offers,
       total: quote.amount,
     }, { notifyStoreManager: settings.notifyStoreManager, platformManagers: settings.platformManagers })

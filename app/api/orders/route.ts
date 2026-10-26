@@ -26,6 +26,8 @@ import { ObjectId } from "mongodb"
 import { deriveCity, derivePincode } from "@/lib/store-address"
 import { idempotentCheckout } from "@/lib/checkout-idempotency"
 import { handleApiError } from "@/lib/api-error"
+import { DeclinedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
+import { quoteGiftPromotions, consumeGiftPromotions } from "@/lib/gift-promotions"
 
 export const dynamic = "force-dynamic"
 
@@ -173,7 +175,7 @@ export async function GET(request: NextRequest) {
         ]
       }
     }
-    if (couponCode) query = { ...query, "coupon.code": couponCode.toUpperCase() }
+    if (couponCode) query = { $and: [query, { $or: [{ "coupon.code": couponCode.toUpperCase() }, { "giftPromotions.code": couponCode.toUpperCase() }] }] }
 
     let ordersQuery = collection.find(query).sort({ createdAt: -1 })
 
@@ -414,6 +416,8 @@ async function createOrder(request: NextRequest) {
       }).optional(),
       coupon: z.object({ code: z.string() }).nullish(),
       redeemPoints: z.number().int().min(0).max(1_000_000).optional(),
+      declinedGiftPromotions: DeclinedGiftPromotionsSchema,
+      expectedGifts: ExpectedGiftsSchema.optional(),
     })
 
     const parsed = orderSchema.safeParse(body)
@@ -493,6 +497,10 @@ async function createOrder(request: NextRequest) {
     if (!pricing.ok) {
       return NextResponse.json({ error: pricing.error }, { status: 400 })
     }
+    pricing.gifts = await quoteGiftPromotions(pricing.items, userId, parsed.data.declinedGiftPromotions)
+    if (parsed.data.expectedGifts && giftSelectionSignature(parsed.data.expectedGifts) !== giftSelectionSignature(pricing.gifts)) return NextResponse.json({
+      error: "Free gifts changed. Review the updated gift selection before paying.",
+    }, { status: 409, headers: method === "pinelabs" || method === "paytm" ? { "Checkout-Retry-Safe": "true" } : {} })
 
     const { items: validatedItems, subtotal, tax, shipping, total, coupon } = pricing
     const pickupLocation = parsed.data.fulfilment?.method === "pickup"
@@ -648,6 +656,7 @@ async function createOrder(request: NextRequest) {
         ? { guestAccessTokenHash: hashGuestAccessToken(guestAccessToken) }
         : {}),
       items: validatedItems,
+      giftPromotions: pricing.gifts,
       customer: {
         firstName: customer.firstName || "",
         lastName: customer.lastName || "",
@@ -720,6 +729,7 @@ async function createOrder(request: NextRequest) {
     })
 
     newOrder.notes = orderNotes
+    if (pricing.gifts.length) newOrder.notes += "\nFREE GIFTS:\n" + pricing.gifts.map(gift => `${gift.name} | SKU ${gift.sku} | Qty ${gift.quantity} | FREE (Rs. 0) | ${gift.code}`).join("\n")
 
     const hostedCheckout = hosted
       ? await initiateHostedCheckout(method, orderId, userId, { amount: payableTotal, fingerprint }, newOrder.customer)
@@ -734,6 +744,7 @@ async function createOrder(request: NextRequest) {
       const latest = await priceOrder(items, { userId, couponCode: parsed.data.coupon?.code,
         fulfilment: parsed.data.fulfilment, session: transaction })
       if (!latest.ok) throw new CheckoutConflictError(latest.error)
+      latest.gifts = await quoteGiftPromotions(latest.items, userId, parsed.data.declinedGiftPromotions, transaction)
       if (method === "store-payment" && checkoutIntent?.store) {
         const holding = await storesHoldingStock(latest.items.filter(item => item.type !== "software")
           .map(item => ({ sku: item.sku || null, quantity: item.quantity })), transaction)
@@ -748,6 +759,8 @@ async function createOrder(request: NextRequest) {
         throw new CheckoutConflictError("Prices or checkout charges changed. Please review checkout before retrying.")
       }
       if (hosted) return
+      try { await consumeGiftPromotions(pricing.gifts || [], orderId, userId, transaction) }
+      catch (error) { throw new CheckoutConflictError(error instanceof Error ? error.message : "Free gift usage could not be recorded") }
       if (coupon) {
         const consumption = await consumeOrderCoupon(items, coupon, userId, transaction,
           parsed.data.fulfilment?.method === "pickup" ? "store" : "overall")

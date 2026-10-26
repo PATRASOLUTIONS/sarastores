@@ -20,6 +20,9 @@ import { purchaseStock, MAX_PURCHASE_QUANTITY } from "@/lib/purchase-validation"
 import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
+import CartGifts from "@/components/cart/CartGifts"
+import { useCartGifts } from "@/hooks/useCartGifts"
+import { useAuth } from "@/contexts/AuthContext"
 
 type Product = {
   id: string
@@ -50,6 +53,7 @@ const isProduct = (value: unknown): value is Product => {
 export default function CartContents({ embedded = false }: { embedded?: boolean }) {
   const marketing = useMarketingContent("cart")
   const { cart, addToCart, updateQuantity, refreshItemPrices, removeFromCart, isLoading } = useCart()
+  const { user } = useAuth()
   const { addToWishlist, isInWishlist } = useWishlist()
   const { data: settings, error: settingsError, isLoading: settingsLoading } = useSettingsData()
   const router = useRouter()
@@ -59,6 +63,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const giftQuote = useCartGifts(embedded ? [] : cart.filter(item => selectedIds.includes(cartLineKey(item))), user?.id || "guest")
   const knownIds = useRef(new Set<string>())
   const selectAll = useRef<HTMLInputElement>(null)
   const [suggestions, setSuggestions] = useState<Product[]>([])
@@ -291,6 +296,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
             })}</ul>
           </section>
           <aside className={styles.summaryColumn}>
+            {!embedded && <CartGifts quote={giftQuote} />}
             <section className={styles.summary} aria-labelledby="price-details">
               <h2 id="price-details">Price Details</h2>
               {limitError && <p role="alert" className={styles.error}>{limitError}</p>}

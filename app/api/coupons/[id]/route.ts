@@ -50,6 +50,9 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       return NextResponse.json({ success: false, error: "Invalid coupon", details: parsed.error.flatten().fieldErrors }, { status: 400 })
     }
     const duplicate = await col.findOne({ code: parsed.data.code, _id: { $ne: existing._id } })
+    if (parsed.data.type === "buy_get_product" && parsed.data.active && !await (await getCollection<{ _id: string; active: boolean }>("gift_items")).findOne({ _id: parsed.data.giftId!, active: true })) {
+      return NextResponse.json({ error: "Select an active gift from Gift Listing" }, { status: 400 })
+    }
     if (duplicate) return NextResponse.json({ success: false, error: "Coupon code already exists" }, { status: 409 })
     // Guard against overwriting a concurrent admin edit; usage counters are untouched.
     const previousTime = existing.updatedAt instanceof Date ? existing.updatedAt.getTime() : 0

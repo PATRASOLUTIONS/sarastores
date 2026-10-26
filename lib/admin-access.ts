@@ -15,6 +15,7 @@ const API_PAGE_ACCESS: [string, string][] = [
   ["/api/orders", "/admin/orders"],
   ["/api/payments", "/admin/payments"],
   ["/api/coupons", "/admin/promotions"],
+  ["/api/admin/gifts", "/admin/gifts"],
   ["/api/leads", "/admin/leads"],
   ["/api/contact-inquiries", "/admin/contact-inquiries"],
   ["/api/complaints", "/admin/complaints"],

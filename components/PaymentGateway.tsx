@@ -48,6 +48,8 @@ interface PaymentOrderDetails {
   }
   coupon?: { code: string } | null
   redeemPoints?: number
+  declinedGiftPromotions?: string[]
+  expectedGifts?: { promotionId: string; giftId: string; sku: string; quantity: number }[]
   fulfilment?: { method: string; storeId?: string }
 }
 
@@ -197,6 +199,8 @@ export default function PaymentGateway({
           })),
           couponCode: orderDetails?.coupon?.code ?? null,
           redeemPoints: orderDetails?.redeemPoints ?? 0,
+          declinedGiftPromotions: orderDetails?.declinedGiftPromotions ?? [],
+          expectedGifts: orderDetails?.expectedGifts,
           fulfilment: orderDetails?.fulfilment,
           customer: { ...orderDetails?.customer, zipCode: orderDetails?.customer?.pincode || orderDetails?.customer?.zipCode },
           currency: "INR",

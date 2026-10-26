@@ -487,6 +487,7 @@ for (const provider of ["pinelabs", "paytm"]) {
         assert.equal(quote.amount, 123.45)
         return { provider, orderId: "fixture-provider-order", checkoutToken: token, redirectUrl: "https://provider.fixture.invalid/checkout" }
       } },
+      "@/lib/gift-promotions": { quoteGiftPromotions: async () => [], consumeGiftPromotions: async () => {} },
       "@/lib/checkout-idempotency": { idempotentCheckout: async (_request, _userId, _scope, work) => work() },
       "@/lib/checkout-customer": { validateCheckoutCustomer: async customer => ({ ok: true, customer }) },
       "@/lib/db-service": { getCollection: async () => { throw new Error("No cart clearing before payment") } },
@@ -676,6 +677,8 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     "@/components/LoyaltyRedeemer": "loyalty",
     "@/components/CartProductImage": "product-image",
     "@/components/OrderSuccess": "order-success",
+    "@/components/cart/CartGifts": "cart-gifts",
+    "@/hooks/useCartGifts": { useCartGifts: () => ({ gifts: [], offers: [], declinedGiftPromotions: [], loading: false, error: "", retry() {} }), clearCartGiftChoices() {} },
     "@/components/ui/dialog": { Dialog: "dialog", DialogContent: "dialog-content", DialogHeader: "dialog-header", DialogTitle: "dialog-title", DialogDescription: "dialog-description" },
     "@/components/PayAtStore": { PayAtStoreDialog: "store-dialog", PayAtStoreStorePicker: "store-picker" },
     "@/lib/checkout-draft": { EMPTY_CHECKOUT_CUSTOMER: { firstName: "", lastName: "", email: "", phone: "", address: "", city: "", state: "", pincode: "", country: "India" }, readCheckoutDraft: () => null, saveCheckoutDraft: () => true, clearCheckoutDraft() {} },

@@ -28,6 +28,9 @@ import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
 import { readCheckoutRecovery, clearCheckoutRecovery, PurchasedItemsSchema, readHostedCheckout, clearHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
 import { prepareCheckoutAttempt, clearCheckoutAttempt, resolveCheckoutAttempt } from "@/lib/checkout-attempt"
+import { useCartGifts, clearCartGiftChoices } from "@/hooks/useCartGifts"
+import CartGifts from "@/components/cart/CartGifts"
+import { GiftAwardSchema, giftSelectionSignature } from "@/lib/gift-validation"
 import { apiFetch, apiFetchJson } from "@/lib/api-client"
 import { CouponQuoteSchema } from "@/lib/coupon-validation"
 import { z } from "zod"
@@ -280,6 +283,7 @@ export default function CheckoutPage() {
           }
           clearHostedCheckout()
           clearCheckoutAttempt(checkoutOwner)
+          clearCartGiftChoices(checkoutOwner)
           clearCheckoutDraft(checkoutOwner)
           setOrderId(data.orderId)
           setOrderPlaced(true)
@@ -449,7 +453,9 @@ export default function CheckoutPage() {
     addressType, selectedAddressId, couponCode, orderPlaced, fulfilmentMethod, pickupStore, deliveryFallbackStoreId,
     paymentMethod, paymentProvider, redeemPoints, storeRequest, storeRequestContext, storeTransaction, appliedCoupon])
   const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [cartLineKey(item), item.quantity, item.price])])
-  const quoteContext = JSON.stringify([couponContext, appliedCoupon?.code, redeemPoints, fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback])
+  const cartGifts = useCartGifts(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId })
+  const quoteContext = JSON.stringify([couponContext, appliedCoupon?.code, redeemPoints, fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback,
+    cartGifts.declinedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
   const currentQuoteContext = useRef(quoteContext)
   currentQuoteContext.current = quoteContext
   const [verifiedQuote, setVerifiedQuote] = useState<{ context: string; subtotal: number; tax: number;
@@ -913,6 +919,7 @@ export default function CheckoutPage() {
       return false
     }
     if (applyingCoupon) { toast.error("Please wait for your coupon to be checked."); return false }
+    if (cartGifts.loading || cartGifts.error) { toast.error(cartGifts.error || "Please wait for free gifts to be checked."); return false }
     if (storeStock.error || !storeStock.storeIds) {
       toast.error(storeStock.error || "Please wait for store stock to be checked."); return false
     }
@@ -930,6 +937,7 @@ export default function CheckoutPage() {
     if (!await validateStep1()) return false
     const response = await apiFetch("/api/cart/validate", {
       method: "POST", json: { items: cart, couponCode: appliedCoupon?.code || null, redeemPoints,
+        declinedGiftPromotions: cartGifts.declinedGiftPromotions,
         fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId } },
       signal: AbortSignal.timeout(15000),
     })
@@ -939,6 +947,7 @@ export default function CheckoutPage() {
       pricing: z.object({ subtotal: z.number().finite(), tax: z.number().finite(), shipping: z.number().finite(),
         total: z.number().finite(), couponDiscount: z.number().finite(),
         items: z.array(z.object({ id: z.string(), price: z.number().finite().positive() })),
+        gifts: z.array(GiftAwardSchema).default([]),
       }),
     }).safeParse(data)
     if (!result.success) { toast.error("Product validation could not be completed. Please retry."); return false }
@@ -946,6 +955,9 @@ export default function CheckoutPage() {
       toast.error("Your checkout changed. Please review it and retry."); return false
     }
     const quote = result.data
+    if (giftSelectionSignature(quote.pricing.gifts) !== giftSelectionSignature(cartGifts.gifts)) {
+      cartGifts.retry(); toast.error("Your free gifts changed. Review the updated gifts before paying."); return false
+    }
     setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
     const changedPrices = quote.pricing.items.some(item => cart.some(current => current.id === item.id &&
       current.price !== item.price))
@@ -997,6 +1009,8 @@ export default function CheckoutPage() {
   const buildOrderData = (paymentDetails?: CheckoutPaymentDetails) => {
       return {
         userId: user?.id,
+        declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+        expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
         items: cart.map((item) => ({
           id: item.id,
           sku: item.sku, variantId: item.variantId, ram: item.ram, storage: item.storage,
@@ -1148,6 +1162,7 @@ export default function CheckoutPage() {
         if (purchased.success) await completePurchase(purchased.data, newOrderId)
         clearCheckoutDraft(checkoutOwner)
         clearCheckoutRecovery(checkoutOwner)
+        clearCartGiftChoices(checkoutOwner)
         clearCheckoutAttempt(checkoutOwner)
         setPaymentRecovery(null)
         setOrderPlaced(true)
@@ -1221,6 +1236,8 @@ export default function CheckoutPage() {
           items: cart.map(item => ({ ...item })),
           couponCode: appliedCoupon?.code || null,
           redeemPoints,
+          declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+          expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
           fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId },
           storeId: payStore.id,
           expectedAmount: Math.round(payableTotal * 100),
@@ -1829,6 +1846,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Coupon input */}
+                <CartGifts quote={cartGifts} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
                 <div id="checkout-coupon" className="mb-4 scroll-mt-48 p-3 border rounded-lg bg-gray-50">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Have a Coupon Code?</label>
                   {!appliedCoupon ? (
@@ -1965,6 +1983,8 @@ export default function CheckoutPage() {
                   amount={payableTotal}
                   beforePayment={validateCheckout}
                   orderDetails={{ customer: customerData, items: cart, coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
+                    declinedGiftPromotions: cartGifts.declinedGiftPromotions,
+                    expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
                     redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId }, total: payableTotal }}
                   onSuccess={handlePaymentSuccess}
                   disabled={Boolean(paymentRecovery || recoveringPayment || cartError || storeStock.error) || !storeStock.storeIds ||

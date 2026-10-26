@@ -12,6 +12,8 @@ import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfill
 import type { HostedPaymentProvider } from "@/types/payment-gateways"
 import { escapeHtml } from "@/lib/html"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { consumeGiftPromotions } from "@/lib/gift-promotions"
+import type { GiftAward } from "@/lib/gift-validation"
 
 interface HostedOrder {
   _id: ObjectId
@@ -29,6 +31,7 @@ interface HostedOrder {
   paymentDetails: { status: string; method: string; orderId: string; paymentId?: string }
   paymentMethod: string
   fulfilment?: { method?: string; storeId?: string }
+  giftPromotions?: GiftAward[]
 }
 
 export function notifyHostedGuestOrder(orderId: string, email: string, guestAccessToken: string) {
@@ -68,6 +71,8 @@ export async function initiateHostedCheckout(
 }
 
 async function consumeHostedDiscounts(order: HostedOrder, session: ClientSession) {
+  try { await consumeGiftPromotions(order.giftPromotions || [], order.orderId, order.userId, session) }
+  catch (error) { throw new CheckoutConflictError(error instanceof Error ? error.message : "Free gift usage could not be recorded") }
   if (order.coupon) {
     const result = await consumeOrderCoupon(order.items, order.coupon, order.userId, session, order.fulfilment?.method === "pickup" ? "store" : "overall")
     if (!result.ok) throw new CheckoutConflictError(result.error)

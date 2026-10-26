@@ -5,6 +5,7 @@ import { storesHoldingStock } from "@/lib/store-stock"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 import { cartLineKey } from "@/lib/cart-line"
 import { purchaseAvailabilityError, purchaseStock, purchaseLimit, type PurchaseProduct } from "@/lib/purchase-validation"
+import type { GiftAward } from "@/lib/gift-validation"
 
 // Catalogue prices are GST-inclusive; base and tax are derived from them.
 const GST_RATE = 0.18
@@ -59,6 +60,7 @@ export type PricedItem = {
   variantId?: string | null
   ram?: string | null
   storage?: string | null
+  division?: string
 }
 
 export type PricingSuccess = {
@@ -71,6 +73,7 @@ export type PricingSuccess = {
   couponDiscount: number
   coupon: { code: string; name: string; discount: number } | null
   total: number
+  gifts?: GiftAward[]
 }
 
 export type PricingResult = PricingSuccess | { ok: false; error: string }
@@ -81,6 +84,7 @@ export type CouponDetails =
   | { type: "buy_get"; buyQty: number; getQty: number; freeUnits: number }
 
 interface PricingCatalogueProduct extends PurchaseProduct {
+  division?: string
   _id?: ObjectId | string
   id?: string
   sku?: string
@@ -113,8 +117,9 @@ interface PricingCoupon {
   code: string
   name: string
   active: boolean
-  type: "fixed" | "percentage" | "buy_get"
-  applyScope?: "all" | "products" | "categories" | "brands" | "skus"
+  type: "fixed" | "percentage" | "buy_get" | "buy_get_product"
+  applyScope?: "all" | "products" | "categories" | "brands" | "skus" | "divisions"
+  divisions?: string[]
   productIds?: string[]
   categoryIds?: string[]
   brands?: string[]
@@ -214,6 +219,7 @@ function inScope(product: PricingCatalogueProduct | undefined, coupon: PricingCo
     const sku = String(product.sku || "").toLowerCase()
     return (coupon.skus || []).map((s: string) => s.toLowerCase()).includes(sku)
   }
+  if (scope === "divisions") return !!product.division && (coupon.divisions || []).some(division => division.trim().toLowerCase() === product.division!.trim().toLowerCase())
   return false
 }
 
@@ -227,6 +233,7 @@ async function computeCouponDiscount(
   const couponsCol = await getCollection<PricingCoupon>(COLLECTIONS.COUPONS)
   const coupon = await couponsCol.findOne({ code: code.toUpperCase().trim(), active: true }, { session })
   if (!coupon) return { ok: false, error: "Coupon not found or inactive" }
+  if (coupon.type === "buy_get_product") return { ok: false, error: "This free gift offer is added automatically to cart and checkout." }
 
   const now = new Date()
   const start = coupon.startDate ? new Date(coupon.startDate) : null
@@ -391,6 +398,7 @@ export async function priceCatalogueCart(
       sku: doc.sku || null,
       ram: raw.ram || null,
       storage: raw.storage || null,
+      ...(doc.division ? { division: doc.division } : {}),
     })
   }
 

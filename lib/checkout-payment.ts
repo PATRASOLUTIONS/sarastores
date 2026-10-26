@@ -7,6 +7,8 @@ import { priceOrder, type IncomingItem, type PricingSuccess } from "@/lib/order-
 import { quoteRedemption } from "@/lib/loyalty"
 import { CartQuantitySchema } from "@/lib/validation"
 import { cartLineKey } from "@/lib/cart-line"
+import { DeclinedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
+import { quoteGiftPromotions } from "@/lib/gift-promotions"
 
 export const CheckoutQuoteSchema = z.object({
   items: z.array(z.object({
@@ -28,6 +30,8 @@ export const CheckoutQuoteSchema = z.object({
     storeId: z.string().max(100).optional(),
   }).optional(),
   currency: z.literal("INR").default("INR"),
+  declinedGiftPromotions: DeclinedGiftPromotionsSchema,
+  expectedGifts: ExpectedGiftsSchema.optional(),
 })
 
 export function hashCheckoutToken(token: string): string {
@@ -43,6 +47,7 @@ export function checkoutFingerprint(
     items: [...pricing.items].sort((a, b) => a.id.localeCompare(b.id) || cartLineKey(a).localeCompare(cartLineKey(b))).map(priced => {
       const item = { ...priced }
       delete item.sku
+      delete item.division
       if (!item.ram) delete item.ram
       if (!item.storage) delete item.storage
       if (!item.variantId) delete item.variantId
@@ -52,15 +57,19 @@ export function checkoutFingerprint(
     fulfilment: { method: options.fulfilment?.method || "delivery", storeId: options.fulfilment?.storeId || null },
     redeemPoints: options.redeemPoints || 0,
     amount: Math.round(amount * 100),
+    ...(pricing.gifts?.length ? { gifts: [...pricing.gifts].sort((a, b) => a.promotionId.localeCompare(b.promotionId))
+      .map(gift => ({ promotionId: gift.promotionId, giftId: gift.giftId, sku: gift.sku, quantity: gift.quantity })) } : {}),
   }))
 }
 
 export async function quoteCheckout(
   items: IncomingItem[],
-  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string }; redeemPoints?: number },
+  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string }; redeemPoints?: number; declinedGiftPromotions?: string[]; expectedGifts?: { promotionId: string; giftId: string; sku: string; quantity: number }[] },
 ) {
   const pricing = await priceOrder(items, options)
   if (!pricing.ok) return pricing
+  pricing.gifts = await quoteGiftPromotions(pricing.items, options.userId, options.declinedGiftPromotions)
+  if (options.expectedGifts && giftSelectionSignature(options.expectedGifts) !== giftSelectionSignature(pricing.gifts)) return { ok: false as const, error: "Free gifts changed. Refresh the gift selection before paying." }
   let amount = pricing.total
   if (options.redeemPoints) {
     if (!options.userId) return { ok: false as const, error: "Sign in to redeem rewards" }
