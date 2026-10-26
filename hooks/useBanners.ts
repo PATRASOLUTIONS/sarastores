@@ -79,6 +79,11 @@ export function useBanners(placement: BannerPlacement, scope?: string): SiteBann
   return scoped.length > 0 ? scoped : all.filter((b) => !(b.scope || "").trim())
 }
 
+export function bannerIsPhotoOnly(banner: Pick<SiteBanner, "title" | "subtitle" | "script" | "ctaText" | "bullets" | "image">) {
+  const copy = [banner.title, banner.subtitle, banner.script, banner.ctaText, ...(banner.bullets || [])]
+  return Boolean((banner.image || "").trim()) && copy.every(value => !(value || "").trim())
+}
+
 export function bannerGradient(banner: Pick<SiteBanner, "bgFrom" | "bgTo">) {
   return {
     backgroundImage: `linear-gradient(115deg, ${banner.bgFrom || "#1560BD"}, ${banner.bgTo || "#0B3C87"})`,

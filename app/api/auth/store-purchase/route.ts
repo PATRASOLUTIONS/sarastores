@@ -5,6 +5,7 @@ import { getCollection } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { sendEmail } from "@/lib/email"
 import { handleApiError } from "@/lib/api-error"
+import { inStorePurchaseEnabled } from "@/lib/payment-config"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { CheckoutQuoteSchema, quoteCheckout, createCheckoutIntent, type CheckoutIntent } from "@/lib/checkout-payment"
 
@@ -31,6 +32,9 @@ interface StoreChallenge {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!inStorePurchaseEnabled()) {
+      return NextResponse.json({ success: false, message: "In-store purchase is not available" }, { status: 403 })
+    }
     const limit = await checkRateLimit(request, RATE_LIMITS.AUTH)
     if (!limit.success) return NextResponse.json({ success: false, message: RATE_LIMITS.AUTH.message }, { status: 429 })
     const parsed = StorePurchaseSchema.safeParse(await request.json().catch(() => null))

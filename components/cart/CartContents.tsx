@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRight, CheckCircle2, CreditCard, Headphones, Minus, Percent, Plus, ShieldCheck, ShoppingCart, Star, Tag, Trash2, Truck } from "lucide-react"
+import { ArrowRight, CheckCircle2, CreditCard, Headphones, Minus, Plus, ShieldCheck, ShoppingCart, Star, Tag, Trash2, Truck } from "lucide-react"
 import { toast } from "react-hot-toast"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -15,9 +15,16 @@ import { cleanProductName } from "@/utils/cleanProductName"
 import { isOfferLive } from "@/lib/offer-sections"
 import styles from "@/app/cart/cart.module.css"
 import { cartLimitError } from "@/lib/cart-limits"
-import { bannerGradient, useBanners } from "@/hooks/useBanners"
+import { cartLineKey } from "@/lib/cart-line"
+import { purchaseStock, MAX_PURCHASE_QUANTITY } from "@/lib/purchase-validation"
+import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
+import CartGifts from "@/components/cart/CartGifts"
+import { useCartGifts } from "@/hooks/useCartGifts"
+import { useAuth } from "@/contexts/AuthContext"
+import { useCartCoupon } from "@/hooks/useCartCoupon"
+import CartCoupon from "@/components/cart/CartCoupon"
 
 type Product = {
   id: string
@@ -48,6 +55,8 @@ const isProduct = (value: unknown): value is Product => {
 export default function CartContents({ embedded = false }: { embedded?: boolean }) {
   const marketing = useMarketingContent("cart")
   const { cart, addToCart, updateQuantity, refreshItemPrices, removeFromCart, isLoading } = useCart()
+  const { user, isLoading: authLoading } = useAuth()
+  const coupon = useCartCoupon(cart, user?.id || "guest", { method: "delivery" }, !authLoading && !isLoading)
   const { addToWishlist, isInWishlist } = useWishlist()
   const { data: settings, error: settingsError, isLoading: settingsLoading } = useSettingsData()
   const router = useRouter()
@@ -57,6 +66,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const giftQuote = useCartGifts(embedded ? [] : cart, user?.id || "guest")
   const knownIds = useRef(new Set<string>())
   const selectAll = useRef<HTMLInputElement>(null)
   const [suggestions, setSuggestions] = useState<Product[]>([])
@@ -68,7 +78,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const idsKey = JSON.stringify([...new Set(cart.filter((item) => item.type !== "software").map((item) => item.id))].sort())
 
   useEffect(() => {
-    const ids = cart.map((item) => item.id)
+    const ids = cart.map(cartLineKey)
     const added = ids.filter((id) => !knownIds.current.has(id))
     knownIds.current = new Set(ids)
     setSelectedIds((previous) => [...previous.filter((id) => ids.includes(id)), ...added])
@@ -166,15 +176,20 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   }, [cart, products, settings, settingsLoading, settingsError])
 
   const unavailable = cart.some((item) => {
-    if (item.type === "software") return false
+    const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
+    if (item.type === "software") return typeof item.stock === "number" && item.stock < quantity
     const product = products[item.id]
     return !detailsLoading && !detailsError && (!product || product.price <= 0 ||
-      (typeof product.stock === "number" && product.stock < item.quantity))
+      (purchaseStock(product) ?? 0) < quantity)
   })
   const limitError = cartLimitError(cart.map((item) => ({ ...item, price: products[item.id]?.price ?? item.price })))
-  const checkoutBlocked = cart.length === 0 || !!limitError
+  const checkoutBlocked = cart.length === 0 || !!limitError || unavailable
   const proceedToCheckout = () => {
     if (checkoutBlocked) return
+    if (coupon.applyingCoupon || coupon.error) {
+      toast.error(coupon.error || "Please wait for your coupon to be checked.")
+      return
+    }
     if (detailsLoading || settingsLoading) {
       toast.error("Prices and delivery charges are still loading. Please try again in a moment.")
       return
@@ -187,16 +202,18 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
       toast.error("Shipping charges are temporarily unavailable. Refresh the page before continuing.")
       return
     }
-    if (unavailable) toast.error("Some items are unavailable in the requested quantity. You can review checkout, but update these items before placing an order.")
+    if (unavailable) { toast.error("Remove unavailable items or reduce their quantity before checkout."); return }
     router.push("/checkout")
   }
   const rail = suggestions.filter((product) => !cart.some((item) => item.id === product.id)).slice(0, 6)
 
   const removeItem = (id: string) => { removeFromCart(id); toast.success("Item removed from cart") }
   const moveToWishlist = async (id: string) => {
+    const item = cart.find(item => cartLineKey(item) === id)
+    if (!item) return
     setPendingWishlist((previous) => [...previous, id])
     try {
-      if (isInWishlist(id) || await addToWishlist(id)) removeFromCart(id)
+      if (isInWishlist(item.id) || await addToWishlist(item.id)) removeFromCart(id)
     } finally {
       setPendingWishlist((previous) => previous.filter((value) => value !== id))
     }
@@ -231,7 +248,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
         <div className={styles.cartLayout}>
           <section className={styles.items} aria-label="Cart items">
             <div className={styles.bulkActions}>
-              <label><input ref={selectAll} type="checkbox" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : cart.map((item) => item.id))} />
+              <label><input ref={selectAll} type="checkbox" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : cart.map(cartLineKey))} />
                 Select All ({cart.length} items)</label>
               <button type="button" disabled={selectedIds.length === 0} onClick={() => {
                 selectedIds.forEach((id) => removeFromCart(id)); toast.success("Selected items removed")
@@ -239,45 +256,55 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               <span className="sr-only">Selection applies to bulk removal. Checkout includes every cart item.</span>
             </div>
             <ul>{cart.map((item) => {
+              const lineKey = cartLineKey(item)
+              const otherQuantity = cart.filter(line => line.id === item.id && cartLineKey(line) !== lineKey)
+                .reduce((sum, line) => sum + line.quantity, 0)
               const product = products[item.id]
               const price = product?.price ?? item.price
               const mrp = product?.mrp
               const saving = typeof mrp === "number" && Number.isFinite(mrp) && mrp > price ? (mrp - price) * item.quantity : 0
               const percentOff = typeof mrp === "number" && mrp > price ? Math.round((mrp - price) / mrp * 100) : 0
-              const limit = typeof product?.stock === "number" ? Math.max(0, product.stock) : item.stock ?? Number.MAX_SAFE_INTEGER
-              const available = product && (product.stock === undefined || product.stock >= item.quantity) && product.price > 0
+              const stock = item.type === "software" ? item.stock ?? MAX_PURCHASE_QUANTITY : purchaseStock(product || {}) ?? 0
+              const limit = Math.max(0, Math.min(stock, item.maxPurchaseQuantity ?? MAX_PURCHASE_QUANTITY) - otherQuantity)
+              const available = item.quantity <= limit && (item.type === "software" || !!product && product.price > 0)
               const name = cleanProductName(item.name)
               const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(product?.slug || item.id)}`
-              return <li key={item.id} className={styles.cartItem}>
-                <input type="checkbox" checked={selectedIds.includes(item.id)} aria-label={`Select ${name}`} onChange={() => setSelectedIds((previous) =>
-                  previous.includes(item.id) ? previous.filter((id) => id !== item.id) : [...previous, item.id])} />
+              return <li key={lineKey} className={styles.cartItem}>
+                <input type="checkbox" checked={selectedIds.includes(lineKey)} aria-label={`Select ${name}`} onChange={() => setSelectedIds((previous) =>
+                  previous.includes(lineKey) ? previous.filter((id) => id !== lineKey) : [...previous, lineKey])} />
                 <Link href={href} className={styles.productImage}><CartProductImage src={item.image} name={name} /></Link>
                 <div className={styles.itemCopy}>
                   <Link href={href}><h2>{name}</h2></Link>
+                  {(item.color || item.size || item.ram || item.storage) && <p>
+                    {[item.color && `Color: ${item.color}`, item.size && `Size: ${item.size}`,
+                      item.ram && `RAM: ${item.ram}`, item.storage && `Storage: ${item.storage}`].filter(Boolean).join(" · ")}
+                  </p>}
                   {item.type === "software" ? <p>{item.validity || (item.validityYears ? `${item.validityYears} years` : "Digital product")}</p> :
                     product?.sku && <p>SKU: {product.sku}</p>}
-                  <p className={available || item.type === "software" ? styles.inStock : styles.stockNotice}>
-                    <CheckCircle2 size={12} />{item.type === "software" ? "Digital delivery" : detailsLoading ? "Checking availability..." : detailsError ? "Availability unavailable" : available ? "In stock" : "Unavailable in this quantity"}
+                  <p className={available ? styles.inStock : styles.stockNotice}>
+                    <CheckCircle2 size={12} />{item.type === "software" ? available ? "Digital delivery" : "Unavailable in this quantity" : detailsLoading ? "Checking availability..." : detailsError ? "Availability unavailable" : available ? "In stock" : "Unavailable in this quantity"}
                   </p>
                   <p className={styles.delivery}><Truck size={12} />{item.type === "software" ? "Delivery details confirmed at checkout" : "Delivery confirmed at checkout"}</p>
                 </div>
                 <div className={styles.quantity} aria-label={`Quantity for ${name}`}>
-                  <button type="button" disabled={item.quantity <= 1} aria-label={`Decrease quantity of ${name}`} onClick={() => updateQuantity(item.id, item.quantity - 1)}><Minus size={12} /></button>
+                  <button type="button" disabled={item.quantity <= 1} aria-label={`Decrease quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity - 1)}><Minus size={12} /></button>
                   <span>{item.quantity}</span>
-                  <button type="button" disabled={item.quantity >= limit || detailsLoading} aria-label={`Increase quantity of ${name}`} onClick={() => updateQuantity(item.id, item.quantity + 1)}><Plus size={12} /></button>
+                  <button type="button" disabled={item.quantity >= limit || detailsLoading} aria-label={`Increase quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity + 1)}><Plus size={12} /></button>
                 </div>
                 <div className={styles.linePrice}>
                   <strong>{money(price * item.quantity)}</strong>
                   {saving > 0 && <><del>{money((mrp || price) * item.quantity)}</del><span>{percentOff}% off</span><p>You save {money(saving)}</p></>}
                 </div>
                 <div className={styles.itemActions}>
-                  <button type="button" disabled={pendingWishlist.includes(item.id)} onClick={() => void moveToWishlist(item.id)}>Move to Wishlist</button>
-                  <span aria-hidden="true">|</span><button type="button" onClick={() => removeItem(item.id)}>Remove</button>
+                  <button type="button" disabled={pendingWishlist.includes(lineKey)} onClick={() => void moveToWishlist(lineKey)}>Move to Wishlist</button>
+                  <span aria-hidden="true">|</span><button type="button" onClick={() => removeItem(lineKey)}>Remove</button>
                 </div>
               </li>
             })}</ul>
           </section>
           <aside className={styles.summaryColumn}>
+            {!embedded && <CartGifts quote={giftQuote} />}
+            <CartCoupon coupon={coupon} />
             <section className={styles.summary} aria-labelledby="price-details">
               <h2 id="price-details">Price Details</h2>
               {limitError && <p role="alert" className={styles.error}>{limitError}</p>}
@@ -286,15 +313,14 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               <dl>
                 <div><dt>Total MRP ({cart.length} items)</dt><dd>{money(totals.mrp)}</dd></div>
                 <div className={styles.discount}><dt>Discount</dt><dd>− {money(totals.savings)}</dd></div>
-                <div><dt>Coupon Discount</dt><dd>At checkout</dd></div>
-                <div className={styles.coupon}><dt><Link href="/checkout#checkout-coupon"><Percent size={15} />Apply Coupon</Link></dt></div>
+                <div className={styles.discount}><dt>Coupon Discount</dt><dd>{coupon.applyingCoupon ? "Checking..." : coupon.couponDiscount > 0 ? `− ${money(coupon.couponDiscount)}` : money(0)}</dd></div>
                 <div className={styles.shipping}><dt>Delivery Charges</dt><dd className={totals.validShipping && totals.shipping === 0 ? styles.discount : undefined}>
                   {totals.validShipping ? totals.shipping === 0 ? "FREE" : money(totals.shipping) : "Calculating..."}</dd></div>
-                <div className={styles.total}><dt>Total Amount<small>Inclusive of all taxes</small></dt><dd>{totals.validShipping ? money(totals.total) : money(totals.gross)}{!totals.validShipping && <small>Before delivery</small>}</dd></div>
+                <div className={styles.total}><dt>Total Amount<small>Inclusive of all taxes</small></dt><dd>{money(Math.max(0, (totals.validShipping ? totals.total : totals.gross) - coupon.couponDiscount))}{!totals.validShipping && <small>Before delivery</small>}</dd></div>
               </dl>
               <button type="button" className={styles.primaryButton} disabled={checkoutBlocked} onClick={proceedToCheckout}>Proceed to Checkout <ArrowRight size={16} /></button>
               {unavailable && <p role="alert" className={styles.stockNotice}>You can review checkout. Remove unavailable items or reduce their quantities before placing an order.</p>}
-              {totals.savings > 0 && <p className={styles.savings}><Tag size={18} />You are saving {money(totals.savings)} on this order!</p>}
+              {totals.savings + coupon.couponDiscount > 0 && <p className={styles.savings}><Tag size={18} />You are saving {money(totals.savings + coupon.couponDiscount)} on this order!</p>}
               <p className={styles.summaryNote}>Totals cover all cart items. Coupons and final availability are confirmed at checkout.</p>
             </section>
             <section className={styles.offers} aria-labelledby="available-offers">
@@ -315,11 +341,13 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
                 <strong>{money(product.price)}</strong><button type="button" disabled={adding.includes(product.id)} onClick={() => void addSuggestion(product)}>{adding.includes(product.id) ? "Adding..." : "Add to Cart"}</button>
               </li>)}</ul> : <p>No additional recommendations are available right now. <Link href="/products">Browse products</Link></p>}
           </div>
-          {promotion && <aside className={styles.shopCard} style={{ ...bannerGradient(promotion), color: promotion.dark ? "#071331" : "#fff" }}>
+          {promotion && (bannerIsPhotoOnly(promotion) ? <aside className={styles.shopCard}>
+            {promotion.ctaLink ? <Link href={promotion.ctaLink}><img src={promotion.image} alt="" className="block h-auto w-full" /></Link> : <img src={promotion.image} alt="" className="block h-auto w-full" />}
+          </aside> : <aside className={styles.shopCard} style={{ ...bannerGradient(promotion), color: promotion.dark ? "#071331" : "#fff" }}>
             {promotion.image && <CartProductImage src={promotion.image} name={promotion.title} />}
             <h3>{promotion.title}</h3>{promotion.subtitle && <p>{promotion.subtitle}</p>}
             {promotion.ctaText && promotion.ctaLink && <Link href={promotion.ctaLink}>{promotion.ctaText} <ArrowRight size={13} /></Link>}
-          </aside>}
+          </aside>)}
         </section>}
       </>}
       {!embedded && marketing.enabled("services") && <section className={styles.benefits} aria-label="Why shop at SARA"><ul>{marketing.items("services", BENEFITS).map(({ icon: Icon, title, detail, href }) => <li key={title}><Link href={href}>

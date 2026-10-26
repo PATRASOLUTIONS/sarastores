@@ -104,7 +104,6 @@ export function buildActiveProductPriceSheet(products: AdminProductResponse[]) {
       itemno,
       price: product.price ?? "",
       mrp: product.mrp ?? "",
-      stock: product.stock ?? "",
       active: "active",
     }
   })

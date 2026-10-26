@@ -1,6 +1,11 @@
 import { type ClientSession, ObjectId } from "mongodb"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { cartLimitError, MAX_CART_PRODUCTS } from "@/lib/cart-limits"
+import { storesHoldingStock } from "@/lib/store-stock"
+import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
+import { cartLineKey } from "@/lib/cart-line"
+import { purchaseAvailabilityError, purchaseStock, purchaseLimit, type PurchaseProduct } from "@/lib/purchase-validation"
+import type { GiftAward } from "@/lib/gift-validation"
 
 // Catalogue prices are GST-inclusive; base and tax are derived from them.
 const GST_RATE = 0.18
@@ -27,6 +32,9 @@ export type IncomingItem = {
   validity?: string | null
   color?: string | null
   size?: string | null
+  variantId?: string | null
+  ram?: string | null
+  storage?: string | null
 }
 
 export type PricedItem = {
@@ -48,6 +56,12 @@ export type PricedItem = {
   validity: string | null
   color: string | null
   size: string | null
+  sku?: string | null
+  variantId?: string | null
+  ram?: string | null
+  storage?: string | null
+  division?: string
+  itemNumbers?: string[]
 }
 
 export type PricingSuccess = {
@@ -58,8 +72,9 @@ export type PricingSuccess = {
   shipping: number
   gross: number
   couponDiscount: number
-  coupon: { code: string; name: string; discount: number } | null
+  coupon: { code: string; name: string; discount: number; couponRemovable?: boolean } | null
   total: number
+  gifts?: GiftAward[]
 }
 
 export type PricingResult = PricingSuccess | { ok: false; error: string }
@@ -69,7 +84,11 @@ export type CouponDetails =
   | { type: "percentage"; value: number; maxDiscount: number | null }
   | { type: "buy_get"; buyQty: number; getQty: number; freeUnits: number }
 
-interface PricingCatalogueProduct {
+interface PricingCatalogueProduct extends PurchaseProduct {
+  division?: string
+  itemno?: string | number
+  itemNo?: string | number
+  raw?: Record<string, unknown>
   _id?: ObjectId | string
   id?: string
   sku?: string
@@ -99,11 +118,13 @@ interface PricingCatalogueProduct {
 }
 
 interface PricingCoupon {
+  couponRemovable?: boolean
   code: string
   name: string
   active: boolean
-  type: "fixed" | "percentage" | "buy_get"
-  applyScope?: "all" | "products" | "categories" | "brands" | "skus"
+  type: "fixed" | "percentage" | "buy_get" | "buy_get_product"
+  applyScope?: "all" | "products" | "categories" | "brands" | "skus" | "divisions"
+  divisions?: string[]
   productIds?: string[]
   categoryIds?: string[]
   brands?: string[]
@@ -122,7 +143,7 @@ interface PricingCoupon {
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100
+  return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
 /** Software metadata arrives as either a string or a number from the cart. */
@@ -168,9 +189,9 @@ async function loadCatalogue(items: IncomingItem[], session?: ClientSession) {
   return byKey
 }
 
-export async function getShippingSettings() {
+export async function getShippingSettings(session?: ClientSession) {
   const settings = await getCollection<{ shippingFee?: number | string | null; freeShippingThreshold?: number | string | null }>("settings")
-  const doc = await settings.findOne({}, { projection: { shippingFee: 1, freeShippingThreshold: 1 } })
+  const doc = await settings.findOne({}, { projection: { shippingFee: 1, freeShippingThreshold: 1 }, session })
   const number = (value: number | string | null | undefined, fallback: number) => {
     if (value == null) return fallback
     if ((typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim()) ||
@@ -203,6 +224,7 @@ function inScope(product: PricingCatalogueProduct | undefined, coupon: PricingCo
     const sku = String(product.sku || "").toLowerCase()
     return (coupon.skus || []).map((s: string) => s.toLowerCase()).includes(sku)
   }
+  if (scope === "divisions") return !!product.division && (coupon.divisions || []).some(division => division.trim().toLowerCase() === product.division!.trim().toLowerCase())
   return false
 }
 
@@ -212,10 +234,11 @@ async function computeCouponDiscount(
   catalogue: Map<string, PricingCatalogueProduct>,
   userId: string | null,
   session?: ClientSession,
-): Promise<{ ok: true; coupon: { code: string; name: string; discount: number }; details: CouponDetails } | { ok: false; error: string }> {
+): Promise<{ ok: true; coupon: NonNullable<PricingSuccess["coupon"]>; details: CouponDetails } | { ok: false; error: string }> {
   const couponsCol = await getCollection<PricingCoupon>(COLLECTIONS.COUPONS)
   const coupon = await couponsCol.findOne({ code: code.toUpperCase().trim(), active: true }, { session })
   if (!coupon) return { ok: false, error: "Coupon not found or inactive" }
+  if (coupon.type === "buy_get_product") return { ok: false, error: "This free gift offer is added automatically to cart and checkout." }
 
   const now = new Date()
   const start = coupon.startDate ? new Date(coupon.startDate) : null
@@ -298,21 +321,28 @@ async function computeCouponDiscount(
   discount = Math.min(Math.round(discount), round2(eligibleSubtotal))
   if (discount <= 0) return { ok: false, error: "No discount from this coupon" }
 
-  return { ok: true, coupon: { code: coupon.code, name: coupon.name, discount }, details }
+  return { ok: true, coupon: { code: coupon.code, name: coupon.name, discount, couponRemovable: coupon.couponRemovable !== false }, details }
 }
 
-async function priceCatalogueCart(
+export async function priceCatalogueCart(
   rawItems: IncomingItem[],
   session?: ClientSession,
+  stockScope: "overall" | "store" = "overall",
 ): Promise<{ ok: true; items: PricedItem[]; catalogue: Map<string, PricingCatalogueProduct> } | { ok: false; error: string }> {
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     return { ok: false, error: "Order must contain at least one item" }
   }
   if (rawItems.length > MAX_CART_PRODUCTS) return { ok: false, error: "You can add up to 20 different products to your cart." }
+  if (rawItems.some(item => !item || typeof item !== "object" ||
+    (typeof item.quantity !== "number" && typeof item.quantity !== "string"))) {
+    return { ok: false, error: "Every item must include a valid quantity." }
+  }
 
   const catalogue = await loadCatalogue(rawItems, session)
   const items: PricedItem[] = []
   const byId = new Map<string, PricingCatalogueProduct>()
+  const quantities = new Map<string, number>()
+  const lines = new Set<string>()
 
   for (const raw of rawItems) {
     const keys = keysFor(raw)
@@ -320,23 +350,35 @@ async function priceCatalogueCart(
 
     const doc = keys.map((k) => catalogue.get(k)).find(Boolean)
     if (!doc) return { ok: false, error: `Product not available: ${keys[0]}` }
-    if (doc.active === false) return { ok: false, error: `Product is no longer available: ${doc.name || keys[0]}` }
+    const unavailable = purchaseAvailabilityError(doc, doc.type === "software")
+    if (unavailable) return { ok: false, error: `${unavailable} ${doc.name || keys[0]}` }
 
-    const quantity = Number(raw.quantity ?? 1)
-    if (!Number.isSafeInteger(quantity) || quantity < 1) return { ok: false, error: "Invalid quantity" }
+    const quantity = Number(raw.quantity)
+    if (!Number.isSafeInteger(quantity) || quantity < 1 ||
+      (typeof raw.quantity === "string" && !/^[1-9]\d*$/.test(raw.quantity.trim()))) return { ok: false, error: "Invalid quantity" }
 
-    const price = Number(doc.price)
+    const price = round2(Number(doc.price))
     if (!Number.isFinite(price) || price <= 0) {
       return { ok: false, error: `Product is not purchasable: ${doc.name || keys[0]}` }
     }
 
-    const stock = Number(doc.stock)
-    if (Number.isFinite(stock) && stock < quantity) {
-      return { ok: false, error: `Insufficient stock for ${doc.name || keys[0]}` }
-    }
-
     const id = doc.id || doc._id?.toString() || keys[0]
-    if (items.some((item) => item.id === id)) return { ok: false, error: "Combine duplicate products into one cart line." }
+    if (raw.variantId) return { ok: false, error: "Select the catalogue product for this variant before checking out." }
+    if (raw.sku && doc.sku && raw.sku.trim().toLowerCase() !== doc.sku.trim().toLowerCase()) {
+      return { ok: false, error: "The selected SKU does not match this product." }
+    }
+    const totalQuantity = (quantities.get(id) || 0) + quantity
+    if (!Number.isSafeInteger(totalQuantity) || totalQuantity > purchaseLimit(doc)) {
+      return { ok: false, error: `Maximum purchase quantity exceeded for ${doc.name || id}.` }
+    }
+    const stock = purchaseStock(doc, doc.type === "software")
+    if ((stockScope === "overall" || doc.type === "software") && stock !== null && stock < totalQuantity) {
+      return { ok: false, error: `Insufficient stock for ${doc.name || id}` }
+    }
+    quantities.set(id, totalQuantity)
+    const lineKey = cartLineKey({ ...raw, id, sku: doc.sku || raw.sku })
+    if (lines.has(lineKey)) return { ok: false, error: "Combine duplicate products with the same options into one cart line." }
+    lines.add(lineKey)
     byId.set(id, doc)
 
     items.push({
@@ -358,6 +400,13 @@ async function priceCatalogueCart(
       validity: toText(doc.validity),
       color: raw.color || null,
       size: raw.size || null,
+      sku: doc.sku || null,
+      itemNumbers: [doc.itemno, doc.itemNo, doc.raw?.itemno, doc.raw?.["Item No."], doc.raw?.["Item No"], doc.raw?.["ITEM NO"]]
+        .map(value => typeof value === "string" || typeof value === "number" ? toText(value) : null)
+        .filter((value): value is string => !!value),
+      ram: raw.ram || null,
+      storage: raw.storage || null,
+      ...(doc.division ? { division: doc.division } : {}),
     })
   }
 
@@ -366,8 +415,8 @@ async function priceCatalogueCart(
   return { ok: true, items, catalogue: byId }
 }
 
-export async function quoteCoupon(rawItems: IncomingItem[], code: string, userId: string | null, session?: ClientSession) {
-  const cart = await priceCatalogueCart(rawItems, session)
+export async function quoteCoupon(rawItems: IncomingItem[], code: string, userId: string | null, session?: ClientSession, stockScope: "overall" | "store" = "overall") {
+  const cart = await priceCatalogueCart(rawItems, session, stockScope)
   if (!cart.ok) return cart
   return computeCouponDiscount(code, cart.items, cart.catalogue, userId, session)
 }
@@ -378,8 +427,9 @@ export async function consumeOrderCoupon(
   expected: NonNullable<PricingSuccess["coupon"]>,
   userId: string | null,
   session: ClientSession,
+  stockScope: "overall" | "store" = "overall",
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const quote = await quoteCoupon(rawItems, expected.code, userId, session)
+  const quote = await quoteCoupon(rawItems, expected.code, userId, session, stockScope)
   if (!quote.ok) return quote
   if (quote.coupon.code !== expected.code || quote.coupon.discount !== expected.discount) {
     return { ok: false, error: "Coupon changed. Please refresh your checkout." }
@@ -410,33 +460,50 @@ export async function consumeOrderCoupon(
  */
 export async function priceOrder(
   rawItems: IncomingItem[],
-  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string } | null },
+  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string } | null; session?: ClientSession },
 ): Promise<PricingResult> {
-  const cart = await priceCatalogueCart(rawItems)
+  const cart = await priceCatalogueCart(rawItems, options.session, options.fulfilment?.method === "pickup" ? "store" : "overall")
   if (!cart.ok) return cart
   const { items, catalogue } = cart
-  const gross = items.reduce((s, i) => s + i.price * i.quantity, 0)
-  const subtotal = items.reduce((s, i) => s + (i.price / (1 + GST_RATE)) * i.quantity, 0)
-  const tax = subtotal * GST_RATE
+  const grossMinor = items.reduce((sum, item) => sum + Math.round(item.price * 100) * item.quantity, 0)
+  const gross = grossMinor / 100
+  const subtotalMinor = Math.round(grossMinor / (1 + GST_RATE))
+  const subtotal = subtotalMinor / 100
+  const tax = (grossMinor - subtotalMinor) / 100
 
   const hardwareGross = items
     .filter((i) => i.type !== "software")
     .reduce((s, i) => s + i.price * i.quantity, 0)
-  const { shippingFee, freeShippingThreshold } = await getShippingSettings()
+  const { shippingFee, freeShippingThreshold } = await getShippingSettings(options.session)
   let shipping = hardwareGross > 0 && hardwareGross < freeShippingThreshold ? shippingFee : 0
+  const needs = items.filter(i => i.type !== "software")
+    .map(i => ({ sku: catalogue.get(i.id)?.sku?.trim() || null, quantity: i.quantity }))
+  const holding = needs.length ? await storesHoldingStock(needs, options.session) : null
+  const requestedStoreId = options.fulfilment?.storeId
+  if (requestedStoreId) {
+    if (!ObjectId.isValid(requestedStoreId)) return { ok: false, error: "Please choose a valid store." }
+    const store = await (await getCollection("store_locations")).findOne(
+      { _id: new ObjectId(requestedStoreId), ...ACTIVE_RETAIL_STORE_FILTER }, { session: options.session },
+    )
+    if (!store) return { ok: false, error: "The selected store is unavailable." }
+  }
   if (options.fulfilment?.method === "pickup") {
     const storeId = options.fulfilment.storeId
-    if (!storeId || !ObjectId.isValid(storeId)) return { ok: false, error: "Please choose a valid pickup store." }
-    const stores = await getCollection("store_locations")
-    const store = await stores.findOne({ _id: new ObjectId(storeId), isActive: true })
-    if (!store) return { ok: false, error: "The selected pickup store is unavailable." }
+    if (!storeId) return { ok: false, error: "Please choose a valid pickup store." }
+    if (holding && !holding.has(storeId)) {
+      return { ok: false, error: "The selected store does not have the requested quantities. Choose another store or check home delivery availability." }
+    }
+    shipping = 0
+  } else if (holding && (holding.size === 0 || (requestedStoreId && !holding.has(requestedStoreId)))) {
+    // priceCatalogueCart already confirmed sufficient overall stock. Free
+    // delivery is recomputed here, including during payment and order creation.
     shipping = 0
   }
 
   let coupon: PricingSuccess["coupon"] = null
   let couponDiscount = 0
   if (options.couponCode) {
-    const result = await computeCouponDiscount(options.couponCode, items, catalogue, options.userId)
+    const result = await computeCouponDiscount(options.couponCode, items, catalogue, options.userId, options.session)
     if (!result.ok) return { ok: false, error: result.error }
     coupon = result.coupon
     couponDiscount = result.coupon.discount

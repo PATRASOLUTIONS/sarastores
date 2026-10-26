@@ -10,11 +10,22 @@ export function paymentEnabled(provider: PaymentProvider): boolean {
   return value === "true"
 }
 
+/** Cash on delivery is offered only when COD_ENABLED is exactly "true". */
 export function cashOnDeliveryEnabled(): boolean {
   const value = process.env.COD_ENABLED
-  if (value === undefined || value === "") return true
+  if (value === undefined || value === "") return false
   if (value !== "true" && value !== "false") throw new PaymentConfigurationError("COD_ENABLED must be true or false")
   return value === "true"
+}
+
+/** Off unless INSTORE_PURCHASE_ENABLED is exactly "true". */
+export function inStorePurchaseEnabled(): boolean {
+  return process.env.INSTORE_PURCHASE_ENABLED?.trim() === "true"
+}
+
+/** On unless PAY_AT_STORE_ENABLED is "false". */
+export function storePaymentEnabled(): boolean {
+  return process.env.PAY_AT_STORE_ENABLED?.trim() !== "false"
 }
 
 export function paymentConfiguration() {
@@ -24,7 +35,8 @@ export function paymentConfiguration() {
     throw new PaymentConfigurationError("PAYMENT_DEFAULT_PROVIDER must name an enabled gateway")
   }
   const defaultProvider = providers.find(provider => provider === requested) ?? providers[0] ?? null
-  return { providers, defaultProvider, codEnabled: cashOnDeliveryEnabled() }
+  return { providers, defaultProvider, codEnabled: cashOnDeliveryEnabled(), instoreEnabled: inStorePurchaseEnabled(),
+    storePaymentEnabled: storePaymentEnabled() }
 }
 
 export function paymentSiteOrigin(): string {

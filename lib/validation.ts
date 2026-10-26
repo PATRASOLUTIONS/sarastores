@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { checkoutCity } from './checkout-region';
 import { isDpdpComplaint } from './complaintTypes';
 import { indianStates } from './indiaData';
+import { accountEmailSchema, registrationEmailSchema, registrationNameSchema } from './registration-validation';
 
 // ============================================
 // Common Validators
@@ -21,6 +22,12 @@ export const phoneSchema = z.string()
 // Indian pincode (6 digits)
 export const pincodeSchema = z.string()
   .regex(/^\d{6}$/, 'Invalid pincode. Must be 6 digits');
+
+export const DeliveryLocationRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('grant'), consent: z.literal(true), adult: z.literal(true), version: z.string().max(100) }).strict(),
+  z.object({ action: z.literal('resolve'), receipt: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180) }).strict(),
+  z.object({ action: z.literal('withdraw'), receipt: z.string().uuid() }).strict(),
+]);
 
 export const PincodeModeSchema = z.enum(['blocked', 'allowed', 'both', 'all']);
 export const PincodeListTypeSchema = z.enum(['allowed', 'blocked']);
@@ -84,10 +91,15 @@ export const emailSchema = z.string()
 export const OrderNotificationSettingsSchema = z.object({
   enabled: z.boolean(),
   email: z.union([z.literal(""), emailSchema]).transform(value => value.toLowerCase()),
+  additionalEmails: z.array(emailSchema.transform(value => value.toLowerCase()))
+    .max(10, "Add at most 10 additional recipients").default([]),
 }).strict().refine(value => !value.enabled || !!value.email, {
   message: "Enter a recipient email before enabling notifications",
   path: ["email"],
-});
+}).transform(value => ({
+  ...value,
+  additionalEmails: [...new Set(value.additionalEmails)].filter(email => email !== value.email),
+}));
 
 // Strong password
 export const passwordSchema = z.string()
@@ -124,6 +136,10 @@ export const quantitySchema = z.number()
   .int('Quantity must be a whole number')
   .positive('Quantity must be positive')
   .max(1000, 'Maximum quantity exceeded');
+
+export const CartQuantitySchema = z.union([
+  z.number(), z.string().trim().regex(/^[1-9]\d*$/, 'Quantity must be a positive whole number').transform(Number),
+]).pipe(quantitySchema);
 
 const spinNumber = z.union([z.number(), z.string().trim().min(1)])
   .transform(Number).pipe(z.number().finite());
@@ -433,16 +449,18 @@ export const LicenseKeyFilterSchema = z.object({
 // ============================================
 
 export const LoginSchema = z.object({
-  email: emailSchema,
+  email: accountEmailSchema,
   password: z.string(),
   rememberMe: z.boolean().optional(),
 });
 
 export const RegisterSchema = z.object({
-  email: emailSchema,
-  password: z.string(),
+  email: registrationEmailSchema,
+  password: z.string().min(1, "Password is required"),
   confirmPassword: z.string(),
-  name: nameSchema,
+  name: registrationNameSchema,
+  /** The web registration form requests an immediate cookie session. */
+  startSession: z.boolean().optional().default(false),
   // Not collected at signup; the checkout form captures it.
   phone: phoneSchema.optional(),
   acceptTerms: z.literal(true, {
@@ -469,7 +487,7 @@ export const RegisterSchema = z.object({
 });
 
 export const ForgotPasswordSchema = z.object({
-  email: emailSchema,
+  email: accountEmailSchema,
 });
 
 export const ResetPasswordSchema = z.object({
@@ -552,13 +570,26 @@ export const AddressSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+export const CheckoutFirstNameSchema = z.string().trim().min(1, 'First name is required')
+  .pipe(registrationNameSchema).pipe(z.string().max(50, 'First name must be 50 characters or fewer'));
+export const CheckoutLastNameSchema = z.string().trim().min(1, 'Last name is required')
+  .pipe(registrationNameSchema).pipe(z.string().max(50, 'Last name must be 50 characters or fewer'));
+export const CheckoutContactSchema = z.object({
+  firstName: CheckoutFirstNameSchema,
+  lastName: CheckoutLastNameSchema,
+  email: registrationEmailSchema,
+  phone: z.string().trim().min(1, 'Phone number is required').pipe(phoneSchema),
+});
+
 export const SavedDeliveryAddressSchema = AddressSchema.pick({
   type: true, firstName: true, lastName: true, phone: true, address: true,
   city: true, state: true, pincode: true, country: true,
 }).extend({
-  firstName: z.string().trim().min(1, 'First name is required').max(50),
-  lastName: z.string().trim().max(50).default(''),
+  firstName: CheckoutFirstNameSchema,
   address: z.string().trim().min(10, 'Address must be at least 10 characters').max(200),
+  // Existing saved addresses may omit a surname; checkout contact validation
+  // asks the shopper to supply it before using the address for a new order.
+  lastName: z.union([z.literal(''), CheckoutLastNameSchema]).default(''),
   phone: z.string().trim().pipe(phoneSchema),
   pincode: z.string().trim().pipe(pincodeSchema),
   city: z.string().trim().min(2, 'City is required').max(50).transform(value => checkoutCity(value) || value),
@@ -621,6 +652,7 @@ export const DirectProductUpdateSchema = UpdateProductSchema.pick({
 }).extend({
   comparePrice: priceSchema.optional(),
   stock: z.number().int().min(0).max(10000000).optional(),
+  maxPurchaseQuantity: quantitySchema.optional(),
   category: z.string().max(200).optional(),
   subcategory: z.string().max(200).optional(),
   images: z.array(urlSchema).max(5).optional(),
@@ -696,6 +728,31 @@ export const CreateOrderSchema = z.object({
   (data) => data.shippingAddressId || data.shippingAddress,
   { message: 'Shipping address is required', path: ['shippingAddress'] }
 );
+
+export const GuestCheckoutCustomerSchema = CheckoutContactSchema.extend({
+  address: z.string().trim().min(10, 'Enter your full address').max(200),
+  city: z.string().trim().min(1, 'City is required').max(100),
+  state: z.string().trim().min(1, 'State is required').max(100),
+  zipCode: z.string().trim().pipe(pincodeSchema),
+  country: z.string().trim().min(1, 'Country is required').max(100),
+});
+
+export const CheckoutCartSelectionSchema = z.object({
+  requestId: z.string().uuid(),
+  action: z.enum(['preserve', 'include', 'wishlist']),
+  items: z.array(z.object({
+    id: z.string().min(1), name: z.string(), price: z.number().finite().nonnegative(),
+    quantity: quantitySchema, image: z.string().default(''),
+    color: z.string().nullable().default(null), size: z.string().nullable().default(null),
+    type: z.enum(['hardware', 'software']).optional(),
+  }).passthrough()).min(1).max(20),
+  previousItems: z.array(z.object({ id: z.string().min(1), quantity: quantitySchema,
+    sku: z.string().nullish(), variantId: z.string().nullish(), color: z.string().nullish(), size: z.string().nullish(),
+    ram: z.string().nullish(), storage: z.string().nullish(), type: z.string().nullish(),
+    kgenVariantId: z.string().nullish(), packSize: z.union([z.string(), z.number()]).nullish(),
+    validityYears: z.union([z.string(), z.number()]).nullish(),
+  })).max(40),
+});
 
 export const EmployeeCreationResponseSchema = z.object({
   success: z.literal(true),
@@ -805,7 +862,9 @@ export const StoreQrAnalyticsQuerySchema = z.object({
   storeId: StoreObjectIdSchema.optional(),
 }).strict();
 export const CreateStoreLocationSchema = z.object({
+  locationType: z.enum(["store", "warehouse"]).optional(),
   shopName: z.string().trim().min(1).max(200),
+  storeCode: z.string().trim().max(50, "Store code must be 50 characters or fewer").optional(),
   locationDescription: z.string().trim().max(2000).default(""),
   googleMapLocation: z.union([StoreHttpUrlSchema, z.literal("")]).default(""),
   mobileNo: z.string().trim().max(30).default(""),
@@ -818,7 +877,11 @@ export const UpdateStoreLocationSchema = CreateStoreLocationSchema.partial().str
   .refine(value => Object.keys(value).length > 0, "Provide a store update");
 export const BulkStoreLocationSchema = z.object({
   stores: z.array(CreateStoreLocationSchema).min(1).max(500)
-    .refine(stores => new Set(stores.map(store => store.shopName)).size === stores.length, "Shop names must be unique in an upload"),
+    .refine(stores => new Set(stores.map(store => store.shopName)).size === stores.length, "Shop names must be unique in an upload")
+    .refine(stores => {
+      const codes = stores.flatMap(store => store.storeCode ? [store.storeCode] : [])
+      return new Set(codes).size === codes.length
+    }, "Store codes must be unique in an upload"),
 }).strict();
 export const PartnerProductAssignmentSchema = z.object({
   productId: z.string().trim().min(1).max(100).transform(value => /^[a-f\d]{24}$/i.test(value) ? value.toLowerCase() : value),

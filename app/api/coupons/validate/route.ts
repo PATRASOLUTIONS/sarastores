@@ -5,13 +5,12 @@ import { MAX_CART_PRODUCTS } from "@/lib/cart-limits"
 import { quoteCoupon } from "@/lib/order-pricing"
 import { withRateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
+import { CheckoutQuoteSchema } from "@/lib/checkout-payment"
 
 const ApplyCouponSchema = z.object({
   code: z.string().trim().min(1).max(50),
-  cart: z.array(z.object({
-    id: z.string().trim().min(1).max(200),
-    quantity: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  })).min(1).max(MAX_CART_PRODUCTS),
+  cart: CheckoutQuoteSchema.shape.items.max(MAX_CART_PRODUCTS),
+  fulfilment: CheckoutQuoteSchema.shape.fulfilment,
 })
 
 // Guests may preview unrestricted coupons; per-customer caps require a session.
@@ -28,7 +27,8 @@ export const POST = withRateLimit(async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Invalid payload", details: parsed.error.flatten() }, { status: 400 })
     }
     const userId = await getCurrentUserId()
-    const result = await quoteCoupon(parsed.data.cart, parsed.data.code, userId)
+    const result = await quoteCoupon(parsed.data.cart, parsed.data.code, userId, undefined,
+      parsed.data.fulfilment?.method === "pickup" ? "store" : "overall")
     if (!result.ok) {
       return NextResponse.json({ success: false, error: result.error }, { status: 400 })
     }

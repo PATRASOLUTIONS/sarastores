@@ -31,12 +31,46 @@ export type TrackingConsent = {
   decidedAt: string
   /** Correlates pre-login consent with the account after sign-in. */
   anonymousId: string
+  /**
+   * True when the banner was skipped because someone on the same network had
+   * already decided. Optional tracking is off and this is not the visitor's
+   * own decision, so it is never remembered or logged as one.
+   */
+  inherited?: boolean
 }
 
 export const DENY_ALL: Omit<TrackingConsent, "decidedAt" | "anonymousId" | "version"> = {
   analytics: false,
   advertising: false,
   personalisation: false,
+}
+
+const CONSENT_COOKIE_MAX_AGE = 365 * 24 * 60 * 60
+
+// A cookie copy survives storage partitioning and site-data cleanups that
+// drop localStorage, so a made choice is not asked for again.
+function readConsentCookie(): string | null {
+  if (typeof document === "undefined" || typeof document.cookie !== "string") return null
+  const prefix = `${CONSENT_STORAGE_KEY}=`
+  const entry = document.cookie.split("; ").find((part) => part.startsWith(prefix))
+  if (!entry) return null
+  try {
+    return decodeURIComponent(entry.slice(prefix.length))
+  } catch {
+    return null
+  }
+}
+
+function writeConsentCookie(value: string | null): void {
+  if (typeof document === "undefined") return
+  try {
+    const secure = window.location?.protocol === "https:" ? "; Secure" : ""
+    document.cookie = value === null
+      ? `${CONSENT_STORAGE_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`
+      : `${CONSENT_STORAGE_KEY}=${encodeURIComponent(value)}; Max-Age=${CONSENT_COOKIE_MAX_AGE}; Path=/; SameSite=Lax${secure}`
+  } catch {
+    // Cookies disabled: localStorage remains the record.
+  }
 }
 
 function randomId(): string {
@@ -58,8 +92,12 @@ function randomId(): string {
 export function readConsent(): TrackingConsent | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY)
+    const stored = window.localStorage.getItem(CONSENT_STORAGE_KEY)
+    const raw = stored || readConsentCookie()
     if (!raw) return null
+    if (!stored) {
+      try { window.localStorage.setItem(CONSENT_STORAGE_KEY, raw) } catch { /* cookie still holds it */ }
+    }
     const parsed = JSON.parse(raw) as TrackingConsent
     if (
       typeof parsed?.analytics !== "boolean" ||
@@ -101,6 +139,7 @@ export function writeConsent(choice: Partial<Record<TrackingCategory, boolean>>)
     anonymousId: getAnonymousId(),
   }
 
+  writeConsentCookie(JSON.stringify(record))
   try {
     window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(record))
   } catch {
@@ -136,6 +175,77 @@ export function writeConsent(choice: Partial<Record<TrackingCategory, boolean>>)
   return record
 }
 
+/** Stores a remembered decision locally without adding a new ledger entry. */
+function adoptConsent(choice: Omit<TrackingConsent, "version" | "anonymousId">): TrackingConsent {
+  const record: TrackingConsent = { ...choice, version: PRIVACY_NOTICE_VERSION, anonymousId: getAnonymousId() }
+  if (!record.inherited) delete record.inherited
+  writeConsentCookie(JSON.stringify(record))
+  try { window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(record)) } catch { /* cookie still holds it */ }
+  try { window.dispatchEvent(new CustomEvent(CONSENT_CHANGE_EVENT, { detail: record })) } catch { /* no listeners */ }
+  return record
+}
+
+type RememberedResponse =
+  | { match: "account"; consent: { analytics: boolean; advertising: boolean; personalisation: boolean; decidedAt: string } }
+  | { match: "network" | null; consent: null }
+
+async function lookupRemembered(): Promise<RememberedResponse | null> {
+  try {
+    const response = await fetch("/api/consent/tracking", { credentials: "include", cache: "no-store" })
+    if (!response.ok) return null
+    const data = await response.json() as RememberedResponse
+    return data && (data.match === "account" || data.match === "network" || data.match === null) ? data : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Called when this browser has no decision yet. Returns the restored decision
+ * when the signed-in account, or someone on this network, already chose, so the
+ * banner can stay hidden; returns null when the visitor must be asked.
+ */
+export async function restoreRememberedConsent(): Promise<TrackingConsent | null> {
+  const remembered = await lookupRemembered()
+  if (readConsent()) return readConsent()
+  if (remembered?.match === "account") {
+    const { analytics, advertising, personalisation, decidedAt } = remembered.consent
+    return adoptConsent({ analytics, advertising, personalisation, decidedAt })
+  }
+  if (remembered?.match === "network") {
+    return adoptConsent({ ...DENY_ALL, decidedAt: new Date().toISOString(), inherited: true })
+  }
+  return null
+}
+
+/**
+ * Run after sign-in. Restores the account's own decision over a network default,
+ * or links this browser's own decision to the account so other devices skip the
+ * banner too.
+ */
+export async function syncConsentWithAccount(): Promise<void> {
+  if (typeof window === "undefined") return
+  const local = readConsent()
+  if (!local || local.inherited) {
+    const remembered = await lookupRemembered()
+    if (remembered?.match === "account") {
+      const { analytics, advertising, personalisation, decidedAt } = remembered.consent
+      adoptConsent({ analytics, advertising, personalisation, decidedAt })
+    }
+    return
+  }
+  try {
+    await fetch("/api/consent/tracking", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(local),
+    })
+  } catch {
+    // The banner will simply be asked once more on the other device.
+  }
+}
+
 function hasWithdrawnConsent(previous: TrackingConsent | null, current: TrackingConsent | null): boolean {
   return (["analytics", "advertising", "personalisation"] as const)
     .some((category) => previous?.[category] === true && current?.[category] !== true)
@@ -168,6 +278,7 @@ export function onConsentChange(handler: (consent: TrackingConsent | null) => vo
 /** Clears the stored decision so the banner reappears. */
 export function resetConsent(): void {
   const previous = readConsent()
+  writeConsentCookie(null)
   try {
     window.localStorage.removeItem(CONSENT_STORAGE_KEY)
     window.dispatchEvent(new CustomEvent(CONSENT_CHANGE_EVENT, { detail: null }))

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { connectToDatabase } from "@/lib/mongodb"
+import { getCollection } from "@/lib/db-service"
 import bcrypt from "bcryptjs"
 import { detectBot, formatWait, getClientIP, resetRateLimit } from "@/lib/botDetection"
 import crypto from "crypto"
@@ -8,6 +8,8 @@ import { recordConsent, CONSENT_PURPOSES, type ConsentDecision } from "@/lib/con
 import { defaultProfileAvatar } from "@/lib/profile-avatars"
 import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
 import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
+import { ACCOUNT_EMAIL_COLLATION, ensureAccountEmailIndex, isDuplicateAccountEmail } from "@/lib/account-email-index"
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
 
 // Use dynamic import for email functions to prevent build-time issues
 const getEmailFunctions = async () => {
@@ -18,63 +20,13 @@ const getEmailFunctions = async () => {
   }
 }
 
-/**
- * The single response this endpoint gives for any well-formed submission,
- * whether or not the address already has an account. It must stay identical in
- * both branches — a difference in status, body or field set re-opens the
- * enumeration oracle. The client never reads a user object from signup
- * (AuthContext deliberately does not auto-login), so omitting one costs
- * nothing.
- */
-const GENERIC_SIGNUP_RESPONSE = {
-  message: "Thanks. If that email address can be registered, we have sent a link to confirm it.",
+// Clients requesting a cookie session also receive a safe account summary.
+const SIGNUP_RESPONSE = {
+  message: "Thanks. We have sent a link to confirm your email address.",
   success: true,
 } as const
 
-/**
- * Tell the real account holder that someone tried to sign up with their
- * address. This is the only place the "account exists" fact is disclosed, and
- * it goes to the person entitled to know it rather than to the form.
- */
-async function notifyExistingAccount(email: string): Promise<void> {
-  try {
-    const { sendEmail } = await getEmailFunctions()
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    await sendEmail({
-      to: email,
-      subject: "Someone tried to create an account with your email",
-      preheader: "No action is needed unless this was you.",
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"></head>
-        <body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
-          <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;padding:30px">
-            <h2 style="color:#111827;margin-top:0">You already have an account</h2>
-            <p style="color:#374151;line-height:1.6">
-              Someone just tried to register a new Sara Electronics account using this email address.
-              You already have one, so nothing has changed and no new account was created.
-            </p>
-            <p style="color:#374151;line-height:1.6">
-              If this was you, sign in instead &mdash; or reset your password if you have forgotten it.
-            </p>
-            <p style="margin:30px 0">
-              <a href="${siteUrl}/login" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:bold;font-size:16px">Sign in</a>
-            </p>
-            <p style="color:#6b7280;font-size:13px">
-              If this was not you, you can safely ignore this email. Your account and password are unchanged.
-            </p>
-          </div>
-        </body>
-        </html>
-      `,
-    })
-  } catch (error) {
-    // Never let a mail failure change the response shape — that would restore
-    // the very distinction this branch exists to remove.
-    console.error("Failed to send existing-account notice:", error)
-  }
-}
+const EMAIL_EXISTS_MESSAGE = "An account with this email already exists."
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,37 +59,52 @@ export async function POST(request: NextRequest) {
 
     const parsed = RegisterSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ message: parsed.error.errors[0].message }, { status: 400 })
+      const fieldErrors: Record<string, string> = {}
+      for (const issue of parsed.error.issues) {
+        const field = String(issue.path[0])
+        if (!fieldErrors[field]) fieldErrors[field] = issue.message
+      }
+      return NextResponse.json({ message: parsed.error.errors[0].message, fieldErrors }, { status: 400 })
     }
     const {
       email,
       password,
       name,
+      startSession,
       marketingEmail,
       marketingWhatsapp,
       marketingSms,
       noticeVersion,
     } = parsed.data
 
-    const { db } = await connectToDatabase()
-    const usersCollection = db.collection("users")
+    if (startSession) {
+      const secret = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET || ""
+      if (secret.length < 16) {
+        return NextResponse.json({ message: "Account registration is temporarily unavailable. Please try again later." }, { status: 503 })
+      }
+    }
 
-    /*
-     * An existing address must not be distinguishable from a new one.
-     *
-     * Returning 409 "User with this email already exists" turned this endpoint
-     * into a membership oracle for any address an attacker cared to try. The
-     * response below is byte-identical to the success response, and the real
-     * account holder — not the person submitting the form — is told that
-     * someone tried to register with their address.
-     */
-    const existingUser = await usersCollection.findOne({ email: email.toLowerCase() })
+    const usersCollection = await getCollection("users")
+    try {
+      // Idempotent, and safe when several instances register concurrently.
+      // Existing conflicting legacy records/indexes must be reconciled by an
+      // operator; never accept an unprotected insert if index creation fails.
+      await ensureAccountEmailIndex(usersCollection)
+    } catch {
+      console.error("[Signup] Account email uniqueness index is unavailable")
+      return NextResponse.json({ message: "Account creation is temporarily unavailable. Please try again later.", success: false }, {
+        status: 503, headers: { "Retry-After": "60" },
+      })
+    }
+
+    // Disclosing an existing address is a product decision; the per-IP
+    // counter and reCAPTCHA in detectBot above are what bound enumeration.
+    const existingUser = await usersCollection.findOne({ email }, { collation: ACCOUNT_EMAIL_COLLATION })
     if (existingUser) {
-      // Spend the same work the real path spends, so response time does not
-      // leak what the response body refuses to.
-      await bcrypt.hash(password, 12)
-      await notifyExistingAccount(String(existingUser.email))
-      return NextResponse.json(GENERIC_SIGNUP_RESPONSE)
+      return NextResponse.json(
+        { message: EMAIL_EXISTS_MESSAGE, code: "EMAIL_EXISTS", success: false },
+        { status: 409 },
+      )
     }
 
     // Hash the password
@@ -149,11 +116,11 @@ export async function POST(request: NextRequest) {
 
     // Create new user
     const newUser = {
-      name: name.trim(),
-      email: email.toLowerCase(),
+      name,
+      email,
       password: hashedPassword,
       role: "user",
-      avatar: defaultProfileAvatar(email.toLowerCase()),
+      avatar: defaultProfileAvatar(email),
       emailVerified: false,
       emailVerificationToken: verificationToken,
       emailVerificationExpiry: verificationExpiry,
@@ -164,7 +131,13 @@ export async function POST(request: NextRequest) {
       orders: [],
     }
 
-    const result = await usersCollection.insertOne(newUser)
+    let result
+    try {
+      result = await usersCollection.insertOne(newUser)
+    } catch (error) {
+      if (!isDuplicateAccountEmail(error)) throw error
+      return NextResponse.json({ message: EMAIL_EXISTS_MESSAGE, code: "EMAIL_EXISTS", success: false }, { status: 409 })
+    }
     const newUserId = result.insertedId.toString()
 
     /**
@@ -245,9 +218,30 @@ export async function POST(request: NextRequest) {
       // Don't fail the registration if email fails
     }
 
-    // Identical to the existing-account branch above, deliberately. Anything
-    // returned here that is not returned there re-identifies the address.
-    return NextResponse.json(GENERIC_SIGNUP_RESPONSE)
+    if (!startSession) return NextResponse.json(SIGNUP_RESPONSE)
+
+    const user = {
+      id: newUserId, name, email, role: "user" as const,
+      avatar: newUser.avatar, emailVerified: false, createdAt: newUser.createdAt,
+      dashboardAccess: false, allowedPages: [], sessionVersion: 0,
+    }
+    const sessionToken = await createSessionToken({
+      id: user.id, name: user.name, email: user.email, role: user.role,
+      dashboardAccess: false, allowedPages: [], sessionVersion: 0,
+    })
+    const response = NextResponse.json({ ...SIGNUP_RESPONSE, user }, {
+      headers: { "Cache-Control": "private, no-store" },
+    })
+    const cookieOptions = {
+      httpOnly: true, secure: process.env.NODE_ENV === "production",
+      sameSite: "lax" as const, maxAge: SESSION_MAX_AGE, path: "/",
+      ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN.replace(/^\./, "") } : {}),
+    }
+    response.cookies.set(SESSION_COOKIE, sessionToken, cookieOptions)
+    response.cookies.set("user", encodeURIComponent(JSON.stringify({
+      id: user.id, email: user.email, role: user.role,
+    })), cookieOptions)
+    return response
   } catch (error) {
     if (error instanceof RateLimitUnavailableError || error instanceof RecaptchaConfigurationError) return handleApiError(error)
     console.error("Signup error:", error)

@@ -6,6 +6,7 @@ import Image from "next/image"
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useCart } from "@/hooks/useCart"
+import { useWishlist } from "@/hooks/useWishlist"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { ShoppingCart, Menu, X, Search, User, Heart, MapPin, ChevronDown, TrendingUp, Clock, Package, Zap, Gift, Download, HelpCircle, Phone } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
@@ -17,8 +18,10 @@ import { cssEasings, durations, scaleFade } from '@/lib/animations'
 import { useScrollState } from '@/hooks/useAnimations'
 import DeliverToPincode from '@/components/DeliverToPincode'
 import MegaMenu from '@/components/MegaMenu'
+import MobileMenuNavigation from '@/components/MobileMenuNavigation'
 import { useSettingsData } from '@/hooks/useSettingsData'
 import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { useHeaderPromotion } from "@/hooks/useHeaderPromotion"
 import CategoryGlyph from '@/components/CategoryGlyph'
 import { taxonomyHref, type TaxonomyDivision } from "@/lib/product-taxonomy"
 import { fetchTaxonomy } from "@/lib/taxonomy-client"
@@ -75,9 +78,12 @@ export default function Header() {
   const pathname = usePathname()
   const [returnLoginHref, setReturnLoginHref] = useState("/login")
   const { cart } = useCart()
+  const { wishlist } = useWishlist()
+  const wishlistCount = new Set(wishlist.map(item => item.id)).size
   const { openCart } = useCartUI()
   const { data: siteSettings } = useSettingsData()
   const marketing = useMarketingContent("header")
+  const headerPromotion = useHeaderPromotion()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [divisions, setDivisions] = useState<TaxonomyDivision[]>([])
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
@@ -468,17 +474,19 @@ export default function Header() {
       {/* Announcement bar */}
       {marketing.enabled("announcement") && <div className="hidden bg-[#1560BD] text-white md:block">
         <div className="section-container flex items-center justify-between gap-4 py-1.5 text-[11px]">
-          <Link href="/super-sunday" className="flex items-center gap-1.5 transition-colors hover:text-white/90">
-            <Zap className="h-3.5 w-3.5" />
-            <span className="font-bold">{marketing.text("announcement", "title")}</span>
-            <span className="text-white/40">|</span>
-            <span className="text-white/90">{marketing.text("announcement", "description")}</span>
-          </Link>
+          {headerPromotion ? (
+            <Link href={headerPromotion.href} className="flex items-center gap-1.5 transition-colors hover:text-white/90">
+              <Zap className="h-3.5 w-3.5" />
+              <span className="font-bold">{headerPromotion.title}</span>
+              <span className="text-white/40">|</span>
+              <span className="text-white/90">{headerPromotion.description}</span>
+            </Link>
+          ) : <span />}
           <div className="flex items-center gap-5 text-white/90">
-            <Link href={marketing.text("announcement", "downloadLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
+            {/* <Link href={marketing.text("announcement", "downloadLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <Download className="h-3.5 w-3.5" />
               {marketing.text("announcement", "downloadTitle")}
-            </Link>
+            </Link> */}
             <Link href={marketing.text("announcement", "storeLink")} className="flex items-center gap-1.5 transition-colors hover:text-white">
               <MapPin className="h-3.5 w-3.5" />
               {marketing.text("announcement", "storeTitle")}
@@ -530,9 +538,9 @@ export default function Header() {
           </button>
 
           {/* Logo */}
-          <Link href="/" className="flex-shrink-0 flex items-center gap-3" aria-label="Sara Mobiles and Electronics - Home">
+          <Link href="/" className="min-w-0 flex-shrink md:flex-shrink-0 flex items-center gap-3" aria-label="Sara Mobiles and Electronics - Home">
             <div className="text-lg md:text-2xl font-heading font-bold">
-              {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-9 md:h-12 w-auto object-contain" priority unoptimized />}
+              {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-7 sm:h-9 md:h-12 max-w-full w-auto object-contain" priority unoptimized />}
             </div>
           </Link>
 
@@ -727,19 +735,24 @@ export default function Header() {
           </div>
 
           {/* Right Side Actions */}
-          <div className="flex items-center gap-3 md:gap-5 flex-shrink-0">
+          <div className="flex items-center gap-1 md:gap-5 flex-shrink-0">
             {/* Deliver-to pincode - reference places this beside the account menu */}
             <div className="order-1 hidden lg:block">
               <DeliverToPincode variant="light" />
             </div>
 
-            {/* Wishlist - Hidden on mobile */}
+            {/* Wishlist */}
             <Link
-              href="/dashboard/wishlist"
-              aria-label="Wishlist"
-              className="order-3 hidden md:inline-flex items-center gap-2 p-2.5 rounded-lg hover:bg-brand-primary-subtle text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors group"
+              href={user ? "/dashboard/wishlist" : "/wishlist"}
+              aria-label={`Wishlist, ${wishlistCount} ${wishlistCount === 1 ? "item" : "items"}`}
+              className="order-3 inline-flex items-center gap-2 p-2.5 min-h-[44px] rounded-lg hover:bg-brand-primary-subtle text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-colors group"
             >
-              <Heart className="h-5 w-5 group-hover:text-brand-primary transition-colors" />
+              <span className="relative">
+                <Heart className="h-5 w-5 group-hover:text-brand-primary transition-colors" />
+                {wishlistCount > 0 && <span className="absolute -top-2 -right-2 bg-brand-accent text-white text-[10px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center font-bold ring-2 ring-white">
+                  {wishlistCount}
+                </span>}
+              </span>
               <span className="hidden xl:inline text-sm font-medium">Wishlist</span>
             </Link>
 
@@ -830,6 +843,7 @@ export default function Header() {
                     role="menuitem"
                   >
                     Wishlist
+                    {wishlistCount > 0 && <span className="ml-2 rounded-full bg-brand-accent px-2 py-0.5 text-xs font-bold text-white">{wishlistCount}</span>}
                   </Link>
                   <button
                     onClick={handleLogout}
@@ -872,10 +886,19 @@ export default function Header() {
               </button>
             </div>
           </form>
+          {headerPromotion && (
+            <Link href={headerPromotion.href} className="mt-2 inline-flex items-center rounded-full bg-[#E11D2E] px-3 py-1 text-xs font-bold text-white">
+              {headerPromotion.title}
+            </Link>
+          )}
         </div>
 
       </div>
 
+      <div className="section-container flex items-center justify-between gap-3 border-t border-gray-100 py-1 lg:hidden">
+        <DeliverToPincode variant="light" />
+        <span className="text-right text-[11px] text-gray-500">Choose your delivery area</span>
+      </div>
       <MegaMenu />
     </motion.header>
 
@@ -921,68 +944,22 @@ export default function Header() {
 
             {/* Scrollable nav content */}
             <nav className="flex-1 overflow-y-auto py-4 px-3">
-              {/* Quick Links */}
-              <div className="flex flex-col space-y-1 pb-4 border-b border-white/10">
-                {[
-                  { href: '/', label: 'Home', icon: <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
-                  { href: '/products', label: 'Products', icon: <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg> },
-                  { href: '/about', label: 'About Us', icon: <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> },
-                  { href: '/contact', label: 'Contact', icon: <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg> },
-                  { href: '/track', label: 'Track Order', icon: <Package className="h-5 w-5" /> },
-                  { href: '/store-locator', label: 'Store Locator', icon: <MapPin className="h-5 w-5" /> },
-                ].map((item, index) => (
-                  <motion.div
-                    key={item.href}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.05 * index, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <Link
-                      href={item.href}
-                      className="group text-white/80 hover:text-white font-medium py-3 px-3 rounded-lg hover:bg-brand-primary/15 transition-all duration-200 flex items-center gap-3"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      <span className="text-white/50 group-hover:text-brand-primary transition-colors">{item.icon}</span>
-                      {item.label}
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Categories */}
-              <div className="py-4 border-b border-white/10">
-                <p className="text-xs font-semibold text-white/40 uppercase mb-2 px-3 tracking-wider">Categories</p>
-                {(divisions.length > 0
+              <MobileMenuNavigation
+                onNavigate={() => setIsMenuOpen(false)}
+                categories={divisions.length > 0
                   ? divisions.map(division => ({
                       id: `division:${division.name.toLowerCase()}`,
-                      name: titleCaseLabel(division.name),
+                      label: titleCaseLabel(division.name),
                       href: taxonomyHref(division.name),
                     }))
                   : categories.map(category => ({
                       id: category.id,
-                      name: category.name,
+                      label: category.name,
                       href: /^mobiles?$/i.test(category.name)
                         ? "/products?subCategory=Mobile&availability=in"
                         : `/products?category=${encodeURIComponent(category.name)}`,
-                    }))
-                ).map((category, index) => (
-                  <motion.div
-                    key={category.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.05 * (index + 5), duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <Link
-                      href={category.href}
-                      onClick={() => setIsMenuOpen(false)}
-                      className="w-full text-left text-white/80 hover:text-white font-medium flex items-center gap-3 py-3 px-3 rounded-lg hover:bg-brand-primary/15 transition-all duration-200"
-                    >
-                      <CategoryGlyph label={category.name} className="h-5 w-5 flex-shrink-0" strokeWidth={1.7} />
-                      <span>{category.name}</span>
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
+                    }))}
+              />
 
               {/* Account Section */}
               {user ? (
@@ -1027,6 +1004,7 @@ export default function Header() {
                   >
                     <Heart className="h-5 w-5 text-white/50" />
                     Wishlist
+                    {wishlistCount > 0 && <span className="ml-auto rounded-full bg-brand-accent px-2 py-0.5 text-xs font-bold text-white">{wishlistCount}</span>}
                   </Link>
                   <button
                     onClick={handleLogout}

@@ -46,12 +46,20 @@ export async function GET(request: Request) {
 
       const products = await productsCollection.find({
         ...PUBLIC_PRODUCT_FILTER,
-        _id: { $in: productIds },
+        $or: [{ _id: { $in: [...productIds, ...wishlist.items] } }, { id: { $in: wishlist.items } }],
+      }).toArray()
+      const softwareCollection = await getCollection<{ _id: ObjectId | string; id?: string; name?: string; slug?: string; status?: string }>("software_products")
+      const software = await softwareCollection.find({
+        $or: [{ _id: { $in: [...productIds, ...wishlist.items] } }, { id: { $in: wishlist.items } }],
+        status: { $nin: ["inactive", "deleted"] },
       }).toArray()
 
       // Ensure slug exists on each product
       const { generateProductSlug } = await import("@/utils/slug")
-      const productsWithSlug = normalizeId(products).map((p) => {
+      const productsWithSlug = normalizeId([
+        ...products.map(product => ({ ...product, type: "hardware" })),
+        ...software.map(product => ({ ...product, type: "software" })),
+      ]).map((p) => {
         if (!p.slug && p.name) p.slug = generateProductSlug(p.name)
         return p
       })
@@ -96,33 +104,34 @@ export async function POST(request: Request) {
         { id: productId },
       ],
     })
-    if (!product) {
+    const softwareCollection = !product
+      ? await getCollection<{ _id: ObjectId | string; id?: string; status?: string }>("software_products") : null
+    const software = softwareCollection ? await softwareCollection.findOne({
+      status: { $nin: ["inactive", "deleted"] },
+      $or: [
+        ...(ObjectId.isValid(productId) ? [{ _id: new ObjectId(productId) }] : []),
+        { _id: productId }, { id: productId },
+      ],
+    }) : null
+    if (!product && !software) {
       return NextResponse.json({ message: "Product not found" }, { status: 404 })
     }
 
     // Check if wishlist exists
     const wishlist = await wishlistCollection.findOne({ userId })
 
-    if (wishlist) {
-      // Check if product is already in wishlist
-      if (wishlist.items.includes(productId)) {
-        return NextResponse.json({
-          message: "Product already in wishlist",
-          added: false,
-        })
-      }
-
-      // Add product to existing wishlist
-      await wishlistCollection.updateOne({ userId }, { $push: { items: productId }, $set: { updatedAt: new Date() } })
-    } else {
-      // Create new wishlist
-      await wishlistCollection.insertOne({
-        userId,
-        items: [productId],
-        createdAt: new Date(),
-        updatedAt: new Date(),
+    if (wishlist?.items.includes(productId)) {
+      return NextResponse.json({
+        message: "Product already in wishlist",
+        added: false,
       })
     }
+    // Retrying or saving concurrently must not duplicate the product.
+    await wishlistCollection.updateOne({ userId }, {
+      $addToSet: { items: productId },
+      $set: { updatedAt: new Date() },
+      $setOnInsert: { userId, createdAt: new Date() },
+    }, { upsert: true })
 
     return NextResponse.json({
       message: "Product added to wishlist",

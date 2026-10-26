@@ -6,6 +6,19 @@ export interface OrderStatusHistoryEntry {
   details?: { note?: string; reason?: string }
 }
 
+export interface StorePaymentRecord {
+  status: "confirmation_pending" | "approved"
+  storeId: string
+  storeName: string
+  storePhone?: string
+  storeEmail?: string
+  platform: string
+  transactionId: string
+  submittedAt: Date | string
+  approvedAt?: Date | string
+  approvedBy?: { id: string; name: string; email: string }
+}
+
 export interface OrderDocument {
   _id: ObjectId | string
   orderId?: string
@@ -36,7 +49,15 @@ export interface OrderDocument {
   shippingAddress?: unknown
   paymentMethod?: string
   paymentDetails?: unknown
-  paymentVerification?: { verified?: boolean; verifiedAt?: Date | string; verifiedBy?: string }
+  paymentVerification?: {
+    verified?: boolean
+    verifiedAt?: Date | string
+    verifiedBy?: string
+    method?: string
+    platform?: string
+    transactionId?: string
+  }
+  storePayment?: StorePaymentRecord
   fulfilment?: unknown
   trackingNumber?: string
   tracking?: { trackingNumber?: string; carrier?: string }

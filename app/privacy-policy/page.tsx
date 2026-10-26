@@ -7,6 +7,7 @@ import {
   DATA_RECIPIENTS,
   RETENTION_SCHEDULE,
   PRIVACY_NOTICE_VERSION,
+  DELIVERY_LOCATION_NOTICE_VERSION,
   DPDP_AGE_OF_MAJORITY,
   isDpdpConfigComplete,
 } from "@/lib/dpdp-config"
@@ -149,6 +150,35 @@ export default function PrivacyPolicy() {
           <p className="mt-2">
             We do not sell your personal data, and we do not buy personal data about you from data brokers.
           </p>
+          <div id="delivery-location" className="mt-5 scroll-mt-32 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <h3 className="mb-2 font-semibold">Optional delivery location detection</h3>
+            <p className="mb-2 text-sm">
+              You can always enter your pincode manually. For adults aged 18 or older who separately agree,
+              we record that affirmative decision before requesting one location fix from the browser.
+              We round coordinates to three decimal places and send them through our server to
+              OpenStreetMap Foundation&apos;s Nominatim service solely to find an Indian delivery pincode.
+              The service may process these coordinates outside India and handles its own service logs
+              under its <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer" className="text-brand-primary underline">privacy policy</a>.
+              We do not send account details to that service, persist coordinates in our database or
+              device storage, or use this feature for advertising or background tracking.
+            </p>
+            <p className="mb-2 text-sm">
+              Consent covers one lookup and expires after five minutes at the latest. Closing the dialog,
+              cancelling detection or unchecking consent prevents further use by the device. A pending
+              browser permission prompt may remain visible; a late result is ignored. A request already
+              sent to the lookup provider cannot be recalled. Each new detection requires fresh consent.
+              Only the pincode you confirm is saved on this device, for up to 30 days; expired values are
+              removed when this feature is next opened. Use &ldquo;Clear saved pincode &amp; stop location
+              access&rdquo; to erase it sooner, or revoke the website&apos;s location permission in your browser.
+            </p>
+            <p className="text-sm">
+              We retain a consent audit record (decision, time, notice version, random receipt identifier
+              and account identifier if signed in) under the consent retention schedule below. This optional
+              record does not contain coordinates, your pincode, IP address or browser details.
+              Location notice version: {DELIVERY_LOCATION_NOTICE_VERSION}. The rights and grievance
+              procedures below apply to this processing too.
+            </p>
+          </div>
         </Section>
 
         <Section id="basis" title="2. Our lawful basis">

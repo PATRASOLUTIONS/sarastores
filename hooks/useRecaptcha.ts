@@ -42,6 +42,22 @@ function loadRecaptcha(siteKey: string): Promise<void> {
   return scriptPromise
 }
 
+async function fetchAuthConfig(attempts = 3): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch('/api/auth/config', { cache: 'no-store', signal: AbortSignal.timeout(20000) })
+    } catch (cause) {
+      const name = (cause as { name?: unknown } | null)?.name
+      const timedOut = name === 'TimeoutError' || name === 'AbortError'
+      if (!timedOut) throw cause
+      if (attempt >= attempts) {
+        throw new Error('Security validation is taking too long to load. Check your connection and reload the page.')
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+    }
+  }
+}
+
 export function useRecaptcha(action: string) {
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +68,7 @@ export function useRecaptcha(action: string) {
     let active = true
     async function initialize() {
       try {
-        const response = await fetch('/api/auth/config', { cache: 'no-store', signal: AbortSignal.timeout(15000) })
+        const response = await fetchAuthConfig()
         const data = await response.json()
         if (!response.ok) throw new Error('Security validation is unavailable. Please try again later.')
         const config = data.recaptcha

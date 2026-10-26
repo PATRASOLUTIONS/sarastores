@@ -88,8 +88,6 @@ interface PricePreview {
   oldPrice: number | null
   newPrice: number
   newMrp: number | null
-  oldStock: number | null
-  newStock: number | null
   oldActive: boolean | null
   newActive: boolean | null
   status: string
@@ -910,9 +908,9 @@ export default function AdminProducts() {
       const XLSX = await import("xlsx")
       const book = XLSX.utils.book_new()
       const sheet = XLSX.utils.json_to_sheet(rows)
-      sheet["!cols"] = [22, 16, 16, 12, 16].map(wch => ({ wch }))
+      sheet["!cols"] = [22, 16, 16, 16].map(wch => ({ wch }))
       XLSX.utils.book_append_sheet(book, sheet, "Active Products")
-      XLSX.writeFile(book, "active-products-price-mrp-stock.xlsx")
+      XLSX.writeFile(book, "active-products-price-mrp.xlsx")
       toast.success(`Downloaded ${rows.length} customer-visible products`)
     } catch (cause) {
       console.error("[Price Import] Template failed", cause)
@@ -962,7 +960,7 @@ export default function AdminProducts() {
         setShowPreviewModal(false)
         setShowPriceUpdateModal(true) // Show result in main modal? Or just alert. Let's keep it simple.
         await fetchProducts()
-        alert(`Price/MRP/stock/visibility update completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\n${(result.errors || []).slice(0, 10).join("\n")}`)
+        alert(`Price/MRP/visibility update completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\n${(result.errors || []).slice(0, 10).join("\n")}`)
       }
 
     } catch (error) {
@@ -1744,7 +1742,7 @@ export default function AdminProducts() {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 h-10">
-                  Download customer-visible products, edit their values, then upload price, MRP, stock and visibility updates.
+                  Download customer-visible products, then upload price, MRP and visibility updates.
                 </p>
 
                 <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 shadow-sm">
@@ -1753,9 +1751,9 @@ export default function AdminProducts() {
                     <p>• Col 1: <strong>itemno</strong> (SKU)</p>
                     <p>• Col 2: <strong>price</strong> (New Price)</p>
                     <p>• Col 3: <strong>mrp</strong> (optional; blank keeps current MRP)</p>
-                    <p>• Col 4: <strong>stock</strong> (optional; 0 marks out of stock)</p>
-                    <p>• Col 5: <strong>active</strong> (active / inactive; optional)</p>
-                    <p>Price must not exceed the new/current MRP. Blank stock keeps current stock.</p>
+                    <p>• Col 4: <strong>active</strong> (active / inactive; optional)</p>
+                    <p>Price must not exceed the new/current MRP.</p>
+                    <p>Stock quantities come from <Link href="/admin/stock-check" className="font-semibold underline">Stock Check</Link>.</p>
                     <p>Active shows the product to customers; inactive hides it. Blank active keeps current visibility.</p>
                   </div>
                 </div>
@@ -1913,7 +1911,6 @@ export default function AdminProducts() {
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">MRP (old → new)</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Old Price</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">New Price</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Stock (old → new)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Customer visibility (old → new)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Status</th>
                     </tr>
@@ -1933,7 +1930,6 @@ export default function AdminProducts() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-right">{item.oldStock ?? '-'} → {item.newStock ?? '-'}</td>
                         <td className="px-4 py-3 text-sm text-center">
                           {item.oldActive === null ? '-' : item.oldActive ? 'Active' : 'Inactive'} → {item.newActive === null ? '-' : item.newActive ? 'Active' : 'Inactive'}
                         </td>

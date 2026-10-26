@@ -1,5 +1,6 @@
 const API_PAGE_ACCESS: [string, string][] = [
   ["/api/admin/store-locations", "/admin/store-locations"],
+  ["/api/admin/store-stock", "/admin/stock-check"],
   ["/api/admin/store-qr", "/admin/store-qr"],
   ["/api/admin/lucky-draw", "/admin/lucky-draw"],
   ["/api/spin-wheel/admin", "/admin/spin-wheel"],
@@ -14,6 +15,7 @@ const API_PAGE_ACCESS: [string, string][] = [
   ["/api/orders", "/admin/orders"],
   ["/api/payments", "/admin/payments"],
   ["/api/coupons", "/admin/promotions"],
+  ["/api/admin/gifts", "/admin/gifts"],
   ["/api/leads", "/admin/leads"],
   ["/api/contact-inquiries", "/admin/contact-inquiries"],
   ["/api/complaints", "/admin/complaints"],

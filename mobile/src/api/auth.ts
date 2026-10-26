@@ -78,7 +78,7 @@ export async function logout(): Promise<void> {
     // Best effort: the local tokens are cleared regardless, so a failed call
     // still signs the user out on this device.
     try {
-      await api.post("/api/v1/auth/logout", { refreshToken })
+      await api.post("/api/v1/auth/logout", { refreshToken }, { auth: true, skipTokenRefresh: true })
     } catch {
       /* ignore */
     }

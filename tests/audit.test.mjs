@@ -71,6 +71,7 @@ for (const [label, current, version, expected] of [
       "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
       "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => ({ ...user, sessionVersion: version }) },
       "@/lib/auth-credentials": { getAuthenticatedUserById: async () => current },
+      "@/lib/session-revocation": { isSessionRevoked: async () => false },
     })
     assert.equal(!!(await loader.load("lib/auth.ts").getSession()), expected)
   })
@@ -81,6 +82,7 @@ test("a database outage during session lookup is not reported as logged out", as
     "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
     "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => user },
     "@/lib/auth-credentials": { getAuthenticatedUserById: async () => { throw new Error("Fixture database outage") } },
+    "@/lib/session-revocation": { isSessionRevoked: async () => false },
   })
   await assert.rejects(() => loader.load("lib/auth.ts").getSession(), /Fixture database outage/)
 })
@@ -90,6 +92,7 @@ test("server authorization uses live roles instead of stale signed privileges", 
     "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: "fixture-token" }) }) },
     "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => ({ ...user, role: "superadmin" }) },
     "@/lib/auth-credentials": { getAuthenticatedUserById: async () => user },
+    "@/lib/session-revocation": { isSessionRevoked: async () => false },
   })
   assert.equal((await loader.load("lib/auth.ts").getSession()).user.role, "user")
   assert.equal((await loader.load("lib/auth.ts").requireFullAdmin()).ok, false)
@@ -375,6 +378,25 @@ for (const endpoint of ["place-order", "queue-order"]) {
   })
 }
 
+const instoreEnv = { INSTORE_PURCHASE_ENABLED: "true", COD_ENABLED: "true" }
+
+for (const value of [undefined, "false", "yes"]) {
+  test(`in-store purchase is refused when INSTORE_PURCHASE_ENABLED=${value}`, async () => {
+    let calls = 0
+    const loader = sourceLoader({
+      "@/lib/auth": auth(),
+      "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { AUTH: {}, ORDERS: {} } },
+      "@/lib/db-service": mockDb({ findOne: async () => { calls++; return null } }),
+      "@/lib/email": { sendEmail: async () => { calls++; return { success: true } } },
+    }, { env: value === undefined ? {} : { INSTORE_PURCHASE_ENABLED: value } })
+    const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
+      email: user.email, employeeId: "fixture", action: "verify", checkout: { items: [{ id, quantity: 1 }] },
+    }))
+    assert.equal(result.status, 403)
+    assert.equal(calls, 0)
+  })
+}
+
 test("in-store OTP rejects nonexistent employees before sending an email", async () => {
   let mails = 0
   const loader = sourceLoader({
@@ -382,7 +404,7 @@ test("in-store OTP rejects nonexistent employees before sending an email", async
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { AUTH: {} } },
     "@/lib/db-service": mockDb({ findOne: async () => null }),
     "@/lib/email": { sendEmail: async () => { mails++; return { success: true } } },
-  })
+  }, { env: instoreEnv })
   const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
     email: "attacker@example.invalid", employeeId: "fixture", action: "verify", checkout: { items: [{ id, quantity: 1 }] },
   }))
@@ -399,7 +421,7 @@ test("in-store approval validates its checkout challenge, not an email-only OTP"
       ...sourceLoader({ "@/lib/order-pricing": pricing, "@/lib/loyalty": noRewards }).load("lib/checkout-payment.ts"),
       quoteCheckout: async () => ({ ok: true, ...price, pricing: price, amount: 100, fingerprint: "fixture-checkout" }),
     },
-  })
+  }, { env: instoreEnv })
   const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
     email: user.email, employeeId: "fixture", action: "validate", otp: "123456",
     challengeId: crypto.randomUUID(), checkout: { items: [{ id, quantity: 1 }] },
@@ -407,7 +429,7 @@ test("in-store approval validates its checkout challenge, not an email-only OTP"
   assert.equal(result.status, 400)
 })
 
-function orderLoader({ intent = null, verified = true, account = user, priced = price, couponResult = { ok: true } } = {}) {
+function orderLoader({ intent = null, verified = true, account = user, priced = price, couponResult = { ok: true }, reusedTransaction = false, env = {} } = {}) {
   let writes = 0
   let persisted
   const cartClears = []
@@ -439,13 +461,15 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
     "@/lib/db-service": {
       ...mockDb({}),
       getCollection: async (name) => ({
-        findOne: async () => ({ employeeId: "fixture", email: user.email }),
+        findOne: async (filter) => filter?.["storePayment.transactionId"]
+          ? (reusedTransaction ? { _id: new ObjectId() } : null)
+          : ({ employeeId: "fixture", email: user.email }),
         find: () => ({ toArray: async () => [] }),
         updateOne: async () => { if (name === "carts") cartClears.push(name); return { matchedCount: 1 } },
       }),
     },
     "@/lib/emailTemplates": { emailTemplates: { ORDER_PENDING: { subject: "Fixture #{orderNumber}", html: () => "<p>Fixture</p>" } } },
-  })
+  }, { env: { ...instoreEnv, ...env } })
   return { route: loader.load("app/api/orders/route.ts"), writes: () => writes, persisted: () => persisted, cartClears, consumptions, transaction, adminNotifications }
 }
 
@@ -568,6 +592,48 @@ for (const method of ["razorpay", "instore"]) {
   })
 }
 
+const storeIntent = (fingerprint, overrides = {}) => ({
+  _id: "SARAECOM-777001", method: "store-payment", status: "created", amount: 10000, fingerprint,
+  store: { id: "store-1", name: "Fixture Store", phone: "9876543210", email: "store@example.invalid" }, ...overrides,
+})
+const storeDetails = { requestId: "SARAECOM-777001", requestToken: "x".repeat(43), platform: "phonepe", transactionId: "T2410231234" }
+
+test("pay at store creates a pending order under the reference the store was already sent", async () => {
+  const fingerprint = sourceLoader().load("lib/checkout-payment.ts").checkoutFingerprint(price, {}, 100)
+  const fixture = orderLoader({ intent: storeIntent(fingerprint) })
+  const response = await fixture.route.POST(request({ ...orderBody, paymentMethod: "store-payment", paymentDetails: storeDetails }))
+  assert.equal(response.status, 200)
+  const order = fixture.persisted()
+  assert.equal(order.orderId, "SARAECOM-777001")
+  assert.equal(order.status, "pending")
+  assert.equal(order.paymentVerification.verified, false)
+  assert.deepEqual(
+    { status: order.storePayment.status, platform: order.storePayment.platform, transactionId: order.storePayment.transactionId, storeName: order.storePayment.storeName },
+    { status: "confirmation_pending", platform: "phonepe", transactionId: "T2410231234", storeName: "Fixture Store" },
+  )
+  assert.equal(fixture.adminNotifications[0][2], "created")
+})
+
+test("pay at store refuses bad transaction details, changed carts, spent requests, reused IDs and the disabled flag", async () => {
+  const fingerprint = sourceLoader().load("lib/checkout-payment.ts").checkoutFingerprint(price, {}, 100)
+  for (const [details, status, options] of [
+    [{ ...storeDetails, transactionId: "" }, 400, {}],
+    [{ ...storeDetails, transactionId: "T24 1023; DROP" }, 400, {}],
+    [{ ...storeDetails, platform: "bitcoin" }, 400, {}],
+    [{ ...storeDetails, requestToken: undefined }, 400, {}],
+    [storeDetails, 409, { intent: storeIntent("changed-cart") }],
+    [storeDetails, 409, { intent: storeIntent(fingerprint, { status: "consumed" }) }],
+    [storeDetails, 409, { intent: storeIntent(fingerprint, { amount: 9000 }) }],
+    [storeDetails, 409, { reusedTransaction: true }],
+    [storeDetails, 403, { env: { PAY_AT_STORE_ENABLED: "false" } }],
+  ]) {
+    const fixture = orderLoader({ intent: storeIntent(fingerprint), ...options })
+    const response = await fixture.route.POST(request({ ...orderBody, paymentMethod: "store-payment", paymentDetails: details }))
+    assert.equal(response.status, status, JSON.stringify(details))
+    assert.equal(fixture.writes(), 0)
+  }
+})
+
 test("valid employee OTP creates a checkout-bound single-use approval without sending a real email", async () => {
   const challengeId = crypto.randomUUID()
   const secret = crypto.randomBytes(32).toString("hex")
@@ -605,7 +671,7 @@ test("valid employee OTP creates a checkout-bound single-use approval without se
         return "fixture-approval-token"
       },
     },
-  }, { env: { SESSION_SECRET: secret } })
+  }, { env: { SESSION_SECRET: secret, ...instoreEnv } })
   const result = await loader.load("app/api/auth/store-purchase/route.ts").POST(request({
     email: user.email, employeeId: "fixture", action: "validate", otp: "123456",
     challengeId, checkout: { items: [{ id, quantity: 1 }] },

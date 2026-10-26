@@ -104,6 +104,36 @@ export function toastProductName(name: string | null | undefined, max = 48): str
 }
 
 /**
+ * The product title without the marketing copy that follows it.
+ *
+ * Many catalogue names are the warehouse "Item Description": a model title such as
+ * "Samsung Galaxy M35 5G (Moonlight Blue, 128GB)" followed by " | Corning Gorilla
+ * Glass…" or a paragraph of features. This keeps the part before the first
+ * separator (outside brackets) and caps what remains at `max` characters.
+ */
+export function shortProductTitle(name: string | null | undefined, max = 80): string {
+  const cleaned = cleanProductName(name)
+  if (!cleaned) return ''
+  let depth = 0
+  let end = cleaned.length
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i]
+    if (char === '(' || char === '[') depth++
+    else if ((char === ')' || char === ']') && depth > 0) depth--
+    if (depth > 0 || i < 15) continue
+    const rest = cleaned.slice(i, i + 3)
+    if (/^ [|–—-] /.test(rest) || /^[|–—]/.test(char) || /^[.!?:;] /.test(rest.slice(0, 2)) || (i >= 25 && /^, /.test(rest.slice(0, 2)))) {
+      end = i
+      break
+    }
+  }
+  const title = cleaned.slice(0, end).replace(/[\s,;:|–—-]+$/, '')
+  if (title.length <= max) return title
+  const cut = title.slice(0, max)
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : max).trimEnd()}…`
+}
+
+/**
  * Cleans a product description by removing marketplace references
  * @param description - The raw product description
  * @returns Cleaned product description

@@ -4,7 +4,17 @@ How a product gets from a supplier listing into the Sara catalogue.
 
 **Admin → Catalogue → Product Scraper** (`/admin/scraper`)
 
+Updated 2026-10-26: Excel and manual entries now skip existing item numbers instead of updating them. Checks include inactive products and the `itemno`, `sku` and legacy `raw.itemno` fields, ignoring case and surrounding whitespace. New scraper item numbers are stored in uppercase. These changes were reviewed in source only; tests, TypeScript checks and builds remain stopped under the user's instruction.
+
+Excel upload shows total rows, item numbers ready to add, skipped rows and per-row reasons. Existing item numbers and repeated numbers within the sheet are skipped before link validation or scraping, so a skipped row's missing/broken link does not block new rows. The queue rechecks before scraping, and the server checks again in the product/specification transaction before insertion. Existing catalogue records are never updated through this scraper flow. Concurrent scraper inserts share the canonical unique specification key, so a losing transaction rolls back and reports the item as skipped when the other run added it.
+
+After a run, the page retains the result table and displays added, skipped, failed and pending counts; it no longer redirects automatically. Only server-confirmed inserts count as added. Retry processes failed/pending rows and excludes successful/skipped rows. Manual entry shows whether its item number is new or already exists, and successful manual save reports one item number added. Manual saves stay inactive pending review; bulk saves retain automatic approval/publication. Both save the product and specification together, with zero initial stock until `/admin/stock-check` supplies inventory.
+
 ---
+
+Bulk Price Update in `/admin/products` exports and accepts `itemno`, `price`, optional `mrp` and optional `active`. Stock is absent from its template and preview. Excel and Google Sheet price imports ignore any stock columns in older sheets and never write inventory quantities; the Products stock display continues to use the overall quantity supplied by `/admin/stock-check`.
+
+The full source review is recorded in [the product and inventory flow review](product-inventory-flow-review.md). Product edit saves also preserve inventory, and activation updates both `active` and `status` so reviewed scraper drafts can become visible. Stock uploads reject unknown codes or missing quantities before writes. Customer product listings fetch current data on entry, focus and every 30 seconds while visible, and display cumulative stock counts.
 
 ## 1. The three steps
 

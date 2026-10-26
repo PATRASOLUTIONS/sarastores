@@ -17,6 +17,7 @@ import Link from "next/link"
 import { Cookie, X } from "lucide-react"
 import {
   readConsent,
+  restoreRememberedConsent,
   onConsentChange,
   writeConsent,
   CONSENT_REOPEN_EVENT,
@@ -62,10 +63,21 @@ export default function ConsentBanner() {
   useEffect(() => {
     // Rendered only after mount so the server HTML stays identical for every
     // visitor and remains cacheable.
-    if (readConsent() === null) setVisible(true)
-    return onConsentChange((consent) => {
+    // A new browser or device asks the server first: the signed-in account, or
+    // someone on this network, may already have decided.
+    let active = true
+    if (readConsent() === null) {
+      void restoreRememberedConsent().then((restored) => {
+        if (active && restored === null && readConsent() === null) setVisible(true)
+      })
+    }
+    const unsubscribe = onConsentChange((consent) => {
       if (consent === null) setVisible(true)
     })
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [])
 
   // The footer's "Cookie preferences" link reopens the banner with the current

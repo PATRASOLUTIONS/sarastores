@@ -40,13 +40,15 @@ export async function GET(
       store: {
         id: store._id.toString(),
         shopName: store.shopName || "",
+        storeCode: store.storeCode || "",
+        locationType: store.locationType || "store",
         locationDescription: store.locationDescription || "",
         googleMapLocation: store.googleMapLocation || "",
         mobileNo: store.mobileNo || "",
         shopTiming: store.shopTiming || "9:00 AM - 9:00 PM",
         shopImage: store.shopImage || "",
         emailId: store.emailId || "",
-        isActive: store.isActive !== false,
+        isActive: store.isActive === true,
         createdAt: store.createdAt,
         updatedAt: store.updatedAt
       }
@@ -88,6 +90,13 @@ export async function PUT(
         success: false, 
         message: "Store not found" 
       }, { status: 404 })
+    }
+
+    if (parsed.data.storeCode && await collection.findOne(
+      { storeCode: parsed.data.storeCode, _id: { $ne: new ObjectId(id) } },
+      { projection: { _id: 1 } },
+    )) {
+      return NextResponse.json({ success: false, message: `Store code ${parsed.data.storeCode} is already used by another store` }, { status: 409 })
     }
 
     const updateData = { ...parsed.data, updatedAt: new Date() }

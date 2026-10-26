@@ -30,6 +30,9 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: "Invalid input", details: parsed.error.flatten().fieldErrors }, { status: 400 })
     }
+    if (parsed.data.type === "buy_get_product" && parsed.data.active && !await (await getCollection<{ _id: string; active: boolean }>("gift_items")).findOne({ _id: parsed.data.giftId!, active: true })) {
+      return NextResponse.json({ error: "Select an active gift from Gift Listing" }, { status: 400 })
+    }
     const col = await getCollection(COLLECTIONS.COUPONS)
     if (await col.findOne({ code: parsed.data.code })) {
       return NextResponse.json({ success: false, error: "Coupon code already exists" }, { status: 409 })

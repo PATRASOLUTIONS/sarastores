@@ -6,7 +6,7 @@ import { ArrowRight, BadgeCheck, CreditCard, Headphones, MapPin, RefreshCw, Shie
 import AddToCartButton from "@/components/AddToCartButton"
 import CompareProductButton from "@/components/CompareProductButton"
 import { useBrandImages } from "@/hooks/useBrandImages"
-import { bannerGradient, type SiteBanner } from "@/hooks/useBanners"
+import { bannerGradient, bannerIsPhotoOnly, type SiteBanner } from "@/hooks/useBanners"
 import { cleanProductName } from "@/utils/cleanProductName"
 import styles from "./homepage.module.css"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
@@ -96,6 +96,10 @@ const BENEFITS = [
 ]
 
 export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
+  void storeCount
+  void BENEFITS
+  return null
+  /*
   const marketing = useMarketingContent("home")
   const benefits = marketing.items("benefits", BENEFITS.map(item => ({ ...item, detail: item.subtitle })))
   return (
@@ -108,9 +112,13 @@ export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
       ))}
     </section>
   )
+  */
 }
 
 export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
+  void brands
+  return null
+  /*
   if (brands.length === 0) return null
 
   return (
@@ -121,7 +129,6 @@ export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
           <Link key={name} href={href} className={styles.pedestalItem}>
             <span className={styles.pedestalStage}>
               {logo ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, "/placeholder.svg")} />
               ) : (
                 <strong>{name.slice(0, 1)}</strong>
@@ -134,6 +141,7 @@ export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
       </div>
     </section>
   )
+  */
 }
 
 export function HomepageCategories({ categories }: { categories: HomeCategory[] }) {
@@ -179,35 +187,55 @@ export function HomepageDeals({ products, loading, error, retry }: {
         <div className={styles.catalogueMessage}><p>New deals are on their way.</p><Link href="/products">Explore all products <ArrowRight size={14} /></Link></div>
       ) : (
         <div className={styles.productGrid}>
-          {products.map((product) => {
-            const mrp = product.mrp && product.mrp > product.price ? product.mrp : undefined
-            const discount = mrp ? Math.round((1 - product.price / mrp) * 100) : 0
-            const name = cleanProductName(product.name)
-            return (
-              <article key={product.id} className={styles.productCard}>
-                <Link href={`/product/${product.slug || product.id}`} className={styles.productImage} aria-label={name}>
-                  {discount > 0 && <span className={styles.discount}>{discount}% OFF</span>}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={product.image} alt={name} loading="lazy" onError={(event) => {
-                    event.currentTarget.onerror = null
-                    event.currentTarget.src = "/placeholder.svg"
-                  }} />
-                </Link>
-                <Link href={`/product/${product.slug || product.id}`} className={styles.productName}>{name}</Link>
-                <p className={styles.price}>
-                  <strong>₹{product.price.toLocaleString("en-IN")}</strong>
-                  {mrp && <del>₹{mrp.toLocaleString("en-IN")}</del>}
-                </p>
-                <p className={styles.rating}>
-                  {product.rating ? <><Star size={14} fill="currentColor" aria-hidden /><span>{product.rating.toFixed(1)}{product.reviewsCount ? ` (${product.reviewsCount.toLocaleString("en-IN")})` : ""}</span></> : <span className={styles.warranty}>{marketing.text("deals", "warrantyLabel")}</span>}
-                </p>
-                <AddToCartButton product={product} className={styles.cartButton} />
-                <CompareProductButton productId={product.id} name={name} />
-              </article>
-            )
-          })}
+          {products.map((product) => <HomeProductCard key={product.id} product={product} warrantyLabel={marketing.text("deals", "warrantyLabel")} />)}
         </div>
       )}
+    </section>
+  )
+}
+
+export function HomeProductCard({ product, warrantyLabel = "Brand warranty included" }: { product: HomeProduct; warrantyLabel?: string }) {
+  const mrp = product.mrp && product.mrp > product.price ? product.mrp : undefined
+  const discount = mrp ? Math.round((1 - product.price / mrp) * 100) : 0
+  const name = cleanProductName(product.name)
+  return (
+    <article className={styles.productCard}>
+      <Link href={`/product/${product.slug || product.id}`} className={styles.productImage} aria-label={name}>
+        {discount > 0 && <span className={styles.discount}>{discount}% OFF</span>}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={product.image} alt={name} loading="lazy" onError={(event) => {
+          event.currentTarget.onerror = null
+          event.currentTarget.src = "/placeholder.svg"
+        }} />
+      </Link>
+      <Link href={`/product/${product.slug || product.id}`} className={styles.productName}>{name}</Link>
+      <p className={styles.price}>
+        <strong>₹{product.price.toLocaleString("en-IN")}</strong>
+        {mrp && <del>₹{mrp.toLocaleString("en-IN")}</del>}
+      </p>
+      <p className={styles.rating}>
+        {product.rating ? <><Star size={14} fill="currentColor" aria-hidden /><span>{product.rating.toFixed(1)}{product.reviewsCount ? ` (${product.reviewsCount.toLocaleString("en-IN")})` : ""}</span></> : <span className={styles.warranty}>{warrantyLabel}</span>}
+      </p>
+      <AddToCartButton product={product} className={styles.cartButton} />
+      <CompareProductButton productId={product.id} name={name} />
+    </article>
+  )
+}
+
+export function HomepageProductRail({ title, href, ctaText = "View All", products, label }: {
+  title: string
+  href: string
+  ctaText?: string
+  products: HomeProduct[]
+  label: string
+}) {
+  if (!products.length) return null
+  return (
+    <section className={styles.deals} aria-label={label}>
+      <HomepageHeading title={title} href={href} ctaText={ctaText} />
+      <div className={styles.productGrid}>
+        {products.map((product) => <HomeProductCard key={product.id} product={product} />)}
+      </div>
     </section>
   )
 }
@@ -217,7 +245,11 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
   if (!cards.length) return null
   return (
     <section className={styles.promotions} style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }} aria-label="Exchange, EMI and special offers">
-      {cards.map((card) => (
+      {cards.map((card) => bannerIsPhotoOnly(card) ? (
+        <article key={card.id} className={`${styles.promoCard} ${styles.promoPhotoCard}`}>
+          {card.ctaLink ? <Link href={card.ctaLink}><img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
+        </article>
+      ) : (
         <article key={card.id} className={`${styles.promoCard} ${!card.image ? styles.emiCard : ""}`} style={bannerGradient(card)}>
           <div className={styles.promoCopy} style={{ color: card.dark ? "var(--brand-text-primary)" : "#FFFFFF" }}>
             <h2>{card.title}</h2>
@@ -237,7 +269,7 @@ export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
 
   return (
     <section className={styles.brands} aria-label="Top Brands">
-      <HomepageHeading title={marketing.text("brands", "title")} href={marketing.text("brands", "ctaLink")} ctaText={marketing.text("brands", "ctaText")} />
+      <HomepageHeading title="Top Brands" href={marketing.text("brands", "ctaLink")} ctaText={marketing.text("brands", "ctaText")} />
       <div className={styles.circleRail}>
         {brands.map(({ name, logo, href }) => (
           <Link key={name} href={href} className={styles.circleItem}>

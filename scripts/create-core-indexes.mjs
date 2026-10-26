@@ -21,6 +21,19 @@ if (!MONGODB_URI) {
 
 const INDEXES = [
   {
+    collection: "users",
+    spec: { email: 1 },
+    options: { unique: true, name: "email_case_insensitive_unique", collation: { locale: "en", strength: 2 },
+      partialFilterExpression: { email: { $type: "string" } } },
+    why: "Account email uniqueness also covers legacy case variants and concurrent writers; reconcile conflicting records before applying.",
+  },
+  {
+    collection: "revoked_sessions",
+    spec: { expiresAt: 1 },
+    options: { name: "revoked_session_expiry", expireAfterSeconds: 0 },
+    why: "Logged-out token digests are needed only until their signed expiry.",
+  },
+  {
     collection: "custom_posters",
     spec: { slug: 1 },
     options: { unique: true, name: "custom_poster_slug_unique" },
@@ -43,6 +56,18 @@ const INDEXES = [
     spec: { shopName: 1 },
     options: { unique: true, name: "store_shop_name_unique" },
     why: "Bulk store imports upsert by exact trimmed shop name; reconcile historical duplicates before applying.",
+  },
+  {
+    collection: "store_stock",
+    spec: { storeCode: 1, sku: 1 },
+    options: { unique: true, name: "store_stock_store_sku_unique" },
+    why: "Stock uploads upsert one row per store code and item code; checkout availability reads by both.",
+  },
+  {
+    collection: "store_stock",
+    spec: { sku: 1 },
+    options: { name: "store_stock_sku" },
+    why: "Recomputing a product's total stock sums every store's row for its item code.",
   },
   {
     collection: "store_qr_codes",

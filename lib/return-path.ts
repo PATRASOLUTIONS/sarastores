@@ -2,13 +2,21 @@
 
 const AUTH_PAGES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"]
 
+export const LAST_VISITED_PATH = "lastVisitedBeforeLogin"
+
 export function safeReturnPath(value: string | null | undefined): string | null {
   if (!value) return null
   const path = value.trim()
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || /^https?:/i.test(path)) return null
-  const pathname = path.split(/[?#]/)[0]
+  // Browsers strip embedded tabs/newlines and resolve dot segments before
+  // navigating. Validate that same destination before checking page access.
+  if (/[\u0000-\u001F\u007F]/.test(path)) return null
+  const base = "https://return-path.invalid"
+  const destination = new URL(path, base)
+  if (destination.origin !== base) return null
+  const pathname = destination.pathname
   if (AUTH_PAGES.some((page) => pathname === page || pathname.startsWith(`${page}/`))) return null
-  return path
+  return `${pathname}${destination.search}${destination.hash}`
 }
 
 export function loginHref(pathname: string, search = ""): string {

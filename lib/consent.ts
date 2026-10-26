@@ -38,6 +38,8 @@ export const CONSENT_PURPOSES = {
   ADVERTISING: "advertising",
   /** Personalised recommendations derived from browsing and purchase history. */
   PERSONALISATION: "personalisation",
+  /** One-time delivery pincode detection, never background tracking. */
+  DELIVERY_LOCATION: "delivery_location",
 } as const
 
 export type ConsentPurpose = (typeof CONSENT_PURPOSES)[keyof typeof CONSENT_PURPOSES]
@@ -50,6 +52,7 @@ export const CONSENT_PURPOSE_LABELS: Record<ConsentPurpose, string> = {
   analytics: "Measuring how the website is used so we can improve it",
   advertising: "Showing you relevant ads on other websites",
   personalisation: "Personalised product recommendations",
+  delivery_location: "One-time location lookup to detect your delivery pincode",
 }
 
 /**
@@ -66,6 +69,7 @@ export const OPTIONAL_PURPOSES: ConsentPurpose[] = [
   CONSENT_PURPOSES.ANALYTICS,
   CONSENT_PURPOSES.ADVERTISING,
   CONSENT_PURPOSES.PERSONALISATION,
+  CONSENT_PURPOSES.DELIVERY_LOCATION,
 ]
 
 /** Where the affirmative action happened, for the audit trail. */
@@ -77,6 +81,7 @@ export type ConsentSource =
   | "checkout"
   | "account_deletion"
   | "admin_action"
+  | "delivery_location"
 
 export type ConsentRecord = {
   userId: string | null

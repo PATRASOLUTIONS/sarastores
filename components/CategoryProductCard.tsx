@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-import useSWR from "swr"
 import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import { useState } from "react"
 import Link from "next/link"
@@ -9,14 +8,13 @@ import Image from "next/image"
 import { Heart, Star, Shield } from "lucide-react"
 import CompareProductButton from "@/components/CompareProductButton"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/AuthContext"
+import { useWishlist } from "@/hooks/useWishlist"
 import { useCart } from "@/hooks/useCart"
 import { toast } from "react-hot-toast"
 import { formatPrice } from "@/utils/formatPrice"
 import { getCatalogMRP } from "@/lib/product-display"
 import { productImageUrls } from "@/lib/product-images"
 import type { ProductCardResponse } from "@/lib/product-card-response"
-import { z } from "zod"
 import { EmiFromBadge } from "@/components/EmiCalculator"
 import { motion } from 'framer-motion'
 
@@ -57,15 +55,13 @@ interface CategoryProductCardProps {
   product: ProductCardResponse
 }
 
-const wishlistResponseSchema = z.object({ items: z.array(z.object({ id: z.string() })) })
-
 export default function CategoryProductCard({ product }: CategoryProductCardProps) {
   const productId = product.id
-  const [isWishlisted, setIsWishlisted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [isWishlistLoading, setIsWishlistLoading] = useState(false)
   const router = useRouter()
-  const { user, isAuthenticated } = useAuth()
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
+  const isWishlisted = isInWishlist(productId)
   const { addToCart } = useCart()
 
   const handleAddToCart = async () => {
@@ -90,66 +86,18 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
     setTimeout(() => setIsAdding(false), 800)
   }
 
-  // Deduplicated wishlist check — SWR shares the request across all card instances
-  const wishlistFetcher = async (url: string) => {
-    const response = await fetch(url, { cache: "no-store" })
-    if (!response.ok) throw new Error("Wishlist could not be loaded")
-    return wishlistResponseSchema.parse(await response.json())
-  }
-  const { data: wishlistData, error: wishlistError } = useSWR(
-    user ? "/api/wishlist" : null,
-    wishlistFetcher,
-    { revalidateOnFocus: false, dedupingInterval: 60000 }
-  )
-  React.useEffect(() => {
-    if (!wishlistData) return
-    const found = wishlistData.items.some((p) => p.id === productId)
-    setIsWishlisted(found)
-  }, [wishlistData, productId, product.id])
-  React.useEffect(() => {
-    if (wishlistError) console.error("Wishlist could not be loaded", wishlistError)
-  }, [wishlistError])
-
   const toggleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-
-    if (!user) {
-      toast.error("Please login to add items to wishlist")
-      router.push(`/login?redirect=/product/${product.slug || productId || product.id}`)
-      return
-    }
 
     // If already wishlisted, remove; otherwise add
     setIsWishlistLoading(true)
     try {
       if (!isWishlisted) {
-        const res = await fetch(`/api/wishlist`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, productId: productId || product.id }),
-        })
-        const json = await res.json().catch(() => ({}))
-        if (res.ok && json.added) {
-          setIsWishlisted(true)
-          toast.success('Added to wishlist')
-        } else if (json.message) {
-          toast.error(json.message)
-        } else {
-          toast.error('Failed to add to wishlist')
-        }
+        await addToWishlist(productId, { id: productId, name: product.name, price: product.price,
+          image: product.image, type: "hardware" })
       } else {
-        const url = `/api/wishlist?userId=${encodeURIComponent(user.id)}&productId=${encodeURIComponent(productId || product.id)}`
-        const res = await fetch(url, { method: 'DELETE' })
-        const json = await res.json().catch(() => ({}))
-        if (res.ok && json.removed) {
-          setIsWishlisted(false)
-          toast.success('Removed from wishlist')
-        } else if (json.message) {
-          toast.error(json.message)
-        } else {
-          toast.error('Failed to remove from wishlist')
-        }
+        await removeFromWishlist(productId)
       }
     } catch (err) {
       console.error('Wishlist error', err)

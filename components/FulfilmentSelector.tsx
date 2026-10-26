@@ -6,33 +6,22 @@ import { CheckCircle, MapPin, Store, Truck, Zap } from "lucide-react"
 import { analytics } from "@/lib/analytics"
 import { checkoutCity } from "@/lib/checkout-region"
 import { useSettingsData } from "@/hooks/useSettingsData"
+import { formatDistance, useNearbyStores } from "@/hooks/useNearbyStores"
+import { farStoreMessage, type StoreStockState } from "@/hooks/useStoreStock"
 import styles from "./FulfilmentSelector.module.css"
 
 /**
  * Click & Pick fulfilment selector ("OMNICHANNEL — THIS SHOULD BE A TOP PRIORITY").
  *
- * Lets the shopper choose home delivery or collection from a SARA store. Store
- * availability is shown as "reserve on confirmation" because per-store stock
- * comes from SAP, which is not connected yet — see
- * docs/brd/PENDING-EXTERNAL-INTEGRATIONS.md (SAP-02, SAP-06).
+ * Shows active retail stores holding the full requested cart. Uploaded
+ * item-code/store-code quantities determine pickup and delivery fallback.
  */
 
 export type FulfilmentMethod = "delivery" | "pickup"
 
 export interface PickupStore {
   id: string
-  name: string
-  address: string
-  city: string
-  phone: string
-  hours: string
-  state?: string
-  pincode?: string
-  image?: string
-}
-
-interface ApiStore {
-  id: string
+  storeCode?: string
   name: string
   address: string
   city: string
@@ -49,6 +38,9 @@ export default function FulfilmentSelector({
   selectedStore,
   onStoreChange,
   deliveryFeeLabel = "Charges confirmed at payment",
+  deliveryPincode = "",
+  deliveryCity = "",
+  stock,
   children,
 }: {
   method: FulfilmentMethod
@@ -56,57 +48,57 @@ export default function FulfilmentSelector({
   selectedStore: PickupStore | null
   onStoreChange: (store: PickupStore | null) => void
   deliveryFeeLabel?: string
+  /** The shopper's delivery address, used to put the nearest stores first. */
+  deliveryPincode?: string
+  deliveryCity?: string
+  /** Whole-cart eligibility and per-item quantities for every active store. */
+  stock: StoreStockState
   children?: ReactNode
 }) {
-  const [stores, setStores] = useState<ApiStore[]>([])
+  const { stores: nearbyStores, loading: storesLoading, error: storesError, retry: retryStores, pincode, nearestId: nearbyNearestId } = useNearbyStores(deliveryPincode, deliveryCity, { allStores: true })
+  const rankedStores = useMemo(
+    () => nearbyStores.filter(store => stock.storeIds?.has(store.id)),
+    [nearbyStores, stock.storeIds],
+  )
+  const nearestId = nearbyNearestId ? rankedStores[0]?.id : undefined
+  const loading = storesLoading || stock.loading || (!stock.storeIds && !stock.error)
+  const error = storesError || stock.error
+  const retry = () => { retryStores(); stock.retry() }
+  const farMessage = farStoreMessage(rankedStores.find(store => stock.storeIds?.has(store.id))?.distance, stock.farDistanceKm)
+
+  useEffect(() => {
+    if (!selectedStore || storesLoading || storesError) return
+    const current = nearbyStores.find(store => store.id === selectedStore.id)
+    if (!current) { onStoreChange(null); return }
+    const refreshed: PickupStore = {
+      id: current.id, storeCode: current.storeCode, name: current.name, address: current.address,
+      city: current.city, phone: current.phone, hours: current.hours,
+      state: current.state, pincode: current.pincode, image: current.image,
+    }
+    if (Object.keys(refreshed).some(field => refreshed[field as keyof PickupStore] !== selectedStore[field as keyof PickupStore])) {
+      onStoreChange(refreshed)
+    }
+  }, [selectedStore, nearbyStores, storesLoading, storesError, onStoreChange])
   const [city, setCity] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [attempt, setAttempt] = useState(0)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const { data: settings } = useSettingsData()
   const genericPhoto = settings?.storefrontImage || "/store-locator/storefront.webp"
 
-  useEffect(() => {
-    if (stores.length > 0) return
-
-    let cancelled = false
-    setLoading(true)
-    setError("")
-    ;(async () => {
-      try {
-        const res = await fetch("/api/stores")
-        if (!res.ok) throw new Error("Stores could not be loaded.")
-        const data = await res.json()
-        if (cancelled) return
-        if (!data?.success || !Array.isArray(data.stores)) throw new Error("Invalid stores response.")
-        setStores(data.stores.filter((store: ApiStore) => checkoutCity(store.city || "") &&
-          (!store.state || store.state.trim().toLowerCase() === "karnataka")))
-      } catch (error) {
-        if (cancelled) return
-        console.error("[Checkout] Store pickup failed:", error)
-        setError("Stores could not be loaded. Please retry or choose home delivery.")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [stores.length, attempt])
-
   const cities = useMemo(
-    () => Array.from(new Set(stores.map((store) => checkoutCity(store.city)).filter(Boolean))).sort(),
-    [stores],
+    () => Array.from(new Set(rankedStores.map((store) => checkoutCity(store.city) || store.city.trim()).filter(Boolean))).sort(),
+    [rankedStores],
   )
+
+  useEffect(() => {
+    if (city && !cities.includes(city)) setCity("")
+  }, [city, cities])
 
   const visibleStores = useMemo(
     () => {
-      const filtered = city ? stores.filter((store) => checkoutCity(store.city) === city) : stores
+      const filtered = city ? rankedStores.filter((store) => (checkoutCity(store.city) || store.city.trim()) === city) : rankedStores
       return expanded ? filtered : filtered.slice(0, 3)
     },
-    [stores, city, expanded],
+    [rankedStores, city, expanded],
   )
 
   return (
@@ -144,15 +136,23 @@ export default function FulfilmentSelector({
       </div>
 
       {children}
-        <div className={styles.stores}>
-          <div className={styles.storeHeading}><h3>Stores for Pickup</h3>
+      {method === "delivery" && <p role="status" className="mt-3 text-sm">
+        {stock.error ? <>{stock.error} <button type="button" className="underline" onClick={stock.retry}>Retry stock check</button></>
+          : !stock.storeIds ? "Checking overall stock..."
+            : stock.deliveryAvailable ? "Your requested quantities are available for home delivery."
+              : stock.availabilityError || "Your requested quantities are unavailable for home delivery. Update your cart to continue."}
+      </p>}
+      {method === "pickup" && <div className={styles.stores}>
+          <div className={styles.storeHeading}><h3>{pincode ? `Available pickup stores near ${pincode}` : "Available pickup stores"}</h3>
             <button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? "Show fewer stores" : "View All Stores"}</button>
           </div>
           {loading ? (
             <p className="text-sm text-gray-600">Loading stores…</p>
-          ) : error ? <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="underline" onClick={() => setAttempt(value => value + 1)}>Retry stores</button></p> : stores.length === 0 ? (
+          ) : error ? <p role="alert" className="text-sm text-red-700">{error} Please retry or choose home delivery. <button type="button" className="underline" onClick={retry}>Retry stores</button></p> : rankedStores.length === 0 ? (
             <p className="text-sm text-gray-600">
-              Store pickup is unavailable right now. Please choose home delivery.
+              No active store has all the requested quantities. {stock.deliveryAvailable ? <>
+                Available for free home delivery. <button type="button" className="font-semibold underline" onClick={() => onMethodChange("delivery")}>Choose Home delivery</button>
+              </> : "Please update your cart to continue."}
             </p>
           ) : (
             <>
@@ -166,7 +166,7 @@ export default function FulfilmentSelector({
                     onStoreChange(null)
                   }}
                 >
-                  <option value="">Bangalore &amp; Mysore</option>
+                  <option value="">All cities</option>
                   {cities.map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -175,9 +175,12 @@ export default function FulfilmentSelector({
                 </select>
               </label>}
 
+              {farMessage && <p role="note" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{farMessage}</p>}
               <ul className={styles.storeGrid}>
                 {visibleStores.map((store) => {
                   const isSelected = method === "pickup" && selectedStore?.id === store.id
+                  const available = stock.storeIds?.has(store.id) === true
+                  const details = stock.byStore[store.id] || []
                   return (
                     <li key={store.id}>
                       <button
@@ -185,6 +188,7 @@ export default function FulfilmentSelector({
                         onClick={() => {
                           const picked = {
                             id: store.id,
+                            storeCode: store.storeCode,
                             name: store.name,
                             address: store.address,
                             city: store.city,
@@ -217,24 +221,45 @@ export default function FulfilmentSelector({
                             }} />
                         </div>
                         <strong>{store.name}</strong>
-                        <small className={styles.storeCity}>{checkoutCity(store.city)}</small>
+                        <small className={styles.storeCity}>
+                          {checkoutCity(store.city) || store.city}
+                          {store.distance !== null && ` · ${formatDistance(store.distance)}`}
+                        </small>
+                        {store.id === nearestId && <small className={styles.storeReady}><MapPin size={10} />Nearest to your address</small>}
                         {store.address && (
                           <span className={styles.storeAddress} title={store.address}>
                             {store.address}
                           </span>
                         )}
-                        <small className={styles.storeReady}><MapPin size={10} />Store will confirm availability</small>
+                        {store.storeCode && <small>Store code: {store.storeCode}</small>}
+                        <small className={available ? styles.storeReady : "mt-1 block text-xs text-amber-700"}>{available ? <><CheckCircle size={10} />Available for pickup</> : "Requested quantity unavailable here"}</small>
+                        {method === "pickup" && details.map(item => <small key={item.itemCode} className="block text-xs text-slate-600">
+                          Item {item.itemCode}: {item.available} available / {item.required} needed
+                        </small>)}
+                        {!available && stock.deliveryAvailable && <small className="block text-xs font-semibold text-green-700">Available for free home delivery</small>}
                       </button>
                     </li>
                   )
                 })}
               </ul>
 
-              {method === "pickup" && selectedStore && (
+              {selectedStore && !loading && !stock.storeIds?.has(selectedStore.id) && (
+                <div role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  {stock.deliveryAvailable ? <>
+                    The requested quantities are unavailable at {selectedStore.name}. Available for free home delivery.
+                    <button type="button" className="ml-2 font-semibold underline" onClick={() => {
+                      onMethodChange("delivery")
+                      analytics.selectFulfilment("delivery")
+                    }}>Continue with free home delivery</button>
+                  </> : "The requested quantities are not available for pickup or home delivery. Update your cart to continue."}
+                </div>
+              )}
+              {!selectedStore && !loading && stock.storeIds?.size === 0 && stock.deliveryAvailable && <p role="status" className="mt-3 text-sm font-semibold text-green-700">Available for free home delivery. Choose Home delivery to continue.</p>}
+              {method === "pickup" && selectedStore && stock.storeIds?.has(selectedStore.id) && (
                 <p className={styles.pickupConfirmation}>
                   <CheckCircle size={14} />
-                  Collecting from <strong>{selectedStore.name}</strong>. We will confirm stock and
-                  message you when your order is ready for pickup.
+                  Collecting from <strong>{selectedStore.name}</strong>. Your items are in stock there;
+                  we will message you when your order is ready for pickup.
                   <span className={styles.storeContact}>
                     <span>{selectedStore.address}</span>
                     {selectedStore.hours && <span>{selectedStore.hours}</span>}
@@ -244,7 +269,7 @@ export default function FulfilmentSelector({
               )}
             </>
           )}
-        </div>
+        </div>}
     </div>
   )
 }

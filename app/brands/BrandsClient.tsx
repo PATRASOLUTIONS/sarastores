@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowRight, ChevronRight, CreditCard, Search, ShieldCheck, Star, Tag, Truck, Wrench } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { bannerGradient, useBanners } from "@/hooks/useBanners"
+import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
 import { titleCaseLabel } from "@/lib/product-display"
 import { brandOf, categoryOf } from "@/utils/catalog"
 import styles from "./brands.module.css"
@@ -187,18 +187,18 @@ export default function BrandsPage() {
       </nav>
       <MarketingSections page="brands">
       <MarketingSection page="brands" section="hero">
-      <section className={`${styles.hero} ${hero ? styles.customHero : ""} ${hero && !hero.dark ? styles.lightText : ""}`}
-        style={hero ? bannerGradient(hero) : undefined} aria-labelledby="brands-hero-heading">
+      <section className={`${styles.hero} ${hero ? styles.customHero : ""} ${hero && !hero.dark ? styles.lightText : ""} ${hero && bannerIsPhotoOnly(hero) ? styles.photoHero : ""}`}
+        style={hero && !bannerIsPhotoOnly(hero) ? bannerGradient(hero) : undefined} aria-labelledby="brands-hero-heading">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={hero?.image || marketing.text("hero", "image")} alt="Electronics and home appliances from leading brands" className={styles.heroImage} />
-        <div className={styles.heroContent}>
+        <img src={hero?.image || marketing.text("hero", "image")} alt="Electronics and home appliances from leading brands" className={hero && bannerIsPhotoOnly(hero) ? styles.heroPhoto : styles.heroImage} />
+        {!(hero && bannerIsPhotoOnly(hero)) && <div className={styles.heroContent}>
           <h1 id="brands-hero-heading" className="font-heading whitespace-pre-line">{hero?.title || marketing.text("hero", "title")}</h1>
           <p>{hero?.subtitle || marketing.text("hero", "description")}</p>
           <ul className={styles.heroPoints}>{marketing.items("hero", HERO_POINTS).map(({ icon: Icon, title, detail }) => <li key={title}>
             <Icon strokeWidth={1.6} /><span>{title}<br />{detail}</span>
           </li>)}</ul>
           {hero?.ctaText && hero.ctaLink && <Link href={hero.ctaLink} className={styles.heroCta}>{hero.ctaText}<ArrowRight size={14} /></Link>}
-        </div>
+        </div>}
       </section>
       </MarketingSection>
 

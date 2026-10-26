@@ -74,6 +74,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Catalogue",
     items: [
       { name: "Products", path: "/admin/products", icon: <ShoppingBag className="h-5 w-5" /> },
+      { name: "Stock Check", path: "/admin/stock-check", icon: <Boxes className="h-5 w-5" /> },
       { name: "Categories & Brands", path: "/admin/catalogue", icon: <FolderTree className="h-5 w-5" /> },
       { name: "Specifications", path: "/admin/product-specifications", icon: <FileSpreadsheet className="h-5 w-5" /> },
       { name: "Image Coverage", path: "/admin/image-coverage", icon: <ImageIcon className="h-5 w-5" /> },
@@ -106,6 +107,7 @@ const MENU_SECTIONS: MenuSection[] = [
     items: [
       { name: "Marketing Dashboard", path: "/admin/marketing", icon: <Megaphone className="h-5 w-5" /> },
       { name: "Coupons & Offers", path: "/admin/promotions", icon: <BadgePercent className="h-5 w-5" /> },
+      { name: "Gift Listing", path: "/admin/gifts", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Super Sunday", path: "/admin/super-sunday", icon: <Star className="h-5 w-5" /> },
       { name: "Campaigns & Email", path: "/admin/customer-centric", icon: <MessageSquare className="h-5 w-5" /> },
       { name: "Email Templates", path: "/admin/customer-centric/templates", icon: <FileText className="h-5 w-5" /> },

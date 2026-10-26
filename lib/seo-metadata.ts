@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { cache } from 'react'
 import { getSettingsData } from '@/lib/db-service'
 import { headers } from 'next/headers'
+import { getConfiguredSiteOrigin, parseSiteOrigin } from '@/lib/site-origin'
 
 /**
  * Gets the site origin from env vars or request headers.
@@ -12,22 +13,17 @@ import { headers } from 'next/headers'
  * it resolves to the per-deployment hostname, not the custom domain.
  */
 export const getOriginFromHeaders = cache(async (): Promise<string> => {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL
-  if (configured) {
-    const url = new URL(configured)
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('The public site URL must use http(s)')
-    return url.origin
-  }
+  const configured = getConfiguredSiteOrigin()
+  if (configured) return configured
 
   const hdrs = await headers()
   const host = (hdrs.get('x-forwarded-host') || hdrs.get('host'))?.split(',')[0].trim()
   const proto = hdrs.get('x-forwarded-proto')?.split(',')[0].trim() ||
     (host && /^(localhost|127\.0\.0\.1|\[::1\])(?::|$)/.test(host) ? 'http' : 'https')
-  if (host) return new URL(`${proto === 'http' ? 'http' : 'https'}://${host}`).origin
+  const requestOrigin = host ? parseSiteOrigin(`${proto === 'http' ? 'http' : 'https'}://${host}`) : undefined
+  if (requestOrigin) return requestOrigin
 
-  return process.env.NEXTAUTH_URL
-    ? new URL(process.env.NEXTAUTH_URL).origin
-    : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+  return process.env.NODE_ENV === 'production' ? 'https://sarastores.com' : 'http://localhost:3000'
 })
 
 /**

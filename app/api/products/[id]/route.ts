@@ -104,6 +104,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const updateFields: Document = { ...data, updatedAt: new Date() }
     delete updateFields.id
     delete updateFields._id
+    // Inventory belongs to Stock Check. A stale editor payload must not
+    // overwrite quantities uploaded while the editor was open.
+    delete updateFields.stock
+    if (updateFields.active !== undefined) {
+      if (typeof updateFields.active !== "boolean") return NextResponse.json({ error: "Active must be a boolean" }, { status: 400 })
+      updateFields.status = updateFields.active ? "active" : "inactive"
+    }
 
     // Regenerate slug if name changes
     if (data.name) {
@@ -198,6 +205,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const data = await request.json()
     delete data.id
     delete data._id
+    delete data.stock
+    if (data.active !== undefined) {
+      if (typeof data.active !== "boolean") return NextResponse.json({ error: "Active must be a boolean" }, { status: 400 })
+      data.status = data.active ? "active" : "inactive"
+    }
     if (process.env.NODE_ENV === "development") console.log("Request data:", data)
 
     // Regenerate slug if name changes

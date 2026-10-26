@@ -19,7 +19,7 @@ const formatINR = (n: number) =>
 const COLLAPSE_KEY = "cartQuickAccess.collapsed"
 
 /**
- * Thin vertical strip docked to the LEFT edge of the viewport.
+ * Thin vertical strip docked to the RIGHT edge of the viewport.
  *
  * Renders only when:
  *   - the user is logged in (`useAuth().user` is set), AND
@@ -98,22 +98,22 @@ export default function CartQuickAccess() {
       <motion.button
         type="button"
         key="cart-tab"
-        initial={{ x: -40, opacity: 0 }}
+        initial={{ x: 40, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        exit={{ x: -40, opacity: 0 }}
+        exit={{ x: 40, opacity: 0 }}
         transition={{ type: "spring", stiffness: 380, damping: 38 }}
         onClick={() => {
           toggleCollapsed()
         }}
         aria-label={`Expand cart quick access, ${itemCount} items`}
-        className="hidden lg:flex flex-col items-center gap-1 fixed left-0 top-1/2 -translate-y-1/2 z-30 w-9 py-3 bg-white border border-gray-200 border-l-0 rounded-r-xl shadow-[2px_4px_18px_-6px_rgba(0,0,0,0.18)] hover:bg-brand-primary-subtle/40 transition-colors"
+        className="hidden lg:flex flex-col items-center gap-1 fixed right-0 top-[calc(50%-72px)] -translate-y-1/2 z-30 w-9 py-3 bg-white border border-gray-200 border-r-0 rounded-l-xl shadow-[-2px_4px_18px_-6px_rgba(0,0,0,0.18)] hover:bg-brand-primary-subtle/40 transition-colors"
       >
-        <ChevronRight className="h-3.5 w-3.5 text-brand-primary" />
+        <ChevronLeft className="h-3.5 w-3.5 text-brand-primary" />
         <ShoppingCart className="h-4 w-4 text-brand-primary" strokeWidth={2.25} />
         <span className="text-[10px] font-extrabold text-gray-700 tabular-nums leading-none">
           {itemCount}
         </span>
-        <ChevronRight className="h-3.5 w-3.5 text-brand-primary" />
+        <ChevronLeft className="h-3.5 w-3.5 text-brand-primary" />
       </motion.button>
     )
   }
@@ -122,12 +122,12 @@ export default function CartQuickAccess() {
     <AnimatePresence>
       <motion.aside
         key="cart-quick-access"
-        initial={{ x: -72, opacity: 0 }}
+        initial={{ x: 72, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        exit={{ x: -72, opacity: 0 }}
+        exit={{ x: 72, opacity: 0 }}
         transition={{ type: "spring", stiffness: 380, damping: 38 }}
         aria-label="Quick cart access"
-        className="hidden lg:flex flex-col fixed left-0 top-1/2 -translate-y-1/2 z-30 w-[60px] bg-white/95 backdrop-blur border border-gray-200 border-l-0 rounded-r-2xl shadow-[2px_4px_18px_-6px_rgba(0,0,0,0.18)] overflow-hidden"
+        className="hidden lg:flex flex-col fixed right-0 top-[calc(50%-72px)] -translate-y-1/2 z-30 w-[60px] bg-white/95 backdrop-blur border border-gray-200 border-r-0 rounded-l-2xl shadow-[-2px_4px_18px_-6px_rgba(0,0,0,0.18)] overflow-hidden"
       >
         {/* Top — label badge */}
         <div className="relative bg-gradient-to-b from-brand-primary/10 to-transparent px-1 py-2 text-center">
@@ -141,9 +141,9 @@ export default function CartQuickAccess() {
             type="button"
             onClick={toggleCollapsed}
             aria-label="Collapse cart quick access"
-            className="absolute -right-1 top-1 h-4 w-4 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-400 flex items-center justify-center transition-colors shadow-sm"
+            className="absolute -left-1 top-1 h-4 w-4 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-400 flex items-center justify-center transition-colors shadow-sm"
           >
-            <ChevronLeft className="h-2.5 w-2.5" strokeWidth={3} />
+            <ChevronRight className="h-2.5 w-2.5" strokeWidth={3} />
           </button>
         </div>
 
@@ -229,14 +229,14 @@ export default function CartQuickAccess() {
           className="flex flex-col items-center gap-0.5 px-1 py-2.5 bg-gradient-to-b from-brand-accent to-orange-500 text-white hover:brightness-105 active:scale-95 transition-all focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-accent/50"
           aria-label="Open cart and proceed to buy"
         >
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.75} />
+          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.75} />
           <span
             className="text-[9px] font-extrabold uppercase tracking-wider leading-none"
             style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
           >
             Buy
           </span>
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.75} />
+          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.75} />
         </button>
       </motion.aside>
     </AnimatePresence>

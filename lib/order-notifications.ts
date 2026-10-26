@@ -11,7 +11,7 @@ export const ORDER_NOTIFICATION_COLLECTION = "order_notification_settings"
 export async function getOrderNotificationSettings() {
   const record = await (await getCollection<Document & { _id: string }>(ORDER_NOTIFICATION_COLLECTION)).findOne({ _id: ORDER_NOTIFICATION_SETTINGS_ID })
   return OrderNotificationSettingsSchema.parse(record
-    ? { enabled: record.enabled, email: record.email }
+    ? { enabled: record.enabled, email: record.email, additionalEmails: record.additionalEmails ?? [] }
     : { enabled: false, email: "" })
 }
 
@@ -47,7 +47,9 @@ export async function notifyAdminOrder(
       }
     }
     if (typeof storeSettings?.storeEmail === "string") recipients.add(storeSettings.storeEmail.trim().toLowerCase())
-    if (event === "confirmed" && settings.enabled) recipients.add(settings.email)
+    if (event === "confirmed" && settings.enabled) {
+      for (const email of [settings.email, ...settings.additionalEmails]) recipients.add(email)
+    }
     recipients.delete("")
     if (!recipients.size) return { status: "skipped" }
     const claim = await collection.updateOne(

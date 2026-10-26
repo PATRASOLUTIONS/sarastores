@@ -34,6 +34,13 @@ const formatDate = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
 }
 const imageOf = (product: ViewedProduct) => product.image || product.images?.[0] || "/placeholder.svg"
+const STORAGE_TOKEN = /(?:\(\s*)?\d+(?:\.\d+)?\s*(?:MB|GB|TB)(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:MB|GB|TB))?(?:\s*\))?/i
+function modelOf(name: string) {
+  const clean = cleanProductName(name).replace(/\s+/g, " ").trim()
+  const match = STORAGE_TOKEN.exec(clean)
+  const family = match && match.index >= 4 ? clean.slice(0, match.index) : clean
+  return family.replace(/[\s(,/-]+$/, "").trim()
+}
 const PERKS = [
   { icon: Package, label: "Track Orders Easily" }, { icon: Heart, label: "Save Your Favourites" },
   { icon: Tag, label: "Get Exclusive Offers" }, { icon: Crown, label: "Enjoy Member Benefits" },
@@ -56,17 +63,20 @@ function Detail({ icon: Icon, label, value, action }: { icon: typeof User; label
 
 export default function DashboardPage() {
   const { user, updateProfile, isLoading: authLoading } = useAuth()
-  const { addToCart } = useCart()
+  const { cart, isLoading: cartLoading, addToCart } = useCart()
   const { isInWishlist, addToWishlist, removeFromWishlist, isLoading: wishlistLoading } = useWishlist()
   const [orders, setOrders] = useState<RecentOrder[]>([])
   const [orderLoading, setOrderLoading] = useState(true)
   const [orderError, setOrderError] = useState("")
   const [orderAttempt, setOrderAttempt] = useState(0)
   const [products, setProducts] = useState<ViewedProduct[]>([])
-  const [productsLoading, setProductsLoading] = useState(true)
+  const [productsLoading, setProductsLoading] = useState(false)
   const [productsError, setProductsError] = useState("")
   const [productsAttempt, setProductsAttempt] = useState(0)
-  const [catalogFallback, setCatalogFallback] = useState(false)
+  const [offers, setOffers] = useState<ViewedProduct[]>([])
+  const [offersLoading, setOffersLoading] = useState(true)
+  const [offersError, setOffersError] = useState("")
+  const [offersAttempt, setOffersAttempt] = useState(0)
   const [adding, setAdding] = useState<string | null>(null)
   const [wishing, setWishing] = useState<string | null>(null)
   const [profileDraft, setProfileDraft] = useState<{ name: string; phone: string; dateOfBirth: string;
@@ -106,34 +116,78 @@ export default function DashboardPage() {
     if (authLoading) return
     setProducts([])
     setProductsError("")
-    if (!accountId) { setProductsLoading(false); return }
+    if (!accountId || cart.length === 0) { setProductsLoading(false); return }
     const controller = new AbortController()
+    const seeds = cart.slice(0, 2)
     const load = async () => {
       setProductsLoading(true)
       try {
-        const response = await apiFetch("/api/user/recently-viewed", { signal: controller.signal })
-        if (!response.ok) throw new Error("Recently viewed products could not be loaded.")
-        const viewed = z.object({ products: z.array(productSchema) }).parse(await response.json()).products
-        let candidates = viewed
-        let fallback = false
-        if (viewed.length === 0) {
-          fallback = true
-          const catalogue = await fetch("/api/products?fields=card&limit=10", { signal: controller.signal })
-          if (!catalogue.ok) throw new Error("Recommended products could not be loaded.")
-          candidates = z.array(productSchema).parse(await catalogue.json())
-        }
+        const lists = await Promise.all(seeds.map(async item => {
+          const query = modelOf(item.name).split(/\s+/).slice(0, 4).join(" ")
+          if (!query) return []
+          const response = await fetch(`/api/products?fields=card&limit=30&search=${encodeURIComponent(query)}`, { signal: controller.signal })
+          if (!response.ok) throw new Error("Recommended products could not be loaded.")
+          return z.array(productSchema).parse(await response.json())
+        }))
         if (controller.signal.aborted) return
-        setProducts(candidates.filter(product => product.active !== false).slice(0, 5))
-        setCatalogFallback(fallback)
+        const inCart = new Set(cart.map(item => item.id))
+        const seen = new Set<string>()
+        const picks: ViewedProduct[] = []
+        lists.forEach((list, index) => {
+          const price = Number(seeds[index].price) || 0
+          const model = modelOf(seeds[index].name).toLowerCase()
+          const ranked = list.filter(product => {
+            if (!product.id || inCart.has(product.id) || product.active === false || product.stock === 0) return false
+            const productModel = modelOf(product.name).toLowerCase()
+            const similarModel = model.length >= 4 && productModel.length >= 4 && (productModel.includes(model) || model.includes(productModel))
+            const inRange = price > 0 && product.price >= price * 0.75 && product.price <= price * 1.35
+            return similarModel && inRange
+          })
+          ranked.forEach(product => {
+            if (seen.has(product.id) || picks.length >= 8) return
+            seen.add(product.id)
+            picks.push(product)
+          })
+        })
+        setProducts(picks)
       } catch (error) {
         if (controller.signal.aborted) return
-        console.error("[Dashboard] Product discovery failed:", error)
-        setProductsError("Products could not be loaded. Please retry.")
+        console.error("[Dashboard] Recommendations failed:", error)
+        setProductsError("Recommended products could not be loaded. Please retry.")
       } finally { if (!controller.signal.aborted) setProductsLoading(false) }
     }
     void load()
     return () => controller.abort()
-  }, [accountId, authLoading, productsAttempt])
+  }, [accountId, authLoading, cart, productsAttempt])
+
+  useEffect(() => {
+    if (authLoading) return
+    setOffers([])
+    setOffersError("")
+    if (!accountId) { setOffersLoading(false); return }
+    const controller = new AbortController()
+    const load = async () => {
+      setOffersLoading(true)
+      try {
+        const discounted: ViewedProduct[] = []
+        for (let skip = 0; skip < 400 && discounted.length < 16; skip += 200) {
+          const response = await fetch(`/api/products?fields=card&limit=200&skip=${skip}`, { signal: controller.signal })
+          if (!response.ok) throw new Error("Offer products could not be loaded.")
+          const page = z.array(productSchema).parse(await response.json())
+          discounted.push(...page.filter(product => product.active !== false && product.price > 0 && (product.mrp ?? 0) > product.price))
+          if (page.length < 200) break
+        }
+        if (controller.signal.aborted) return
+        setOffers(discounted.slice(0, 16))
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Dashboard] Offer products failed:", error)
+        setOffersError("Offer products could not be loaded. Please retry.")
+      } finally { if (!controller.signal.aborted) setOffersLoading(false) }
+    }
+    void load()
+    return () => controller.abort()
+  }, [accountId, authLoading, offersAttempt])
 
   useEffect(() => {
     if (profileDraft) profileDialog.current?.showModal()
@@ -191,10 +245,18 @@ export default function DashboardPage() {
       <img src="/images/account-welcome-bag.png" alt="" aria-hidden="true" />
     </section>
     <section className={styles.panel}>
+      <header><h2>My Cart</h2><Link href="/dashboard/cart">View Cart <ArrowRight size={13} /></Link></header>
+      {cartLoading && cart.length === 0 ? <p role="status" className={styles.notice}>Loading your cart...</p> :
+        cart.length === 0 ? <p className={styles.notice}>Your cart is empty. <Link href="/products">Start shopping</Link></p> :
+          <ul className={styles.products}>{cart.map(item => <li key={item.id}>
+            <Link href={`/product/${encodeURIComponent(item.id)}`}><CartProductImage src={item.image} name={cleanProductName(item.name)} /><strong>{cleanProductName(item.name)}</strong></Link>
+            <p><b>{inr(item.price)}</b><span>Qty {item.quantity}</span></p>
+          </li>)}</ul>}
+    </section>
+    {(orderLoading || orderError || orders.length > 0) && <section className={styles.panel}>
       <header><h2>Recent Orders</h2><Link href="/dashboard/orders">View All Orders <ArrowRight size={13} /></Link></header>
       {orderLoading ? <p role="status" className={styles.notice}>Loading recent orders...</p> :
         orderError ? <p role="alert" className={styles.notice}>{orderError} <button type="button" onClick={() => setOrderAttempt(value => value + 1)}>Retry orders</button></p> :
-          orders.length === 0 ? <p className={styles.notice}>You haven&apos;t placed an order yet. <Link href="/products">Start shopping</Link></p> :
             <ul className={styles.orders}>{orders.map(order => {
               const lead = order.items[0]
               const settled = ["delivered", "collected", "cancelled", "returned", "refunded"].includes(order.status.toLowerCase())
@@ -205,12 +267,27 @@ export default function DashboardPage() {
                   <Link className={styles.outline} href={`/dashboard/orders/${encodeURIComponent(order.id)}`}>{settled ? "View Details" : "Track Order"}</Link>
                 </div></li>
             })}</ul>}
+    </section>}
+    <section className={styles.panel}>
+      <header><h2>Recommended for You</h2><Link href="/products">View All <ArrowRight size={13} /></Link></header>
+      {cart.length === 0 ? <p className={styles.notice}>Add a product to your cart to see similar models and prices.</p> :
+        productsLoading ? <p role="status" className={styles.notice}>Finding similar products...</p> :
+          productsError ? <p role="alert" className={styles.notice}>{productsError} <button type="button" onClick={() => setProductsAttempt(value => value + 1)}>Retry products</button></p> :
+            products.length ? <ul className={styles.products}>{products.map(product => <li key={product.id}>
+              <button type="button" className={styles.heart} aria-label={`${isInWishlist(product.id) ? "Remove" : "Add"} ${cleanProductName(product.name)} ${isInWishlist(product.id) ? "from" : "to"} wishlist`}
+                aria-pressed={isInWishlist(product.id)} disabled={wishlistLoading || wishing !== null} onClick={() => void toggleWishlist(product.id)}>
+                <Heart size={17} fill={isInWishlist(product.id) ? "currentColor" : "none"} /></button>
+              <Link href={`/product/${encodeURIComponent(product.slug || product.id)}`}><CartProductImage src={imageOf(product)} name={cleanProductName(product.name)} /><strong>{cleanProductName(product.name)}</strong></Link>
+              <p><b>{inr(product.price)}</b>{product.mrp && product.mrp > product.price ? <s>{inr(product.mrp)}</s> : null}</p>
+              <button type="button" className={styles.outline} disabled={adding !== null || product.stock === 0} onClick={() => void addProduct(product)}>
+                {product.stock === 0 ? "Out of Stock" : adding === product.id ? "Adding..." : "Add to Cart"}</button>
+            </li>)}</ul> : <p className={styles.notice}>No similar products found for what is in your cart.</p>}
     </section>
     <section className={styles.panel}>
-      <header><h2>{catalogFallback ? "Recommended for You" : "Recently Viewed"}</h2><Link href="/products">View All <ArrowRight size={13} /></Link></header>
-      {productsLoading ? <p role="status" className={styles.notice}>Loading products...</p> :
-        productsError ? <p role="alert" className={styles.notice}>{productsError} <button type="button" onClick={() => setProductsAttempt(value => value + 1)}>Retry products</button></p> :
-          products.length ? <ul className={styles.products}>{products.map(product => <li key={product.id}>
+      <header><h2>Our Best Sellers</h2><Link href="/offers">View All Offers <ArrowRight size={13} /></Link></header>
+      {offersLoading ? <p role="status" className={styles.notice}>Loading offer products...</p> :
+        offersError ? <p role="alert" className={styles.notice}>{offersError} <button type="button" onClick={() => setOffersAttempt(value => value + 1)}>Retry offers</button></p> :
+          offers.length ? <ul className={styles.products}>{offers.map(product => <li key={product.id}>
             <button type="button" className={styles.heart} aria-label={`${isInWishlist(product.id) ? "Remove" : "Add"} ${cleanProductName(product.name)} ${isInWishlist(product.id) ? "from" : "to"} wishlist`}
               aria-pressed={isInWishlist(product.id)} disabled={wishlistLoading || wishing !== null} onClick={() => void toggleWishlist(product.id)}>
               <Heart size={17} fill={isInWishlist(product.id) ? "currentColor" : "none"} /></button>
@@ -218,7 +295,7 @@ export default function DashboardPage() {
             <p><b>{inr(product.price)}</b>{product.mrp && product.mrp > product.price ? <s>{inr(product.mrp)}</s> : null}</p>
             <button type="button" className={styles.outline} disabled={adding !== null || product.stock === 0} onClick={() => void addProduct(product)}>
               {product.stock === 0 ? "Out of Stock" : adding === product.id ? "Adding..." : "Add to Cart"}</button>
-          </li>)}</ul> : <p className={styles.notice}>Browse products to discover your next favourite. <Link href="/products">View products</Link></p>}
+          </li>)}</ul> : <p className={styles.notice}>No offer products are available right now.</p>}
     </section>
     <div className={styles.accountDetails}>
       <SavedAddresses />

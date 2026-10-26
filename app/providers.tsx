@@ -1,6 +1,8 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { Suspense } from "react"
+import LoginReturnTracker from "@/components/LoginReturnTracker"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { CartUIProvider } from "@/contexts/CartUIContext"
@@ -21,6 +23,9 @@ export function Providers({ children }: ProvidersProps) {
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange forcedTheme="light">
       <MotionConfig reducedMotion="user">
         <AuthProvider>
+          <Suspense fallback={null}>
+            <LoginReturnTracker />
+          </Suspense>
           <AntiInspect />
           <CartProvider>
             <CartUIProvider>

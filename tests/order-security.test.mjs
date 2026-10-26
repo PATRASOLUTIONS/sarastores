@@ -304,7 +304,14 @@ test("notification settings remain private, validated, normalized and persistent
   assert.equal(saved.status, 200)
   assert.equal(fixture.settings().email, "recipient@example.invalid")
   assert.equal(fixture.settings().updatedBy, staff.id)
-  assert.deepEqual(await (await route.GET()).json(), { enabled: true, email: "recipient@example.invalid" })
+  assert.deepEqual(await (await route.GET()).json(), { enabled: true, email: "recipient@example.invalid", additionalEmails: [] })
+  const many = await route.PUT(req("PUT", {
+    enabled: true, email: "recipient@example.invalid",
+    additionalEmails: ["SECOND@example.invalid", "second@example.invalid", "recipient@example.invalid"],
+  }))
+  assert.equal(many.status, 200)
+  assert.deepEqual([...fixture.settings().additionalEmails], ["second@example.invalid"])
+  assert.equal((await route.PUT(req("PUT", { enabled: true, email: "a@example.invalid", additionalEmails: ["bad\r\nBcc: x@example.invalid"] }))).status, 400)
 })
 
 test("notification configuration refuses anonymous customers and even orders-enabled staff", async () => {

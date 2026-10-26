@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
 import { getAuthenticatedUserById } from '@/lib/auth-credentials';
 import { staffCanAccessApi } from '@/lib/admin-access';
+import { isSessionRevoked } from '@/lib/session-revocation';
 
 export interface AuthSession {
   user: {
@@ -57,11 +58,7 @@ async function getBearerToken(): Promise<string | undefined> {
 export async function getSession(): Promise<AuthSession | null> {
   let token: string | undefined;
   try {
-    token = await getBearerToken();
-    if (!token) {
-      const cookieStore = await cookies();
-      token = cookieStore.get(SESSION_COOKIE)?.value;
-    }
+    token = await getRequestSessionToken();
   } catch (error) {
     // Cookie access outside a request is logged-out. A later database failure
     // must not be collapsed into the same result: callers would return 401 and
@@ -70,11 +67,19 @@ export async function getSession(): Promise<AuthSession | null> {
     return null;
   }
   const payload = await verifySessionToken(token);
-  if (!payload) return null;
+  if (!payload || !token) return null;
+  if (await isSessionRevoked(token)) return null;
   const user = await getAuthenticatedUserById(payload.id);
   if (!user || user.sessionVersion !== (payload.sessionVersion ?? 0)) return null;
   if (!['user', 'vendor', 'admin', 'superadmin'].includes(user.role)) return null;
   return { user: { ...user, role: user.role as AuthSession['user']['role'] } };
+}
+
+/** Read the same credential for session lookup and logout. */
+export async function getRequestSessionToken(): Promise<string | undefined> {
+  const bearerToken = await getBearerToken();
+  if (bearerToken) return bearerToken;
+  return (await cookies()).get(SESSION_COOKIE)?.value;
 }
 
 /**

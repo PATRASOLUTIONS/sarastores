@@ -21,7 +21,7 @@ const env = {
 const request = {
   reference: "SARAECOM-999999", amount: 12345, userId: "fixture-user",
   callbackUrl: `${env.NEXT_PUBLIC_SITE_URL}/api/payment/pinelabs/return`,
-  customer: { firstName: "Synthetic", lastName: "Customer", email: "customer@example.invalid", phone: "0000000000" },
+  customer: { firstName: "Arun", lastName: "Kumar", email: "customer@example.com", phone: "9876543210", address: "12 Fixture Street", city: "Bengaluru", state: "Karnataka", zipCode: "560001", country: "India" },
 }
 const pineOrder = {
   order_id: "v1-fixture-order", merchant_order_reference: request.reference,
@@ -57,7 +57,7 @@ test("configuration endpoint returns only non-secret gateway choices", async () 
   const loader = sourceLoader({}, { env })
   const response = await loader.load("app/api/payment/config/route.ts").GET()
   const data = await response.json()
-  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true })
+  assert.deepEqual(data, { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: false, instoreEnabled: false, storePaymentEnabled: true })
   assert.match(response.headers.get("cache-control"), /no-store/)
   for (const value of [key, pineKey, env.PINELABS_CLIENT_SECRET]) assert.equal(JSON.stringify(data).includes(value), false)
 })
@@ -78,6 +78,7 @@ for (let mask = 0; mask < 8; mask++) {
 test("disabled Razorpay refuses new checkout without calling the provider", async () => {
   let calls = 0
   const loader = sourceLoader({
+    "@/lib/checkout-idempotency": { idempotentCheckout: async (_request, _userId, _scope, work) => work() },
     "@/lib/razorpay": { getRazorpayClient: () => { calls++; throw new Error("Should not create payment") } },
   }, { env: { RAZORPAY_ENABLED: "false" } })
   assert.equal((await loader.load("app/api/payment/create-order/route.ts").POST(post({ items: [] }))).status, 503)
@@ -467,6 +468,7 @@ for (const provider of ["pinelabs", "paytm"]) {
         redeemPoints: async () => { throw new Error("Must not redeem before payment") } },
       "@/lib/checkout-payment": {
         checkoutFingerprint: () => "fixture-fingerprint",
+        hashCheckoutToken: value => crypto.createHash("sha256").update(value).digest("hex"),
         getCheckoutIntent: async () => ({ _id: "fixture-provider-order", method: provider, userId: null, status: "created" }),
         persistCheckoutOrder: async (order, intent, callback) => {
           assert.equal(initialized, true)
@@ -485,8 +487,18 @@ for (const provider of ["pinelabs", "paytm"]) {
         assert.equal(quote.amount, 123.45)
         return { provider, orderId: "fixture-provider-order", checkoutToken: token, redirectUrl: "https://provider.fixture.invalid/checkout" }
       } },
+      "@/lib/gift-promotions": { quoteGiftPromotions: async () => [], consumeGiftPromotions: async () => {} },
+      "@/lib/checkout-idempotency": { idempotentCheckout: async (_request, _userId, _scope, work) => work() },
+      "@/lib/checkout-customer": { validateCheckoutCustomer: async customer => ({ ok: true, customer }) },
       "@/lib/db-service": { getCollection: async () => { throw new Error("No cart clearing before payment") } },
     })
+    const totalChanged = await loader.load("app/api/orders/route.ts").POST(post({
+      items: [{ id: "fixture", quantity: 1 }], customer: request.customer,
+      paymentMethod: provider, expectedAmount: 100,
+    }))
+    assert.equal(totalChanged.status, 409)
+    assert.equal(totalChanged.headers.get("Checkout-Retry-Safe"), "true")
+    assert.equal(initialized, false)
     const response = await loader.load("app/api/orders/route.ts").POST(post({
       items: [{ id: "fixture", quantity: 1, price: 1 }], customer: request.customer,
       paymentMethod: provider, total: 1, status: "confirmed", userId: "forged-user",
@@ -605,10 +617,11 @@ test("checkout logo cards show only enabled gateways and keep offline choices in
   const options = sourceLoader({ "next/image": "provider-image" }).load("components/CheckoutPaymentOptions.tsx")
   const selected = []
   for (const codEnabled of [true, false]) {
+   for (const instoreEnabled of [true, false]) {
    for (const providers of [[], ["pinelabs"], ["razorpay", "paytm"], ["pinelabs", "razorpay", "paytm"]]) {
-     const choices = [...providers, ...(codEnabled ? ["cash-on-delivery"] : []), "instore"]
+     const choices = [...providers, ...(codEnabled ? ["cash-on-delivery"] : []), ...(instoreEnabled ? ["instore"] : [])]
      for (const choice of [null, ...choices]) {
-       const tree = options.default({ providers, codEnabled, selected: choice, onChange: value => selected.push(value) })
+       const tree = options.default({ providers, codEnabled, instoreEnabled, selected: choice, onChange: value => selected.push(value) })
        const radios = elements(tree).filter(node => node.type === "input")
        assert.deepEqual(radios.map(node => node.props.value), choices)
        assert.equal(radios.filter(node => node.props.checked).length, choice === null ? 0 : 1)
@@ -618,6 +631,7 @@ test("checkout logo cards show only enabled gateways and keep offline choices in
          assert.equal(selected.at(-1), radio.props.value)
        }
      }
+   }
    }
   }
   for (const provider of ["pinelabs", "razorpay", "paytm"]) {
@@ -663,6 +677,12 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     "@/components/LoyaltyRedeemer": "loyalty",
     "@/components/CartProductImage": "product-image",
     "@/components/OrderSuccess": "order-success",
+    "@/components/cart/CartGifts": "cart-gifts",
+    "@/hooks/useCartGifts": { useCartGifts: () => ({ gifts: [], offers: [], declinedGiftPromotions: [], loading: false, error: "", retry() {} }), clearCartGiftChoices() {} },
+    "@/components/ui/dialog": { Dialog: "dialog", DialogContent: "dialog-content", DialogHeader: "dialog-header", DialogTitle: "dialog-title", DialogDescription: "dialog-description" },
+    "@/components/PayAtStore": { PayAtStoreDialog: "store-dialog", PayAtStoreStorePicker: "store-picker" },
+    "@/lib/checkout-draft": { EMPTY_CHECKOUT_CUSTOMER: { firstName: "", lastName: "", email: "", phone: "", address: "", city: "", state: "", pincode: "", country: "India" }, readCheckoutDraft: () => null, saveCheckoutDraft: () => true, clearCheckoutDraft() {} },
+    "@/lib/checkout-recovery": { readHostedCheckout: () => null, readCheckoutRecovery: () => null },
     "@/hooks/useCart": { useCart: () => ({
       cart: [{ id: "fixture-product", type: "software", name: "Synthetic Product", price: 118, quantity: 1 }],
       clearCart() {}, removeFromCart() {}, refreshItemPrices() {}, isLoading: false,
@@ -670,17 +690,22 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked") 
     "@/contexts/AuthContext": { useAuth: () => ({ user: null, isLoading: false }) },
     "@/hooks/useSettingsData": { useSettingsData: () => ({ data: { shippingFee: 99, freeShippingThreshold: 1000 }, isLoading: false }) },
     "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
+    "@/hooks/useStoreStock": { useStoreStock: () => ({ storeIds: new Set(), pickupStoreIds: new Set(), deliveryAvailable: true, availabilityLoading: false, farDistanceKm: 15, loading: false, error: "", retry() {} }) },
     "@/lib/analytics": { analytics: { beginCheckout() {} }, toAnalyticsItem: item => item },
     "react-hot-toast": { toast: { error: message => errors.push(message) } },
   }, {
     fetch: async url => {
+      if (url === "/api/cart/validate") return Response.json({ success: true, amount: 118, pricing: { subtotal: 100, tax: 18, shipping: 0, total: 118, couponDiscount: 0, items: [{ id: "fixture-product", price: 118 }] } })
       if (url === "/api/blocked-pincodes") return Response.json({ mode: deliveryMode, blockedPincodes: ["400001"], allowedPincodes: [] })
       assert.equal(url, "/api/payment/config")
       return fail ? Response.json({ error: "Configuration unavailable" }, { status: 503 }) : Response.json(config)
     },
     context: {
       sessionStorage: { getItem: () => null },
-      window: { location: { search: "" } },
+      localStorage: { getItem: () => null, setItem() {} },
+      window: { location: { search: "" }, addEventListener() {}, removeEventListener() {} },
+      document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} },
+      setInterval: () => 1, clearInterval() {},
       console: { ...console, error: (...args) => errors.push(args) },
     },
   })
@@ -702,7 +727,7 @@ for (const mode of ["all", "blocked"]) {
     assert.equal(elements(stateField()).some(node => node.type === "option" && node.props.value === "Maharashtra"), mode === "all")
     assert.equal(fields().find(node => node.props?.id === "city").type, mode === "all" ? "input" : "select")
     for (const [name, value] of Object.entries({
-      firstName: "Synthetic", email: "fixture@example.invalid", phone: "9876543210",
+      firstName: "Arun", lastName: "Kumar", email: "fixture@example.com", phone: "9876543210",
       address: "Synthetic Test Street", state: "Maharashtra", city: "Mumbai", pincode: "400001",
     })) {
       const input = fields().find(node => node.props?.id === name)
@@ -714,8 +739,8 @@ for (const mode of ["all", "blocked"]) {
   })
 }
 
-test("checkout uses the server default, switches provider handoff, and preserves COD/in-store choices", async () => {
-  const config = { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true }
+test("home delivery uses the server default and only permits online provider handoff", async () => {
+  const config = { providers: ["pinelabs", "razorpay", "paytm"], defaultProvider: "pinelabs", codEnabled: true, instoreEnabled: true }
   const fixture = checkoutOptionsFixture(config)
   await new Promise(setImmediate)
   const options = () => findElement(fixture.render(), "checkout-options").props
@@ -730,44 +755,45 @@ test("checkout uses the server default, switches provider handoff, and preserves
     assert.equal(Object.hasOwn(gateway, "preferredMethod"), false)
   }
   options().onChange("cash-on-delivery")
-  assert.equal(options().selected, "cash-on-delivery")
-  assert.equal(findElement(fixture.render(), "payment-gateway").props.paymentMethod, "cash-on-delivery")
+  assert.equal(options().selected, "paytm")
+  assert.equal(findElement(fixture.render(), "payment-gateway").props.paymentMethod, "online")
   options().onChange("instore")
-  assert.equal(findElement(fixture.render(), "payment-gateway"), null)
-  assert.ok(findElement(fixture.render(), "in-store"))
+  assert.equal(options().selected, "paytm")
+  assert.equal(findElement(fixture.render(), "in-store"), null)
   options().onChange("pinelabs")
   assert.equal(findElement(fixture.render(), "payment-gateway").props.provider, "pinelabs")
 })
 
 for (const fail of [false, true]) {
   test(`checkout never invents an online gateway when none are available (configuration failure=${fail})`, async () => {
-    const fixture = checkoutOptionsFixture({ providers: [], defaultProvider: null, codEnabled: true }, fail)
+    const fixture = checkoutOptionsFixture({ providers: [], defaultProvider: null, codEnabled: true, instoreEnabled: true }, fail)
     await new Promise(setImmediate)
     const options = findElement(fixture.render(), "checkout-options").props
     assert.equal(options.providers.length, 0)
-    assert.equal(options.selected, fail ? "instore" : "cash-on-delivery")
-    assert.equal(options.codEnabled, !fail)
-    if (fail) assert.equal(fixture.errors.length, 1)
+    assert.equal(options.selected, null)
+    assert.equal(options.codEnabled, false)
+    assert.equal(options.instoreEnabled, false)
+    if (fail) assert.ok(fixture.errors.length >= 1)
     options.onChange("cash-on-delivery")
     if (fail) {
-      assert.equal(findElement(fixture.render(), "payment-gateway"), null)
-      assert.ok(findElement(fixture.render(), "in-store"))
+      assert.equal(findElement(fixture.render(), "checkout-options").props.selected, null)
+      assert.equal(findElement(fixture.render(), "in-store"), null)
     } else {
-      assert.equal(findElement(fixture.render(), "payment-gateway").props.paymentMethod, "cash-on-delivery")
+      assert.equal(findElement(fixture.render(), "checkout-options").props.selected, null)
     }
   })
 }
 
 for (const providers of [[], ["pinelabs"]]) {
   test(`disabled COD stays unavailable and selects a valid alternative (gateways=${providers.length})`, async () => {
-    const fixture = checkoutOptionsFixture({ providers, defaultProvider: providers[0] ?? null, codEnabled: false })
+    const fixture = checkoutOptionsFixture({ providers, defaultProvider: providers[0] ?? null, codEnabled: false, instoreEnabled: true })
     assert.equal(findElement(fixture.render(), "checkout-options").props.codEnabled, false, "Hidden until configuration loads")
     await new Promise(setImmediate)
     const options = () => findElement(fixture.render(), "checkout-options").props
     assert.equal(options().codEnabled, false)
-    assert.equal(options().selected, providers[0] ?? "instore")
+    assert.equal(options().selected, providers[0] ?? null)
     options().onChange("cash-on-delivery")
-    assert.equal(options().selected, providers[0] ?? "instore")
+    assert.equal(options().selected, providers[0] ?? null)
     assert.ok(!elements(fixture.render()).some(node => typeof node.props?.children === "string" &&
       node.props.children.includes("Choose cash on delivery")))
   })
@@ -781,7 +807,7 @@ test("COD configuration is strict, returned by the public endpoint, and checked 
   loader.env.COD_ENABLED = "true"
   assert.equal(config.cashOnDeliveryEnabled(), true)
   delete loader.env.COD_ENABLED
-  assert.equal(config.cashOnDeliveryEnabled(), true, "Retain existing deployments when unset")
+  assert.equal(config.cashOnDeliveryEnabled(), false, "Hidden unless explicitly enabled")
   loader.env.COD_ENABLED = "yes"
   assert.throws(() => config.cashOnDeliveryEnabled(), /COD_ENABLED must be true or false/)
   assert.equal((await loader.load("app/api/payment/config/route.ts").GET()).status, 500)
@@ -794,6 +820,7 @@ for (const method of ["cash", "cod", "cash-on-delivery", undefined]) {
     let pricingCalls = 0
     const loader = sourceLoader({
       "@/lib/auth": { getSession: async () => ({ user: { id: "fixture-user" } }) },
+      "@/lib/checkout-customer": { validateCheckoutCustomer: async customer => ({ ok: true, customer }) },
       "@/lib/order-pricing": { priceOrder: async () => { pricingCalls++; return { ok: false, error: "Fixture pricing reached" } } },
     }, { env: { COD_ENABLED: "false" } })
     const route = loader.load("app/api/orders/route.ts")
@@ -826,6 +853,7 @@ test("native checkout reads the same COD flag and rejects malformed configuratio
 for (const provider of ["pinelabs", "paytm"]) {
   test(`browser ${provider} checkout saves a recovery capability before navigating and does not load Razorpay`, async () => {
     const storage = new Map()
+    const browserStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }
     let navigated
     let submitted = false
     const elements = []
@@ -844,9 +872,9 @@ for (const provider of ["pinelabs", "paytm"]) {
             ...(provider === "paytm" ? { formFields: { mid: "fixture-mid", txnToken: "fixture-token", orderId: pineOrder.order_id } } : {}) } })
       },
       context: {
-        sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
-        localStorage: { setItem: (key, value) => storage.set(key, value) },
-        window: { location: { assign: url => { assert.ok(storage.has("sara_hosted_checkout")); navigated = url } } },
+        sessionStorage: browserStorage,
+        localStorage: browserStorage,
+        window: { localStorage: browserStorage, sessionStorage: browserStorage, location: { assign: url => { assert.ok(storage.has("sara_hosted_checkout")); navigated = url } } },
         document: {
           body: { appendChild: () => {} },
           createElement: type => {

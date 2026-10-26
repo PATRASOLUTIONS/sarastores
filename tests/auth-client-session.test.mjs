@@ -3,7 +3,8 @@ import test from "node:test"
 import { sourceLoader } from "./source-loader.mjs"
 
 const user = { id: "synthetic-customer", name: "Synthetic Customer", email: "customer@example.invalid", role: "user" }
-function harness({ stored = user, session = null, deferSession = false } = {}) {
+function harness({ stored = user, session = null, deferSession = false, logoutStatus = 200, logoutFailure = false } = {}) {
+  const toasts = []
   const storage = new Map(stored ? [["user", JSON.stringify(stored)], ["loginTime", String(Date.now())], ["lastActivityTime", String(Date.now())]] : [])
   storage.set("redirectAfterLogin", "/checkout")
   const localStorage = {
@@ -22,7 +23,10 @@ function harness({ stored = user, session = null, deferSession = false } = {}) {
       return Response.json({ user: session })
     }
     if (url.startsWith("/api/users/")) return Response.json(session)
-    if (url === "/api/auth/logout") return Response.json({ success: true })
+    if (url === "/api/auth/logout") {
+      if (logoutFailure) throw new Error("Synthetic logout network failure")
+      return Response.json({ success: logoutStatus === 200 }, { status: logoutStatus })
+    }
     throw new Error(`Unexpected isolated auth request: ${url}`)
   }
   const window = { fetch: response, location: { pathname: "/login", href: "/login" },
@@ -47,20 +51,35 @@ function harness({ stored = user, session = null, deferSession = false } = {}) {
   const provider = sourceLoader({
     react,
     "react/jsx-runtime": { jsx: (_type, props) => props },
-    "react-hot-toast": { toast: { error() {}, success() {} } },
+    "react-hot-toast": { toast: {
+      error: message => toasts.push({ type: "error", message }),
+      success: message => toasts.push({ type: "success", message }),
+    } },
     "next/navigation": { useRouter: () => ({ push() {} }) },
-  }, { fetch: response, context: { window, document, localStorage } }).load("contexts/AuthContext.tsx")
+  }, { fetch: response, context: { window, document, localStorage, DOMException } }).load("contexts/AuthContext.tsx")
   const render = () => { index = 0; return provider.AuthProvider({ children: null }).value }
   render(); mounted = true
   for (const effect of effects) effect()
   return {
-    render, storage, listeners,
+    render, storage, listeners, toasts,
     sessionCalls: () => sessionCalls,
     setSession: value => { session = value },
     completeSession: value => resolveSession(Response.json({ user: value })),
   }
 }
 const flush = async () => { await new Promise(setImmediate); await new Promise(setImmediate) }
+
+for (const options of [{ logoutStatus: 503 }, { logoutFailure: true }]) {
+  test(`logout failure never reports successful server invalidation: ${JSON.stringify(options)}`, async () => {
+    const app = harness({ session: user, ...options })
+    await flush()
+    app.render().logout()
+    await flush()
+    assert.equal(app.render().isAuthenticated, false)
+    assert.ok(app.toasts.some(toast => toast.type === "error" && toast.message.includes("logout")))
+    assert.equal(app.toasts.some(toast => toast.type === "success"), false)
+  })
+}
 
 test("account landing waits for hydration before redirecting an anonymous shopper", () => {
   for (const state of [{ user: null, isLoading: true }, { user: null, isLoading: false }, { user, isLoading: false }]) {
@@ -228,7 +247,7 @@ function registrationHarness() {
     "@/components/Footer": "footer",
     "@/contexts/AuthContext": { useAuth: () => ({
       isAuthenticated: false,
-      signup: async (...args) => { signups.push(args); return true },
+      signup: async (...args) => { signups.push(args); return { ok: true } },
     }) },
     "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
     "@/hooks/useRateLimit": { useRateLimit: () => ({
@@ -259,50 +278,83 @@ function registrationHarness() {
   }
 }
 
-test("registration agreements start unchecked and the combined agreement selects and clears all five", () => {
+test("registration agreement starts unchecked and selects account plus offer consent together", () => {
   const form = registrationHarness()
-  assert.equal(form.checkboxes().length, 5)
-  assert.ok(form.checkboxes().every(node => node.props.checked === false))
+  assert.equal(form.checkboxes().length, 1)
+  assert.equal(form.checkboxes()[0].props.checked, false)
   form.change("agreeToTerms", true)
-  assert.ok(form.checkboxes().every(node => node.props.checked === true))
+  assert.equal(form.checkboxes()[0].props.checked, true)
   form.change("agreeToTerms", false)
-  assert.ok(form.checkboxes().every(node => node.props.checked === false))
+  assert.equal(form.checkboxes()[0].props.checked, false)
 })
 
-test("registration combined agreement clears both agreement errors without clearing unrelated errors", async () => {
+test("registration agreement clears its error without clearing unrelated errors", async () => {
   const form = registrationHarness()
   await form.submit()
   const messages = () => form.render().filter(node => node.type === "p").map(node => node.props.children)
   assert.ok(messages().includes("You must agree to the terms"))
-  assert.ok(messages().includes("Please confirm you have read the privacy notice"))
   form.change("agreeToTerms", true)
   assert.ok(!messages().includes("You must agree to the terms"))
-  assert.ok(!messages().includes("Please confirm you have read the privacy notice"))
   assert.ok(messages().includes("Name is required"))
 })
 
-for (const optOut of [false, true]) {
-  test(`registration submits selected consent values with individual marketing opt-outs=${optOut}`, async () => {
+test("registration submits the single agreement as account and offer consent", async () => {
+  const form = registrationHarness()
+  form.change("name", "Synthetic Customer")
+  form.change("email", "customer@example.com")
+  form.change("password", "anything")
+  form.change("confirmPassword", "anything")
+  form.change("agreeToTerms", true)
+  await form.submit()
+  assert.equal(form.signups.length, 1)
+  assert.equal(form.signups[0][7], true)
+  assert.deepEqual({ ...form.signups[0][8] }, {
+    acceptPrivacyNotice: true, marketingEmail: true, marketingWhatsapp: true, marketingSms: true,
+    noticeVersion: "fixture-notice",
+  })
+})
+
+for (const [field, invalid] of [["name", "sdfksfgksjfygdkfghdkdfgkfdhgsdfgkhfgudfgkfghdfhgsdfugs"],
+  ["email", "dfgjdfkgdfdk@hjdfhgdfgkjdf.csdfsdfsdf"], ["name", " \t "], ["email", "a@-example.com"]]) {
+  test(`registration form blocks invalid ${field} before submitting: ${invalid.slice(0, 12)}`, async () => {
     const form = registrationHarness()
-    form.change("name", "Synthetic Customer")
-    form.change("email", "customer@example.invalid")
-    form.change("password", "FixturePassword123!")
-    form.change("confirmPassword", "FixturePassword123!")
-    form.change("agreeToTerms", true)
-    if (optOut) {
-      for (const name of ["marketingEmail", "marketingWhatsapp", "marketingSms"]) {
-        form.change(name, false)
-        assert.equal(form.checkboxes().find(node => node.props.name === name).props.checked, false)
-        assert.equal(form.checkboxes().find(node => node.props.name === "agreeToTerms").props.checked, true)
-        assert.equal(form.checkboxes().find(node => node.props.name === "agreePrivacyNotice").props.checked, true)
-      }
-    }
+    form.change("name", "Asha Patel"); form.change("email", "asha@example.com")
+    form.change("password", "Fixture-Password-1!"); form.change("confirmPassword", "Fixture-Password-1!")
+    form.change("agreeToTerms", true); form.change(field, invalid)
     await form.submit()
-    assert.equal(form.signups.length, 1)
-    assert.equal(form.signups[0][7], true)
-    assert.deepEqual({ ...form.signups[0][8] }, {
-      acceptPrivacyNotice: true, marketingEmail: !optOut, marketingWhatsapp: !optOut, marketingSms: !optOut,
-      noticeVersion: "fixture-notice",
-    })
+    assert.equal(form.signups.length, 0)
+    assert.ok(form.render().find(node => node.type === "p" && node.props.id === `${field}-error`))
+  })
+}
+
+test("registration typing preserves word spaces and submits canonical Unicode identity", async () => {
+  const form = registrationHarness()
+  form.change("name", "José ")
+  assert.equal(form.render().find(node => node.type === "input" && node.props.name === "name").props.value, "José ")
+  form.change("name", " Jose\u0301   A\u0301lvarez "); form.change("email", " ASHA@EXAMPLE.COM ")
+  form.change("password", "Fixture-Password-1!"); form.change("confirmPassword", "Fixture-Password-1!")
+  form.change("agreeToTerms", true); await form.submit()
+  assert.equal(form.signups.length, 1)
+  assert.equal(form.signups[0][0], "José Álvarez"); assert.equal(form.signups[0][1], "asha@example.com")
+})
+
+test("registration blur validation exposes accessible field errors", () => {
+  const form = registrationHarness(); form.change("email", "a@example..com")
+  form.render().find(node => node.type === "input" && node.props.name === "email").props.onBlur()
+  const input = form.render().find(node => node.type === "input" && node.props.name === "email")
+  assert.equal(input.props["aria-invalid"], true); assert.equal(input.props["aria-describedby"], "email-error")
+  assert.ok(form.render().find(node => node.type === "p" && node.props.id === "email-error" && node.props.role === "alert"))
+})
+
+for (const name of ["asdfghjkl", "qwertyuiop", "zxcvbnm", "sdfksfgksjfygdkfgh", "HJguygu",
+  "aaaaaaaaaaaaaaaa", "xxxxxxxxxxxxxxxx", "testtesttest", "John123", "Admin999", "null", "undefined", "NaN",
+  "true", "false", "hello_world", "hello-world"]) {
+  test(`reported junk name is blocked by the registration form: ${name}`, async () => {
+    const form = registrationHarness()
+    form.change("name", name); form.change("email", "customer@example.com")
+    form.change("password", "Fixture-password-1!"); form.change("confirmPassword", "Fixture-password-1!")
+    form.change("agreeToTerms", true); await form.submit()
+    assert.equal(form.signups.length, 0)
+    assert.ok(form.render().find(node => node.type === "p" && node.props.id === "name-error"))
   })
 }

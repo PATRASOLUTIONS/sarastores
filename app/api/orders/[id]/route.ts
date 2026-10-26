@@ -114,6 +114,7 @@ export async function GET(
       paymentMethod: normalizedOrder.paymentMethod || "cash",
       paymentDetails: normalizedOrder.paymentDetails || {},
       paymentVerification: normalizedOrder.paymentVerification || { verified: false },
+      storePayment: normalizedOrder.storePayment || null,
       fulfilment: normalizedOrder.fulfilment || { method: "delivery" },
       trackingNumber: normalizedOrder.trackingNumber || (normalizedOrder.tracking?.trackingNumber) || null,
       timeline: normalizedOrder.timeline || (normalizedOrder.statusHistory || []).map(sh => ({
@@ -219,6 +220,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
     if (!orderWithinAdminScope(scope, existingOrder)) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 })
+    }
+
+    if (existingOrder.storePayment?.status === "confirmation_pending" && parsed.data.status &&
+      !["pending", "cancelled"].includes(parsed.data.status)) {
+      return NextResponse.json({ error: "Approve the store payment before progressing this order" }, { status: 409 })
     }
 
     const now = new Date()

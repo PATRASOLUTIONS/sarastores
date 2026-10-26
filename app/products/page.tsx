@@ -92,7 +92,7 @@ const shopperCategory = (product: Product) =>
 async function fetchCatalog(): Promise<Product[]> {
   const catalog: Product[] = []
   for (let skip = 0; ; skip += 500) {
-    const response = await fetch(`/api/products?limit=500&skip=${skip}`)
+    const response = await fetch(`/api/products?limit=500&skip=${skip}`, { cache: "no-store" })
     if (!response.ok) throw new Error("Products could not be loaded. Please try again.")
     const page = productListingListResponseSchema.parse(await response.json())
     catalog.push(...page)
@@ -335,7 +335,7 @@ export default function ProductsPage() {
       setError(null)
       try {
         const [productsData, categoriesData] = await Promise.all([
-          retryCount > 0 ? fetchCatalog() : fetchWithCache("products-offers-catalog", fetchCatalog, productListingListResponseSchema, 5 * 60 * 1000),
+          fetchCatalog(),
           fetchWithCache(
             "categories",
             async () => {
@@ -359,8 +359,20 @@ export default function ProductsPage() {
         if (!cancelled) setIsLoading(false)
       }
     }
-    load()
-    return () => { cancelled = true }
+    void load()
+    let refreshing = false
+    const refresh = async () => {
+      if (document.hidden || refreshing) return
+      refreshing = true
+      try { const latest = await fetchCatalog(); if (!cancelled) setProducts(latest) }
+      catch (cause) { console.error("[Products] Catalogue refresh failed:", cause) }
+      finally { refreshing = false }
+    }
+    const onFocus = () => { void refresh() }
+    const timer = setInterval(onFocus, 30000)
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onFocus)
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus) }
   }, [retryCount])
 
   const eligibleProducts = useMemo(() => products.filter(product => {

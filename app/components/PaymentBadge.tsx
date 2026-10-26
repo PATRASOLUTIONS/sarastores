@@ -13,6 +13,8 @@ const PaymentBadge: FC<PaymentBadgeProps> = ({ method }) => {
         return 'bg-blue-100 text-blue-800'
       case 'instore':
         return 'bg-purple-100 text-purple-800'
+      case 'store-payment':
+        return 'bg-amber-100 text-amber-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -20,7 +22,8 @@ const PaymentBadge: FC<PaymentBadgeProps> = ({ method }) => {
 
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getBadgeColors()}`}>
-      {method.toLowerCase() === 'pinelabs' ? 'Pine Labs' :
+      {method.toLowerCase() === 'store-payment' ? 'Pay at store' :
+        method.toLowerCase() === 'pinelabs' ? 'Pine Labs' :
         method.toLowerCase() === 'paytm' ? 'Paytm' : method.charAt(0).toUpperCase() + method.slice(1)}
     </span>
   )

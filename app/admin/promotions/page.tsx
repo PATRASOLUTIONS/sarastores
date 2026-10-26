@@ -5,11 +5,14 @@ import { CreateCouponSchema, CouponListSchema, CouponMutationSchema, CouponDelet
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { z } from "zod"
 import { productCardResponseSchema } from "@/lib/product-card-response"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import Link from "next/link"
+import { GiftListSchema, type Gift } from "@/lib/gift-validation"
 import { toast } from "react-hot-toast"
 
-type Scope = "all" | "products" | "categories" | "skus" | "brands"
-type Type = "fixed" | "percentage" | "buy_get"
+type Scope = "all" | "products" | "categories" | "skus" | "brands" | "divisions"
+type Type = "fixed" | "percentage" | "buy_get" | "buy_get_product"
 
 interface CouponForm {
   code: string
@@ -22,6 +25,11 @@ interface CouponForm {
   categoryIds?: string
   skus?: string
   brands?: string
+  divisions?: string
+  giftId?: string | null
+  giftAutoAdd?: boolean
+  giftRemovable?: boolean
+  couponRemovable?: boolean
   startDate?: string
   endDate?: string
   noEndDate: boolean
@@ -39,9 +47,11 @@ interface Product {
   sku?: string
   manufacturerName?: string
   image?: string
+  division?: string
 }
 
-interface Coupon extends Omit<CouponForm, "productIds" | "categoryIds" | "skus" | "brands" | "startDate" | "endDate" | "maxDiscount" | "buyQty" | "getQty"> {
+interface Coupon extends Omit<CouponForm, "productIds" | "categoryIds" | "skus" | "brands" | "divisions" | "startDate" | "endDate" | "maxDiscount" | "buyQty" | "getQty"> {
+  divisions?: string[]
   id: string
   productIds?: string[]
   categoryIds?: string[]
@@ -56,7 +66,7 @@ interface Coupon extends Omit<CouponForm, "productIds" | "categoryIds" | "skus" 
 }
 
 const productListSchema = z.array(productCardResponseSchema.pick({
-  id: true, name: true, price: true, sku: true, manufacturerName: true, image: true,
+  id: true, name: true, price: true, sku: true, manufacturerName: true, image: true, division: true,
 }).extend({
   sku: z.string().nullish().transform(value => value ?? undefined),
   manufacturerName: z.string().nullish().transform(value => value ?? undefined),
@@ -65,6 +75,8 @@ const usageListSchema = z.array(z.object({
   id: z.string(), total: z.number().finite().nonnegative(),
   createdAt: z.string().optional(), date: z.string().optional(), status: z.string().optional(),
 }))
+const inputDate = (date: string | null | undefined, isGift: boolean) => date
+  ? new Date(new Date(date).getTime() + (isGift ? 330 * 60 * 1000 : 0)).toISOString().slice(0, 10) : ""
 
 export default function PromotionsAdminPage() {
   const submitLock = useSubmitLock()
@@ -73,6 +85,8 @@ export default function PromotionsAdminPage() {
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [gifts, setGifts] = useState<Gift[]>([])
+  const [giftsError, setGiftsError] = useState("")
   const [productsLoading, setProductsLoading] = useState(false)
   const [productSearch, setProductSearch] = useState("")
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
@@ -97,6 +111,53 @@ export default function PromotionsAdminPage() {
     active: true,
   })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState("")
+  const [importError, setImportError] = useState("")
+  const draftBeforeBulk = useRef<{ form: CouponForm; editingId: string | null } | null>(null)
+  const importAttempt = useRef(0)
+
+  const changeBulkOpen = (open: boolean) => {
+    if (loading) return
+    importAttempt.current++
+    setImporting(false)
+    setImportMessage("")
+    setImportError("")
+    setShowProductSelector(false)
+    if (open) {
+      draftBeforeBulk.current = { form, editingId }
+      setEditingId(null)
+      setForm({ code: "", name: "", type: "buy_get_product", value: 0, applyScope: "skus", skus: "",
+        buyQty: 1, getQty: 1, noEndDate: false, active: true, startDate: "", endDate: "",
+        giftAutoAdd: true, giftRemovable: true, couponRemovable: true })
+    } else if (draftBeforeBulk.current) {
+      setForm(draftBeforeBulk.current.form)
+      setEditingId(draftBeforeBulk.current.editingId)
+      draftBeforeBulk.current = null
+    }
+    setBulkOpen(open)
+  }
+
+  const uploadTpins = async (file: File) => {
+    const attempt = ++importAttempt.current
+    setImportMessage("")
+    setImportError("")
+    setImporting(true)
+    try {
+      if (!/\.(xlsx|xls)$/i.test(file.name)) throw new Error("Choose an Excel .xlsx or .xls file")
+      if (file.size > 5 * 1024 * 1024) throw new Error("Excel file must be 5 MB or smaller")
+      const { importPromotionTpins } = await import("@/lib/promotion-tpin-import")
+      const { tpins, duplicates } = importPromotionTpins(await file.arrayBuffer())
+      if (attempt !== importAttempt.current) return
+      setForm(current => ({ ...current, skus: tpins.join("\n") }))
+      setImportMessage(`${file.name}: ${tpins.length.toLocaleString()} TPINs imported${duplicates ? `; ${duplicates} duplicates removed` : ""}. Save the coupon to store this list.`)
+    } catch (error) {
+      if (attempt === importAttempt.current) setImportError(error instanceof Error ? error.message : "Could not read the Excel file")
+    } finally {
+      if (attempt === importAttempt.current) setImporting(false)
+    }
+  }
   const [usageFor, setUsageFor] = useState<{ code: string;
  id: string } | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
@@ -123,6 +184,9 @@ export default function PromotionsAdminPage() {
   useEffect(() => {
     load()
     loadProducts()
+    void apiFetchJson("/api/admin/gifts", {}, value => GiftListSchema.parse(value))
+      .then(data => setGifts(data.gifts.filter(gift => gift.active)))
+      .catch(error => setGiftsError(error instanceof Error ? error.message : "Could not load gifts"))
   }, [])
 
   const loadProducts = async () => {
@@ -172,20 +236,26 @@ export default function PromotionsAdminPage() {
       toast.error("Coupon name is required")
       return
     }
-    if (form.type !== "buy_get" && (!form.value || form.value <= 0)) {
+    if (!["buy_get", "buy_get_product"].includes(form.type) && (!form.value || form.value <= 0)) {
       toast.error("Discount value must be greater than 0")
       return
     }
-    if (form.type === "buy_get" && (!form.buyQty || !form.getQty)) {
+    if (["buy_get", "buy_get_product"].includes(form.type) && (!form.buyQty || !form.getQty)) {
       toast.error("Buy and Get quantities are required for Buy X Get Y offers")
       return
     }
-    if (!submitLock.acquire()) return
+    if (importing || !submitLock.acquire()) return
 
     try {
       setLoading(true)
       const payload = {
         ...form,
+        giftId: form.type === "buy_get_product" ? form.giftId || null : null,
+        divisions: form.applyScope === "divisions" ? (form.divisions || "").split(",").map(value => value.trim()).filter(Boolean) : [],
+        ...(form.type === "buy_get_product" ? {
+          startDate: form.startDate ? new Date(`${form.startDate}T00:00:00+05:30`).toISOString() : null,
+          endDate: form.endDate && !form.noEndDate ? new Date(`${form.endDate}T23:59:59.999+05:30`).toISOString() : null,
+        } : {}),
         productIds:
           form.applyScope === "products" && form.productIds
             ? form.productIds
@@ -199,7 +269,7 @@ export default function PromotionsAdminPage() {
         skus:
           form.applyScope === "skus" && form.skus
             ? form.skus
-                .split(",")
+                .split(/[,;\n\r]+/)
                 .map((s) => s.trim())
                 .filter(Boolean)
             : [],
@@ -245,6 +315,17 @@ export default function PromotionsAdminPage() {
         active: true,
       })
       setEditingId(null)
+      if (bulkOpen) {
+        importAttempt.current++
+        setBulkOpen(false)
+        setImportMessage("")
+        setImportError("")
+        if (draftBeforeBulk.current) {
+          setForm(draftBeforeBulk.current.form)
+          setEditingId(draftBeforeBulk.current.editingId)
+          draftBeforeBulk.current = null
+        }
+      }
       await load()
     } catch (e) {
       console.error(e)
@@ -268,8 +349,13 @@ export default function PromotionsAdminPage() {
       categoryIds: (c.categoryIds || []).join(","),
   skus: (c.skus || []).join(","),
       brands: (c.brands || []).join(","),
-      startDate: c.startDate ? new Date(c.startDate).toISOString().slice(0, 10) : "",
-      endDate: c.endDate ? new Date(c.endDate).toISOString().slice(0, 10) : "",
+      divisions: (c.divisions || []).join(","),
+      giftId: c.giftId,
+      giftAutoAdd: c.giftAutoAdd ?? true,
+      giftRemovable: c.giftRemovable ?? true,
+      couponRemovable: c.couponRemovable ?? true,
+      startDate: inputDate(c.startDate, c.type === "buy_get_product"),
+      endDate: inputDate(c.endDate, c.type === "buy_get_product"),
       noEndDate: !!c.noEndDate,
       usageLimit: c.usageLimit ?? undefined,
       perCustomerLimit: c.perCustomerLimit ?? undefined,
@@ -313,18 +399,10 @@ export default function PromotionsAdminPage() {
     }
   }
 
-  return (
-    <div className="max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Promotions & Coupons</h1>
-        <p className="text-gray-600 mt-1">Create and manage discount coupons for your store</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Create/Edit form */}
+  const couponEditor = (
         <div className="lg:col-span-1 bg-white rounded-lg shadow-sm border p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{editingId ? "Edit Coupon" : "Create Coupon"}</h2>
+            <h2 className="text-lg font-semibold">{bulkOpen ? "Create Bulk Coupon" : editingId ? "Edit Coupon" : "Create Coupon"}</h2>
             {editingId && (
               <button
                 onClick={() => {
@@ -377,14 +455,17 @@ export default function PromotionsAdminPage() {
               <select
                 className="w-full border rounded px-2 py-2"
                 value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as Type })}
+                disabled={bulkOpen}
+                onChange={(e) => setForm({ ...form, type: e.target.value as Type,
+                  ...(e.target.value === "buy_get_product" ? { value: 0, applyScope: "all", buyQty: form.buyQty || 1, getQty: form.getQty || 1 } : {}) })}
               >
                 <option value="fixed">Rupees Discount (₹)</option>
                 <option value="percentage">Percentage Discount (%)</option>
                 <option value="buy_get">Buy X Get Y Free</option>
+                <option value="buy_get_product">{bulkOpen ? "Buy X Get Y Free" : "Buy X Get Y Product Free"}</option>
               </select>
             </div>
-            {form.type !== "buy_get" ? (
+            {!["buy_get", "buy_get_product"].includes(form.type) ? (
               <div>
                 <label className="text-sm">{form.type === "fixed" ? "Discount (₹)" : "Discount (%)"}</label>
                 <input
@@ -416,6 +497,24 @@ export default function PromotionsAdminPage() {
                 </div>
               </>
             )}
+            {form.type === "buy_get_product" && <div className="md:col-span-2">
+              <label htmlFor="free-gift-sku" className="text-sm">{bulkOpen ? "Y: Free gift SKU" : "Free gift SKU"}</label>
+              <select id="free-gift-sku" className="mt-1 w-full rounded border p-2" value={form.giftId || ""} onChange={event => setForm({ ...form, giftId: event.target.value })}>
+                <option value="">Select a gift</option>{gifts.map(gift => <option key={gift.id} value={gift.id}>{gift.sku} — {gift.name}</option>)}
+              </select>
+              {giftsError && <p role="alert" className="mt-1 text-sm text-red-700">{giftsError}</p>}
+              <div className="mt-3 space-y-2">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.giftAutoAdd !== false} onChange={event => setForm({ ...form, giftAutoAdd: event.target.checked, ...(event.target.checked ? {} : { giftRemovable: true }) })} />Add free gift to cart by default</label>
+                <label htmlFor="gift-cart-removal" className="block text-sm">Free gift removal from cart</label>
+                <select id="gift-cart-removal" className="w-full rounded border p-2" disabled={form.giftAutoAdd === false} value={form.giftRemovable === false ? "locked" : "allowed"} onChange={event => setForm({ ...form, giftRemovable: event.target.value === "allowed" })}>
+                  <option value="allowed">Can be deleted from cart</option>
+                  <option value="locked">Cannot be deleted from cart</option>
+                </select>
+                <p className="text-xs text-gray-600">When automatic adding is off, customers can choose Add free gift in cart or checkout and can remove it. Automatic gifts follow the selected removal option.</p>
+              </div>
+              <p className="mt-2 text-xs text-gray-600">Each X eligible units earns Y gifts, up to 100 free units per offer per order. Dates use Indian time.</p>
+              <Link className="text-xs text-blue-700 underline" href="/admin/gifts">Add or edit gift products</Link>
+            </div>}
             {form.type === "percentage" && (
               <div>
                 <label className="text-sm">Max Discount (₹, optional)</label>
@@ -432,15 +531,18 @@ export default function PromotionsAdminPage() {
               <select
                 className="w-full border rounded px-2 py-2"
                 value={form.applyScope}
+                disabled={bulkOpen}
                 onChange={(e) => setForm({ ...form, applyScope: e.target.value as Scope })}
               >
                 <option value="all">All products</option>
                 <option value="products">Specific products (IDs)</option>
-                <option value="categories">Specific categories (IDs)</option>
-                <option value="brands">Specific brands</option>
-                <option value="skus">Specific SKUs</option>
+                {form.type !== "buy_get_product" && <option value="categories">Specific categories (IDs)</option>}
+                {form.type !== "buy_get_product" && <option value="brands">Specific brands</option>}
+                <option value="skus">{bulkOpen ? "X: Uploaded TPINs" : form.type === "buy_get_product" ? "Specific SKUs / item numbers" : "Specific SKUs"}</option>
+                <option value="divisions">Specific divisions</option>
               </select>
             </div>
+            {form.applyScope === "divisions" && <div className="md:col-span-2"><label htmlFor="promotion-divisions" className="text-sm">Divisions (comma-separated)</label><input id="promotion-divisions" list="promotion-division-options" className="mt-1 w-full rounded border p-2" value={form.divisions || ""} onChange={event => setForm({ ...form, divisions: event.target.value })} /><datalist id="promotion-division-options">{[...new Set(products.map(product => product.division).filter(Boolean))].map(division => <option key={division} value={division} />)}</datalist></div>}
             {form.applyScope === "categories" && (
               <div>
                 <label className="text-sm" htmlFor="coupon-category-ids">Category IDs (comma-separated)</label>
@@ -562,12 +664,29 @@ export default function PromotionsAdminPage() {
             )}
             {form.applyScope === "skus" && (
               <div className="md:col-span-2">
-                <label className="text-sm">SKUs (comma-separated)</label>
-                <input
+                {bulkOpen && <div className="mb-3 rounded border bg-blue-50 p-3">
+                  <label htmlFor="bulk-tpin-file" className="block text-sm font-medium">X: Upload TPIN Excel sheet</label>
+                  <input id="bulk-tpin-file" type="file" accept=".xlsx,.xls" disabled={importing || loading}
+                    className="mt-2 block w-full text-sm" onChange={event => {
+                      const file = event.target.files?.[0]
+                      event.target.value = ""
+                      if (file) void uploadTpins(file)
+                    }} />
+                  <p className="mt-2 text-xs text-gray-600">Use a TPIN column in the first worksheet, with one product SKU/item number per row. Up to 5,000 rows and 5 MB. Format identifiers as text to preserve leading zeros. Uploading replaces the list below.</p>
+                  {importing && <p role="status" className="mt-2 text-sm">Reading Excel sheet...</p>}
+                  {importMessage && <p role="status" className="mt-2 text-sm text-green-800">{importMessage}</p>}
+                  {importError && <p role="alert" className="mt-2 text-sm text-red-700">{importError}</p>}
+                </div>}
+                <label className="text-sm" htmlFor="promotion-skus">{bulkOpen ? "Imported TPINs" : form.type === "buy_get_product" ? "SKUs / item numbers" : "SKUs"} (comma-separated or one per line)</label>
+                <textarea
+                  id="promotion-skus"
+                  rows={3}
                   className="w-full border rounded px-2 py-2"
                   value={form.skus}
+                  disabled={importing || loading}
                   onChange={(e) => setForm({ ...form, skus: e.target.value })}
                 />
+                {form.type === "buy_get_product" && <p className="mt-1 text-xs text-gray-600">Enter multiple SKUs or item numbers. Quantities across matching products combine toward Buy X; each product is counted once.</p>}
               </div>
             )}
             {form.applyScope === "brands" && (
@@ -630,7 +749,16 @@ export default function PromotionsAdminPage() {
                 placeholder="0 = unlimited"
               />
               <p className="text-xs text-gray-500 mt-1">Maximum times per customer (0 = unlimited)</p>
+              {form.type === "buy_get_product" && <p className="text-xs text-gray-500">An account is required when a per-customer limit is set. With 0, guests can receive gifts too. Usage is counted only when a gift is included in the order.</p>}
             </div>
+            {form.type !== "buy_get_product" && <div className="md:col-span-2">
+              <label htmlFor="coupon-cart-removal" className="text-sm">Coupon removal from cart</label>
+              <select id="coupon-cart-removal" className="mt-1 w-full rounded border p-2" value={form.couponRemovable === false ? "locked" : "allowed"} onChange={event => setForm({ ...form, couponRemovable: event.target.value === "allowed" })}>
+                <option value="allowed">Can be deleted from cart</option>
+                <option value="locked">Cannot be deleted from cart</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-600">Controls whether customers can remove this coupon after applying it at checkout.</p>
+            </div>}
             <div className="md:col-span-2">
               <label className="text-sm">Active</label>
               <label className="ml-2">
@@ -645,7 +773,7 @@ export default function PromotionsAdminPage() {
           <div className="mt-4">
             <button
               onClick={submit}
-              disabled={loading}
+              disabled={loading || importing}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading && (
@@ -654,10 +782,32 @@ export default function PromotionsAdminPage() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               )}
-              {loading ? "Saving..." : editingId ? "Update Coupon" : "Create Coupon"}
+              {loading ? "Saving..." : editingId ? "Update Coupon" : bulkOpen ? "Create Bulk Coupon" : "Create Coupon"}
             </button>
           </div>
         </div>
+  )
+
+  return (
+    <div className="max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Promotions & Coupons</h1>
+        <p className="text-gray-600 mt-1">Create and manage discount coupons for your store</p>
+        <Link href="/admin/gifts" className="mt-2 inline-block text-blue-700 underline">Manage Gift Listing</Link>
+        <Dialog open={bulkOpen} onOpenChange={changeBulkOpen}>
+          <DialogTrigger asChild><button type="button" disabled={loading} className="ml-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">Bulk</button></DialogTrigger>
+          <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto" onEscapeKeyDown={event => { if (loading) event.preventDefault() }} onInteractOutside={event => { if (loading) event.preventDefault() }}>
+            <DialogHeader>
+              <DialogTitle>Bulk Buy X Get Y Free</DialogTitle>
+              <DialogDescription>Upload the eligible X product TPINs and select the Y gift SKU. Set quantities, dates and usage limits, then save the coupon.</DialogDescription>
+            </DialogHeader>
+            {bulkOpen && couponEditor}
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {bulkOpen ? <div className="rounded-lg border bg-white p-5 text-sm text-gray-600">Create your bulk gift promotion in the popup.</div> : couponEditor}
 
         {/* Right: Coupons table and Usage */}
         <div className="lg:col-span-2 space-y-6">
@@ -692,7 +842,7 @@ export default function PromotionsAdminPage() {
                         <td className="py-2 pr-4 font-mono">{c.code}</td>
                         <td className="py-2 pr-4">{c.name}</td>
                         <td className="py-2 pr-4">
-                          {c.type !== "buy_get" ? (
+                          {!["buy_get", "buy_get_product"].includes(c.type) ? (
                             <>
                               {c.type} {c.type === "fixed" ? `₹${c.value}` : `${c.value}%`}
                               {c.maxDiscount ? ` (max ₹${c.maxDiscount})` : ""}
@@ -700,6 +850,7 @@ export default function PromotionsAdminPage() {
                           ) : (
                             <>
                               Buy {c.buyQty} Get {c.getQty}
+                              {c.type === "buy_get_product" && <span className="block text-xs text-green-700">Product free: {c.giftId}</span>}
                             </>
                           )}
                         </td>

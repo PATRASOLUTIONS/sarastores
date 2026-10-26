@@ -12,7 +12,9 @@ import { useAuth } from "@/contexts/AuthContext"
 import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Shield, Check } from "lucide-react"
 import { useRecaptcha } from "@/hooks/useRecaptcha"
 import { PRIVACY_NOTICE_VERSION } from "@/lib/dpdp-config"
-import DOMPurify from "isomorphic-dompurify"
+import { destinationAfterLogin, LAST_VISITED_PATH, safeReturnPath } from "@/lib/return-path"
+import { RegistrationIdentitySchema, registrationEmailSchema, registrationNameSchema,
+  REGISTRATION_NAME_MAX_LENGTH, REGISTRATION_EMAIL_MAX_LENGTH } from "@/lib/registration-validation"
 
 export default function RegisterPage() {
   return (
@@ -43,6 +45,7 @@ function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const lock = useSubmitLock()
   const [focusedField, setFocusedField] = useState<string | null>(null)
+  const [showConsentDetails, setShowConsentDetails] = useState(false)
 
   const { enabled: recaptchaEnabled, isReady: recaptchaReady, error: recaptchaError, getToken } = useRecaptcha("signup")
 
@@ -58,20 +61,16 @@ function RegisterForm() {
   // Arriving from a guest order confirmation, so the email is already known.
   useEffect(() => {
     const email = searchParams.get("email")
-    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setFormData((prev) => (prev.email ? prev : { ...prev, email }))
+    const parsed = registrationEmailSchema.safeParse(email)
+    if (parsed.success) {
+      setFormData((prev) => (prev.email ? prev : { ...prev, email: parsed.data }))
     }
   }, [searchParams])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target
     const checked = (e.target as HTMLInputElement).checked
-    const sanitizedValue = type === "checkbox"
-      ? checked
-      : DOMPurify.sanitize(value.trim(), {
-          ALLOWED_TAGS: [],
-          ALLOWED_ATTR: []
-        })
+    const nameValidation = name === "name" ? registrationNameSchema.safeParse(value) : null
 
     const isAgreementToggle = type === "checkbox" && name === "agreeToTerms"
     setFormData((prev) => ({
@@ -83,34 +82,48 @@ function RegisterForm() {
         marketingWhatsapp: checked,
         marketingSms: checked,
       } : {
-        [name]: type === "checkbox" ? checked : sanitizedValue,
+        [name]: type === "checkbox" ? checked : value,
       }),
     }))
 
     setErrors((prev) => {
       const newErrors = { ...prev }
       delete newErrors[name]
+      if (nameValidation && !nameValidation.success) {
+        newErrors.name = nameValidation.error.issues[0].message
+      }
+      if (name === "email") delete newErrors.emailExists
       if (isAgreementToggle) delete newErrors.agreePrivacyNotice
       return newErrors
     })
   }
 
+  const validateIdentityField = (field: "name" | "email") => {
+    setFocusedField(null)
+    const schema = field === "name" ? registrationNameSchema : registrationEmailSchema
+    const result = schema.safeParse(formData[field])
+    if (result.success) setFormData(prev => ({ ...prev, [field]: result.data }))
+    setErrors(prev => {
+      const next = { ...prev }
+      if (result.success) delete next[field]
+      else next[field] = result.error.issues[0].message
+      return next
+    })
+  }
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
-
-    if (!formData.name.trim()) {
-      newErrors.name = "Name is required"
-    } else if (formData.name.trim().length < 2) {
-      newErrors.name = "Name must be at least 2 characters"
+    const identity = RegistrationIdentitySchema.safeParse(formData)
+    if (!identity.success) {
+      for (const issue of identity.error.issues) {
+        const field = String(issue.path[0])
+        if (!newErrors[field]) newErrors[field] = issue.message
+      }
     }
 
-    if (!formData.email) {
-      newErrors.email = "Email is required"
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email"
-    }
-
-    if (formData.password !== formData.confirmPassword) {
+    if (!formData.password) {
+      newErrors.password = "Password is required"
+    } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match"
     }
 
@@ -123,13 +136,14 @@ function RegisterForm() {
     }
 
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return Object.keys(newErrors).length === 0 && identity.success ? identity.data : null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm()) return
+    const identity = validateForm()
+    if (!identity) return
     if (!lock.acquire()) return
 
     let recaptchaToken: string | null = null
@@ -151,9 +165,9 @@ function RegisterForm() {
     setIsSubmitting(true)
 
     try {
-      const success = await signup(
-        formData.name,
-        formData.email,
+      const result = await signup(
+        identity.name,
+        identity.email,
         formData.password,
         honeypot,
         formTimestamp,
@@ -168,10 +182,22 @@ function RegisterForm() {
           noticeVersion: PRIVACY_NOTICE_VERSION,
         }
       )
-      if (success) {
-        router.push("/login")
+      if (result.ok) {
+        let requested = safeReturnPath(searchParams.get("redirect"))
+        try {
+          requested ||= safeReturnPath(localStorage.getItem("redirectAfterLogin"))
+            || safeReturnPath(sessionStorage.getItem(LAST_VISITED_PATH))
+          localStorage.removeItem("redirectAfterLogin")
+        } catch {
+          // A direct registration still works without browser storage.
+        }
+        window.location.assign(destinationAfterLogin(result.user, requested))
+      } else if (result.code === "EMAIL_EXISTS") {
+        setErrors({ email: result.message, emailExists: "true" })
+      } else if (result.fieldErrors) {
+        setErrors({ ...result.fieldErrors, general: result.message })
       } else {
-        setErrors({ general: "Could not create your account. Please try again." })
+        setErrors({ general: result.message })
       }
     } catch (error) {
       console.error("Registration error:", error)
@@ -285,10 +311,14 @@ function RegisterForm() {
                     name="name"
                     type="text"
                     autoComplete="name"
+                    required
+                    maxLength={REGISTRATION_NAME_MAX_LENGTH}
+                    aria-invalid={!!errors.name}
+                    aria-describedby={errors.name ? "name-error" : undefined}
                     value={formData.name}
                     onChange={handleChange}
                     onFocus={() => setFocusedField("name")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => validateIdentityField("name")}
                     className={`block h-11 w-full rounded-lg border pl-10 pr-3 text-[14px] outline-none transition-colors ${
                       errors.name
                         ? "border-red-400 bg-red-50/40"
@@ -297,7 +327,7 @@ function RegisterForm() {
                     placeholder="John Doe"
                   />
                 </div>
-                {errors.name && <p className="mt-1.5 text-[12px] text-red-600">{errors.name}</p>}
+                {errors.name && <p id="name-error" role="alert" className="mt-1.5 text-[12px] text-red-600">{errors.name}</p>}
               </div>
 
               <div>
@@ -311,12 +341,17 @@ function RegisterForm() {
                   <input
                     id="email"
                     name="email"
-                    type="email"
+                    type="text"
                     autoComplete="email"
+                    inputMode="email"
+                    required
+                    maxLength={REGISTRATION_EMAIL_MAX_LENGTH}
+                    aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? "email-error" : undefined}
                     value={formData.email}
                     onChange={handleChange}
                     onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => validateIdentityField("email")}
                     className={`block h-11 w-full rounded-lg border pl-10 pr-3 text-[14px] outline-none transition-colors ${
                       errors.email
                         ? "border-red-400 bg-red-50/40"
@@ -325,7 +360,19 @@ function RegisterForm() {
                     placeholder="you@example.com"
                   />
                 </div>
-                {errors.email && <p className="mt-1.5 text-[12px] text-red-600">{errors.email}</p>}
+                {errors.email && (
+                  <p id="email-error" role="alert" className="mt-1.5 text-[12px] text-red-600">
+                    {errors.email}
+                    {errors.emailExists && (
+                      <>
+                        {" "}
+                        <Link href="/login" className="font-semibold underline">Sign in</Link>
+                        {" or "}
+                        <Link href="/forgot-password" className="font-semibold underline">reset your password</Link>
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -361,6 +408,7 @@ function RegisterForm() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+                {errors.password && <p className="mt-1.5 text-[12px] text-red-600">{errors.password}</p>}
               </div>
 
               <div>
@@ -399,27 +447,7 @@ function RegisterForm() {
                 {errors.confirmPassword && <p className="mt-1.5 text-[12px] text-red-600">{errors.confirmPassword}</p>}
               </div>
 
-              {/*
-                DPDP Section 5 notice. The Act requires the person to be told what
-                is collected and why *before* consenting, not to be sent hunting
-                through a linked policy for it.
-              */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
-                <p className="text-[12.5px] font-semibold text-[#0F2557]">How we use your details</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
-                  We collect your <strong>name and email address</strong> and, later at checkout, your{" "}
-                  <strong>phone number and delivery address</strong>, so we can create your account, process your
-                  orders and issue GST invoices. We keep invoice records for 72 months because tax law requires it.
-                  You can access, correct, export or erase your data, withdraw consent at any time, or complain to
-                  the Data Protection Board of India.{" "}
-                  <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">
-                    Read the full privacy notice
-                  </Link>
-                  .
-                </p>
-              </div>
-
-              <div className="space-y-2.5">
+              <div>
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
                     type="checkbox"
@@ -431,90 +459,117 @@ function RegisterForm() {
                   <span className="text-sm text-brand-text-secondary leading-snug">
                     I agree to the{" "}
                     <Link href="/terms-and-conditions" className="font-medium text-[#1560BD] hover:underline">Terms and Conditions</Link>
+                    {" "}for all, including the Privacy Notice and offers by email, WhatsApp and SMS.
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowConsentDetails(open => !open)}
+                  className="mt-1.5 text-[13px] font-medium text-[#1560BD] hover:underline"
+                >
+                  {showConsentDetails ? "View less" : "View more"}
+                </button>
+                {errors.agreeToTerms && <p className="mt-1.5 text-sm text-red-600">{errors.agreeToTerms}</p>}
+              </div>
+
+              {showConsentDetails && (
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
+                    <p className="text-[12.5px] font-semibold text-[#0F2557]">How we use your details</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
+                      We collect your <strong>name and email address</strong> and, later at checkout, your{" "}
+                      <strong>phone number and delivery address</strong>, so we can create your account, process your
+                      orders and issue GST invoices. We keep invoice records for 72 months because tax law requires it.
+                      You can access, correct, export or erase your data, withdraw consent at any time, or complain to
+                      the Data Protection Board of India.{" "}
+                      <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">
+                        Read the full privacy notice
+                      </Link>
+                      .
+                    </p>
+                  </div>
+
+                  <p className="text-sm text-brand-text-secondary leading-snug">
+                    I agree to the{" "}
+                    <Link href="/terms-and-conditions" className="font-medium text-[#1560BD] hover:underline">Terms and Conditions</Link>
                     , consent to the account and order processing described in the{" "}
                     <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">Privacy Notice</Link>
                     , and opt in to optional offers by email, WhatsApp and SMS.
-                    <span className="mt-1 block text-xs text-slate-500">
-                      Checking this selects all options below; unchecking it clears them. You can turn off optional
-                      offers individually and still create your account.
-                    </span>
-                  </span>
-                </label>
-                {errors.agreeToTerms && <p className="text-sm text-red-600">{errors.agreeToTerms}</p>}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Checking the box above selects all options below; unchecking it clears them. You can turn off optional
+                    offers individually and still create your account.
+                  </p>
 
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="agreePrivacyNotice"
-                    checked={formData.agreePrivacyNotice}
-                    onChange={handleChange}
-                    className={`mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40 ${errors.agreePrivacyNotice ? "border-red-400" : ""}`}
-                  />
-                  <span className="text-sm text-brand-text-secondary leading-snug">
-                    I have read the{" "}
-                    <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">Privacy Notice</Link>
-                    {" "}and consent to my data being processed to run my account and orders
-                  </span>
-                </label>
-                {errors.agreePrivacyNotice && <p className="text-sm text-red-600">{errors.agreePrivacyNotice}</p>}
-              </div>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="agreePrivacyNotice"
+                      checked={formData.agreePrivacyNotice}
+                      onChange={handleChange}
+                      className={`mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40 ${errors.agreePrivacyNotice ? "border-red-400" : ""}`}
+                    />
+                    <span className="text-sm text-brand-text-secondary leading-snug">
+                      I have read the{" "}
+                      <Link href="/privacy-policy" className="font-medium text-[#1560BD] hover:underline">Privacy Notice</Link>
+                      {" "}and consent to my data being processed to run my account and orders
+                    </span>
+                  </label>
+                  {errors.agreePrivacyNotice && <p className="text-sm text-red-600">{errors.agreePrivacyNotice}</p>}
 
-              {/*
-                Optional and genuinely severable. Consent that is a condition of
-                getting the service is not "free" under Section 6(1), so these
-                default to off and never block submission.
-              */}
-              <div className="rounded-lg border border-slate-200 p-3.5">
-                <p className="text-[12.5px] font-semibold text-[#0F2557]">
-                  Keep me posted <span className="font-normal text-slate-500">(optional)</span>
-                </p>
-                <p className="mt-0.5 text-[11.5px] text-slate-500">
-                  Entirely your choice — your account works exactly the same either way, and you can change this
-                  whenever you like.
-                </p>
-                <div className="mt-2.5 space-y-2">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="marketingEmail"
-                      checked={formData.marketingEmail}
-                      onChange={handleChange}
-                      className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
-                    />
-                    <span className="text-[13px] text-brand-text-secondary leading-snug">
-                      Email me offers, price drops and new arrivals
-                    </span>
-                  </label>
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="marketingWhatsapp"
-                      checked={formData.marketingWhatsapp}
-                      onChange={handleChange}
-                      className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
-                    />
-                    <span className="text-[13px] text-brand-text-secondary leading-snug">
-                      Send me offers on WhatsApp
-                    </span>
-                  </label>
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="marketingSms"
-                      checked={formData.marketingSms}
-                      onChange={handleChange}
-                      className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
-                    />
-                    <span className="text-[13px] text-brand-text-secondary leading-snug">
-                      Send me offers by SMS
-                    </span>
-                  </label>
+                  <div className="rounded-lg border border-slate-200 p-3.5">
+                    <p className="text-[12.5px] font-semibold text-[#0F2557]">
+                      Keep me posted <span className="font-normal text-slate-500">(optional)</span>
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] text-slate-500">
+                      Entirely your choice — your account works exactly the same either way, and you can change this
+                      whenever you like.
+                    </p>
+                    <div className="mt-2.5 space-y-2">
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="marketingEmail"
+                          checked={formData.marketingEmail}
+                          onChange={handleChange}
+                          className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
+                        />
+                        <span className="text-[13px] text-brand-text-secondary leading-snug">
+                          Email me offers, price drops and new arrivals
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="marketingWhatsapp"
+                          checked={formData.marketingWhatsapp}
+                          onChange={handleChange}
+                          className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
+                        />
+                        <span className="text-[13px] text-brand-text-secondary leading-snug">
+                          Send me offers on WhatsApp
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="marketingSms"
+                          checked={formData.marketingSms}
+                          onChange={handleChange}
+                          className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary/40"
+                        />
+                        <span className="text-[13px] text-brand-text-secondary leading-snug">
+                          Send me offers by SMS
+                        </span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"
-                disabled={isSubmitting || (recaptchaEnabled && !recaptchaReady)}
+                disabled={isSubmitting || !!errors.name || (recaptchaEnabled && !recaptchaReady)}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1560BD] text-[14px] font-bold text-white transition-colors hover:bg-[#0F2557] focus:outline-none focus:ring-2 focus:ring-[#1560BD]/40 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmitting ? (

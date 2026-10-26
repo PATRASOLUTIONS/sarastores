@@ -29,6 +29,8 @@
   background: linear-gradient(110deg, #e5f1ff, #f3f8ff 44%, #e9eaff 67%, #cceaff);
 }
 
+.photoHero { min-height: 0; background: transparent; }
+.heroPhoto { position: static; display: block; width: 100%; height: auto; object-fit: cover; mask-image: none; }
 .heroImage {
   position: absolute;
   top: 0;

@@ -6,6 +6,8 @@ import { CreditCard, AlertCircle, Check, ArrowLeft, ArrowRight } from "lucide-re
 import type { IncomingItem } from "@/lib/order-pricing"
 import { RazorpayOrderResponseSchema, RazorpayVerificationResponseSchema, type RazorpayCheckoutOptions } from "@/types/razorpay"
 import { HostedCheckoutResponseSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
+import { paymentRecoveryStorageAvailable, readCheckoutRecovery, saveCheckoutRecovery, readHostedCheckout, saveHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
+import { prepareCheckoutAttempt, clearCheckoutAttempt } from "@/lib/checkout-attempt"
 
 declare global {
   interface Window {
@@ -24,6 +26,9 @@ export interface CheckoutPaymentDetails {
   verifiedEmail?: string
   approvalId?: string
   approvalToken?: string
+  requestId?: string
+  requestToken?: string
+  platform?: string
 }
 
 interface PaymentOrderDetails {
@@ -43,13 +48,19 @@ interface PaymentOrderDetails {
   }
   coupon?: { code: string } | null
   redeemPoints?: number
+  declinedGiftPromotions?: string[]
+  selectedGiftPromotions?: string[]
+  expectedGifts?: { promotionId: string; giftId: string; sku: string; quantity: number }[]
   fulfilment?: { method: string; storeId?: string }
 }
 
 interface PaymentGatewayProps {
+  checkoutOwner?: string
+  onPaymentReceived?: (recovery: CheckoutRecovery) => void
+  disabled?: boolean
   paymentMethod: string
   amount: number
-  onSuccess: (paymentDetails: CheckoutPaymentDetails) => void | Promise<void>
+  onSuccess: (paymentDetails: CheckoutPaymentDetails, savedOrderData?: Record<string, unknown>) => void | Promise<void>
   onCancel: () => void
   orderDetails?: PaymentOrderDetails
   beforePayment?: () => Promise<boolean>
@@ -61,6 +72,9 @@ interface PaymentGatewayProps {
 }
 
 export default function PaymentGateway({
+  checkoutOwner = "guest",
+  onPaymentReceived,
+  disabled = false,
   paymentMethod,
   amount,
   onSuccess,
@@ -100,27 +114,35 @@ export default function PaymentGateway({
     try {
       if (!provider || provider === "razorpay" || !getHostedOrderData) throw new Error("Payment gateway is unavailable")
       // Prove that this tab can retain its capability before creating a payment.
-      sessionStorage.setItem("sara_payment_storage_check", "1")
-      sessionStorage.removeItem("sara_payment_storage_check")
-      if (sessionStorage.getItem("sara_hosted_checkout")) {
+      if (!paymentRecoveryStorageAvailable(checkoutOwner)) throw new Error("Enable browser storage before starting payment.")
+      if (readHostedCheckout()) {
         throw new Error("A previous payment needs confirmation. Refresh checkout before paying again.")
       }
+      const orderSnapshot = getHostedOrderData()
+      const attempt = await prepareCheckoutAttempt(checkoutOwner, provider,
+        { ...orderSnapshot, paymentMethod: provider, expectedAmount: Math.round(amount * 100) }, orderSnapshot)
       const response = await fetch("/api/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...getHostedOrderData(), paymentMethod: provider }),
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body: JSON.stringify(attempt.body),
       })
       const json: unknown = await response.json()
       if (!response.ok) {
+        if ([400, 403, 404, 429].includes(response.status) || response.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
         const failure = json as { error?: string }
         throw new Error(failure.error || "Payment could not be started")
       }
       const data = HostedCheckoutResponseSchema.parse(json)
-      sessionStorage.setItem("sara_hosted_checkout", JSON.stringify({
+      const saved = saveHostedCheckout({
         orderId: data.checkout.orderId, checkoutToken: data.checkout.checkoutToken,
         storeOrderId: data.orderId, guestAccessToken: data.guestAccessToken,
         total: data.total, tax: data.tax, shipping: data.shipping,
-      }))
-      if (data.guestAccessToken) localStorage.setItem(`guest_order_${data.orderId}`, data.guestAccessToken)
+        items: (attempt.orderData.items as IncomingItem[] || []).map(item => ({ ...item, quantity: Number(item.quantity) })),
+        owner: checkoutOwner,
+      })
+      if (!saved) throw new Error(`Payment checkout ${data.orderId} was created, but its recovery details could not be saved. Keep this tab open and contact support before paying.`)
+      if (data.guestAccessToken) {
+        try { localStorage.setItem(`guest_order_${data.orderId}`, data.guestAccessToken) } catch { /* The recovery record also retains the link. */ }
+      }
       if (data.checkout.formFields) {
         const form = document.createElement("form")
         form.method = "POST"
@@ -155,33 +177,16 @@ export default function PaymentGateway({
     setErrors({})
 
     try {
+      if (readCheckoutRecovery(checkoutOwner)) throw new Error("A payment needs confirmation. Recover it before starting another payment.")
+      if (!paymentRecoveryStorageAvailable(checkoutOwner)) throw new Error("Your browser cannot save payment recovery details. Enable browser storage before paying.")
+      const orderSnapshot = getHostedOrderData?.()
+      if (!orderSnapshot) throw new Error("Checkout details could not be saved. Refresh checkout before paying.")
       // Prepare comprehensive notes for Razorpay
       const itemNames = orderDetails?.items?.map((item) => item.name).join(", ") || ""
       const itemTypes = orderDetails?.items?.map((item) => item.type || "hardware").join(", ") || ""
 
-      const razorpayNotes = {
-        customer_name: orderDetails?.customer?.firstName + " " + orderDetails?.customer?.lastName || "",
-        customer_email: orderDetails?.customer?.email || "",
-        customer_phone: orderDetails?.customer?.phone || "",
-        customer_address: orderDetails?.customer?.address || "",
-        customer_city: orderDetails?.customer?.city || "",
-        customer_state: orderDetails?.customer?.state || "",
-        customer_zipcode: orderDetails?.customer?.pincode || orderDetails?.customer?.zipCode || "",
-        customer_country: orderDetails?.customer?.country || "India",
-        order_amount: amount.toString(),
-        order_items_count: orderDetails?.items?.length?.toString() || "0",
-        item_names: itemNames.substring(0, 255), // Razorpay has 255 char limit per field
-        item_types: itemTypes,
-        payment_method: "razorpay",
-      }
-
       // Create order on backend. The server re-prices the cart and decides the amount.
-      const orderResponse = await fetch("/api/payment/create-order", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const attempt = await prepareCheckoutAttempt(checkoutOwner, "razorpay", {
           items: (orderDetails?.items || []).map((item) => ({
             id: item.id || item.productId,
             productId: item.productId,
@@ -190,17 +195,27 @@ export default function PaymentGateway({
             type: item.type,
             color: item.color,
             size: item.size,
+            variantId: item.variantId, ram: item.ram, storage: item.storage,
+            packSize: item.packSize, validityYears: item.validityYears, kgenVariantId: item.kgenVariantId,
           })),
           couponCode: orderDetails?.coupon?.code ?? null,
           redeemPoints: orderDetails?.redeemPoints ?? 0,
+          declinedGiftPromotions: orderDetails?.declinedGiftPromotions ?? [],
+          selectedGiftPromotions: orderDetails?.selectedGiftPromotions ?? [],
+          expectedGifts: orderDetails?.expectedGifts,
           fulfilment: orderDetails?.fulfilment,
+          customer: { ...orderDetails?.customer, zipCode: orderDetails?.customer?.pincode || orderDetails?.customer?.zipCode },
           currency: "INR",
-          receipt: `order_${Date.now()}`,
-          notes: razorpayNotes,
-        }),
+          expectedAmount: Math.round(amount * 100),
+        }, orderSnapshot)
+      const orderResponse = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body: JSON.stringify(attempt.body),
       })
 
       if (!orderResponse.ok) {
+        if ([400, 403, 404, 429].includes(orderResponse.status) || orderResponse.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
         const failure = await orderResponse.json().catch(() => null)
         throw new Error(failure?.error || "Failed to create payment order")
       }
@@ -215,6 +230,13 @@ export default function PaymentGateway({
         order_id: orderData.orderId,
         handler: async (response) => {
           try {
+            const recovery = {
+              savedAt: Date.now(), orderData: attempt.orderData,
+              receipt: { ...response, checkoutToken: orderData.checkoutToken },
+            }
+            const saved = saveCheckoutRecovery(checkoutOwner, recovery)
+            onPaymentReceived?.(recovery)
+            if (!saved) throw new Error("Payment was received, but recovery details could not be saved. Keep this tab open and contact support; do not pay again.")
             // Verify payment on backend and update notes
             const verifyResponse = await fetch("/api/payment/verify", {
               method: "POST",
@@ -245,11 +267,11 @@ export default function PaymentGateway({
               checkoutToken: orderData.checkoutToken,
             }
 
-            await onSuccess(paymentDetails)
+            await onSuccess(paymentDetails, attempt.orderData)
             setIsProcessing(false)
           } catch (error) {
             console.error("Payment verification error:", error)
-            setErrors({ form: "Payment verification failed. Please contact support." })
+            setErrors({ form: "Your payment needs confirmation. Use Recover payment below; do not pay again." })
             setIsProcessing(false)
           }
         },
@@ -324,7 +346,7 @@ export default function PaymentGateway({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isProcessing || submitting.current) return
+    if (disabled || isProcessing || submitting.current) return
     submitting.current = true
     setIsProcessing(true)
     setErrors({})
@@ -392,7 +414,7 @@ export default function PaymentGateway({
 
           <button
             type="submit"
-            disabled={isProcessing || (paymentMethod !== "cash-on-delivery" && (!provider || (provider === "razorpay" && !razorpayLoaded)))}
+            disabled={disabled || isProcessing || (paymentMethod !== "cash-on-delivery" && (!provider || (provider === "razorpay" && !razorpayLoaded)))}
             className={compact ? "w-full rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center" : "px-6 py-2 bg-brand-accent text-white rounded-md hover:bg-brand-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center font-semibold active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-accent/40"}
           >
             {isProcessing ? (

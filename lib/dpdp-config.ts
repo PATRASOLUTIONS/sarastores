@@ -26,7 +26,10 @@ function env(name: string, fallback: string = NOT_CONFIGURED): string {
  * person is agreeing to. Every consent record stores the version that was on
  * screen at the time, which is what makes a historical consent provable.
  */
-export const PRIVACY_NOTICE_VERSION = env("NEXT_PUBLIC_PRIVACY_NOTICE_VERSION", "2026-10-01.1")
+export const PRIVACY_NOTICE_VERSION = env("NEXT_PUBLIC_PRIVACY_NOTICE_VERSION", "2026-10-26.1")
+
+/** Versioned separately so an environment override cannot hide location-notice changes. */
+export const DELIVERY_LOCATION_NOTICE_VERSION = "delivery-location-2026-10-26.1"
 
 /** India's statutory age of majority. DPDP has no lower "teen" tier. */
 export const DPDP_AGE_OF_MAJORITY = 18
@@ -93,6 +96,12 @@ export type Recipient = {
 }
 
 export const DATA_RECIPIENTS: Recipient[] = [
+  {
+    name: "OpenStreetMap Foundation (Nominatim)",
+    purpose: "Optional, one-time delivery pincode detection after separate consent",
+    dataShared: "Coordinates rounded to three decimal places, sent by our server. No account details are sent.",
+    location: "May be processed outside India",
+  },
   {
     name: "Razorpay Software Private Limited",
     purpose: "Payment processing and refunds",

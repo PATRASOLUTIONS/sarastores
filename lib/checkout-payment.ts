@@ -5,15 +5,23 @@ import { getCollection } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { priceOrder, type IncomingItem, type PricingSuccess } from "@/lib/order-pricing"
 import { quoteRedemption } from "@/lib/loyalty"
+import { CartQuantitySchema } from "@/lib/validation"
+import { cartLineKey } from "@/lib/cart-line"
+import { DeclinedGiftPromotionsSchema, SelectedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
+import { quoteGiftPromotions } from "@/lib/gift-promotions"
 
 export const CheckoutQuoteSchema = z.object({
   items: z.array(z.object({
     id: z.string().max(200).optional(),
     productId: z.string().max(200).optional(),
     sku: z.string().max(200).nullish(),
-    quantity: z.coerce.number().int().positive().max(1000000),
+    quantity: CartQuantitySchema,
     color: z.string().max(100).nullish(),
     size: z.string().max(100).nullish(),
+    variantId: z.string().max(200).nullish(), ram: z.string().max(100).nullish(), storage: z.string().max(100).nullish(),
+    type: z.string().max(50).nullish(),
+    packSize: z.union([z.string(), z.number()]).nullish(), validityYears: z.union([z.string(), z.number()]).nullish(),
+    kgenVariantId: z.string().max(200).nullish(),
   })).min(1).max(100),
   couponCode: z.string().max(100).nullish(),
   redeemPoints: z.number().int().nonnegative().max(1000000).default(0),
@@ -22,6 +30,9 @@ export const CheckoutQuoteSchema = z.object({
     storeId: z.string().max(100).optional(),
   }).optional(),
   currency: z.literal("INR").default("INR"),
+  declinedGiftPromotions: DeclinedGiftPromotionsSchema,
+  selectedGiftPromotions: SelectedGiftPromotionsSchema,
+  expectedGifts: ExpectedGiftsSchema.optional(),
 })
 
 export function hashCheckoutToken(token: string): string {
@@ -34,20 +45,33 @@ export function checkoutFingerprint(
   amount: number,
 ): string {
   return hashCheckoutToken(JSON.stringify({
-    items: [...pricing.items].sort((a, b) => a.id.localeCompare(b.id)),
+    items: [...pricing.items].sort((a, b) => a.id.localeCompare(b.id) || cartLineKey(a).localeCompare(cartLineKey(b))).map(priced => {
+      const item = { ...priced }
+      delete item.sku
+      delete item.division
+      delete item.itemNumbers
+      if (!item.ram) delete item.ram
+      if (!item.storage) delete item.storage
+      if (!item.variantId) delete item.variantId
+      return item
+    }),
     couponCode: pricing.coupon?.code || null,
     fulfilment: { method: options.fulfilment?.method || "delivery", storeId: options.fulfilment?.storeId || null },
     redeemPoints: options.redeemPoints || 0,
     amount: Math.round(amount * 100),
+    ...(pricing.gifts?.length ? { gifts: [...pricing.gifts].sort((a, b) => a.promotionId.localeCompare(b.promotionId))
+      .map(gift => ({ promotionId: gift.promotionId, giftId: gift.giftId, sku: gift.sku, quantity: gift.quantity })) } : {}),
   }))
 }
 
 export async function quoteCheckout(
   items: IncomingItem[],
-  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string }; redeemPoints?: number },
+  options: { couponCode?: string | null; userId: string | null; fulfilment?: { method?: string; storeId?: string }; redeemPoints?: number; declinedGiftPromotions?: string[]; selectedGiftPromotions?: string[]; expectedGifts?: { promotionId: string; giftId: string; sku: string; quantity: number }[] },
 ) {
   const pricing = await priceOrder(items, options)
   if (!pricing.ok) return pricing
+  pricing.gifts = await quoteGiftPromotions(pricing.items, options.userId, options.declinedGiftPromotions, undefined, options.selectedGiftPromotions)
+  if (options.expectedGifts && giftSelectionSignature(options.expectedGifts) !== giftSelectionSignature(pricing.gifts)) return { ok: false as const, error: "Free gifts changed. Refresh the gift selection before paying." }
   let amount = pricing.total
   if (options.redeemPoints) {
     if (!options.userId) return { ok: false as const, error: "Sign in to redeem rewards" }
@@ -67,7 +91,7 @@ export interface CheckoutIntent {
   fingerprint: string
   amount: number
   currency: "INR"
-  method: "razorpay" | "instore" | "pinelabs" | "paytm"
+  method: "razorpay" | "instore" | "pinelabs" | "paytm" | "store-payment"
   status: "created" | "verified" | "consumed"
   createdAt: Date
   expiresAt: Date
@@ -77,6 +101,7 @@ export interface CheckoutIntent {
   employeeEmail?: string
   merchantReference?: string
   needsReview?: boolean
+  store?: { id: string; name: string; phone: string; email: string }
 }
 
 export async function createCheckoutIntent(
@@ -84,21 +109,24 @@ export async function createCheckoutIntent(
   userId: string | null,
   quote: { amount: number; fingerprint: string },
   method: CheckoutIntent["method"] = "razorpay",
+  extra: { ttlMs?: number; store?: CheckoutIntent["store"] } = {},
 ): Promise<string> {
   const token = crypto.randomBytes(32).toString("base64url")
   const collection = await getCollection<CheckoutIntent>("checkout_intents")
   await collection.insertOne({
     _id: orderId, userId, tokenHash: hashCheckoutToken(token), fingerprint: quote.fingerprint,
     amount: Math.round(quote.amount * 100), currency: "INR", method, status: "created",
-    createdAt: new Date(), expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    createdAt: new Date(), expiresAt: new Date(Date.now() + (extra.ttlMs ?? 60 * 60 * 1000)),
+    ...(extra.store ? { store: extra.store } : {}),
   })
   return token
 }
 
-export async function getCheckoutIntent(orderId: string, token: string, userId: string | null) {
+export async function getCheckoutIntent(orderId: string, token: string, userId: string | null, includeCompleted = false) {
   const collection = await getCollection<CheckoutIntent>("checkout_intents")
   return collection.findOne({
-    _id: orderId, tokenHash: hashCheckoutToken(token), userId, expiresAt: { $gt: new Date() },
+    _id: orderId, tokenHash: hashCheckoutToken(token), userId,
+    ...(includeCompleted ? { $or: [{ expiresAt: { $gt: new Date() } }, { status: "consumed" as const }] } : { expiresAt: { $gt: new Date() } }),
   })
 }
 
@@ -116,8 +144,10 @@ export async function persistCheckoutOrder(
     await session.withTransaction(async () => {
       if (intent) {
         const hosted = intent.method === "pinelabs" || intent.method === "paytm"
+        // A store payment is settled offline, so its request is never "verified" online.
+        const expected = hosted || intent.method === "store-payment" ? "created" : "verified"
         const claimed = await db.collection<CheckoutIntent>("checkout_intents").updateOne(
-          { _id: intent._id, status: hosted ? "created" : "verified", orderId: { $exists: false }, expiresAt: { $gt: new Date() }, ...(intent.paymentId ? { paymentId: intent.paymentId } : {}) },
+          { _id: intent._id, status: expected, orderId: { $exists: false }, expiresAt: { $gt: new Date() }, ...(intent.paymentId ? { paymentId: intent.paymentId } : {}) },
           { $set: { status: hosted ? "created" : "consumed", orderId: String(order.orderId) } },
           { session },
         )

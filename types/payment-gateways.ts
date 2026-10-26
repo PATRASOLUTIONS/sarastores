@@ -14,6 +14,8 @@ export const PaymentConfigurationSchema = z.object({
   providers: z.array(PaymentProviderSchema),
   defaultProvider: PaymentProviderSchema.nullable(),
   codEnabled: z.boolean(),
+  instoreEnabled: z.boolean().default(false),
+  storePaymentEnabled: z.boolean().default(false),
 })
 
 export const HostedCheckoutResponseSchema = z.object({

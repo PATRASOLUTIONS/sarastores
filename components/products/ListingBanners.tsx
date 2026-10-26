@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
-import { bannerGradient, useBanners, type SiteBanner } from "@/hooks/useBanners"
+import { bannerGradient, bannerIsPhotoOnly, useBanners, type SiteBanner } from "@/hooks/useBanners"
 
 export type ListingBanner = SiteBanner
 
@@ -12,9 +12,6 @@ export function useListingBanners(placement: "hero" | "promo", scope?: string) {
 }
 
 const gradient = bannerGradient
-
-const hasCopy = (banner: ListingBanner) =>
-  [banner.title, banner.subtitle, banner.ctaText, banner.script].some((value) => (value || "").trim())
 
 function PhotoOnly({ banner, label, rounded }: { banner: ListingBanner; label: string; rounded: string }) {
   const image = (
@@ -30,7 +27,7 @@ function PhotoOnly({ banner, label, rounded }: { banner: ListingBanner; label: s
 }
 
 export function ListingHero({ banner }: { banner: ListingBanner }) {
-  if (banner.image && !hasCopy(banner)) {
+  if (bannerIsPhotoOnly(banner)) {
     return <PhotoOnly banner={banner} label="Banner" rounded="rounded-2xl" />
   }
 
@@ -101,8 +98,8 @@ export function ListingPromoRow({ banners }: { banners: ListingBanner[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {banners.slice(0, 2).map((banner) => {
-        if (banner.image && !hasCopy(banner)) {
-          return <PhotoOnly key={banner.id} banner={banner} label="Promotion" rounded="rounded-xl" />
+        if (bannerIsPhotoOnly(banner)) {
+          return <div key={banner.id} className="sm:col-span-2"><PhotoOnly banner={banner} label="Promotion" rounded="rounded-xl" /></div>
         }
 
         const light = !banner.dark

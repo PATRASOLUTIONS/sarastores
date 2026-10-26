@@ -69,6 +69,33 @@ export function productSuggestions(product: Partial<Pick<CatalogProduct, "id" | 
   return [...new Map([...exact, ...related].map(candidate => [String(candidate.id), candidate])).values()].slice(0, limit)
 }
 
+type SimilarSeed = Partial<Pick<CatalogProduct, "id" | "subCategory" | "category" | "name" | "price" | "manufacturerName">> & { brand?: string | null }
+
+/** In-stock products of the same kind as `product`, closest in price first, same brand preferred. */
+export function similarProducts(product: SimilarSeed, catalog: CatalogProduct[], limit = 6, exclude: Iterable<string> = []): CatalogProduct[] {
+  const normalize = (value: unknown) => String(value || "").trim().toLowerCase()
+  const skip = new Set([String(product.id), ...exclude])
+  const subcategory = normalize(product.subCategory)
+  const category = categoryOf(product)
+  const brand = normalize(product.manufacturerName || product.brand)
+  const price = Number(product.price) || 0
+  const sameKind = catalog.filter(candidate =>
+    !skip.has(String(candidate.id)) &&
+    candidate.image && Number(candidate.price) > 0 &&
+    candidate.active !== false && isInStock(candidate) &&
+    ((subcategory && normalize(candidate.subCategory) === subcategory) || (category && categoryOf(candidate) === category)),
+  )
+  const inBand = price > 0
+    ? sameKind.filter(candidate => Number(candidate.price) >= price * 0.6 && Number(candidate.price) <= price * 1.6)
+    : sameKind
+  const score = (candidate: CatalogProduct) =>
+    (brand && normalize(candidate.manufacturerName || candidate.brand) === brand ? 0 : 1) * 10 +
+    (price > 0 ? Math.abs(Number(candidate.price) - price) / price : 0)
+  return [...new Map((inBand.length ? inBand : sameKind).map(candidate => [String(candidate.id), candidate])).values()]
+    .sort((a, b) => score(a) - score(b))
+    .slice(0, limit)
+}
+
 export type Rail = {
   id: string
   title: string

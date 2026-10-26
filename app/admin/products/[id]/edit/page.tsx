@@ -321,6 +321,7 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
 
       // remove identifiers from payload to avoid accidental id updates server-side
       delete payload.id
+      delete payload.stock
       if ("_id" in payload) delete payload._id
 
       if (Array.isArray(payload.images) && payload.images.length > 0) {
@@ -576,15 +577,11 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
                 type="number"
                 id="stock"
                 value={product.stock}
-                onChange={(e) => {
-                  const stockValue = Number.parseInt(e.target.value) || 0
-                  setProduct({ ...product, stock: stockValue })
-                  handleRawDataChange("In Stock", stockValue.toString())
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                 min="0"
-                required
               />
+              <p className="mt-1 text-xs text-gray-500">Overall stock is updated from <Link href="/admin/stock-check" className="underline">Stock Check</Link>.</p>
             </div>
           </div>
           </section>
