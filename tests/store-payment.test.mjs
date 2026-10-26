@@ -3,6 +3,8 @@ import test from "node:test"
 import { ObjectId } from "mongodb"
 import { NextRequest } from "next/server.js"
 import { sourceLoader } from "./source-loader.mjs"
+import * as React from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 
 const storeId = new ObjectId().toString()
 const store = { id: storeId, name: "Fixture Store", phone: "9876543210", email: "store@example.invalid", address: "Fixture Road" }
@@ -47,6 +49,59 @@ function requestLoader({ env = {}, loaded = store, limited = false, stocked = tr
   }, { env })
   return { route: loader.load("app/api/payment/store-request/route.ts"), intents, notifications }
 }
+
+test("notification configuration reports missing names without exposing credentials", () => {
+  const absent = sourceLoader().load("lib/store-payment.ts").getStorePaymentNotificationConfiguration()
+  assert.equal(absent.whatsapp, false); assert.equal(absent.email, false)
+  for (const name of ["ASKEVA_API_KEY", "STORE_ORDER_WHATSAPP_TEMPLATE", "PLATFORM_MANAGER_WHATSAPP_TEMPLATE", "CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE", "SMTP_HOST", "SMTP_USER", "SMTP_PASS"]) assert.ok(absent.missing.includes(name))
+  const complete = sourceLoader({}, { env: {
+    ASKEVA_API_KEY: "synthetic-private-key", ASKEVA_API_URL: "https://provider.invalid",
+    STORE_ORDER_WHATSAPP_TEMPLATE: "store_approved", PLATFORM_MANAGER_WHATSAPP_TEMPLATE: "manager_approved",
+    CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE: "customer_approved", SMTP_HOST: "mail.invalid",
+    SMTP_USER: "synthetic-user", SMTP_PASS: "synthetic-private-password",
+  } }).load("lib/store-payment.ts").getStorePaymentNotificationConfiguration()
+  assert.deepEqual(JSON.parse(JSON.stringify(complete)), { whatsapp: true, email: true, missing: [] })
+  for (const secret of ["synthetic-private-key", "synthetic-private-password", "synthetic-user", "provider.invalid"]) assert.equal(JSON.stringify(complete).includes(secret), false)
+})
+
+test("a store WhatsApp exception does not prevent platform-manager and email notifications", async () => {
+  const calls = [], mails = []
+  const loader = sourceLoader({
+    "@/lib/whatsapp-template": { sendWhatsAppTemplate: async phone => {
+      calls.push(phone)
+      if (phone === store.phone) throw new Error("Synthetic provider failure")
+      return { success: true }
+    } },
+    "@/lib/email": { sendEmail: async mail => { mails.push(mail); return { success: true } } },
+  }, { env: { STORE_ORDER_WHATSAPP_TEMPLATE: "store_approved", PLATFORM_MANAGER_WHATSAPP_TEMPLATE: "manager_approved" },
+    context: { console: { ...console, error() {} } } })
+  const result = await loader.load("lib/store-payment.ts").notifyStoreOfPaymentRequest(store,
+    { orderId: "FIXTURE", customer, delivery: "Store pickup", items: [], total: 10 },
+    { notifyStoreManager: true, platformManagers: [{ name: "Ops", phone: "9000000001" }] })
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { whatsapp: false, email: true, managers: 1 })
+  assert.deepEqual(calls, [store.phone, "9000000001"]); assert.equal(mails.length, 1)
+})
+
+test("email failure returns its channel status without losing an accepted WhatsApp notification", async () => {
+  const loader = sourceLoader({
+    "@/lib/whatsapp-template": { sendWhatsAppTemplate: async () => ({ success: true }) },
+    "@/lib/email": { sendEmail: async () => { throw new Error("Synthetic mail failure") } },
+  }, { env: { STORE_ORDER_WHATSAPP_TEMPLATE: "store_approved" }, context: { console: { ...console, error() {} } } })
+  const result = await loader.load("lib/store-payment.ts").notifyStoreOfPaymentRequest(store,
+    { orderId: "FIXTURE", customer, delivery: "Store pickup", items: [], total: 10 })
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { whatsapp: true, email: false, managers: 0 })
+})
+
+test("Pay at Store dialog does not claim the store received a failed notification", () => {
+  const Dialog = sourceLoader({ react: { ...React, useEffect() {}, useState: initial => [initial, () => {}] } })
+    .load("components/PayAtStore.tsx").PayAtStoreDialog
+  const props = { storeName: "Fixture store", orderReference: "FIXTURE", amount: 10, customerPhone: "", submitting: false, onSubmit() {}, onClose() {} }
+  const failed = renderToStaticMarkup(React.createElement(Dialog, { ...props, storeNotified: false }))
+  assert.ok(failed.includes("We could not notify the store automatically")); assert.ok(failed.includes("Call the store"))
+  assert.equal(failed.includes("A store manager will call you"), false)
+  const sent = renderToStaticMarkup(React.createElement(Dialog, { ...props, storeNotified: true }))
+  assert.ok(sent.includes("was sent to")); assert.ok(sent.includes("A store manager will call you"))
+})
 
 test("pay at store request binds a 24h intent to the store and messages it with the order, delivery and price", async () => {
   const fixture = requestLoader()

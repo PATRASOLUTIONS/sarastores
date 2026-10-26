@@ -11,6 +11,18 @@ export const STORE_PAYMENT_REQUEST_TTL_MS = 24 * 60 * 60 * 1000
 export const STORE_PAYMENT_SETTINGS_COLLECTION = "store_payment_settings"
 export const STORE_PAYMENT_WHATSAPP_SETTINGS_ID = "whatsapp"
 
+/** Configuration presence only: never expose credentials or contact providers. */
+export function getStorePaymentNotificationConfiguration() {
+  const whatsappKeys = ["ASKEVA_API_KEY", "ASKEVA_API_URL"]
+  const emailKeys = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"]
+  const templateKeys = ["STORE_ORDER_WHATSAPP_TEMPLATE", "PLATFORM_MANAGER_WHATSAPP_TEMPLATE", "CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE"]
+  const configured = (name: string) => Boolean(process.env[name]?.trim())
+  return {
+    whatsapp: whatsappKeys.every(configured), email: emailKeys.every(configured),
+    missing: [...whatsappKeys, ...templateKeys, ...emailKeys].filter(name => !configured(name)),
+  }
+}
+
 export async function getStorePaymentWhatsAppSettings(): Promise<StorePaymentWhatsAppSettings> {
   const doc = await (await getCollection<{ _id: string } & Partial<Record<keyof StorePaymentWhatsAppSettings, unknown>>>(STORE_PAYMENT_SETTINGS_COLLECTION))
     .findOne({ _id: STORE_PAYMENT_WHATSAPP_SETTINGS_ID })
@@ -77,12 +89,17 @@ export async function loadPaymentStore(storeId: string): Promise<PaymentStore | 
   }
 }
 
-function sendTemplate(phone: string, name: string, values: string[], label: string) {
-  return sendWhatsAppTemplate(phone, {
-    language: { policy: "deterministic", code: process.env.STORE_ORDER_WHATSAPP_LANGUAGE?.trim() || "en" },
-    name,
-    components: [{ type: "body", parameters: values.map(text => ({ type: "text" as const, text: templateText(text) })) }],
-  }, undefined, label)
+async function sendTemplate(phone: string, name: string, values: string[], label: string) {
+  try {
+    return await sendWhatsAppTemplate(phone, {
+      language: { policy: "deterministic", code: process.env.STORE_ORDER_WHATSAPP_LANGUAGE?.trim() || "en" },
+      name,
+      components: [{ type: "body", parameters: values.map(text => ({ type: "text" as const, text: templateText(text) })) }],
+    }, undefined, label)
+  } catch {
+    console.error(`[${label}] Notification failed`)
+    return { success: false as const, error: "WhatsApp notification failed" }
+  }
 }
 
 function itemsLine(items: StorePaymentSummary["items"]): string {
@@ -149,6 +166,9 @@ export async function notifyStoreOfPaymentRequest(
         `<table cellpadding="6" border="1" style="border-collapse:collapse"><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>${rows}</table>` +
         `<p><strong>Offers:</strong> ${escapeHtml(offers)}</p>` +
         `<p><strong>Amount to collect:</strong> ${escapeHtml(rupees(summary.total))}</p>`,
+    }).catch(() => {
+      console.error("[Store payment] Store email notification failed")
+      return { success: false as const }
     })
     email = result.success
   }

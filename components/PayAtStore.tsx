@@ -130,8 +130,12 @@ export function PayAtStoreDialog({ storeName, orderReference, amount, customerPh
   }
 
   const steps = [
-    { icon: Store, text: <><strong>{storeName}</strong> has received your order <strong>{orderReference}</strong>.</> },
-    { icon: PhoneCall, text: <>A store manager will call you{customerPhone ? <> on <strong>{customerPhone}</strong></> : null}.</> },
+    { icon: Store, text: storeNotified
+      ? <>Your payment request <strong>{orderReference}</strong> was sent to <strong>{storeName}</strong>.</>
+      : <>Your payment request <strong>{orderReference}</strong> is ready for <strong>{storeName}</strong>. We could not notify the store automatically.</> },
+    { icon: PhoneCall, text: storeNotified
+      ? <>A store manager will call you{customerPhone ? <> on <strong>{customerPhone}</strong></> : null}.</>
+      : <>Call the store and quote your request number to arrange payment.</> },
     { icon: MessageCircle, text: <>They will send a payment link to your WhatsApp. Pay <strong>₹{amount.toLocaleString("en-IN")}</strong>.</> },
     { icon: Receipt, text: <>Enter the platform you paid with and the transaction ID below to place your order.</> },
   ]
