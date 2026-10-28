@@ -20,6 +20,7 @@ import { StorePaymentTransactionSchema } from "@/types/store-payment"
 import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { notifyCustomerOrderConfirmed } from "@/lib/order-confirmation-whatsapp"
 import { GuestCheckoutCustomerSchema, CheckoutContactSchema } from "@/lib/validation"
 import { validateCheckoutCustomer } from "@/lib/checkout-customer"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
@@ -835,11 +836,12 @@ async function createOrder(request: NextRequest) {
           },
         }
 
-        await sendEmail({
+        const confirmationEmail = await sendEmail({
           to: customerEmail,
           subject: emailTemplates.ORDER_PENDING.subject.replace("#{orderNumber}", orderId),
           html: emailTemplates.ORDER_PENDING.html(emailData),
         })
+        if (!confirmationEmail.success) console.error("[Orders] Customer confirmation email was not accepted", { orderId })
 
         // A guest has no order history to sign in to, so the capability link is
         // the only way back to this order. Send it separately from the template.
@@ -862,9 +864,10 @@ async function createOrder(request: NextRequest) {
         }
       }
     } catch {
-      // email failure should not fail order creation
+      console.error("[Orders] Customer email notification failed", { orderId })
     }
 
+    if (status === "confirmed") after(() => notifyCustomerOrderConfirmed(insertedId).then(() => {}))
     await notifyAdminOrder(insertedId, "orders", status === "confirmed" ? "confirmed" : "created")
 
     try {

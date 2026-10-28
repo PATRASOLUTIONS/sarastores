@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email"
 import { requireAdmin, getSession } from "@/lib/auth"
 import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { notifyCustomerOrderConfirmed } from "@/lib/order-confirmation-whatsapp"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
 import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
 import { rebuildCustomerProfile, recordEvent, EARNING_STATUSES } from "@/lib/customer-profile"
@@ -333,6 +334,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     const adminNotification = updateData.status === "confirmed"
       ? await notifyAdminOrder(existingOrder._id, isPartnerOrder ? "partner_orders" : "orders")
       : null
+    if (!isPartnerOrder && updateData.status === "confirmed") await notifyCustomerOrderConfirmed(existingOrder._id)
 
     // Reaching a value-realising status changes lifetime spend and tier, so refresh
     // the rollup now rather than waiting for the nightly rebuild. Never fatal.

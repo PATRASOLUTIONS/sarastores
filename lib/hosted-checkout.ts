@@ -12,6 +12,7 @@ import { queueExternalOrder, fulfillExternalOrder } from "@/lib/external-fulfill
 import type { HostedPaymentProvider } from "@/types/payment-gateways"
 import { escapeHtml } from "@/lib/html"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { notifyCustomerOrderConfirmed } from "@/lib/order-confirmation-whatsapp"
 import { consumeGiftPromotions } from "@/lib/gift-promotions"
 import type { GiftAward } from "@/lib/gift-validation"
 
@@ -87,6 +88,7 @@ async function consumeHostedDiscounts(order: HostedOrder, session: ClientSession
 }
 
 async function hostedPaymentEffects(order: HostedOrder) {
+  await notifyCustomerOrderConfirmed(order._id)
   if (order.items.some(item => item.type === "software" && !item.provider)) {
     try {
       await fulfillSoftwareOrder(order._id.toString())
