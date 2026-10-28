@@ -4,6 +4,15 @@ import { z } from "zod"
 import { activeBrandListResponseSchema } from "@/lib/catalog-list-response"
 
 export type ActiveProductBrand = { name: string; count: number }
+const HEADER_BRANDS = ["apple", "samsung", "vivo", "oppo", "realme", "redmi", "xiaomi"]
+
+export function selectHeaderBrands(brands: ActiveProductBrand[]): ActiveProductBrand[] {
+  return HEADER_BRANDS.flatMap(name => {
+    const brand = brands.find(item => item.name.trim().toLowerCase() === name)
+    return brand ? [brand] : []
+  })
+}
+
 const productBrandsSchema = z.array(z.object({
   active: z.boolean().optional(),
   stock: z.union([z.number(), z.string()]).nullish(),
@@ -57,7 +66,7 @@ async function loadBrands(): Promise<ActiveProductBrand[]> {
   }
 }
 
-// Only brands with active, in-stock products appear in either header menu.
+// Load brands with active, in-stock products; menus select their featured brands.
 // Share in-flight requests without relying on a persisted browser-cache shape.
 export function fetchActiveProductBrands(force = false): Promise<ActiveProductBrand[]> {
   if (pending) return pending

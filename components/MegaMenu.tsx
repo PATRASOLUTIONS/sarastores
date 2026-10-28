@@ -4,14 +4,14 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { useHeaderPromotion } from "@/hooks/useHeaderPromotion"
-import { fetchActiveProductBrands, type ActiveProductBrand } from "@/lib/active-brand-client"
+import { fetchActiveProductBrands, selectHeaderBrands, type ActiveProductBrand } from "@/lib/active-brand-client"
 
 const STATIC_LINKS = [
   { href: "/offers", label: "Offers", accent: true },
   { href: "/store-locator", label: "Store Locator" },
 ]
 
-// Brands represented by active, in-stock products, without a tab cap.
+// Show the same featured, in-stock brands as the mobile menu.
 export default function MegaMenu() {
   const marketing = useMarketingContent("header")
   const headerPromotion = useHeaderPromotion()
@@ -26,7 +26,7 @@ export default function MegaMenu() {
     setError(false)
     setLoading(true)
     void fetchActiveProductBrands(attempt > 0).then(data => {
-      if (!cancelled) setBrands(data)
+      if (!cancelled) setBrands(selectHeaderBrands(data))
     }).catch(() => {
       if (!cancelled) setError(true)
     }).finally(() => {

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useEffect, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, Gift, Headphones, Home, Info, LayoutGrid, MapPin, Tags } from "lucide-react"
 import CategoryGlyph from "@/components/CategoryGlyph"
-import { fetchActiveProductBrands, type ActiveProductBrand } from "@/lib/active-brand-client"
+import { fetchActiveProductBrands, selectHeaderBrands, type ActiveProductBrand } from "@/lib/active-brand-client"
 
 type MenuLink = { href: string; label: string }
 type CategoryLink = MenuLink & { id: string }
@@ -50,7 +50,7 @@ export default function MobileMenuNavigation({ categories, onNavigate }: { categ
     void fetchActiveProductBrands(attempt > 0)
       .then(data => {
         if (cancelled) return
-        setBrands(data)
+        setBrands(selectHeaderBrands(data))
         setBrandsLoading(false)
       }).catch(error => {
         if (cancelled) return
