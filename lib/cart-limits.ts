@@ -3,10 +3,11 @@ import { MAX_PURCHASE_QUANTITY } from "@/lib/purchase-validation"
 export const MAX_CART_PRODUCTS = 20
 export const MAX_CART_VALUE = 10_00_000
 
-export type CartLimitItem = { id: string; price: number; quantity: number }
+export type CartLimitItem = { id: string; price: number; quantity: number; type?: string; saraCare?: unknown }
 
 export function cartLimitError(items: CartLimitItem[]): string | null {
-  if (items.length > MAX_CART_PRODUCTS || new Set(items.map((item) => item.id)).size > MAX_CART_PRODUCTS) {
+  const products = items.filter(item => item.type !== "service" && !item.saraCare)
+  if (items.length > MAX_CART_PRODUCTS * 2 || products.length > MAX_CART_PRODUCTS || new Set(products.map((item) => item.id)).size > MAX_CART_PRODUCTS) {
     return "You can add up to 20 products or purchase options to your cart. Remove an item before adding another."
   }
   let value = 0

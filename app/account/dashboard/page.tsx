@@ -162,8 +162,8 @@ export default function UserDashboard() {
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                            {order.items.slice(0, 3).map(item => (
-                              <div key={item.id} className="flex items-center space-x-4">
+                            {order.items.slice(0, 3).map((item, index) => (
+                              <div key={`${item.id}-${index}`} className="flex items-center space-x-4">
                                 <img
                                   src={item.image || "/placeholder.svg"}
                                   alt={item.name}

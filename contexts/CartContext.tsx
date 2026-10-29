@@ -18,8 +18,11 @@ import { CHECKOUT_CART_INTENT, CHECKOUT_CART_SELECTION_ID, mergeCheckoutCart } f
 import { usePathname } from "next/navigation"
 import { cartLineKey, findCartLine, type CartLineIdentity } from "@/lib/cart-line"
 import { purchaseAvailabilityError, purchaseStock, purchaseLimit } from "@/lib/purchase-validation"
+import { isSaraCare, SaraCareQuoteResponseSchema, type SaraCareSnapshot, type SaraCareYears, type SaraCareOffer } from "@/lib/sara-care-types"
 
 export interface CartItem {
+  saraCare?: SaraCareSnapshot
+  saraCareSelection?: SaraCareYears | null
   color: string | null
   size: string | null
   id: string
@@ -33,7 +36,7 @@ export interface CartItem {
   variantId?: string
   ram?: string
   storage?: string
-  type?: "software" | "hardware"
+  type?: "software" | "hardware" | "service"
   packSize?: number
   validityYears?: number
   maxDevices?: number | string
@@ -69,8 +72,15 @@ export interface Order {
 }
 
 type CartContextValue = {
+  saraCareOffers: SaraCareOffer[]
+  saraCareError: string
+  saraCareLoading: boolean
+  removeAllSaraCare: () => void
+  setSaraCareDuration: (parentLineKey: string, years: SaraCareYears | null) => void
+  refreshSaraCare: () => void
   cart: CartItem[]
   isLoading: boolean
+  isHydrating: boolean
   addToCart: (product: CartItem) => Promise<boolean>
   updateQuantity: (id: string, quantity: number) => boolean
   refreshItemPrices: (prices: Record<string, number>, stocks?: Record<string, number>) => void
@@ -95,10 +105,12 @@ type CartContextValue = {
 const CartContext = createContext<CartContextValue | null>(null)
 
 const EMPTY_CART: CartItem[] = []
+const careCartKey = (owner: string, items: CartItem[]) => JSON.stringify([owner, items.filter(item => !isSaraCare(item)).map(item =>
+  [cartLineKey(item), item.quantity, item.price, item.saraCareSelection === undefined ? "default" : item.saraCareSelection])])
 
 async function keepPublicCartItems(items: CartItem[]): Promise<CartItem[]> {
   const productIds = [...new Set(items
-    .filter(item => item.type !== "software")
+    .filter(item => item.type !== "software" && !isSaraCare(item))
     .map(item => item.id)
     .filter(Boolean))]
   if (productIds.length === 0) return items
@@ -116,7 +128,7 @@ async function keepPublicCartItems(items: CartItem[]): Promise<CartItem[]> {
     const visibleIds = new Set(products
       .flatMap((product) => [product?.id, product?._id])
       .filter((id): id is string => typeof id === "string"))
-    return items.filter(item => item.type === "software" || visibleIds.has(item.id))
+    return items.filter(item => item.type === "software" || isSaraCare(item) || visibleIds.has(item.id))
   } catch {
     // Availability checks must fail open on a network error so an offline
     // shopper's cart is not erased. Checkout still validates server-side.
@@ -149,6 +161,12 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   const cartRef = useRef(cart)
   cartRef.current = cart
   const [isLoading, setIsLoading] = useState(true)
+  const [saraCareOffers, setSaraCareOffers] = useState<SaraCareOffer[]>([])
+  const [saraCareError, setSaraCareError] = useState("")
+  const [careQuotedKey, setCareQuotedKey] = useState("")
+  const [careAttempt, setCareAttempt] = useState(0)
+  const careInputKey = careCartKey(userId, cart)
+  const careNeeded = cart.some(item => isSaraCare(item) || item.type !== "software" && item.saraCareSelection !== null)
   const [checkoutCartPending, setCheckoutCartPending] = useState(false)
   const checkoutCartPendingRef = useRef(false)
   const [previousCart, setPreviousCart] = useState<CartItem[]>([])
@@ -229,6 +247,66 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   )
 
   // ----- single loader -----------------------------------------------------
+  const setSaraCareDuration = useCallback((parentLineKey: string, years: SaraCareYears | null) => {
+    const next = cartRef.current.filter(item => item.saraCare?.parentLineKey !== parentLineKey)
+      .map(item => cartLineKey(item) === parentLineKey ? { ...item, saraCareSelection: years } : item)
+    safeSetCart(next)
+    persistLocal(next)
+  }, [safeSetCart, persistLocal])
+  const refreshSaraCare = useCallback(() => { setCareQuotedKey(""); setCareAttempt(attempt => attempt + 1) }, [])
+  const removeAllSaraCare = useCallback(() => {
+    const next = cartRef.current.filter(item => !isSaraCare(item)).map(item => ({ ...item, saraCareSelection: null }))
+    safeSetCart(next)
+    persistLocal(next)
+    setSaraCareError("")
+    // Refresh offers in the background so protection can be added back later.
+    // Explicit opt-outs never wait for this optional service before checkout.
+    setCareQuotedKey("")
+  }, [safeSetCart, persistLocal, userId])
+  useEffect(() => {
+    if (isLoading || careQuotedKey === careInputKey) return
+    const controller = new AbortController()
+    const parents = cartRef.current.filter(item => !isSaraCare(item))
+    if (!parents.length) {
+      setSaraCareOffers([]); setSaraCareError(""); setCareQuotedKey(careInputKey)
+      if (cartRef.current.length) safeSetCart([])
+      return
+    }
+    setSaraCareError("")
+    const quote = async () => {
+      try {
+        const response = await fetch("/api/sara-care/quote", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: parents }), signal: AbortSignal.any([controller.signal,
+            AbortSignal.timeout(process.env.NODE_ENV === "development" ? 60000 : 30000)]), cache: "no-store" })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || "Sara Care could not be refreshed. Please retry.")
+        const parsed = SaraCareQuoteResponseSchema.parse(data)
+        if (controller.signal.aborted || careCartKey(activeUserIdRef.current, cartRef.current) !== careInputKey) return
+        const next: CartItem[] = parents.flatMap(parent => {
+          const care = parsed.items.filter(item => item.saraCare.parentLineKey === cartLineKey(parent))
+          return [{ ...parent, ...(parent.saraCareSelection === undefined && care.length ? { saraCareSelection: care[0].saraCare.durationYears } : {}) }, ...care]
+        })
+        const addedDefault = parsed.items.some(item => parents.some(parent => cartLineKey(parent) === item.saraCare.parentLineKey && parent.saraCareSelection === undefined) &&
+          !cartRef.current.some(current => current.saraCare?.parentLineKey === item.saraCare.parentLineKey))
+        if (addedDefault) toast.success("Optional Sara Care added as a separate cart product. You can change or remove it.")
+        setSaraCareOffers(parsed.offers)
+        safeSetCart(next)
+        persistLocal(next)
+        setCareQuotedKey(careCartKey(userId, next))
+      } catch (error) {
+        if (controller.signal.aborted || careCartKey(activeUserIdRef.current, cartRef.current) !== careInputKey) return
+        if (parents.every(parent => parent.type === "software" || parent.saraCareSelection === null)) {
+          setSaraCareError(""); setCareQuotedKey(careInputKey); return
+        }
+        const timedOut = error instanceof Error && error.name === "TimeoutError"
+        setSaraCareError(timedOut ? "Sara Care prices took too long to load. Retry, or continue without Sara Care. Your device items are saved."
+          : error instanceof Error ? error.message : "Sara Care could not be refreshed. Please retry.")
+        setCareQuotedKey(careInputKey)
+      }
+    }
+    void quote()
+    return () => controller.abort()
+  }, [careInputKey, careQuotedKey, careAttempt, isLoading, persistLocal, safeSetCart, userId])
 
   const saveAccountCart = useCallback(async (snapshot: CartItem[], requireSave = false) => {
     if (userId === "guest" || checkoutCartPendingRef.current) return
@@ -309,15 +387,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
 
     const mergeGuest = (serverItems: CartItem[]): CartItem[] => {
       if (guestItems.length === 0) return serverItems
-      const merged = [...serverItems]
-      for (const g of guestItems) {
-        const i = merged.findIndex((item) => cartLineKey(item) === cartLineKey(g))
-        if (i >= 0) {
-          merged[i] = { ...merged[i], quantity: (merged[i].quantity || 1) + (g.quantity || 1) }
-        } else {
-          merged.push(g)
-        }
-      }
+      const merged = mergeCheckoutCart(guestItems, serverItems)
       try {
         localStorage.removeItem("cart_guest")
       } catch {
@@ -640,17 +710,19 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     (id: string) => {
       const removed = findCartLine(cartRef.current, id)
       if (!removed) return
-      const next = cartRef.current.filter(item => cartLineKey(item) !== cartLineKey(removed))
+      if (removed.saraCare) { setSaraCareDuration(removed.saraCare.parentLineKey, null); return }
+      const next = cartRef.current.filter(item => cartLineKey(item) !== cartLineKey(removed) && item.saraCare?.parentLineKey !== cartLineKey(removed))
       safeSetCart(next)
       persistLocal(next)
       void saveAccountCart(next)
       analytics.removeFromCart(toAnalyticsItem(removed))
     },
-    [persistLocal, safeSetCart, saveAccountCart],
+    [persistLocal, safeSetCart, saveAccountCart, setSaraCareDuration],
   )
 
   const addToCart = useCallback(
     async (product: CartItem) => {
+      if (isSaraCare(product)) { toast.error("Add Sara Care through the device it protects."); return false }
       const owner = activeUserIdRef.current
       const lineKey = cartLineKey(product)
       const actionKey = `${owner}:${lineKey}`
@@ -701,6 +773,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
             stock,
             maxPurchaseQuantity,
             quantity: next[existingIndex].quantity + product.quantity,
+            ...(product.saraCareSelection !== undefined ? { saraCareSelection: product.saraCareSelection } : {}),
             ...(product.type && { type: product.type }),
             ...(product.packSize && { packSize: product.packSize }),
             ...(product.validityYears && { validityYears: product.validityYears }),
@@ -723,7 +796,12 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
             },
           ]
         }
-        return next
+        const parentLine = next.find(item => !isSaraCare(item) && cartLineKey(item) === lineKey)
+        return next.flatMap(item => {
+          if (item.saraCare?.parentLineKey !== lineKey || !parentLine) return [item]
+          if (parentLine.saraCareSelection === null || (parentLine.saraCareSelection !== undefined && parentLine.saraCareSelection !== item.saraCare.durationYears)) return []
+          return [{ ...item, quantity: parentLine.quantity }]
+        })
       })()
       const error = cartLimitError(updatedCart)
       const nextQuantity = updatedCart.filter(item => item.id === product.id).reduce((sum, item) => sum + item.quantity, 0)
@@ -749,10 +827,11 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
       if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > purchaseLimit({})) { toast.error("Quantity must be a positive whole number within the purchase limit."); return false }
       const item = findCartLine(cartRef.current, id)
       if (!item) return false
+      if (isSaraCare(item)) { toast.error("Sara Care quantity follows the covered product."); return false }
       if (quantity === item.quantity) return true
       const actionKey = `${activeUserIdRef.current}:${cartLineKey(item)}`
       if (Date.now() - (lastQuantityAt.current.get(actionKey) || 0) < 300) return false
-      const next = cartRef.current.map(existing => cartLineKey(existing) === cartLineKey(item) ? { ...existing, quantity } : existing)
+      const next = cartRef.current.map(existing => cartLineKey(existing) === cartLineKey(item) || existing.saraCare?.parentLineKey === cartLineKey(item) ? { ...existing, quantity } : existing)
       const error = cartLimitError(next)
       const reducing = !!item && Number.isSafeInteger(quantity) && quantity > 0 && quantity < item.quantity
       const totalQuantity = next.filter(existing => existing.id === item.id).reduce((sum, existing) => sum + existing.quantity, 0)
@@ -806,7 +885,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     const previous = cartRef.current
     let changed = false
     const next = previous.map((item) => {
-      const price = prices[item.id]
+      const price = prices[cartLineKey(item)] ?? (isSaraCare(item) ? undefined : prices[item.id])
       const stock = stocks[item.id]
       const validPrice = Number.isFinite(price) && price > 0
       const validStock = Number.isFinite(stock) && stock >= 0
@@ -819,7 +898,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     persistLocal(next)
   }, [persistLocal, safeSetCart])
 
-  const availabilityKey = JSON.stringify([...new Map(cart.map(item => [item.id, item.type || "hardware"])).entries()].sort())
+  const availabilityKey = JSON.stringify([...new Map(cart.filter(item => !isSaraCare(item)).map(item => [item.id, item.type || "hardware"])).entries()].sort())
   useEffect(() => {
     const identities: Array<[string, string]> = JSON.parse(availabilityKey)
     if (!identities.length || isLoading) return
@@ -1025,7 +1104,11 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   const value = useMemo<CartContextValue>(
     () => ({
       cart,
-      isLoading,
+      isHydrating: isLoading,
+      isLoading: isLoading || careNeeded && careQuotedKey !== careInputKey,
+      saraCareLoading: !isLoading && careNeeded && careQuotedKey !== careInputKey,
+      removeAllSaraCare,
+      saraCareOffers, saraCareError, setSaraCareDuration, refreshSaraCare,
       addToCart,
       updateQuantity,
       refreshItemPrices,
@@ -1043,6 +1126,8 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     [
       cart,
       isLoading,
+      careQuotedKey, careInputKey, careNeeded, saraCareOffers, saraCareError, setSaraCareDuration, refreshSaraCare,
+      removeAllSaraCare,
       addToCart,
       updateQuantity,
       refreshItemPrices,

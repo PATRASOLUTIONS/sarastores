@@ -1,4 +1,5 @@
 export type CartLineIdentity = {
+  saraCare?: { parentLineKey: string; durationYears: number } | null;
   id?: string; productId?: string; type?: string | null; sku?: string | null;
   variantId?: string | null; color?: string | null; size?: string | null;
   ram?: string | null; storage?: string | null; kgenVariantId?: string | null;
@@ -12,6 +13,7 @@ export function cartLineKey(item: CartLineIdentity): string {
   const options = [item.variantId, item.sku, item.color, item.size, item.ram, item.storage,
     item.kgenVariantId, item.packSize, item.validityYears].map(option)
   if (item.type === "software") options.push("software")
+  if (item.saraCare) options.push("sara-care", item.saraCare.parentLineKey, String(item.saraCare.durationYears))
   return `${id}::${JSON.stringify(options)}`
 }
 

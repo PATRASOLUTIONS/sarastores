@@ -89,7 +89,7 @@ async function createStoreRequest(request: NextRequest) {
     if (parsed.data.expectedAmount !== undefined && Math.round(quote.amount * 100) !== parsed.data.expectedAmount) {
       return NextResponse.json({ error: "Your checkout total changed. Review it before requesting store payment." }, { status: 409, headers: { ...headers, "Checkout-Retry-Safe": "true" } })
     }
-    const hardware = quote.pricing.items.filter(item => item.type !== "software")
+    const hardware = quote.pricing.items.filter(item => item.type === "hardware")
     if (hardware.length) {
       const codes = await itemCodesFor(hardware.map(item => item.id))
       const holding = await storesHoldingStock(hardware.map(item => ({ sku: codes.get(item.id) ?? null, quantity: item.quantity })))

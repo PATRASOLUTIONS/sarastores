@@ -21,6 +21,8 @@ import { cartLimitError } from "@/lib/cart-limits"
 import { useCartUI } from "@/contexts/CartUIContext"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { toast } from "react-hot-toast"
+import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
+import { isSaraCare } from "@/lib/sara-care-types"
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -32,7 +34,7 @@ const formatINR = (n: number) =>
 export default function CartSidebar() {
   const { isOpen, closeCart, lastAddedId, setLastAddedId } = useCartUI()
   const router = useRouter()
-  const { cart, updateQuantity, removeFromCart, clearCart, isLoading } = useCart()
+  const { cart, updateQuantity, removeFromCart, clearCart, isLoading, saraCareError } = useCart()
   const { data: settings, error: settingsError, isLoading: settingsLoading } = useSettingsData()
 
   // Track which line item was just added so we can flash it. The
@@ -60,7 +62,7 @@ export default function CartSidebar() {
     () => cart.reduce((n, item) => n + Number(item.quantity || 0), 0),
     [cart],
   )
-  const hardwareSubtotal = cart.filter((item) => item.type !== "software")
+  const hardwareSubtotal = cart.filter((item) => item.type !== "software" && !isSaraCare(item))
     .reduce((sum, item) => sum + item.price * item.quantity, 0)
   const threshold = Number(settings?.freeShippingThreshold ?? 1000)
   const fee = Number(settings?.shippingFee ?? 99)
@@ -79,6 +81,7 @@ export default function CartSidebar() {
   }
 
   const handleProceedToBuy = () => {
+    if (isLoading || saraCareError) { toast.error(saraCareError || "Please wait for cart prices to refresh."); return }
     if (!cart.length) { toast.error("Your cart is empty"); return }
     const error = cartLimitError(cart)
     if (error) { toast.error(error); return }
@@ -200,7 +203,7 @@ export default function CartSidebar() {
                       >
                         {/* Image */}
                         <Link
-                          href={`/product/${encodeURIComponent(item.id)}`}
+                          href={isSaraCare(item) ? "/sara-care" : `/product/${encodeURIComponent(item.id)}`}
                           onClick={closeCart}
                           className="relative h-20 w-20 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden border border-gray-100"
                         >
@@ -220,12 +223,13 @@ export default function CartSidebar() {
                         {/* Details */}
                         <div className="flex-1 min-w-0">
                           <Link
-                            href={`/product/${encodeURIComponent(item.id)}`}
+                            href={isSaraCare(item) ? "/sara-care" : `/product/${encodeURIComponent(item.id)}`}
                             onClick={closeCart}
                             className="block text-[13px] font-semibold text-gray-900 hover:text-brand-primary line-clamp-2 leading-snug"
                           >
                             {item.name}
                           </Link>
+                          <SaraCareOptions item={item} />
 
                           {(item.color || item.size) && (
                             <p className="text-[11px] text-gray-500 mt-0.5">
@@ -251,7 +255,7 @@ export default function CartSidebar() {
                                 onClick={() =>
                                   handleQuantity(lineKey, item.quantity - 1)
                                 }
-                                disabled={item.quantity <= 1}
+                                disabled={isSaraCare(item) || item.quantity <= 1}
                                 aria-label="Decrease quantity"
                                 className="p-1.5 text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
                               >
@@ -265,6 +269,7 @@ export default function CartSidebar() {
                                   handleQuantity(lineKey, item.quantity + 1)
                                 }
                                 aria-label="Increase quantity"
+                                disabled={isSaraCare(item)}
                                 className="p-1.5 text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
                               >
                                 <Plus className="h-3.5 w-3.5" />
@@ -309,6 +314,7 @@ export default function CartSidebar() {
             {/* Footer — subtotal + Proceed to Buy */}
             {cart.length > 0 && (
               <div className="border-t border-gray-100 bg-white px-5 py-4 space-y-3 shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.12)]">
+                <SaraCareNotice />
                 <div className="space-y-1 text-[12.5px]">
                   <div className="flex items-center justify-between text-gray-600">
                     <span>Subtotal ({itemCount} item{itemCount > 1 ? "s" : ""})</span>
@@ -333,6 +339,7 @@ export default function CartSidebar() {
 
                 <button
                   onClick={handleProceedToBuy}
+                  disabled={isLoading || !!saraCareError}
                   className="w-full bg-gradient-to-r from-brand-accent to-orange-500 hover:from-brand-accent-hover hover:to-orange-600 text-white font-bold text-[14px] py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
                 >
                   <Tag className="h-4 w-4" />

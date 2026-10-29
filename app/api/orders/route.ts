@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse, after } from "next/server"
+import { SaraCareInputFields } from "@/lib/sara-care-types"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
@@ -368,6 +369,7 @@ async function createOrder(request: NextRequest) {
     // Prices, totals, coupon value and order status are always derived server-side.
     const orderSchema = z.object({
       items: z.array(z.object({
+        ...SaraCareInputFields,
         id: z.string().optional(),
         productId: z.string().optional(),
         sku: z.string().nullish(),
@@ -754,7 +756,7 @@ async function createOrder(request: NextRequest) {
       if (!latest.ok) throw new CheckoutConflictError(latest.error)
       latest.gifts = await quoteGiftPromotions(latest.items, userId, parsed.data.declinedGiftPromotions, transaction, parsed.data.selectedGiftPromotions)
       if (method === "store-payment" && checkoutIntent?.store) {
-        const holding = await storesHoldingStock(latest.items.filter(item => item.type !== "software")
+        const holding = await storesHoldingStock(latest.items.filter(item => item.type === "hardware")
           .map(item => ({ sku: item.sku || null, quantity: item.quantity })), transaction)
         if (!holding.has(checkoutIntent.store.id)) {
           throw new CheckoutConflictError("Pay at store is unavailable for the requested quantities. Please choose home delivery and pay online.")

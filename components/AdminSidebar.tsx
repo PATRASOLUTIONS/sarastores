@@ -108,6 +108,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Marketing Dashboard", path: "/admin/marketing", icon: <Megaphone className="h-5 w-5" /> },
       { name: "Coupons & Offers", path: "/admin/promotions", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Gift Listing", path: "/admin/gifts", icon: <BadgePercent className="h-5 w-5" /> },
+      { name: "Sara Care", path: "/admin/sara-care", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Super Sunday", path: "/admin/super-sunday", icon: <Star className="h-5 w-5" /> },
       { name: "Campaigns & Email", path: "/admin/customer-centric", icon: <MessageSquare className="h-5 w-5" /> },
       { name: "Email Templates", path: "/admin/customer-centric/templates", icon: <FileText className="h-5 w-5" /> },

@@ -1,5 +1,9 @@
 import type React from "react"
 import { pageMetadata } from "@/lib/seo-page"
+import { redirect } from "next/navigation"
+import { getSession } from "@/lib/auth"
+
+export const dynamic = "force-dynamic"
 
 export const generateMetadata = pageMetadata({
   path: "/track",
@@ -8,6 +12,7 @@ export const generateMetadata = pageMetadata({
   noIndex: true,
 })
 
-export default function TrackLayout({ children }: { children: React.ReactNode }) {
+export default async function TrackLayout({ children }: { children: React.ReactNode }) {
+  if (!(await getSession())) redirect("/login?redirect=/track")
   return <>{children}</>
 }

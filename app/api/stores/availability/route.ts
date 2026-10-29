@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const catalogue = await priceCatalogueCart(groupedItems, undefined, "store")
     if (!catalogue.ok) return NextResponse.json({ success: true, storeIds: [], byStore: {}, deliveryAvailable: false,
       availabilityError: catalogue.error, farDistanceKm: storeFarDistanceKm() }, { headers })
-    const needs = catalogue.items.filter(item => item.type !== "software")
+    const needs = catalogue.items.filter(item => item.type === "hardware")
       .map(item => ({ sku: item.sku?.trim() || null, itemCode: item.itemNumbers?.[0] || item.sku, quantity: item.quantity }))
     const availability = await getStoreStockAvailability(needs)
     // Catalogue stock includes warehouses and other stores. Never trust the

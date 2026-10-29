@@ -9,7 +9,7 @@ import { CheckoutQuoteSchema } from "@/lib/checkout-payment"
 
 const ApplyCouponSchema = z.object({
   code: z.string().trim().min(1).max(50),
-  cart: CheckoutQuoteSchema.shape.items.max(MAX_CART_PRODUCTS),
+  cart: CheckoutQuoteSchema.shape.items.max(MAX_CART_PRODUCTS * 2),
   fulfilment: CheckoutQuoteSchema.shape.fulfilment,
 })
 

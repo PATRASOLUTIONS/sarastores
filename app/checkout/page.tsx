@@ -25,6 +25,8 @@ import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { cartLimitError } from "@/lib/cart-limits"
 import { cartLineKey } from "@/lib/cart-line"
+import { isSaraCare, SaraCareSnapshotSchema } from "@/lib/sara-care-types"
+import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
 import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
 import { readCheckoutRecovery, clearCheckoutRecovery, PurchasedItemsSchema, readHostedCheckout, clearHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
@@ -87,6 +89,7 @@ const money = (value: number) =>
 
 export default function CheckoutPage() {
   const { cart, completePurchase, removeFromCart, refreshItemPrices, isLoading: cartLoading,
+    isHydrating: cartHydrating, saraCareLoading, saraCareError, refreshSaraCare,
     checkoutCartPending, previousCart, previousCartLoaded, checkoutCartError, resolvingCheckoutCart,
     prepareCheckoutSignIn, resolveCheckoutCart, abandonCheckoutCart, loadCartFromDatabase } = useCart()
   const { user, isLoading: authLoading } = useAuth()
@@ -159,7 +162,7 @@ export default function CheckoutPage() {
   const [catalogueLoading, setCatalogueLoading] = useState(false)
   const [catalogueError, setCatalogueError] = useState("")
   const [catalogueAttempt, setCatalogueAttempt] = useState(0)
-  const catalogueIds = JSON.stringify(cart.filter(item => item.type !== "software").map(item => item.id).sort())
+  const catalogueIds = JSON.stringify(cart.filter(item => item.type !== "software" && !isSaraCare(item)).map(item => item.id).sort())
   useEffect(() => {
     const ids: string[] = JSON.parse(catalogueIds)
     if (!ids.length) { setCatalogue({}); setCatalogueError(""); setCatalogueLoading(false); return }
@@ -486,9 +489,11 @@ export default function CheckoutPage() {
   couponContextRef.current = couponContext
 
   // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
-  const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross } = cart.reduce((acc, item) => {
+  const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross, careGross } = cart.reduce((acc, item) => {
     const qty = item.quantity || 1
-    if (item.type === 'software') {
+    if (isSaraCare(item)) {
+      acc.careGross += item.price * qty
+    } else if (item.type === 'software') {
       // For software, price includes GST, so we calculate base price (price/1.18)
       const basePrice = (item.price / 1.18) * qty;
       acc.softwareBaseTotal += basePrice;
@@ -500,24 +505,25 @@ export default function CheckoutPage() {
       acc.hardwareGross += item.price * qty;
     }
     return acc;
-  }, { softwareBaseTotal: 0, hardwareBaseTotal: 0, softwareGross: 0, hardwareGross: 0 });
+  }, { softwareBaseTotal: 0, hardwareBaseTotal: 0, softwareGross: 0, hardwareGross: 0, careGross: 0 });
 
   // Calculate GST for software and hardware (18% of their base prices)
   const softwareGST = softwareBaseTotal * 0.18
   const hardwareGST = hardwareBaseTotal * 0.18
+  const careGST = careGross - careGross / 1.18
 
   // Subtotal (tax-exclusive base amount)
-  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal
+  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal + careGross / 1.18
 
   // Gross totals (base + GST)
   const softwareTotal = softwareBaseTotal + softwareGST
   const hardwareTotal = hardwareBaseTotal + hardwareGST
 
   // Total tax (software + hardware)
-  const tax = currentQuote?.tax ?? softwareGST + hardwareGST
+  const tax = currentQuote?.tax ?? softwareGST + hardwareGST + careGST
 
   // Only apply shipping if there are hardware items in the cart
-  const hasHardware = cart.some(item => item.type !== 'software')
+  const hasHardware = cart.some(item => item.type !== 'software' && !isSaraCare(item))
   let shipping = 0
   if (hasHardware && !isLoadingSettings && !isPickup) {
     const hardwareGrossSubtotal = hardwareGross
@@ -527,7 +533,7 @@ export default function CheckoutPage() {
   if (currentQuote) shipping = currentQuote.shipping
 
   // Apply coupon discount (if any) on gross amounts (softwareTotal + hardwareTotal)
-  const preCouponTotal = softwareTotal + hardwareTotal
+  const preCouponTotal = softwareTotal + hardwareTotal + careGross
   const discountedTotal = Math.max(0, preCouponTotal - couponDiscount)
 
   // Calculate final total (after coupon and adding shipping)
@@ -535,14 +541,15 @@ export default function CheckoutPage() {
 
   // Indicative only — /api/orders recomputes and debits the points.
   const payableTotal = currentQuote?.amount ?? Math.round(Math.max(0, total - loyaltyDiscount) * 100) / 100
-  const productDiscount = cart.reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
-  const totalMrp = preCouponTotal + productDiscount
+  const productDiscount = cart.filter(item => !isSaraCare(item)).reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
+  const totalMrp = softwareGross + hardwareGross + productDiscount
   const unavailableItem = cart.find(item => {
+    if (isSaraCare(item)) return false
     const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
     return ((!isPickup || item.type === "software") && typeof item.stock === "number" && item.stock < quantity)
       || (typeof item.maxPurchaseQuantity === "number" && item.maxPurchaseQuantity < quantity)
   })
-  const cartError = cartLimitError(cart) || (unavailableItem
+  const cartError = saraCareError || cartLimitError(cart) || (unavailableItem
     ? `${unavailableItem.name} is unavailable in the requested quantity. Reduce its quantity or remove it before placing an order.`
     : null)
 
@@ -989,6 +996,7 @@ export default function CheckoutPage() {
   const validateCheckout = async (action: "payment" | "store" = "payment") => {
     if (!checkoutValidationLock.acquire()) return false
     try {
+    if (cartLoading) { toast.error("Please wait for your cart and Sara Care prices to finish loading."); return false }
     if (addressesLoading || profileLoading || addressMutation.current) {
       toast.error("Please wait for your account addresses to finish loading or saving.")
       return false
@@ -1032,7 +1040,7 @@ export default function CheckoutPage() {
         total: z.number().finite(), couponDiscount: z.number().finite(),
         coupon: z.object({ code: z.string(), name: z.string(), discount: z.number().finite(),
           couponRemovable: z.boolean().default(true) }).nullable().optional().default(null),
-        items: z.array(z.object({ id: z.string(), price: z.number().finite().positive() })),
+        items: z.array(z.object({ id: z.string(), price: z.number().finite().positive(), saraCare: SaraCareSnapshotSchema.optional() })),
         gifts: z.array(GiftAwardSchema).default([]),
       }),
     }).safeParse(data)
@@ -1044,10 +1052,15 @@ export default function CheckoutPage() {
     if (giftSelectionSignature(quote.pricing.gifts) !== giftSelectionSignature(cartGifts.gifts)) {
       cartGifts.retry(); toast.error("Your free gifts changed. Review the updated gifts before paying."); return false
     }
-    const changedPrices = quote.pricing.items.some(item => cart.some(current => current.id === item.id &&
-      current.price !== item.price))
-    const prices = Object.fromEntries(quote.pricing.items.map(item => [item.id, item.price]))
-    const updatedCart = cart.map(item => ({ ...item, price: prices[item.id] ?? item.price }))
+    if (quote.pricing.items.length !== cart.length) { toast.error("Your cart changed. Refresh checkout before paying."); return false }
+    if (quote.pricing.items.some((item, index) => item.saraCare?.revision !== cart[index].saraCare?.revision)) {
+      refreshSaraCare()
+      toast.error("Sara Care terms or rates changed. Review the refreshed plan before paying.")
+      return false
+    }
+    const changedPrices = quote.pricing.items.some((item, index) => cart[index].price !== item.price)
+    const prices = Object.fromEntries(cart.map((item, index) => [cartLineKey(item), quote.pricing.items[index].price]))
+    const updatedCart = cart.map(item => ({ ...item, price: prices[cartLineKey(item)] ?? item.price }))
     const changedCoupon = Boolean(quote.couponMessage) || (appliedCoupon?.code ?? null) !== (quote.pricing.coupon?.code ?? null)
       || Math.round(couponDiscount * 100) !== Math.round(quote.pricing.couponDiscount * 100)
     const changedTotal = Math.round(quote.amount * 100) !== Math.round(payableTotal * 100)
@@ -1080,6 +1093,7 @@ export default function CheckoutPage() {
         selectedGiftPromotions: cartGifts.selectedGiftPromotions,
         expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
         items: cart.map((item) => ({
+          saraCare: item.saraCare, saraCareSelection: item.saraCareSelection,
           id: item.id,
           sku: item.sku, variantId: item.variantId, ram: item.ram, storage: item.storage,
           color: item.color, size: item.size,
@@ -1361,7 +1375,7 @@ export default function CheckoutPage() {
     })
   }
 
-  if (cartLoading || !draftReady) {
+  if (cartHydrating || !draftReady) {
     // Full page loader
     return (
       <div className="flex flex-col min-h-screen">
@@ -1370,6 +1384,7 @@ export default function CheckoutPage() {
           <div className="flex flex-col items-center">
             <span className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1560BD] mb-4"></span>
             <span className="text-[#0F2557] text-lg font-medium">Loading checkout...</span>
+            <SaraCareNotice disabled={isProcessing || paymentPending || !!paymentRecovery} />
           </div>
         </main>
         <Footer />
@@ -1414,7 +1429,7 @@ export default function CheckoutPage() {
     <div className={`flex min-h-screen flex-col bg-white ${styles.checkout}`}>
       <Header />
       <main className="flex-grow">
-        {cartError && <p role="alert" className="mx-auto max-w-6xl rounded bg-red-50 p-4 text-sm text-red-700">{cartError} <Link href="/cart" className="underline">Update cart</Link></p>}
+        {cartError && !saraCareError && <p role="alert" className="mx-auto max-w-6xl rounded bg-red-50 p-4 text-sm text-red-700">{cartError} <Link href="/cart" className="underline">Update cart</Link></p>}
         <div className={`section-container ${styles.container}`}>
           <nav className="sr-only" aria-label="Breadcrumb">
             <Link href="/" className="hover:text-[#1560BD]">
@@ -1860,7 +1875,7 @@ export default function CheckoutPage() {
                   <div><dt>{isPickup ? "Contact details" : "Delivery address"}</dt><dd>{addressSummary}</dd></div>
                   <div><dt>Delivery option</dt><dd>{deliverySummary}</dd></div>
                   <div><dt>Payment method</dt><dd>{paymentSummary}</dd></div>
-                  <div><dt>Order total</dt><dd>{money(payableTotal)}</dd></div>
+                  <div><dt>Order total</dt><dd>{saraCareLoading ? "Updating…" : money(payableTotal)}</dd></div>
                 </dl>
                 <p className="mt-4 text-sm text-gray-600">Review your items in the order summary, then place your order.</p>
               </CheckoutSection>
@@ -1885,13 +1900,30 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Cart Items */}
+                <SaraCareNotice disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery} />
                 <div className={styles.summaryItems}>
                   {cart.map((item) => {
                     const lineKey = cartLineKey(item)
                     const title = shortProductTitle(item.name) || "Product"
-                    const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(item.id)}`
+                    const href = isSaraCare(item) ? "/sara-care" : item.type === "software" ? "/software" : `/product/${encodeURIComponent(item.id)}`
+                    if (item.saraCare) return <div key={lineKey} className={styles.careProduct}>
+                      <div className={styles.careProductHeader}>
+                        <span className={styles.careIcon}><Shield size={18} /></span>
+                        <div><strong>Sara Care · {item.saraCare.durationYears} {item.saraCare.durationYears === 1 ? "year" : "years"}</strong><span>Protection product</span></div>
+                        <b>₹{money(item.price * item.quantity)}</b>
+                      </div>
+                      <p className={styles.careCoveredDevice}>For {cleanProductName(item.saraCare.parentName)}</p>
+                      <p>Qty: {item.quantity} · ₹{money(item.price)} per device · GST included</p>
+                      <SaraCareOptions item={item} variant="checkout" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId} />
+                      <p>Begins on {item.saraCare.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}, according to the coverage terms.</p>
+                      <div className={styles.careProductActions}><Link href="/sara-care" target="_blank" rel="noopener noreferrer">About Sara Care</Link>
+                        <button type="button" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId}
+                          onClick={() => removeFromCart(lineKey)} aria-label={`Remove Sara Care for ${item.saraCare.parentName}`}><Trash2 size={13} />Remove Care</button>
+                      </div>
+                    </div>
                     return (
-                    <div key={lineKey} className={styles.summaryRow}>
+                    <div key={lineKey} className={styles.summaryItem}>
+                    <div className={styles.summaryRow}>
                       <a href={href} target="_blank" rel="noopener noreferrer" className={styles.summaryImage} aria-label={`Open ${title} in a new tab`}>
                         <CartProductImage src={item.image} name={title} />
                       </a>
@@ -1917,7 +1949,7 @@ export default function CheckoutPage() {
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                           <button type="button" onClick={() => void moveItemToWishlist(lineKey)}
-                            disabled={!!movingWishlistId || storeRequestLoading}
+                            disabled={isSaraCare(item) || !!movingWishlistId || storeRequestLoading}
                             aria-label={`Move ${title} to wishlist`}
                             className="inline-flex items-center gap-1 text-xs font-medium text-[#1560BD] hover:underline disabled:opacity-50">
                             <Heart className="h-3.5 w-3.5" />
@@ -1935,6 +1967,8 @@ export default function CheckoutPage() {
                         <p className="text-sm font-semibold flex-shrink-0">₹{money(item.price * item.quantity)}</p>
                       </div>
                     </div>
+                    <SaraCareOptions item={item} variant="checkout" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId} />
+                    </div>
                     )
                   })}
                 </div>
@@ -1950,6 +1984,7 @@ export default function CheckoutPage() {
                   <h3 className="mb-3 font-semibold text-sm">Price Details</h3>
                   <div className="flex justify-between text-sm"><span className="text-gray-600">Total MRP</span><span>₹{money(totalMrp)}</span></div>
                   <div className="flex justify-between text-sm text-green-700"><span>Product Discount</span><span>− ₹{money(productDiscount)}</span></div>
+                  {(careGross > 0 || saraCareLoading) && <div className="flex justify-between gap-2 text-sm"><span className="text-gray-600">Sara Care</span><span aria-live="polite">{saraCareLoading ? "Updating…" : `₹${money(careGross)}`}</span></div>}
                   <div className="flex justify-between text-sm"><span className="text-gray-600">Delivery Charges</span><span className={shipping === 0 ? "text-green-700" : ""}>{hasHardware && !isPickup && (isLoadingSettings || settingsError || !settingsData) ? "Confirming..." : shipping > 0 ? `₹${money(shipping)}` : "FREE"}</span></div>
                   <details className="text-xs text-gray-600"><summary className="cursor-pointer">GST breakdown (included in prices)</summary>
                   <div className="flex justify-between text-sm">
@@ -1968,6 +2003,7 @@ export default function CheckoutPage() {
                       <span>₹{money(hardwareGST)}</span>
                     </div>
                   )}
+                  {careGST > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">GST (18% on Sara Care)</span><span>₹{money(careGST)}</span></div>}
                   </details>
                   {couponDiscount > 0 && (
                     <div className="flex justify-between text-sm text-green-600">
@@ -1983,7 +2019,7 @@ export default function CheckoutPage() {
                   )}
                   <div className="flex justify-between text-lg font-bold border-t pt-2">
                     <span>Total Amount</span>
-                    <span>₹{money(payableTotal)}</span>
+                    <span aria-live="polite">{saraCareLoading ? "Updating…" : `₹${money(payableTotal)}`}</span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">Inclusive of all taxes. Final prices are confirmed server-side.</p>
                   {productDiscount + couponDiscount > 0 && <p className={styles.savings}><Tag size={17} />You are saving ₹{money(productDiscount + couponDiscount)} on this order.</p>}
@@ -2005,7 +2041,7 @@ export default function CheckoutPage() {
                   <ArrowRight size={16} />
                 </button> : paymentMethod === "store-payment" ? (
                   <button type="button" onClick={() => void requestStorePayment()}
-                    disabled={storeRequestLoading || isProcessing || !allowStorePayment}
+                    disabled={saraCareLoading || !!saraCareError || storeRequestLoading || isProcessing || !allowStorePayment}
                     className="flex w-full items-center justify-center rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
                     {storeRequestLoading ? "Sending to store..."
                       : activeStoreRequest ? "Enter transaction ID"
@@ -2031,7 +2067,7 @@ export default function CheckoutPage() {
                     expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
                     redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId }, total: payableTotal }}
                   onSuccess={handlePaymentSuccess}
-                  disabled={Boolean(paymentRecovery || recoveringPayment || cartError || storeStock.error) || !storeStock.storeIds ||
+                  disabled={saraCareLoading || Boolean(paymentRecovery || recoveringPayment || cartError || storeStock.error) || !storeStock.storeIds ||
                     (isPickup ? !pickupStore || !storeStock.storeIds.has(pickupStore.id) : !storeStock.deliveryAvailable)}
                   onCancel={() => toast.error("Payment cancelled")}
                 /> : <a href="#payment-method-heading" className={styles.primaryButton}>Verify in-store purchase <ArrowRight size={16} /></a>}
@@ -2040,7 +2076,7 @@ export default function CheckoutPage() {
                 {hasHardware && shipping > 0 && (
                   <div className="mt-4 rounded-lg bg-[#F4F8FD] p-3">
                     <p className="text-[12px] text-[#1560BD]">
-                      Add ₹{(freeShippingThreshold - (softwareTotal + hardwareTotal)).toLocaleString("en-IN")} more for free delivery!
+                      Add ₹{money(Math.max(0, freeShippingThreshold - hardwareGross))} more for free delivery!
                     </p>
                   </div>
                 )}

@@ -1,4 +1,5 @@
 const API_PAGE_ACCESS: [string, string][] = [
+  ["/api/admin/sara-care", "/admin/sara-care"],
   ["/api/admin/store-locations", "/admin/store-locations"],
   ["/api/admin/store-stock", "/admin/stock-check"],
   ["/api/admin/store-qr", "/admin/store-qr"],

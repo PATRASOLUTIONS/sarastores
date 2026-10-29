@@ -89,6 +89,13 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 })
     }
 
+    if (account.emailVerified !== true) {
+      return NextResponse.json({
+        error: "Verify your email address before downloading your data.",
+        code: "EMAIL_VERIFICATION_REQUIRED",
+      }, { status: 403, headers: { "Cache-Control": "private, no-store" } })
+    }
+
     const email = typeof account.email === "string" ? account.email : null
 
     const recordLimit = 5000

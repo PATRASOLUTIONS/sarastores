@@ -74,10 +74,24 @@
 .deliveryNotice li svg { color: #009a46; flex-shrink: 0; }
 .summary { display: flex; flex-direction: column; background: linear-gradient(110deg, #fff, #f5f9ff); border: 1px solid #e8edf5; border-radius: 5px; padding: 14px; overflow: hidden; }
 .summaryHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -14px -14px 0; padding: 14px; background: #f1f6fe; border-bottom: 1px solid #e8edf5; }
-.summaryHeader h2 { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.summaryHeader h2 { font-size: 14px; font-weight: 700; }
 .summaryHeader > a { font-size: 10px; white-space: nowrap; }
-.summaryItems { max-height: 242px; overflow-y: auto; }
-.summaryRow { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #e4e9f1; }
+.summaryItems { min-width: 0; }
+.summaryItem { min-width: 0; border-bottom: 1px solid #e4e9f1; }
+.summaryRow { position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; }
+.careProduct { min-width: 0; margin: 10px 0; padding: 12px; border: 1px solid #cbdcf6; border-radius: 8px; background: #f1f6ff; color: #526079; font-size: 11px; line-height: 1.5; }
+.careProductHeader { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: start; gap: 8px; color: #0f2557; }
+.careIcon { display: grid; place-items: center; height: 30px; border-radius: 7px; color: #1560bd; background: #e0ebff; }
+.careProductHeader strong { display: block; font-size: 12px; }
+.careProductHeader span:not(.careIcon) { display: block; color: #526079; font-size: 10px; }
+.careProductHeader b { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.careProduct > p { margin-top: 5px; overflow-wrap: anywhere; }
+.careCoveredDevice { color: #344054; font-weight: 600; }
+.careProductActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #d8e4f8; }
+.careProductActions a { color: #1560bd; }
+.careProductActions button { display: inline-flex; align-items: center; gap: 4px; color: #b42318; font-weight: 600; }
+.careProductActions button:disabled { opacity: .5; }
+.careProductActions a:focus-visible, .careProductActions button:focus-visible { outline: 2px solid #1560bd; outline-offset: 3px; }
 .summaryRow > div:last-child { flex-shrink: 0; }
 .summaryRow > div:last-child > p { font-size: 12px; font-weight: 700; }
 .summaryRow > div:last-child > button { position: absolute; right: 0; bottom: 3px; padding: 2px; opacity: 0; }

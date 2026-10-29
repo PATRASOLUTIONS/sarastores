@@ -90,10 +90,11 @@ export async function POST(request: NextRequest) {
         const validated = next.map((item, index) => ({ ...item,
           id: pricing.items[index].id, productId: pricing.items[index].id,
           price: pricing.items[index].price, quantity: pricing.items[index].quantity,
+          ...(pricing.items[index].saraCare ? { saraCare: pricing.items[index].saraCare } : {}),
         }))
         committedItems = validated
         if (action === "wishlist" && previous.length) {
-          const ids = [...new Set(previous.map(item => item.id || (item as CartItem & { productId?: string }).productId)
+          const ids = [...new Set(previous.filter(item => !item.saraCare && item.type !== "service").map(item => item.id || (item as CartItem & { productId?: string }).productId)
             .filter((id): id is string => typeof id === "string" && id.length > 0))]
           await wishlists.updateOne({ userId }, {
             $addToSet: { items: { $each: ids } }, $set: { updatedAt: new Date() },

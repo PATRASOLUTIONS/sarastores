@@ -18,9 +18,9 @@ export interface StoreStockState {
 }
 
 /** Which stores can serve the whole cart from their own stock. */
-export function useStoreStock(items: { id: string; quantity: number }[]): StoreStockState {
+export function useStoreStock(items: { id: string; quantity: number; type?: string; saraCare?: unknown }[]): StoreStockState {
   const quantities = new Map<string, number>()
-  for (const item of items) quantities.set(item.id, (quantities.get(item.id) || 0) + item.quantity)
+  for (const item of items.filter(item => item.type !== "service" && !item.saraCare)) quantities.set(item.id, (quantities.get(item.id) || 0) + item.quantity)
   const key = [...quantities].map(([id, quantity]) => `${id}:${quantity}`).sort().join(",")
   const [result, setResult] = useState<{ key: string; storeIds: Set<string> | null;
     byStore: Record<string, StoreItemAvailability[]>; deliveryAvailable: boolean; availabilityError: string; error: string }>({

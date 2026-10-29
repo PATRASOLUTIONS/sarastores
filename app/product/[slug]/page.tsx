@@ -23,6 +23,8 @@ import {
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import ProductLoading from "@/components/product/ProductLoading"
+import ProductSaraCare from "@/components/product/ProductSaraCare"
+import type { SaraCareYears } from "@/lib/sara-care-types"
 import ProductSpecificationTabs from "@/components/ProductSpecificationTabs"
 import { RailCards, Stars } from "@/components/product/PdpBlocks"
 import ProductReviewsSection from "@/components/ProductReviewsSection"
@@ -60,6 +62,7 @@ const TABS = [
   { id: "emi", label: "EMI Options" },
   { id: "reviews", label: "Reviews" },
   { id: "faqs", label: "FAQs" },
+  { id: "sara-care", label: "Sara Care" },
 ]
 
 const TRUST = [
@@ -257,6 +260,8 @@ export default function ProductDetailPage() {
   const [specsError, setSpecsError] = useState("")
   const [adding, setAdding] = useState<"cart" | "buy" | null>(null)
   const [tab, setTab] = useState("overview")
+  const [careSelection, setCareSelection] = useState<SaraCareYears | null | undefined>(undefined)
+  useEffect(() => { setCareSelection(undefined) }, [slug])
   const [reviewStats, setReviewStats] = useState<{ rating: number; count: number } | null>(null)
   const updateReviewStats = useCallback((next: { rating: number; count: number }) => {
     setReviewStats(previous => previous?.rating === next.rating && previous.count === next.count ? previous : next)
@@ -517,6 +522,7 @@ export default function ProductDetailPage() {
     try {
       const added = await addToCart({
         id: String(product.id),
+        saraCareSelection: careSelection,
         name: product.name,
         price: product.price,
         image: images[0] || "/placeholder.svg",
@@ -967,6 +973,7 @@ export default function ProductDetailPage() {
                 <ProductReviewsSection embedded productId={String(product.id)} productName={name} productImage={images[0]} seedReviews={recordedReviews} average={recordedRating.count ? recordedRating.rating : undefined} count={recordedRating.count} onStatsChange={updateReviewStats} />
               )}
 
+              {tab === "sara-care" && <ProductSaraCare productId={String(product.id)} productName={name} selection={careSelection} onSelect={setCareSelection} />}
               {tab === "faqs" && marketing.enabled("faqs") && (
                 <dl className="divide-y divide-gray-100">
                   {FAQS.map(({ q, a }, index) => (

@@ -29,6 +29,7 @@ export function giftQuantity(promotion: GiftPromotion, items: PricedItem[], user
   }
   const lower = (value: string) => value.trim().toLowerCase()
   const eligible = items.filter(item => {
+    if (item.type === "service") return false
     switch (promotion.applyScope || "all") {
       case "all": return true
       case "products": return promotion.productIds?.includes(item.id)
