@@ -254,6 +254,11 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     persistLocal(next)
   }, [safeSetCart, persistLocal])
   const refreshSaraCare = useCallback(() => { setCareQuotedKey(""); setCareAttempt(attempt => attempt + 1) }, [])
+  useEffect(() => {
+    if (pathname === "/cart" || pathname === "/checkout") refreshSaraCare()
+    window.addEventListener("focus", refreshSaraCare)
+    return () => window.removeEventListener("focus", refreshSaraCare)
+  }, [pathname, refreshSaraCare])
   const removeAllSaraCare = useCallback(() => {
     const next = cartRef.current.filter(item => !isSaraCare(item)).map(item => ({ ...item, saraCareSelection: null }))
     safeSetCart(next)
@@ -284,7 +289,10 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
         if (controller.signal.aborted || careCartKey(activeUserIdRef.current, cartRef.current) !== careInputKey) return
         const next: CartItem[] = parents.flatMap(parent => {
           const care = parsed.items.filter(item => item.saraCare.parentLineKey === cartLineKey(parent))
-          return [{ ...parent, ...(parent.saraCareSelection === undefined && care.length ? { saraCareSelection: care[0].saraCare.durationYears } : {}) }, ...care]
+          const offer = parsed.offers.find(offer => offer.parentLineKey === cartLineKey(parent))
+          const selection = !offer || (parent.saraCareSelection != null && !offer.options.some(option => option.years === parent.saraCareSelection))
+            ? null : parent.saraCareSelection === undefined && care.length ? care[0].saraCare.durationYears : parent.saraCareSelection
+          return [{ ...parent, saraCareSelection: selection }, ...care]
         })
         const addedDefault = parsed.items.some(item => parents.some(parent => cartLineKey(parent) === item.saraCare.parentLineKey && parent.saraCareSelection === undefined) &&
           !cartRef.current.some(current => current.saraCare?.parentLineKey === item.saraCare.parentLineKey))

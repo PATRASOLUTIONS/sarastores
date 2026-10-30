@@ -875,7 +875,7 @@ export default function ProductDetailPage() {
           {/* ── Tabs ─────────────────────────────────────────────── */}
           <div id="product-details-tabs" className="min-w-0 scroll-mt-4 bg-white">
             <div className="flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Product details">
-              {TABS.filter(item => item.id !== "faqs" || marketing.enabled("faqs")).map(({ id, label }) => (
+              {TABS.filter(item => (item.id !== "faqs" || marketing.enabled("faqs")) && (item.id !== "sara-care" || !!productCare.offer)).map(({ id, label }) => (
                 <button
                   key={id}
                   type="button"

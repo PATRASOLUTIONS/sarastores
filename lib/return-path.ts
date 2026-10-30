@@ -1,4 +1,5 @@
 /** Same-origin path to resume after login. Rejects off-site and auth-page targets. */
+import { staffCanAccessPage, staffLandingPage } from "@/lib/admin-access"
 
 const AUTH_PAGES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"]
 
@@ -24,16 +25,17 @@ export function loginHref(pathname: string, search = ""): string {
   return path ? `/login?redirect=${encodeURIComponent(path)}` : "/login"
 }
 
-type ReturnUser = { role?: string; dashboardAccess?: boolean }
+type ReturnUser = { role?: string; dashboardAccess?: boolean; allowedPages?: string[] }
 
 export function destinationAfterLogin(user: ReturnUser, requested: string | null | undefined): string {
   const staff = user.role === "admin" || user.role === "superadmin" || user.dashboardAccess === true
   const vendor = user.role === "vendor" || staff
   let path = safeReturnPath(requested)
   if (path?.startsWith("/admin") && !staff) path = null
+  if (path && (path === "/admin" || path.startsWith("/admin/")) && !staffCanAccessPage(user, path.split(/[?#]/)[0])) path = null
   if (path?.startsWith("/vendor") && !vendor) path = null
   if (path) return path
-  if (staff) return "/admin/dashboard"
+  if (staff) return staffLandingPage(user)
   if (user.role === "vendor") return "/vendor/dashboard"
   return "/dashboard"
 }

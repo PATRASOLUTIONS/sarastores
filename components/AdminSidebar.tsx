@@ -4,6 +4,7 @@ import Link from "next/link"
 import { INTEGRATIONS, getConnectedIntegrations } from "@/lib/integrations"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
+import { staffCanAccessPage } from "@/lib/admin-access"
 import {
   BadgePercent,
   Book,
@@ -90,13 +91,13 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Bulk Order Update", path: "/admin/orders/bulk-update", icon: <ListChecks className="h-5 w-5" /> },
       { name: "External Orders", path: "/admin/external-orders", icon: <Truck className="h-5 w-5" /> },
       { name: "Payments", path: "/admin/payments", icon: <CreditCard className="h-5 w-5" /> },
-      { name: "Employees", path: "/admin/employees", icon: <Users className="h-5 w-5" /> },
+      { name: "Employees", path: "/admin/employees", icon: <Users className="h-5 w-5" />, fullAdminOnly: true },
     ],
   },
   {
     title: "Customers",
     items: [
-      { name: "Customers", path: "/admin/customers", icon: <Users className="h-5 w-5" /> },
+      { name: "Customers", path: "/admin/customers", icon: <Users className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Leads", path: "/admin/leads", icon: <UserPlus className="h-5 w-5" /> },
       { name: "Complaints", path: "/admin/complaints", icon: <MessageSquare className="h-5 w-5" /> },
       { name: "Contact Inquiries", path: "/admin/contact-inquiries", icon: <Contact2 className="h-5 w-5" /> },
@@ -108,7 +109,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Marketing Dashboard", path: "/admin/marketing", icon: <Megaphone className="h-5 w-5" /> },
       { name: "Coupons & Offers", path: "/admin/promotions", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Gift Listing", path: "/admin/gifts", icon: <BadgePercent className="h-5 w-5" /> },
-      { name: "Sara Care", path: "/admin/sara-care", icon: <BadgePercent className="h-5 w-5" /> },
+      { name: "Sara Care", path: "/admin/sara-care", icon: <BadgePercent className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Super Sunday", path: "/admin/super-sunday", icon: <Star className="h-5 w-5" /> },
       { name: "Campaigns & Email", path: "/admin/customer-centric", icon: <MessageSquare className="h-5 w-5" /> },
       { name: "Email Templates", path: "/admin/customer-centric/templates", icon: <FileText className="h-5 w-5" /> },
@@ -212,12 +213,8 @@ export default function AdminSidebar({ isOpen, setIsOpen }: AdminSidebarProps) {
 
       // While the session is still resolving, leave the menu intact — narrowing it
       // first makes the whole nav flash down to one item and back on every load.
-      if (!isLoading) {
-        if (Array.isArray(allowedPages) && allowedPages.length > 0) {
-          items = items.filter((i) => allowedPages.includes(i.path))
-        } else if (user && user.role !== "admin" && user.role !== "superadmin") {
-          items = items.filter((i) => i.path === "/admin/dashboard")
-        }
+      if (!isLoading && user && user.role !== "admin" && user.role !== "superadmin") {
+        items = items.filter(i => !i.external && staffCanAccessPage(user, i.path))
       }
 
       if (term) items = items.filter((i) => i.name.toLowerCase().includes(term))

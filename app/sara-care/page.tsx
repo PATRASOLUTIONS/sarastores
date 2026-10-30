@@ -7,7 +7,7 @@ export default async function SaraCarePage() {
   const config = await loadSaraCareConfig()
   return <><Header /><main className="mx-auto max-w-3xl space-y-5 px-5 py-12">
     <h1 className="text-3xl font-bold text-maroon-800">Sara Care</h1>
-    <p>Optional protection for eligible devices purchased from Sara. Choose a 1-, 2-, or 3-year package in your cart. Available durations and prices depend on the product.</p>
+    <p>Optional protection for eligible devices purchased from Sara. Choose from the protection durations available for your product, including six-month and multi-year plans. Available durations and prices depend on the product.</p>
     <p>Sara Care appears as a separate product beside the device it protects. You can change the duration or remove it before paying. Its quantity follows the covered device.</p>
     <section id="coverage-terms" className="scroll-mt-32 space-y-5">
       <h2 className="text-xl font-semibold">Coverage terms</h2>

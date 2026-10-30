@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import type { GiftAward } from "@/lib/gift-validation"
 import OrderGiftItems from "@/components/OrderGiftItems"
-import type { SaraCareSnapshot } from "@/lib/sara-care-types"
+import { saraCareDurationLabel, type SaraCareSnapshot } from "@/lib/sara-care-types"
 
 interface OrderItem {
   saraCare?: SaraCareSnapshot
@@ -958,7 +958,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{item.name}</div>
                             {item.saraCare && <div className="mt-1 text-xs text-orange-900">
-                              <p>{item.saraCare.durationYears}-year protection for {item.saraCare.parentName}</p>
+                              <p>{saraCareDurationLabel(item.saraCare.durationYears)} protection for {item.saraCare.parentName}</p>
                               <p>{item.saraCare.percentage}% of {item.saraCare.basis === "mrp" ? "MRP" : "selling price"} · ₹{item.saraCare.basisAmount.toLocaleString("en-IN")}</p>
                               <p>Coverage begins on {item.saraCare.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}, according to the saved terms.</p>
                               <details><summary className="cursor-pointer">Purchased coverage terms</summary><p className="whitespace-pre-wrap">{item.saraCare.terms}</p></details>

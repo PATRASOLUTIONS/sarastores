@@ -47,8 +47,9 @@ export default function SaraCareOptions({ item, disabled = false, variant = "com
 }
 
 export function SaraCareNotice({ disabled = false }: { disabled?: boolean }) {
-  const { saraCareError, saraCareLoading, refreshSaraCare, removeAllSaraCare } = useCart()
+  const { cart, saraCareOffers, saraCareError, saraCareLoading, refreshSaraCare, removeAllSaraCare } = useCart()
   if (!saraCareError && !saraCareLoading) return null
+  if (!saraCareError && !saraCareOffers.length && !cart.some(isSaraCare)) return null
   return <div role={saraCareError ? "alert" : "status"} className="my-2 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
     <p>{saraCareError || "Updating optional Sara Care prices…"}</p>
     <div className="mt-2 flex flex-wrap gap-3">

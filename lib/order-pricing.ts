@@ -7,8 +7,8 @@ import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 import { cartLineKey } from "@/lib/cart-line"
 import { purchaseAvailabilityError, purchaseStock, purchaseLimit, type PurchaseProduct } from "@/lib/purchase-validation"
 import type { GiftAward } from "@/lib/gift-validation"
-import { loadSaraCareConfig, priceSaraCare } from "@/lib/sara-care"
-import { saraCareProductId, saraCareSku, type SaraCareSnapshot, type SaraCareYears } from "@/lib/sara-care-types"
+import { loadSaraCareConfig, loadSaraCarePricing, priceSaraCare } from "@/lib/sara-care"
+import { saraCareProductId, saraCareSku, saraCareDurationLabel, type SaraCareSnapshot, type SaraCareYears } from "@/lib/sara-care-types"
 
 // Catalogue prices are GST-inclusive; base and tax are derived from them.
 const GST_RATE = 0.18
@@ -429,7 +429,7 @@ export async function priceCatalogueCart(
   }
 
   if (careRows.length) {
-    const config = await loadSaraCareConfig(session)
+    const config = await loadSaraCarePricing(await loadSaraCareConfig(session), [...parentsByLine.values()].map(parent => parent.doc), session)
     const covered = new Set<string>()
     for (const raw of careRows) {
       const reference = raw.saraCare
@@ -444,11 +444,11 @@ export async function priceCatalogueCart(
       if (!quote) return { ok: false, error: "Sara Care is no longer available for this product. Refresh your cart." }
       covered.add(reference.parentLineKey)
       const care: PricedItem = { id: saraCareProductId(reference.durationYears),
-        name: `Sara Care — ${reference.durationYears} ${reference.durationYears === 1 ? "Year" : "Years"} — ${parent.item.name}`,
+        name: `Sara Care — ${saraCareDurationLabel(reference.durationYears)} — ${parent.item.name}`,
         price: quote.price, quantity: parent.item.quantity, image: "/images/sara-care.svg", type: "service",
         category: "Sara Care", subCategory: null, provider: null, source: null, kgenProductId: null, kgenVariantId: null,
         packSize: null, validityYears: null, maxDevices: null, validity: null, color: null, size: null,
-        sku: saraCareSku(reference.durationYears), saraCare: quote.snapshot }
+        sku: quote.snapshot.planCode || saraCareSku(reference.durationYears), saraCare: quote.snapshot }
       items.push(care)
       pricedByRaw.set(raw, care)
     }

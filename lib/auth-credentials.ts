@@ -35,7 +35,8 @@ export const authUserRecordSchema = z.object({
   status: z.string().optional(),
   emailVerified: z.boolean().optional(),
   createdAt: z.union([z.date(), z.string()]).nullish(),
-  updatedAt: z.date().optional(),
+  // Employee records use ISO strings; login/profile updates use BSON dates.
+  updatedAt: z.union([z.date(), z.string().datetime()]).optional(),
   avatar: z.string().nullish(),
   phone: z.string().nullish(),
   address: z.string().nullish(),

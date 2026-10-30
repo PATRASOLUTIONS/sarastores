@@ -25,7 +25,7 @@ import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { cartLimitError } from "@/lib/cart-limits"
 import { cartLineKey } from "@/lib/cart-line"
-import { isSaraCare, SaraCareSnapshotSchema } from "@/lib/sara-care-types"
+import { isSaraCare, saraCareDurationLabel, SaraCareSnapshotSchema } from "@/lib/sara-care-types"
 import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
 import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
@@ -1909,7 +1909,7 @@ export default function CheckoutPage() {
                     if (item.saraCare) return <div key={lineKey} className={styles.careProduct}>
                       <div className={styles.careProductHeader}>
                         <span className={styles.careIcon}><Shield size={18} /></span>
-                        <div><strong>Sara Care · {item.saraCare.durationYears} {item.saraCare.durationYears === 1 ? "year" : "years"}</strong><span>Protection product</span></div>
+                        <div><strong>Sara Care · {saraCareDurationLabel(item.saraCare.durationYears)}</strong><span>Protection product</span></div>
                         <b>₹{money(item.price * item.quantity)}</b>
                       </div>
                       <p className={styles.careCoveredDevice}>For {cleanProductName(item.saraCare.parentName)}</p>
@@ -1984,7 +1984,7 @@ export default function CheckoutPage() {
                   <h3 className="mb-3 font-semibold text-sm">Price Details</h3>
                   <div className="flex justify-between text-sm"><span className="text-gray-600">Total MRP</span><span>₹{money(totalMrp)}</span></div>
                   <div className="flex justify-between text-sm text-green-700"><span>Product Discount</span><span>− ₹{money(productDiscount)}</span></div>
-                  {(careGross > 0 || saraCareLoading) && <div className="flex justify-between gap-2 text-sm"><span className="text-gray-600">Sara Care</span><span aria-live="polite">{saraCareLoading ? "Updating…" : `₹${money(careGross)}`}</span></div>}
+                  {careGross > 0 && <div className="flex justify-between gap-2 text-sm"><span className="text-gray-600">Sara Care</span><span aria-live="polite">{saraCareLoading ? "Updating…" : `₹${money(careGross)}`}</span></div>}
                   <div className="flex justify-between text-sm"><span className="text-gray-600">Delivery Charges</span><span className={shipping === 0 ? "text-green-700" : ""}>{hasHardware && !isPickup && (isLoadingSettings || settingsError || !settingsData) ? "Confirming..." : shipping > 0 ? `₹${money(shipping)}` : "FREE"}</span></div>
                   <details className="text-xs text-gray-600"><summary className="cursor-pointer">GST breakdown (included in prices)</summary>
                   <div className="flex justify-between text-sm">

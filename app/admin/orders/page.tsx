@@ -13,7 +13,7 @@ import PaymentBadge from "@/app/components/PaymentBadge"
 import OrderNotificationEmails from "@/components/admin/OrderNotificationEmails"
 import StorePaymentWhatsAppRecipients from "@/components/admin/StorePaymentWhatsAppRecipients"
 import { storePaymentPlatformLabel } from "@/types/store-payment"
-import type { SaraCareSnapshot } from "@/lib/sara-care-types"
+import { saraCareDurationLabel, type SaraCareSnapshot } from "@/lib/sara-care-types"
 
 interface OrderItem {
   saraCare?: SaraCareSnapshot
@@ -931,7 +931,7 @@ export default function AdminOrders() {
                         </span>
                         {order.items.filter(item => item.saraCare).map((item, index) => <div key={`${item.id}-${index}`} className="mt-2 max-w-xs whitespace-normal rounded border border-orange-200 bg-orange-50 p-2 text-xs">
                           <strong>{item.name}</strong><p>Qty {item.quantity} · ₹{(item.price * item.quantity).toLocaleString("en-IN")}</p>
-                          <p>{item.saraCare!.percentage}% of {item.saraCare!.basis === "mrp" ? "MRP" : "selling price"} · {item.saraCare!.durationYears} year(s)</p>
+                          <p>{item.saraCare!.pricingMode === "value" ? "Uploaded plan value" : `${item.saraCare!.percentage}% of ${item.saraCare!.basis === "mrp" ? "MRP" : "selling price"}`} · {saraCareDurationLabel(item.saraCare!.durationYears)}</p>
                           <p>{order.status === "cancelled" ? "Cancelled — review linked Care refund" : `Coverage begins on ${item.saraCare!.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}`}</p>
                         </div>)}
                       </td>
