@@ -102,8 +102,8 @@ export function buildActiveProductPriceSheet(products: AdminProductResponse[]) {
     seen.add(itemno)
     return {
       itemno,
-      price: product.price ?? "",
       mrp: product.mrp ?? "",
+      price: product.price ?? "",
     }
   })
 }

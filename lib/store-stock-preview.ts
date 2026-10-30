@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 import type { ClientSession, ObjectId } from "mongodb"
-import { COLLECTIONS, getCollection } from "@/lib/db-service"
-import { stockItemCode, stockItemFilter, type StockCatalogueProduct } from "@/lib/stock-item-code"
+import { getCollection } from "@/lib/db-service"
+import { stockItemCode, type StockCatalogueProduct } from "@/lib/stock-item-code"
+import { findStockProducts, findStockRows } from "@/lib/store-stock-catalogue"
 import { STORE_STOCK_COLLECTION, type StoreStockRow, type StoreStockUploadRow } from "@/lib/store-stock"
 
 export const STOCK_PREVIEW_PAGE_SIZE = 200
@@ -25,13 +26,12 @@ export async function createStockPreview(plan: StockPreviewPlan, session?: Clien
   const omitted = plan.replacementStores.length ? (await stock.find({ storeCode: { $in: plan.replacementStores }, quantity: { $gt: 0 } }, { session }).toArray())
     .filter(row => !listed.has(pairKey(row.storeCode, row.sku))) : []
   const skus = [...new Set([...plan.valid.map(row => row.itemCode), ...omitted.map(row => row.sku)])]
-  const rows = skus.length ? await stock.find({ sku: { $in: skus } }, { session }).toArray() : []
+  const rows = await findStockRows<StoreStockRow>(STORE_STOCK_COLLECTION, skus, session)
   const previousPairs = new Map(rows.map(row => [pairKey(row.storeCode, row.sku), row.quantity]))
   const totals = new Map<string, number>()
   for (const row of rows) totals.set(row.sku, (totals.get(row.sku) || 0) + row.quantity)
-  const products = skus.length ? await (await getCollection<StockCatalogueProduct & { _id: ObjectId | string; name?: string; stock?: number }>(COLLECTIONS.PRODUCTS)).find(
-    stockItemFilter(skus), { session, collation: { locale: "en", strength: 2 }, projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1, name: 1, stock: 1 } },
-  ).toArray() : []
+  const products = await findStockProducts<StockCatalogueProduct & { _id: ObjectId | string; name?: string; stock?: number }>(skus,
+    { session, projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1, name: 1, stock: 1 } })
   const bySku = new Map(products.map(product => [stockItemCode(product), product]))
   if (plan.valid.some(row => !bySku.has(row.itemCode))) throw new Error("An item changed in the catalogue. Refresh the stock preview.")
   const edits = [

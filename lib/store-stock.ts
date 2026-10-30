@@ -2,7 +2,8 @@ import { ObjectId, type ClientSession } from "mongodb"
 import { z } from "zod"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
-import { stockItemCode, stockItemFilter, type StockCatalogueProduct } from "@/lib/stock-item-code"
+import { stockItemCode, type StockCatalogueProduct } from "@/lib/stock-item-code"
+import { findStockProducts } from "@/lib/store-stock-catalogue"
 
 /**
  * Per-store stock, keyed by the store code from /admin/store-locations and the
@@ -22,13 +23,13 @@ export interface StoreStockRow {
 export const StoreStockUploadSchema = z.object({
   replaceStores: z.boolean().default(false),
   preview: z.boolean().default(false),
-  previewPage: z.number().int().min(0).max(10000).default(0),
+  previewPage: z.number().int().nonnegative().safe().default(0),
   previewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   rows: z.array(z.object({
     itemCode: z.string().trim().min(1, "Every row needs an item code").max(100),
     storeCode: z.string().trim().min(1, "Every row needs a store code").max(50),
     quantity: z.number().int("Quantity must be a whole number").min(0, "Quantity cannot be negative").max(1_000_000),
-  }).strict()).min(1, "The sheet has no rows").max(50_000, "Upload at most 50,000 rows at a time"),
+  }).strict()).min(1, "The sheet has no rows"),
 }).strict()
 
 export type StoreStockUploadRow = z.infer<typeof StoreStockUploadSchema>["rows"][number]
@@ -113,15 +114,19 @@ export async function itemCodesFor(productIds: string[]): Promise<Map<string, st
 /** Sets each product's `stock` to the total held across all stores. */
 export async function recomputeProductStock(skus: string[], session?: ClientSession): Promise<number> {
   if (skus.length === 0) return 0
-  const totals = await (await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)).aggregate<{ _id: string; total: number }>([
-    { $match: { sku: { $in: skus } } },
-    { $group: { _id: "$sku", total: { $sum: "$quantity" } } },
-  ], { session }).toArray()
+  const stock = await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)
+  const totals: { _id: string; total: number }[] = []
+  const unique = [...new Set(skus)]
+  for (let offset = 0; offset < unique.length; offset += STOCK_WRITE_BATCH_SIZE) {
+    totals.push(...await stock.aggregate<{ _id: string; total: number }>([
+      { $match: { sku: { $in: unique.slice(offset, offset + STOCK_WRITE_BATCH_SIZE) } } },
+      { $group: { _id: "$sku", total: { $sum: "$quantity" } } },
+    ], { session }).toArray())
+  }
   const bySku = new Map(totals.map(row => [row._id, row.total]))
   const requested = new Set(skus.map(code => code.trim().toUpperCase()))
-  const products = await (await getCollection<StockCatalogueProduct & { _id: ObjectId | string }>(COLLECTIONS.PRODUCTS)).find(
-    stockItemFilter(skus), { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 }, session, collation: { locale: "en", strength: 2 } },
-  ).toArray()
+  const products = await findStockProducts<StockCatalogueProduct & { _id: ObjectId | string }>(skus,
+    { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 }, session })
   const updates = products.filter(product => requested.has(stockItemCode(product)?.toUpperCase() || ""))
   if (!updates.length) return 0
   const now = new Date()

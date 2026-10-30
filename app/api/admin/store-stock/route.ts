@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { WithId } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -10,6 +11,7 @@ import {
 } from "@/lib/store-stock"
 
 import { createStockPreview, STOCK_PREVIEW_PAGE_SIZE, type StockPreviewPlan, type SkippedStockRecord } from "@/lib/store-stock-preview"
+import { findStockProducts, STOCK_LOOKUP_BATCH_SIZE } from "@/lib/store-stock-catalogue"
 
 const LIST_LIMIT = 20
 export const maxDuration = 300
@@ -90,11 +92,19 @@ export async function POST(request: NextRequest) {
 
     const storeCodes = [...new Set(rows.map(row => row.storeCode))]
     const itemCodes = [...new Set(rows.map(row => row.itemCode))]
+    const findStores = async () => {
+      const collection = await getCollection<StoredStoreLocation>("store_locations")
+      const stores = new Map<string, WithId<StoredStoreLocation>>()
+      for (let offset = 0; offset < storeCodes.length; offset += STOCK_LOOKUP_BATCH_SIZE) {
+        const batch = await collection.find({ storeCode: { $in: storeCodes.slice(offset, offset + STOCK_LOOKUP_BATCH_SIZE) } },
+          { projection: { storeCode: 1, shopName: 1 }, collation: { locale: "en", strength: 2 } }).toArray()
+        for (const store of batch) stores.set(String(store._id), store)
+      }
+      return [...stores.values()]
+    }
     const [knownStores, products] = await Promise.all([
-      (await getCollection<StoredStoreLocation>("store_locations")).find({ storeCode: { $in: storeCodes } },
-        { projection: { storeCode: 1, shopName: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
-      (await getCollection<StockCatalogueProduct & { _id: unknown }>(COLLECTIONS.PRODUCTS)).find(stockItemFilter(itemCodes),
-        { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 }, collation: { locale: "en", strength: 2 } }).toArray(),
+      findStores(),
+      findStockProducts<StockCatalogueProduct & { _id: unknown }>(itemCodes, { projection: { sku: 1, itemno: 1, itemNo: 1, raw: 1 } }),
     ])
     const storesByCode = new Map(knownStores.map(store => [stockCodeKey(store.storeCode!), store.storeCode!]))
     if (storesByCode.size !== knownStores.length) return NextResponse.json({ success: false, message: "Multiple stores share the same store code. Correct Store Locations before uploading." }, { status: 400 })
