@@ -796,6 +796,15 @@ export const CreateLeadSchema = z.object({
   source: z.string().trim().min(1).max(200).optional().default("Shubham Lucky Draw"),
 });
 
+export const StoreLocatorLeadSchema = CreateLeadSchema.pick({ name: true, phone: true }).extend({
+  email: emailSchema,
+  message: z.string().trim().min(1, "Please enter your message").max(5000),
+  storeId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid store"),
+  source: z.literal("store_locator"),
+  contactConsent: z.literal(true, { errorMap: () => ({ message: "Please accept the terms and contact consent" }) }),
+  promotionalConsent: z.boolean(),
+}).strict();
+
 export const UpdateLeadSchema = CreateLeadSchema.partial().omit({ pincode: true }).extend({
   id: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid lead ID'),
   status: z.enum(["new", "contacted", "interested", "converted", "closed"]).optional(),
@@ -876,6 +885,7 @@ export const CreateStoreLocationSchema = z.object({
   storeCode: z.string().trim().max(50, "Store code must be 50 characters or fewer").optional(),
   locationDescription: z.string().trim().max(2000).default(""),
   googleMapLocation: z.union([StoreHttpUrlSchema, z.literal("")]).default(""),
+  googlePlaceId: z.string().trim().max(200).regex(/^[A-Za-z0-9_-]*$/, "Enter a valid Google Place ID").optional(),
   mobileNo: z.string().trim().max(30).default(""),
   shopTiming: z.string().trim().max(200).default("9:00 AM - 9:00 PM"),
   shopImage: z.string().trim().max(2_000_000).default(""),

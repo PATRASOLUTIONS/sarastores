@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
-import { AlertCircle, ArrowRight, ChevronRight, Loader2, MapPin, MessageCircle, Phone, Search, Store as StoreIcon, Target, X } from "lucide-react"
+import { AlertCircle, ArrowRight, ChevronRight, Loader2, MapPin, MessageCircle, Phone, Search, Target, X } from "lucide-react"
 import type { Store } from "@/lib/store-data"
 import { analytics } from "@/lib/analytics"
 import { useSettingsData } from "@/hooks/useSettingsData"
-import { calculateDistance, coordinates, coordinatesFromGeocode, geocodePincode, type Coordinates } from "@/lib/geo-client"
+import { calculateDistance, coordinates, type Coordinates } from "@/lib/geo-client"
 import Header from "./Header"
 import Footer from "./Footer"
 import { StoreLocatorHero, StoreLocatorTrust } from "./store-locator-chrome"
+import { StoreEnquiryDialog } from "./store-enquiry-dialog"
+import { StoreGooglePhoto } from "./store-google-photo"
 import styles from "./store-locator.module.css"
 
-const StoreMap = dynamic(() => import("./store-map"), {
+const StoreMap = dynamic(() => import("./google-store-map"), {
   ssr: false,
   loading: () => <div className={styles.mapLoading}><Loader2 className="h-6 w-6 animate-spin" /><span>Loading map...</span></div>,
 })
@@ -34,19 +36,16 @@ function isStore(value: unknown): value is Store {
 }
 
 async function searchPlaces(query: string, signal: AbortSignal): Promise<SearchPlace[]> {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=in&format=json&limit=5`,
-    { signal, headers: { "Accept-Language": "en" } },
-  )
-  if (!response.ok) throw new Error("Place search is unavailable. Please try again.")
+  const response = await fetch(`/api/stores/search?query=${encodeURIComponent(query)}`, { signal })
   const data: unknown = await response.json()
-  if (!Array.isArray(data)) throw new Error("Place search returned an invalid response. Please try again.")
+  if (!response.ok || !data || typeof data !== "object" || !("places" in data) || !Array.isArray(data.places)) {
+    throw new Error(data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "Place search is unavailable. Please try again.")
+  }
   const places: SearchPlace[] = []
-  for (const entry of data) {
-    const value: unknown = entry
-    const coords = coordinatesFromGeocode([value])
-    if (coords && value && typeof value === "object" && "display_name" in value && typeof value.display_name === "string") {
-      places.push({ ...coords, label: value.display_name })
+  for (const value of data.places) {
+    if (value && typeof value === "object" && "lat" in value && "lng" in value && "label" in value && typeof value.label === "string") {
+      const coords = coordinates(value.lat, value.lng)
+      if (coords) places.push({ ...coords, label: value.label })
     }
   }
   if (!places.length) throw new Error("No place found. Add the city to the office name, or try its address or pincode.")
@@ -87,6 +86,7 @@ export function StoreLocator() {
   const [selectedBrand, setSelectedBrand] = useState("all")
   const [sort, setSort] = useState("nearest")
   const [selectedStore, setSelectedStore] = useState<string | null>(null)
+  const [enquiryStore, setEnquiryStore] = useState<Store | null>(null)
   const [showAll, setShowAll] = useState(true)
   const [view, setView] = useState<"map" | "list">("map")
   const [mapReset, setMapReset] = useState(0)
@@ -109,7 +109,6 @@ export function StoreLocator() {
   const isPincodeSearch = /^[1-9]\d{5}$/.test(searchQuery.trim())
   const activePlace = placeQuery === searchQuery.trim() ? selectedPlace : null
   const userLocation = isPincodeSearch ? pincodeLocation : activePlace || gpsLocation
-  const locationLabel = isPincodeSearch ? `Pincode ${searchQuery.trim()}` : activePlace?.label || "Your location"
   const genericPhoto = settings?.storefrontImage || "/store-locator/storefront.webp"
 
   useEffect(() => {
@@ -131,7 +130,15 @@ export function StoreLocator() {
           !("stores" in data) || !Array.isArray(data.stores) || !data.stores.every(isStore)) {
           throw new Error("Unable to load stores. Please try again.")
         }
-        setStores(data.stores)
+        // Shuffle once per successful load; filtering keeps this order stable.
+        const shuffled = [...data.stores]
+        for (let index = shuffled.length - 1; index > 0; index--) {
+          const other = Math.floor(Math.random() * (index + 1))
+          const value = shuffled[index]
+          shuffled[index] = shuffled[other]
+          shuffled[other] = value
+        }
+        setStores(shuffled)
       } catch (error) {
         if (controller.signal.aborted) return
         console.error("Failed to load stores:", error)
@@ -153,7 +160,8 @@ export function StoreLocator() {
     const pincode = searchQuery.trim()
     const timer = setTimeout(async () => {
       try {
-        const coords = await geocodePincode(pincode, controller.signal)
+        const places = await searchPlaces(pincode, controller.signal)
+        const coords = places[0]
         if (controller.signal.aborted) return
         setPincodeLocation(coords)
         analytics.checkPincode(pincode, true, "store_locator")
@@ -239,7 +247,7 @@ export function StoreLocator() {
     clearLocation()
   }
 
-  function getCurrentLocation() {
+  function getCurrentLocation(automatic = false) {
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser.")
       return
@@ -249,17 +257,23 @@ export function StoreLocator() {
     setLocationError(null)
     navigator.geolocation.getCurrentPosition((position) => {
       if (request !== locationRequest.current) return
-      setSearchQuery("")
+      if (!automatic) setSearchQuery("")
       setGpsLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
       setSort("nearest")
       setLocationLoading(false)
     }, (error) => {
       if (request !== locationRequest.current) return
-      setLocationError(error.code === 1 ? "Location permission denied. Enable location access or search by city or pincode." :
+      setGpsLocation(null)
+      setLocationError(error.code === 1 ? "Location access wasn't granted. Showing stores in a shuffled order; you can still search by city or pincode." :
         error.code === 3 ? "Location request timed out. Please try again." : "Unable to retrieve your location. Please try again.")
       setLocationLoading(false)
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 })
   }
+
+  useEffect(() => {
+    getCurrentLocation(true)
+    return () => { locationRequest.current++ }
+  }, [])
 
   const locatedStores = useMemo<LocatedStore[]>(() => stores.map((store) => {
     const coords = coordinates(store.latitude, store.longitude)
@@ -287,13 +301,12 @@ export function StoreLocator() {
   const filteredStores = useMemo(() => {
     if (nearestFallback) return [nearestFallback.store]
     return matchingStores.filter((store) => !userLocation || (store.distance !== null && store.distance <= radiusKm)).sort((a, b) => {
-    if (sort === "nearest" && userLocation) return (a.distance ?? Infinity) - (b.distance ?? Infinity)
+    if (sort === "nearest") return userLocation ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : 0
     return sort === "name-desc" ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
     })
   }, [matchingStores, nearestFallback, userLocation, radiusKm, sort])
   const visibleStores = showAll ? filteredStores : filteredStores.slice(0, 5)
   const nearestStoreId = useMemo(() => userLocation ? [...filteredStores].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0]?.id : null, [filteredStores, userLocation])
-  const mappedCount = filteredStores.filter((store) => store.coords).length
   const filterActive = !!searchQuery || selectedCity !== "all" || selectedType !== "all" || selectedBrand !== "all" || !!userLocation
 
   function selectStore(id: string) {
@@ -335,12 +348,12 @@ export function StoreLocator() {
             <option value="all">All Brands</option>
             {brands.map((brand) => <option key={brand}>{brand}</option>)}
           </select>
-          <button className={styles.locationButton} type="button" onClick={getCurrentLocation} disabled={locationLoading}>
+          <button className={styles.locationButton} type="button" onClick={() => getCurrentLocation()} disabled={locationLoading}>
             {locationLoading ? <Loader2 size={19} className="animate-spin" /> : <Target size={19} />}
             {locationLoading ? "Detecting..." : "Use My Location"}
           </button>
         </section>
-        <p className={styles.searchHint}>Type an office or place name with its city, then press Enter or Search. Place search by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>; directions open in Google Maps.</p>
+        <p className={styles.searchHint}>Search a store, place or pincode. Select a store to view its Google Map, photos and directions.</p>
         {placeLoading && <p role="status" className={styles.searchHint}>Finding this place...</p>}
         {placeResults.length > 0 && <section className={styles.placeResults} aria-label="Matching places">
           <p>{placeResults.length > 1 ? "Choose the correct place. Nearest stores are shown for the selected result." : "Showing stores nearest to this place."}</p>
@@ -371,11 +384,11 @@ export function StoreLocator() {
             <div className={styles.resultsHeading}>
               <h2>Our Stores <span>({isDataLoading ? "Loading..." : `${filteredStores.length} Stores`})</span></h2>
               <label>Sort By: <select aria-label="Sort stores" value={sort} onChange={(event) => setSort(event.target.value)}>
-                <option value="nearest">Nearest First</option><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
+                <option value="nearest">{userLocation ? "Nearest First" : "Suggested order"}</option><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
               </select></label>
             </div>
             {view === "list" && <div className={styles.listViewToolbar}>{viewTabs}</div>}
-            {!isDataLoading && <p className={styles.distanceHint}>{userLocation ? "Distances are approximate, straight-line distances. Google Maps shows the driving route." : "Search a place, use your location or enter a pincode to see distances."}</p>}
+            {!isDataLoading && <p className={styles.distanceHint}>{userLocation ? "Distances are approximate, straight-line distances. Google Maps shows the driving route." : "Showing stores in a shuffled order. Use your location or search a pincode to find nearby stores."}</p>}
             {isDataLoading ? <div className={styles.empty} role="status"><Loader2 className="animate-spin" /><p>Loading stores...</p></div> :
               dataError ? <div className={styles.empty} role="alert"><AlertCircle /><p>{dataError}</p><button type="button" onClick={() => setRefresh((value) => value + 1)}>Retry</button></div> :
               filteredStores.length === 0 ? <div className={styles.empty}><MapPin /><h3>No stores found</h3><p>{userLocation ? `No matching stores within ${radiusKm} km. Widen the radius or reset filters.` : "Try another city, area or store type."}</p><button type="button" onClick={resetFilters}>Show All Stores</button></div> :
@@ -383,21 +396,19 @@ export function StoreLocator() {
                 {visibleStores.map((store) => {
                   const status = openingStatus(store.hours, now)
                   return (
-                    <article key={store.id} className={`${styles.storeCard} ${selectedStore === store.id ? styles.selectedCard : ""}`} data-store-id={store.id}>
-                      {/* A shared fallback illustrates the brand, not this individual branch. */}
-                      <img src={store.image || genericPhoto} alt={store.image ? store.name : "SARA storefront illustration"} className={styles.storePhoto} onError={(event) => {
-                        if (!event.currentTarget.dataset.fallback) { event.currentTarget.dataset.fallback = "true"; event.currentTarget.src = "/store-locator/storefront.webp" }
-                      }} />
+                    <article key={store.id} className={`${styles.storeCard} ${selectedStore === store.id ? styles.selectedCard : ""}`} data-store-id={store.id}
+                      onClick={event => { if (event.target instanceof Element && !event.target.closest("a, button")) setEnquiryStore(store) }}>
+                      <StoreGooglePhoto store={store} fallback={genericPhoto} />
                       <div className={styles.storeDetails}>
-                        <h3><button type="button" onClick={() => selectStore(store.id)}>{store.name}</button></h3>
+                        <h3><button type="button" aria-haspopup="dialog" onClick={() => { selectStore(store.id); setEnquiryStore(store) }}>{store.name}</button></h3>
                         <p className={styles.address}>{store.address}</p>
                         <div className={styles.hours}><span className={status === "Open Now" ? styles.open : styles.closed}>{status && <i />}{status || "Opening hours"}</span><span>{store.hours}</span></div>
                         {store.phone && <a className={styles.phone} href={`tel:${store.phone}`} onClick={() => analytics.callClick("store_locator", store.phone)}><Phone size={12} />{store.phone}</a>}
-                        <div className={styles.tags}><span>{store.region}</span>{store.brand && <span>{store.brand}</span>}{store.id === nearestStoreId && <span>Nearest Store</span>}{!store.coords && <span>Not on map</span>}</div>
+                        <div className={styles.tags}><span>{store.region}</span>{store.brand && <span>{store.brand}</span>}{store.id === nearestStoreId && <span>Nearest Store</span>}</div>
                       </div>
                       <div className={styles.cardActions}>
                         {store.distance !== null && <strong>{store.distance < 10 ? store.distance.toFixed(1) : Math.round(store.distance)} km</strong>}
-                        <button type="button" className={styles.mapSelect} aria-label={`View ${store.name} on map`} disabled={!store.coords} onClick={() => { selectStore(store.id); setView("map") }}><MapPin size={20} /></button>
+                        <button type="button" className={styles.mapSelect} aria-label={`View ${store.name} on Google Maps`} onClick={() => { selectStore(store.id); setView("map") }}><MapPin size={20} /></button>
                         {store.phone && <a className={styles.whatsapp} href={`https://wa.me/91${store.phone.replace(/\D/g, "").slice(-10)}?text=${encodeURIComponent(`Hi ${store.name}, I would like to know about your products, pricing and available offers.`)}`} target="_blank" rel="noopener noreferrer" onClick={() => analytics.whatsappClick("store_locator", { store_id: store.id, city: store.city })}><MessageCircle size={12} />WhatsApp</a>}
                         <a className={styles.directions} href={directionsUrl(store, userLocation)} target="_blank" rel="noopener noreferrer">Get Directions <ArrowRight size={13} /></a>
                       </div>
@@ -409,17 +420,17 @@ export function StoreLocator() {
               {showAll ? "Show Fewer Stores" : `View All ${filteredStores.length} Stores`} <ArrowRight size={16} />
             </button>}
           </div>
-          {view === "map" && <div className={styles.mapPanel}>
-            <StoreMap stores={filteredStores} selectedStore={selectedStore} onSelectStore={selectStore} userLocation={userLocation} userLocationLabel={locationLabel} resetKey={mapReset} className={styles.map} />
-            <div className={styles.mapToolbar}>{viewTabs}</div>
-            {!isDataLoading && <div className={styles.mapCoverage}>{mappedCount} of {filteredStores.length} stores on map</div>}
-            <button type="button" className={styles.resetMap} aria-label="Show all filtered stores on map" onClick={() => { setSelectedStore(null); setMapReset((value) => value + 1) }}><Target size={20} /></button>
-            <div className={styles.mapBadge}><StoreIcon size={39} /><strong>{settings?.statStores || "85+"}</strong><span>Stores Across<br />Karnataka</span><i /><small>Serving {settings?.statCustomers || "2,00,000+"}<br />Happy Customers</small></div>
+          {view === "map" && <div className={`${styles.mapPanel} ${styles.googleMapPanel}`}>
+            <div className={styles.googleMapHeading}>{viewTabs}<span>Google Maps · {filteredStores.find(store => store.id === selectedStore)?.name || filteredStores[0]?.name || "Our stores"}</span>
+              <button type="button" aria-label="Reset Google Map to the first matching store" onClick={() => { setSelectedStore(null); setMapReset((value) => value + 1) }}><Target size={18} /></button>
+            </div>
+            <div className={styles.googleMapFrame}><StoreMap stores={filteredStores} selectedStore={selectedStore} resetKey={mapReset} /></div>
           </div>}
         </section>
         <StoreLocatorTrust />
       </div>
       <Footer />
+      {enquiryStore && <StoreEnquiryDialog key={enquiryStore.id} store={enquiryStore} origin={userLocation} onClose={() => setEnquiryStore(null)} />}
     </div>
   )
 }

@@ -317,6 +317,7 @@
 }
 
 .storeCard {
+  cursor: pointer;
   display: grid;
   grid-template-columns: 116px minmax(0, 1fr) 90px;
   gap: 12px;
@@ -340,6 +341,30 @@
   border-radius: 2px;
   align-self: center;
 }
+
+.storePhotoWrap {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  height: 112px;
+  align-self: center;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.photoCredit {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 3px 4px;
+  background: #0009;
+  color: white;
+  font-size: 8px;
+  line-height: 1.3;
+  max-height: 40px;
+  overflow-y: auto;
+}
+
+.photoCredit a { text-decoration: underline; }
 
 .storeDetails {
   min-width: 0;
@@ -503,6 +528,13 @@
   inset: 0;
   color: #080e46;
 }
+
+.googleMapPanel { display: flex; flex-direction: column; }
+.googleMapHeading { display: flex; align-items: center; gap: 12px; padding: 10px; background: white; border-bottom: 1px solid #e1ebf8; }
+.googleMapHeading > span { flex: 1; min-width: 0; font-size: 11px; color: #46547e; }
+.googleMapHeading > button { padding: 8px; color: #005bff; }
+.googleMapFrame { position: relative; flex: 1; min-height: 400px; }
+.googleMapFrame > iframe { position: absolute; inset: 0; }
 
 .mapToolbar,
 .mapCoverage,

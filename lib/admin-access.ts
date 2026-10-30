@@ -1,4 +1,5 @@
 const API_PAGE_ACCESS: [string, string | string[]][] = [
+  ["/api/admin/store-locations/business-profile", "/admin/store-locations"],
   ["/api/admin/dashboard", "/admin/dashboard"],
   ["/api/admin/taxonomy", "/admin/catalogue"],
   ["/api/admin/image-coverage", "/admin/image-coverage"],
@@ -88,6 +89,8 @@ export function staffCanAccessApi(
     return !!user.allowedPages?.some(page => /^\/admin\/[a-zA-Z0-9/_-]+$/.test(page) || page === "/admin")
   }
   const matches = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
+  // Account OAuth access must not inherit the broader read-only stock/order store permissions.
+  if (matches("/api/admin/store-locations/business-profile")) return staffCanAccessPage(user, "/admin/store-locations")
   const requiredPage = [...API_PAGE_ACCESS].sort((a, b) => b[0].length - a[0].length)
     .find(([prefix]) => matches(prefix))?.[1]
   if (requiredPage && (Array.isArray(requiredPage) ? requiredPage : [requiredPage])
