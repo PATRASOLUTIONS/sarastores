@@ -26,7 +26,7 @@ export async function createStockPreview(plan: StockPreviewPlan, session?: Clien
   const omitted = plan.replacementStores.length ? (await stock.find({ storeCode: { $in: plan.replacementStores }, quantity: { $gt: 0 } }, { session }).toArray())
     .filter(row => !listed.has(pairKey(row.storeCode, row.sku))) : []
   const skus = [...new Set([...plan.valid.map(row => row.itemCode), ...omitted.map(row => row.sku)])]
-  const rows = await findStockRows<StoreStockRow>(STORE_STOCK_COLLECTION, skus, session)
+  const rows = await findStockRows(STORE_STOCK_COLLECTION, skus, session)
   const previousPairs = new Map(rows.map(row => [pairKey(row.storeCode, row.sku), row.quantity]))
   const totals = new Map<string, number>()
   for (const row of rows) totals.set(row.sku, (totals.get(row.sku) || 0) + row.quantity)
