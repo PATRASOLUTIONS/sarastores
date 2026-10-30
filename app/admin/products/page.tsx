@@ -88,8 +88,6 @@ interface PricePreview {
   oldPrice: number | null
   newPrice: number
   newMrp: number | null
-  oldActive: boolean | null
-  newActive: boolean | null
   status: string
   error?: string
 }
@@ -299,6 +297,7 @@ export default function AdminProducts() {
     errors: string[];
   } | null>(null)
   const [previewData, setPreviewData] = useState<PricePreview[] | null>(null)
+  const [pricePreviewPage, setPricePreviewPage] = useState(1)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isPriceExporting, setIsPriceExporting] = useState(false)
   const [updatingActiveIds, setUpdatingActiveIds] = useState<string[]>([])
@@ -908,7 +907,7 @@ export default function AdminProducts() {
       const XLSX = await import("xlsx")
       const book = XLSX.utils.book_new()
       const sheet = XLSX.utils.json_to_sheet(rows)
-      sheet["!cols"] = [22, 16, 16, 16].map(wch => ({ wch }))
+      sheet["!cols"] = [22, 16, 16].map(wch => ({ wch }))
       XLSX.utils.book_append_sheet(book, sheet, "Active Products")
       XLSX.writeFile(book, "active-products-price-mrp.xlsx")
       toast.success(`Downloaded ${rows.length} customer-visible products`)
@@ -950,6 +949,7 @@ export default function AdminProducts() {
       if (preview) {
         setGoogleSheetId("")
         setPreviewData(result.updates)
+        setPricePreviewPage(1)
         setIsPreviewLoading(false)
         setShowPriceUpdateModal(false)
         setShowPreviewModal(true)
@@ -960,7 +960,7 @@ export default function AdminProducts() {
         setShowPreviewModal(false)
         setShowPriceUpdateModal(true) // Show result in main modal? Or just alert. Let's keep it simple.
         await fetchProducts()
-        alert(`Price/MRP/visibility update completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\n${(result.errors || []).slice(0, 10).join("\n")}`)
+        alert(`Price/MRP update completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\nDuplicate item numbers ignored (last row used): ${result.ignoredDuplicates || 0}\n${(result.errors || []).slice(0, 10).join("\n")}`)
       }
 
     } catch (error) {
@@ -978,7 +978,7 @@ export default function AdminProducts() {
     if (isPreviewLoading || isSyncingGoogle) return
     console.log("[Admin Products] 📊 Google Sheet Sync requested, preview:", preview)
     if (!googleSheetId) {
-      alert("Please enter a Google Sheet ID")
+      alert("Please paste a Google Sheet link or ID")
       return
     }
 
@@ -1004,6 +1004,7 @@ export default function AdminProducts() {
       if (preview) {
         setPriceUpdateFile(null)
         setPreviewData(result.updates)
+        setPricePreviewPage(1)
         setIsPreviewLoading(false)
         setShowPriceUpdateModal(false)
         setShowPreviewModal(true)
@@ -1013,7 +1014,7 @@ export default function AdminProducts() {
         setShowPreviewModal(false)
         setShowPriceUpdateModal(true)
         await fetchProducts()
-        alert(`Sync completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\n${(result.errors || []).slice(0, 10).join("\n")}`)
+        alert(`Sync completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\nDuplicate item numbers ignored (last row used): ${result.ignoredDuplicates || 0}\n${(result.errors || []).slice(0, 10).join("\n")}`)
       }
 
     } catch (error) {
@@ -1042,7 +1043,7 @@ export default function AdminProducts() {
       console.log("[Admin Products] 📦 Blob size:", blob.size, "bytes")
 
       const url = URL.createObjectURL(blob)
-      const filename = `products-export-${new Date().toISOString().slice(0, 19)}.xlsx`
+      const filename = `products-export-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.xlsx`
       console.log("[Admin Products] 💾 Downloading file:", filename)
 
       const a = document.createElement("a")
@@ -1264,7 +1265,7 @@ export default function AdminProducts() {
             <button
               onClick={handleExport}
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center justify-center min-w-[8rem]"
-              title="Export products to CSV"
+              title="Export products and per-store stock to Excel"
             >
               Export
             </button>
@@ -1742,7 +1743,7 @@ export default function AdminProducts() {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 h-10">
-                  Download customer-visible products, then upload price, MRP and visibility updates.
+                  Match existing item numbers and update price and MRP. Supports up to 50,000 rows (10 MB).
                 </p>
 
                 <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 shadow-sm">
@@ -1751,10 +1752,9 @@ export default function AdminProducts() {
                     <p>• Col 1: <strong>itemno</strong> (SKU)</p>
                     <p>• Col 2: <strong>price</strong> (New Price)</p>
                     <p>• Col 3: <strong>mrp</strong> (optional; blank keeps current MRP)</p>
-                    <p>• Col 4: <strong>active</strong> (active / inactive; optional)</p>
                     <p>Price must not exceed the new/current MRP.</p>
                     <p>Stock quantities come from <Link href="/admin/stock-check" className="font-semibold underline">Stock Check</Link>.</p>
-                    <p>Active shows the product to customers; inactive hides it. Blank active keeps current visibility.</p>
+                    <p>Unknown item numbers are reported; no new products are created. Duplicate item numbers use the last row.</p>
                   </div>
                 </div>
 
@@ -1802,7 +1802,7 @@ export default function AdminProducts() {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 h-10">
-                  Sync directly from a published Google Sheet.
+                  Fetch itemno, price and mrp directly from your Google Sheet link.
                 </p>
 
                 <div className="bg-white border border-green-200 rounded-lg p-3 mb-4 text-xs text-green-800 shadow-sm">
@@ -1810,6 +1810,8 @@ export default function AdminProducts() {
                   <div className="space-y-1 opacity-80">
                     <p>• File {'>'} Share {'>'} Publish to web</p>
                     <p>• Paste Sheet ID or Published Link</p>
+                    <p>• Use only <strong>itemno</strong>, <strong>price</strong>, <strong>mrp</strong> as column headers.</p>
+                    <p>• A shared link also works with “Anyone with the link can view”. The tab in your link is used.</p>
                   </div>
                 </div>
 
@@ -1911,12 +1913,11 @@ export default function AdminProducts() {
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">MRP (old → new)</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Old Price</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">New Price</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Customer visibility (old → new)</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Status</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {previewData.map((item, idx) => (
+                    {previewData.slice((pricePreviewPage - 1) * 100, pricePreviewPage * 100).map((item, idx) => (
                       <tr key={idx} className={item.status === 'error' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'}>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.sku}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 truncate max-w-[200px]" title={item.name}>{item.name}</td>
@@ -1929,9 +1930,6 @@ export default function AdminProducts() {
                               ({((item.newPrice - item.oldPrice) / item.oldPrice * 100).toFixed(1)}%)
                             </span>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-center">
-                          {item.oldActive === null ? '-' : item.oldActive ? 'Active' : 'Inactive'} → {item.newActive === null ? '-' : item.newActive ? 'Active' : 'Inactive'}
                         </td>
                         <td className="px-4 py-3 text-sm text-center">
                           {item.status === 'error' ? (
@@ -1956,6 +1954,11 @@ export default function AdminProducts() {
                 Total Items: {previewData.length} |
                 Valid: {previewData.filter((i) => i.status === 'valid').length} |
                 Errors: {previewData.filter((i) => i.status === 'error').length}
+                <div className="mt-2 flex items-center gap-2">
+                  <button type="button" disabled={pricePreviewPage <= 1} onClick={() => setPricePreviewPage(page => page - 1)} className="rounded border px-2 py-1 disabled:opacity-50">Previous</button>
+                  <span>Page {pricePreviewPage} of {Math.max(1, Math.ceil(previewData.length / 100))}</span>
+                  <button type="button" disabled={pricePreviewPage * 100 >= previewData.length} onClick={() => setPricePreviewPage(page => page + 1)} className="rounded border px-2 py-1 disabled:opacity-50">Next</button>
+                </div>
               </div>
               <div className="flex gap-3">
                 <button

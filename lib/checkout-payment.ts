@@ -9,9 +9,11 @@ import { CartQuantitySchema } from "@/lib/validation"
 import { cartLineKey } from "@/lib/cart-line"
 import { DeclinedGiftPromotionsSchema, SelectedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
 import { quoteGiftPromotions } from "@/lib/gift-promotions"
+import { SaraCareInputFields } from "@/lib/sara-care-types"
 
 export const CheckoutQuoteSchema = z.object({
   items: z.array(z.object({
+    ...SaraCareInputFields,
     id: z.string().max(200).optional(),
     productId: z.string().max(200).optional(),
     sku: z.string().max(200).nullish(),

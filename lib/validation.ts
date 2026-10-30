@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { SaraCareInputFields } from '@/lib/sara-care-types';
 import { checkoutCity } from './checkout-region';
 import { isDpdpComplaint } from './complaintTypes';
 import { indianStates } from './indiaData';
@@ -708,6 +709,7 @@ export const SpecificationUpdateSchema = z.object({
 // ============================================
 
 export const OrderItemSchema = z.object({
+  ...SaraCareInputFields,
   productId: z.string().trim().min(1, 'Product ID is required').max(200),
   variantId: z.string().optional(),
   quantity: quantitySchema,
@@ -741,17 +743,19 @@ export const CheckoutCartSelectionSchema = z.object({
   requestId: z.string().uuid(),
   action: z.enum(['preserve', 'include', 'wishlist']),
   items: z.array(z.object({
+    ...SaraCareInputFields,
     id: z.string().min(1), name: z.string(), price: z.number().finite().nonnegative(),
     quantity: quantitySchema, image: z.string().default(''),
     color: z.string().nullable().default(null), size: z.string().nullable().default(null),
-    type: z.enum(['hardware', 'software']).optional(),
-  }).passthrough()).min(1).max(20),
+    type: z.enum(['hardware', 'software', 'service']).optional(),
+  }).passthrough()).min(1).max(40),
   previousItems: z.array(z.object({ id: z.string().min(1), quantity: quantitySchema,
+    ...SaraCareInputFields,
     sku: z.string().nullish(), variantId: z.string().nullish(), color: z.string().nullish(), size: z.string().nullish(),
     ram: z.string().nullish(), storage: z.string().nullish(), type: z.string().nullish(),
     kgenVariantId: z.string().nullish(), packSize: z.union([z.string(), z.number()]).nullish(),
     validityYears: z.union([z.string(), z.number()]).nullish(),
-  })).max(40),
+  })).max(80),
 });
 
 export const EmployeeCreationResponseSchema = z.object({

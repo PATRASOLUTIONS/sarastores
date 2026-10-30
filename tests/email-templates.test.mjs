@@ -2,6 +2,35 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { sourceLoader } from "./source-loader.mjs"
 
+test("verification emails include a button, visible URL and plain-text link", () => {
+  const email = sourceLoader({}, { env: { NEXT_PUBLIC_SITE_URL: "sarastores.com/" } }).load("lib/verification-email.ts")
+  const url = email.verificationUrl("token+with&characters", "customer/id")
+  const parsed = new URL(url)
+  assert.equal(parsed.origin, "https://sarastores.com")
+  assert.equal(parsed.pathname, "/api/auth/verify-email")
+  assert.equal(parsed.searchParams.get("token"), "token+with&characters")
+  assert.equal(parsed.searchParams.get("userId"), "customer/id")
+  const message = email.buildVerificationEmail('<img src=x onerror="alert(1)">', url)
+  assert.equal((message.html.match(/href="/g) || []).length, 2)
+  assert.match(message.html, /Verify Email Address/)
+  assert.ok(message.html.includes(`>${url.replaceAll("&", "&amp;")}<`))
+  assert.ok(message.text.includes(url))
+  assert.match(message.text, /24 hours/)
+  assert.ok(!message.html.includes("<img src=x"))
+})
+
+test("verification links use valid configuration and never default to localhost in production", () => {
+  for (const [env, expected] of [
+    [{ NODE_ENV: "production" }, "https://sarastores.com"],
+    [{ NODE_ENV: "production", NEXT_PUBLIC_SITE_URL: "http://localhost:3000" }, "https://sarastores.com"],
+    [{ NEXT_PUBLIC_SITE_URL: "[invalid]", NEXT_PUBLIC_APP_URL: "https://store.example.invalid/path" }, "https://store.example.invalid"],
+    [{ NODE_ENV: "development", NEXT_PUBLIC_SITE_URL: "localhost:3005" }, "http://localhost:3005"],
+  ]) {
+    const email = sourceLoader({}, { env }).load("lib/verification-email.ts")
+    assert.equal(new URL(email.verificationUrl("token", "user")).origin, expected)
+  }
+})
+
 /**
  * Covers the template layer: HTML escaping of customer data, the plain-text
  * alternative every message must carry, preheader injection, and tax-invoice

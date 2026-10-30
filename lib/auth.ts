@@ -199,7 +199,7 @@ export async function checkAdminAuthorization(): Promise<{
     }
     const requestHeaders = await headers();
     const path = requestHeaders.get('x-sara-request-path') || '';
-    if (staffCanAccessApi(session.user, path)) {
+    if (staffCanAccessApi(session.user, path, requestHeaders.get('x-sara-request-method') || 'GET')) {
       return { authorized: true, userId: session.user.id };
     }
     return { authorized: false, error: 'Admin access required' };

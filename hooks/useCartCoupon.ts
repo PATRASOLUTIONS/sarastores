@@ -93,8 +93,19 @@ export function useCartCoupon(items: IncomingItem[], owner: string, fulfilment: 
     try { saveCartCoupon(owner, null); setSelection(null); setQuote(null); setCouponCode(""); toast.success("Coupon removed") }
     catch { setStorageError("Your coupon removal could not be saved. Enable browser storage and retry.") }
   }
+  const acceptCheckoutQuote = (coupon: (CartCouponSelection & { discount: number }) | null, refreshedItems: IncomingItem[]) => {
+    saveCartCoupon(owner, coupon)
+    setSelection(coupon)
+    setQuote(coupon ? {
+      context: JSON.stringify({ items: refreshedItems, owner, fulfilment, code: coupon.code }),
+      coupon, discount: coupon.discount,
+    } : null)
+    setError("")
+    setStorageError("")
+    if (!coupon) setCouponCode("")
+  }
   return { couponCode, setCouponCode, appliedCoupon, couponDiscount: resolved ? quote!.discount : 0, applyingCoupon,
-    error: storageError || error, apply, remove,
+    error: storageError || error, apply, remove, acceptCheckoutQuote,
     setCouponDiscount: (discount: number) => setQuote(previous => previous ? { ...previous, discount } : previous),
     retry: () => { window.dispatchEvent(new Event(CART_COUPON_UPDATED)); setAttempt(value => value + 1) } }
 }

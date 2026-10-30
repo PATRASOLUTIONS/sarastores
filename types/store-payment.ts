@@ -58,6 +58,7 @@ export const StorePaymentWhatsAppAdminSchema = z.object({
   settings: StorePaymentWhatsAppSettingsSchema,
   stores: z.array(z.object({ id: z.string(), name: z.string(), city: z.string(), listedPhone: z.string() })),
   templates: z.object({ store: z.boolean(), platformManager: z.boolean(), customer: z.boolean() }),
+  configuration: z.object({ whatsapp: z.boolean(), email: z.boolean(), missing: z.array(z.string()) }).optional(),
 })
 
 /** Returned by POST /api/payment/store-request. */

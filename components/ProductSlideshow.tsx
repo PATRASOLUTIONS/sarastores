@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import { isProductUnavailable } from "@/lib/product-availability"
 import { ChevronLeft, ChevronRight, Pause, Play, ExternalLink, ArrowRight } from "lucide-react"
 
 // Define types for our product slides
@@ -14,6 +15,8 @@ interface ProductSlide {
     slug?: string
     name: string
     price: number
+    stock?: number
+    active?: boolean
     image: string
   }[]
 }
@@ -270,7 +273,8 @@ export default function ProductSlideshow() {
                         />
                         <div className="p-4">
                           <h4 className="font-semibold mb-2 truncate">{product.name}</h4>
-                          <p className="text-blue-800 font-bold">₹{product.price.toLocaleString("en-IN")}</p>
+                          {isProductUnavailable(product) ? <p className="text-sm font-semibold text-red-700">Currently unavailable</p> :
+                            <p className="text-blue-800 font-bold">₹{product.price.toLocaleString("en-IN")}</p>}
                         </div>
                       </div>
                     </Link>

@@ -21,6 +21,8 @@ import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanner
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import CartGifts from "@/components/cart/CartGifts"
+import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
+import { isSaraCare } from "@/lib/sara-care-types"
 import { useCartGifts } from "@/hooks/useCartGifts"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartCoupon } from "@/hooks/useCartCoupon"
@@ -54,7 +56,7 @@ const isProduct = (value: unknown): value is Product => {
 
 export default function CartContents({ embedded = false }: { embedded?: boolean }) {
   const marketing = useMarketingContent("cart")
-  const { cart, addToCart, updateQuantity, refreshItemPrices, removeFromCart, isLoading } = useCart()
+  const { cart, addToCart, updateQuantity, refreshItemPrices, removeFromCart, isLoading, isHydrating, saraCareError } = useCart()
   const { user, isLoading: authLoading } = useAuth()
   const coupon = useCartCoupon(cart, user?.id || "guest", { method: "delivery" }, !authLoading && !isLoading)
   const { addToWishlist, isInWishlist } = useWishlist()
@@ -75,7 +77,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const [merchandisingLoading, setMerchandisingLoading] = useState(true)
   const [pendingWishlist, setPendingWishlist] = useState<string[]>([])
   const [adding, setAdding] = useState<string[]>([])
-  const idsKey = JSON.stringify([...new Set(cart.filter((item) => item.type !== "software").map((item) => item.id))].sort())
+  const idsKey = JSON.stringify([...new Set(cart.filter((item) => item.type !== "software" && !isSaraCare(item)).map((item) => item.id))].sort())
 
   useEffect(() => {
     const ids = cart.map(cartLineKey)
@@ -163,7 +165,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
       const price = products[item.id]?.price ?? item.price
       const line = price * item.quantity
       gross += line
-      if (item.type !== "software") hardwareGross += line
+      if (item.type !== "software" && !isSaraCare(item)) hardwareGross += line
       const mrp = products[item.id]?.mrp
       if (typeof mrp === "number" && Number.isFinite(mrp) && mrp > price) savings += (mrp - price) * item.quantity
     }
@@ -176,6 +178,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   }, [cart, products, settings, settingsLoading, settingsError])
 
   const unavailable = cart.some((item) => {
+    if (isSaraCare(item)) return false
     const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
     if (item.type === "software") return typeof item.stock === "number" && item.stock < quantity
     const product = products[item.id]
@@ -183,7 +186,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
       (purchaseStock(product) ?? 0) < quantity)
   })
   const limitError = cartLimitError(cart.map((item) => ({ ...item, price: products[item.id]?.price ?? item.price })))
-  const checkoutBlocked = cart.length === 0 || !!limitError || unavailable
+  const checkoutBlocked = cart.length === 0 || isLoading || !!saraCareError || !!limitError || unavailable
   const proceedToCheckout = () => {
     if (checkoutBlocked) return
     if (coupon.applyingCoupon || coupon.error) {
@@ -241,7 +244,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
         </li>)}</ol>
       </header>
 
-      {isLoading ? <div className={`${styles.message} ${styles.cartLoading}`} role="status">Loading your cart...</div> : cart.length === 0 ? <section className={styles.empty}>
+      {isHydrating ? <div className={`${styles.message} ${styles.cartLoading}`} role="status">Loading your cart...<SaraCareNotice /></div> : cart.length === 0 ? <section className={styles.empty}>
         <ShoppingCart size={55} /><h2>Your cart is empty</h2>{marketing.enabled("intro") && <p>{marketing.text("intro", "emptyDescription")}</p>}
         <Link href={marketing.text("intro", "ctaLink")} className={styles.primaryButton}>{marketing.text("intro", "ctaText")} <ArrowRight size={16} /></Link>
       </section> : <>
@@ -266,9 +269,9 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               const percentOff = typeof mrp === "number" && mrp > price ? Math.round((mrp - price) / mrp * 100) : 0
               const stock = item.type === "software" ? item.stock ?? MAX_PURCHASE_QUANTITY : purchaseStock(product || {}) ?? 0
               const limit = Math.max(0, Math.min(stock, item.maxPurchaseQuantity ?? MAX_PURCHASE_QUANTITY) - otherQuantity)
-              const available = item.quantity <= limit && (item.type === "software" || !!product && product.price > 0)
+              const available = isSaraCare(item) || item.quantity <= limit && (item.type === "software" || !!product && product.price > 0)
               const name = cleanProductName(item.name)
-              const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(product?.slug || item.id)}`
+              const href = isSaraCare(item) ? "/sara-care" : item.type === "software" ? "/software" : `/product/${encodeURIComponent(product?.slug || item.id)}`
               return <li key={lineKey} className={styles.cartItem}>
                 <input type="checkbox" checked={selectedIds.includes(lineKey)} aria-label={`Select ${name}`} onChange={() => setSelectedIds((previous) =>
                   previous.includes(lineKey) ? previous.filter((id) => id !== lineKey) : [...previous, lineKey])} />
@@ -281,32 +284,34 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
                   </p>}
                   {item.type === "software" ? <p>{item.validity || (item.validityYears ? `${item.validityYears} years` : "Digital product")}</p> :
                     product?.sku && <p>SKU: {product.sku}</p>}
-                  <p className={available ? styles.inStock : styles.stockNotice}>
+                  {!isSaraCare(item) && <p className={available ? styles.inStock : styles.stockNotice}>
                     <CheckCircle2 size={12} />{item.type === "software" ? available ? "Digital delivery" : "Unavailable in this quantity" : detailsLoading ? "Checking availability..." : detailsError ? "Availability unavailable" : available ? "In stock" : "Unavailable in this quantity"}
-                  </p>
-                  <p className={styles.delivery}><Truck size={12} />{item.type === "software" ? "Delivery details confirmed at checkout" : "Delivery confirmed at checkout"}</p>
+                  </p>}
+                  {!isSaraCare(item) && <p className={styles.delivery}><Truck size={12} />{item.type === "software" ? "Delivery details confirmed at checkout" : "Delivery confirmed at checkout"}</p>}
                 </div>
                 <div className={styles.quantity} aria-label={`Quantity for ${name}`}>
-                  <button type="button" disabled={item.quantity <= 1} aria-label={`Decrease quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity - 1)}><Minus size={12} /></button>
+                  <button type="button" disabled={isSaraCare(item) || item.quantity <= 1} aria-label={`Decrease quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity - 1)}><Minus size={12} /></button>
                   <span>{item.quantity}</span>
-                  <button type="button" disabled={item.quantity >= limit || detailsLoading} aria-label={`Increase quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity + 1)}><Plus size={12} /></button>
+                  <button type="button" disabled={isSaraCare(item) || item.quantity >= limit || detailsLoading} aria-label={`Increase quantity of ${name}`} onClick={() => updateQuantity(lineKey, item.quantity + 1)}><Plus size={12} /></button>
                 </div>
                 <div className={styles.linePrice}>
                   <strong>{money(price * item.quantity)}</strong>
                   {saving > 0 && <><del>{money((mrp || price) * item.quantity)}</del><span>{percentOff}% off</span><p>You save {money(saving)}</p></>}
                 </div>
                 <div className={styles.itemActions}>
-                  <button type="button" disabled={pendingWishlist.includes(lineKey)} onClick={() => void moveToWishlist(lineKey)}>Move to Wishlist</button>
+                  <button type="button" disabled={isSaraCare(item) || pendingWishlist.includes(lineKey)} onClick={() => void moveToWishlist(lineKey)}>Move to Wishlist</button>
                   <span aria-hidden="true">|</span><button type="button" onClick={() => removeItem(lineKey)}>Remove</button>
                 </div>
+                <div className={styles.careOptions}><SaraCareOptions item={item} /></div>
               </li>
             })}</ul>
+            {!embedded && <CartGifts quote={giftQuote} disabled={isLoading} />}
           </section>
           <aside className={styles.summaryColumn}>
-            {!embedded && <CartGifts quote={giftQuote} />}
             <CartCoupon coupon={coupon} />
             <section className={styles.summary} aria-labelledby="price-details">
               <h2 id="price-details">Price Details</h2>
+              <SaraCareNotice />
               {limitError && <p role="alert" className={styles.error}>{limitError}</p>}
               {(detailsError || (!settingsLoading && !totals.validShipping)) && <p role="alert" className={styles.error}>{detailsError || "Shipping charges are temporarily unavailable. Please refresh to try again."}</p>}
               {detailsError && <button type="button" className={styles.textButton} onClick={() => setAttempt((value) => value + 1)}>Retry product details</button>}

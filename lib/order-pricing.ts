@@ -2,10 +2,13 @@ import { type ClientSession, ObjectId } from "mongodb"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { cartLimitError, MAX_CART_PRODUCTS } from "@/lib/cart-limits"
 import { storesHoldingStock } from "@/lib/store-stock"
+import { stockItemCode } from "@/lib/stock-item-code"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
 import { cartLineKey } from "@/lib/cart-line"
 import { purchaseAvailabilityError, purchaseStock, purchaseLimit, type PurchaseProduct } from "@/lib/purchase-validation"
 import type { GiftAward } from "@/lib/gift-validation"
+import { loadSaraCareConfig, loadSaraCarePricing, priceSaraCare } from "@/lib/sara-care"
+import { saraCareProductId, saraCareSku, saraCareDurationLabel, type SaraCareSnapshot, type SaraCareYears } from "@/lib/sara-care-types"
 
 // Catalogue prices are GST-inclusive; base and tax are derived from them.
 const GST_RATE = 0.18
@@ -13,6 +16,8 @@ const DEFAULT_SHIPPING_FEE = 99
 const DEFAULT_FREE_SHIPPING_THRESHOLD = 1000
 
 export type IncomingItem = {
+  saraCare?: { parentLineKey: string; durationYears: SaraCareYears }
+  saraCareSelection?: SaraCareYears | null
   id?: string
   productId?: string
   sku?: string | null
@@ -38,6 +43,7 @@ export type IncomingItem = {
 }
 
 export type PricedItem = {
+  saraCare?: SaraCareSnapshot
   id: string
   name: string
   price: number
@@ -77,7 +83,7 @@ export type PricingSuccess = {
   gifts?: GiftAward[]
 }
 
-export type PricingResult = PricingSuccess | { ok: false; error: string }
+export type PricingResult = PricingSuccess | { ok: false; error: string; code?: "COUPON_UNAVAILABLE" }
 
 export type CouponDetails =
   | { type: "fixed"; value: number }
@@ -85,6 +91,10 @@ export type CouponDetails =
   | { type: "buy_get"; buyQty: number; getQty: number; freeUnits: number }
 
 interface PricingCatalogueProduct extends PurchaseProduct {
+  serviceKind?: string
+  mrp?: number | string
+  categoryGroupName?: string
+  segment?: string
   division?: string
   itemno?: string | number
   itemNo?: string | number
@@ -273,7 +283,7 @@ async function computeCouponDiscount(
     }
   }
 
-  const eligible = pricedItems.filter((i) => inScope(catalogue.get(i.id), coupon))
+  const eligible = pricedItems.filter((i) => i.type !== "service" && inScope(catalogue.get(i.id), coupon))
   if (eligible.length === 0) return { ok: false, error: "Coupon does not apply to these items" }
 
   const eligibleSubtotal = eligible.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -332,7 +342,7 @@ export async function priceCatalogueCart(
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     return { ok: false, error: "Order must contain at least one item" }
   }
-  if (rawItems.length > MAX_CART_PRODUCTS) return { ok: false, error: "You can add up to 20 different products to your cart." }
+  if (rawItems.length > MAX_CART_PRODUCTS * 2) return { ok: false, error: "You can add up to 20 products with their linked care plans." }
   if (rawItems.some(item => !item || typeof item !== "object" ||
     (typeof item.quantity !== "number" && typeof item.quantity !== "string"))) {
     return { ok: false, error: "Every item must include a valid quantity." }
@@ -343,6 +353,9 @@ export async function priceCatalogueCart(
   const byId = new Map<string, PricingCatalogueProduct>()
   const quantities = new Map<string, number>()
   const lines = new Set<string>()
+  const pricedByRaw = new Map<IncomingItem, PricedItem>()
+  const parentsByLine = new Map<string, { raw: IncomingItem; doc: PricingCatalogueProduct; item: PricedItem }>()
+  const careRows: IncomingItem[] = []
 
   for (const raw of rawItems) {
     const keys = keysFor(raw)
@@ -350,6 +363,8 @@ export async function priceCatalogueCart(
 
     const doc = keys.map((k) => catalogue.get(k)).find(Boolean)
     if (!doc) return { ok: false, error: `Product not available: ${keys[0]}` }
+    if (doc.serviceKind === "sara-care") { careRows.push(raw); continue }
+    if (raw.saraCare || raw.type === "service") return { ok: false, error: "Invalid service product." }
     const unavailable = purchaseAvailabilityError(doc, doc.type === "software")
     if (unavailable) return { ok: false, error: `${unavailable} ${doc.name || keys[0]}` }
 
@@ -400,7 +415,7 @@ export async function priceCatalogueCart(
       validity: toText(doc.validity),
       color: raw.color || null,
       size: raw.size || null,
-      sku: doc.sku || null,
+      sku: stockItemCode(doc),
       itemNumbers: [doc.itemno, doc.itemNo, doc.raw?.itemno, doc.raw?.["Item No."], doc.raw?.["Item No"], doc.raw?.["ITEM NO"]]
         .map(value => typeof value === "string" || typeof value === "number" ? toText(value) : null)
         .filter((value): value is string => !!value),
@@ -408,11 +423,39 @@ export async function priceCatalogueCart(
       storage: raw.storage || null,
       ...(doc.division ? { division: doc.division } : {}),
     })
+    const priced = items[items.length - 1]
+    pricedByRaw.set(raw, priced)
+    parentsByLine.set(cartLineKey(raw), { raw, doc, item: priced })
   }
 
+  if (careRows.length) {
+    const config = await loadSaraCarePricing(await loadSaraCareConfig(session), [...parentsByLine.values()].map(parent => parent.doc), session)
+    const covered = new Set<string>()
+    for (const raw of careRows) {
+      const reference = raw.saraCare
+      const parent = reference && parentsByLine.get(reference.parentLineKey)
+      if (!reference || !parent || covered.has(reference.parentLineKey) ||
+        parent.raw.saraCareSelection === null || (parent.raw.saraCareSelection !== undefined && parent.raw.saraCareSelection !== reference.durationYears) ||
+        Number(raw.quantity) !== parent.item.quantity || !Number.isSafeInteger(Number(raw.quantity)) ||
+        (raw.id || raw.productId) !== saraCareProductId(reference.durationYears)) {
+        return { ok: false, error: "Sara Care must match one covered product, duration and quantity in your cart." }
+      }
+      const quote = priceSaraCare(config, parent.doc, reference.parentLineKey, reference.durationYears)
+      if (!quote) return { ok: false, error: "Sara Care is no longer available for this product. Refresh your cart." }
+      covered.add(reference.parentLineKey)
+      const care: PricedItem = { id: saraCareProductId(reference.durationYears),
+        name: `Sara Care — ${saraCareDurationLabel(reference.durationYears)} — ${parent.item.name}`,
+        price: quote.price, quantity: parent.item.quantity, image: "/images/sara-care.svg", type: "service",
+        category: "Sara Care", subCategory: null, provider: null, source: null, kgenProductId: null, kgenVariantId: null,
+        packSize: null, validityYears: null, maxDevices: null, validity: null, color: null, size: null,
+        sku: quote.snapshot.planCode || saraCareSku(reference.durationYears), saraCare: quote.snapshot }
+      items.push(care)
+      pricedByRaw.set(raw, care)
+    }
+  }
   const limitError = cartLimitError(items)
   if (limitError) return { ok: false, error: limitError }
-  return { ok: true, items, catalogue: byId }
+  return { ok: true, items: rawItems.map(raw => pricedByRaw.get(raw)!), catalogue: byId }
 }
 
 export async function quoteCoupon(rawItems: IncomingItem[], code: string, userId: string | null, session?: ClientSession, stockScope: "overall" | "store" = "overall") {
@@ -472,12 +515,12 @@ export async function priceOrder(
   const tax = (grossMinor - subtotalMinor) / 100
 
   const hardwareGross = items
-    .filter((i) => i.type !== "software")
+    .filter((i) => i.type === "hardware")
     .reduce((s, i) => s + i.price * i.quantity, 0)
   const { shippingFee, freeShippingThreshold } = await getShippingSettings(options.session)
   let shipping = hardwareGross > 0 && hardwareGross < freeShippingThreshold ? shippingFee : 0
-  const needs = items.filter(i => i.type !== "software")
-    .map(i => ({ sku: catalogue.get(i.id)?.sku?.trim() || null, quantity: i.quantity }))
+  const needs = items.filter(i => i.type === "hardware")
+    .map(i => ({ sku: i.sku || null, quantity: i.quantity }))
   const holding = needs.length ? await storesHoldingStock(needs, options.session) : null
   const requestedStoreId = options.fulfilment?.storeId
   if (requestedStoreId) {
@@ -504,7 +547,7 @@ export async function priceOrder(
   let couponDiscount = 0
   if (options.couponCode) {
     const result = await computeCouponDiscount(options.couponCode, items, catalogue, options.userId, options.session)
-    if (!result.ok) return { ok: false, error: result.error }
+    if (!result.ok) return { ok: false, error: result.error, code: "COUPON_UNAVAILABLE" }
     coupon = result.coupon
     couponDiscount = result.coupon.discount
   }

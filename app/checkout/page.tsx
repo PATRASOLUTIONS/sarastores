@@ -15,6 +15,7 @@ import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/Paymen
 import CheckoutPaymentOptions, { PaymentProviderLogo } from "@/components/CheckoutPaymentOptions"
 import { PayAtStoreDialog, PayAtStoreStorePicker, type PayAtStoreChoice } from "@/components/PayAtStore"
 import { useStoreStock } from "@/hooks/useStoreStock"
+import { useNearbyStores } from "@/hooks/useNearbyStores"
 import { StorePaymentRequestResponseSchema, type StorePaymentPlatform, type StorePaymentRequestResponse } from "@/types/store-payment"
 import FulfilmentSelector, {
   type FulfilmentMethod,
@@ -24,6 +25,8 @@ import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { cartLimitError } from "@/lib/cart-limits"
 import { cartLineKey } from "@/lib/cart-line"
+import { isSaraCare, saraCareDurationLabel, SaraCareSnapshotSchema } from "@/lib/sara-care-types"
+import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
 import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
 import { readCheckoutRecovery, clearCheckoutRecovery, PurchasedItemsSchema, readHostedCheckout, clearHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
@@ -37,6 +40,7 @@ import { clearCartCoupon } from "@/lib/cart-coupon"
 import CartCoupon from "@/components/cart/CartCoupon"
 import { z } from "zod"
 import styles from "./checkout.module.css"
+import CheckoutSection from "./CheckoutSection"
 import CartProductImage from "@/components/CartProductImage"
 import { CHECKOUT_CITIES, checkoutCity } from "@/lib/checkout-region"
 import { indianStates } from "@/lib/indiaData"
@@ -85,6 +89,7 @@ const money = (value: number) =>
 
 export default function CheckoutPage() {
   const { cart, completePurchase, removeFromCart, refreshItemPrices, isLoading: cartLoading,
+    isHydrating: cartHydrating, saraCareLoading, saraCareError, refreshSaraCare,
     checkoutCartPending, previousCart, previousCartLoaded, checkoutCartError, resolvingCheckoutCart,
     prepareCheckoutSignIn, resolveCheckoutCart, abandonCheckoutCart, loadCartFromDatabase } = useCart()
   const { user, isLoading: authLoading } = useAuth()
@@ -97,6 +102,11 @@ export default function CheckoutPage() {
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentPending, setPaymentPending] = useState(false)
+  const startPaymentRef = useRef<(() => Promise<void>) | null>(null)
+  const [checkoutChange, setCheckoutChange] = useState<{
+    previousTotal: number; updatedTotal: number; pricesChanged: boolean; couponChanged: boolean;
+    couponMessage: string | null; action: "payment" | "store";
+  } | null>(null)
   const [itemToRemove, setItemToRemove] = useState<{ id: string; name: string } | null>(null)
   const [movingWishlistId, setMovingWishlistId] = useState<string | null>(null)
   const wishlistMoveInProgress = useRef(false)
@@ -119,6 +129,7 @@ export default function CheckoutPage() {
   const checkoutOwner = accountId || "guest"
   const checkoutOwnerRef = useRef(checkoutOwner)
   checkoutOwnerRef.current = checkoutOwner
+  useEffect(() => { setCheckoutChange(null) }, [checkoutOwner])
   const restoredDraftOwner = useRef<string | null>(null)
   const [draftOwner, setDraftOwner] = useState<string | null>(null)
   const draftReady = !authLoading && draftOwner === checkoutOwner
@@ -126,6 +137,16 @@ export default function CheckoutPage() {
   const [profileError, setProfileError] = useState("")
   const [profileAttempt, setProfileAttempt] = useState(0)
   const [editingAddress, setEditingAddress] = useState(true)
+  const [expandedStep, setExpandedStep] = useState<1 | 2 | 3 | 4 | null>(1)
+  const [confirmedDelivery, setConfirmedDelivery] = useState<string | null>(null)
+  const [confirmedPayment, setConfirmedPayment] = useState<string | null>(null)
+  const initialAddressAdvance = useRef<string | null>(null)
+  const openCheckoutStep = (step: 1 | 2 | 3 | 4) => {
+    setExpandedStep(step)
+    requestAnimationFrame(() => document.getElementById(
+      ["delivery-address-heading", "delivery-options-heading", "payment-method-heading", "checkout-review-heading"][step - 1],
+    )?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
   const [addressNotice, setAddressNotice] = useState("")
   const [savedAddresses, setSavedAddresses] = useState<SavedDeliveryAddress[]>([])
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
@@ -141,7 +162,7 @@ export default function CheckoutPage() {
   const [catalogueLoading, setCatalogueLoading] = useState(false)
   const [catalogueError, setCatalogueError] = useState("")
   const [catalogueAttempt, setCatalogueAttempt] = useState(0)
-  const catalogueIds = JSON.stringify(cart.filter(item => item.type !== "software").map(item => item.id).sort())
+  const catalogueIds = JSON.stringify(cart.filter(item => item.type !== "software" && !isSaraCare(item)).map(item => item.id).sort())
   useEffect(() => {
     const ids: string[] = JSON.parse(catalogueIds)
     if (!ids.length) { setCatalogue({}); setCatalogueError(""); setCatalogueLoading(false); return }
@@ -334,6 +355,7 @@ export default function CheckoutPage() {
   const [pickupStore, setPickupStore] = useState<PickupStore | null>(null)
   const isPickup = fulfilmentMethod === "pickup"
   const storeStock = useStoreStock(cart)
+  const nearbyStores = useNearbyStores(customerData.pincode, customerData.city, { allStores: true })
   const [deliveryFallbackStoreId, setDeliveryFallbackStoreId] = useState<string | null>(null)
   const fulfilmentStoreId = isPickup ? pickupStore?.id : deliveryFallbackStoreId || undefined
   const pickupUnavailable = Boolean(pickupStore && storeStock.storeIds && !storeStock.storeIds.has(pickupStore.id))
@@ -415,6 +437,10 @@ export default function CheckoutPage() {
       }
     }
     setCustomerData(draft?.customer || EMPTY_CUSTOMER)
+    setExpandedStep(1)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    initialAddressAdvance.current = null
     setCustomerErrors({})
     setContinueAsGuest(draft?.continueAsGuest || false)
     setEditingAddress(draft?.editingAddress ?? true)
@@ -463,9 +489,11 @@ export default function CheckoutPage() {
   couponContextRef.current = couponContext
 
   // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
-  const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross } = cart.reduce((acc, item) => {
+  const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross, careGross } = cart.reduce((acc, item) => {
     const qty = item.quantity || 1
-    if (item.type === 'software') {
+    if (isSaraCare(item)) {
+      acc.careGross += item.price * qty
+    } else if (item.type === 'software') {
       // For software, price includes GST, so we calculate base price (price/1.18)
       const basePrice = (item.price / 1.18) * qty;
       acc.softwareBaseTotal += basePrice;
@@ -477,24 +505,25 @@ export default function CheckoutPage() {
       acc.hardwareGross += item.price * qty;
     }
     return acc;
-  }, { softwareBaseTotal: 0, hardwareBaseTotal: 0, softwareGross: 0, hardwareGross: 0 });
+  }, { softwareBaseTotal: 0, hardwareBaseTotal: 0, softwareGross: 0, hardwareGross: 0, careGross: 0 });
 
   // Calculate GST for software and hardware (18% of their base prices)
   const softwareGST = softwareBaseTotal * 0.18
   const hardwareGST = hardwareBaseTotal * 0.18
+  const careGST = careGross - careGross / 1.18
 
   // Subtotal (tax-exclusive base amount)
-  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal
+  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal + careGross / 1.18
 
   // Gross totals (base + GST)
   const softwareTotal = softwareBaseTotal + softwareGST
   const hardwareTotal = hardwareBaseTotal + hardwareGST
 
   // Total tax (software + hardware)
-  const tax = currentQuote?.tax ?? softwareGST + hardwareGST
+  const tax = currentQuote?.tax ?? softwareGST + hardwareGST + careGST
 
   // Only apply shipping if there are hardware items in the cart
-  const hasHardware = cart.some(item => item.type !== 'software')
+  const hasHardware = cart.some(item => item.type !== 'software' && !isSaraCare(item))
   let shipping = 0
   if (hasHardware && !isLoadingSettings && !isPickup) {
     const hardwareGrossSubtotal = hardwareGross
@@ -504,7 +533,7 @@ export default function CheckoutPage() {
   if (currentQuote) shipping = currentQuote.shipping
 
   // Apply coupon discount (if any) on gross amounts (softwareTotal + hardwareTotal)
-  const preCouponTotal = softwareTotal + hardwareTotal
+  const preCouponTotal = softwareTotal + hardwareTotal + careGross
   const discountedTotal = Math.max(0, preCouponTotal - couponDiscount)
 
   // Calculate final total (after coupon and adding shipping)
@@ -512,14 +541,15 @@ export default function CheckoutPage() {
 
   // Indicative only — /api/orders recomputes and debits the points.
   const payableTotal = currentQuote?.amount ?? Math.round(Math.max(0, total - loyaltyDiscount) * 100) / 100
-  const productDiscount = cart.reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
-  const totalMrp = preCouponTotal + productDiscount
+  const productDiscount = cart.filter(item => !isSaraCare(item)).reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
+  const totalMrp = softwareGross + hardwareGross + productDiscount
   const unavailableItem = cart.find(item => {
+    if (isSaraCare(item)) return false
     const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
     return ((!isPickup || item.type === "software") && typeof item.stock === "number" && item.stock < quantity)
       || (typeof item.maxPurchaseQuantity === "number" && item.maxPurchaseQuantity < quantity)
   })
-  const cartError = cartLimitError(cart) || (unavailableItem
+  const cartError = saraCareError || cartLimitError(cart) || (unavailableItem
     ? `${unavailableItem.name} is unavailable in the requested quantity. Reduce its quantity or remove it before placing an order.`
     : null)
 
@@ -596,7 +626,7 @@ export default function CheckoutPage() {
         setSelectedAddressId(selected => selected && result.data.addresses.some(address => address.id === selected)
           ? selected : null)
         if (result.data.addresses[0] && editedCustomerFields.current.size === 0) {
-          selectAddress(result.data.addresses[0])
+          selectAddress(result.data.addresses[0], false)
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -638,6 +668,8 @@ export default function CheckoutPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     editedCustomerFields.current.add(name)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
     if (name === "state") editedCustomerFields.current.add("city")
     setCustomerData((prev) => ({
       ...prev,
@@ -677,6 +709,7 @@ export default function CheckoutPage() {
     }
     setCustomerErrors(errors)
     setEditingAddress(true)
+    openCheckoutStep(1)
     requestAnimationFrame(() => document.getElementById(String(parsed.error.issues[0].path[0]))?.focus())
     toast.error(parsed.error.issues[0].message)
     return false
@@ -685,29 +718,43 @@ export default function CheckoutPage() {
     for (const field of ["address", "city", "pincode"]) editedCustomerFields.current.add(field)
     setCustomerData(previous => ({ ...previous, address: "", city: "", pincode: "", state: "Karnataka" }))
     setEditingAddress(true)
+    openCheckoutStep(1)
     setAddressNotice("")
     setSelectedAddressId(null)
     setAddressType("home")
   }
 
-  const selectAddress = (address: SavedDeliveryAddress) => {
+  const selectAddress = (address: SavedDeliveryAddress, advance = true) => {
     setCustomerErrors({})
     const { id, type, ...details } = address
     for (const field of Object.keys(details)) editedCustomerFields.current.add(field)
     setCustomerData(previous => ({ ...previous, ...details }))
     setSelectedAddressId(id)
     setAddressType(type)
-    setEditingAddress(false)
+    const complete = CheckoutContactSchema.omit({ email: true }).safeParse(details).success
+    setEditingAddress(!complete)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    if (advance) openCheckoutStep(complete ? 2 : 1)
     setAddressNotice("")
   }
 
   const useEnteredAddress = () => {
+    if (!user && !continueAsGuest) { toast.error("Choose to sign in or continue as a guest"); return }
     if (!validateContactDetails()) return
+    if (isPickup && user) {
+      setEditingAddress(false)
+      openCheckoutStep(2)
+      return
+    }
     const result = SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType })
     if (!result.success) { toast.error(result.error.issues[0].message); return }
     setCustomerData(previous => ({ ...previous, ...result.data }))
     setSelectedAddressId(null)
     setEditingAddress(false)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    openCheckoutStep(2)
   }
 
   const saveAddress = async () => {
@@ -771,6 +818,62 @@ export default function CheckoutPage() {
       }
     }
   }
+
+  const parsedContact = CheckoutContactSchema.safeParse(customerData)
+  const addressComplete = draftReady && !editingAddress && Boolean(user || continueAsGuest)
+    && parsedContact.success
+    && ((isPickup && !!user) || SavedDeliveryAddressSchema.safeParse({ ...customerData, type: addressType }).success)
+  const deliveryContext = JSON.stringify([{ ...customerData, ...(parsedContact.success ? parsedContact.data : {}) }, fulfilmentMethod, pickupStore?.id,
+    cart.map(item => [cartLineKey(item), item.quantity])])
+  const deliveryComplete = addressComplete && confirmedDelivery === deliveryContext
+  const paymentContext = JSON.stringify([deliveryContext, paymentMethod, paymentProvider])
+  const paymentAvailable = paymentMethod === "store-payment" ? allowStorePayment
+    : paymentMethod === "online" && !!paymentProvider && paymentProviders.includes(paymentProvider)
+  const paymentComplete = deliveryComplete && paymentAvailable && confirmedPayment === paymentContext
+
+  useEffect(() => {
+    if (!draftReady || profileLoading || addressesLoading || pincodeRulesLoading) return
+    if (initialAddressAdvance.current === checkoutOwner) return
+    if (addressComplete) {
+      initialAddressAdvance.current = checkoutOwner
+      setExpandedStep(2)
+    } else if (!editingAddress) setEditingAddress(true)
+  }, [draftReady, checkoutOwner, profileLoading, addressesLoading, pincodeRulesLoading, addressComplete, editingAddress])
+
+  useEffect(() => {
+    if (expandedStep === null || expandedStep === 1) return
+    if (!addressComplete) setExpandedStep(1)
+    else if (expandedStep > 2 && !deliveryComplete) setExpandedStep(2)
+    else if (expandedStep === 4 && !paymentComplete) setExpandedStep(3)
+  }, [expandedStep, addressComplete, deliveryComplete, paymentComplete])
+
+  const continueDelivery = async () => {
+    if (!addressComplete) { openCheckoutStep(1); return }
+    if (storeStock.loading || !storeStock.storeIds) { toast.error("Please wait for store stock to be checked."); return }
+    if (storeStock.error) { toast.error(storeStock.error); return }
+    if (isPickup && (!pickupStore || !storeStock.storeIds.has(pickupStore.id))) {
+      toast.error("Choose a pickup store with your items in stock."); return
+    }
+    if (!isPickup && !storeStock.deliveryAvailable) {
+      toast.error(storeStock.availabilityError || "Your requested quantities are unavailable for home delivery."); return
+    }
+    if (!await validateStep1()) { openCheckoutStep(1); return }
+    setConfirmedDelivery(deliveryContext)
+    setConfirmedPayment(null)
+    openCheckoutStep(3)
+  }
+  const continuePayment = () => {
+    if (paymentConfigLoading || paymentConfigError || !paymentAvailable) {
+      toast.error(paymentConfigError || "Choose an available payment method."); return
+    }
+    setConfirmedPayment(paymentContext)
+    openCheckoutStep(4)
+  }
+  const addressSummary = addressComplete
+    ? `${customerData.firstName} ${customerData.lastName} · ${isPickup ? customerData.phone : `${customerData.address}, ${customerData.city} ${customerData.pincode}`}`
+    : "Enter your contact and delivery details"
+  const deliverySummary = isPickup ? `Store pickup${pickupStore ? ` · ${pickupStore.name}` : " · Choose a store"}` : "Home delivery"
+  const paymentSummary = paymentMethod === "store-payment" ? "Pay at Store" : paymentProvider ? PAYMENT_PROVIDER_LABELS[paymentProvider] : "Choose a payment method"
 
   const moveItemToWishlist = async (lineKey: string) => {
     if (wishlistMoveInProgress.current || checkoutCartPending || paymentPending || hostedReturn
@@ -890,9 +993,10 @@ export default function CheckoutPage() {
     return true
   }
 
-  const validateCheckout = async () => {
+  const validateCheckout = async (action: "payment" | "store" = "payment") => {
     if (!checkoutValidationLock.acquire()) return false
     try {
+    if (cartLoading) { toast.error("Please wait for your cart and Sara Care prices to finish loading."); return false }
     if (addressesLoading || profileLoading || addressMutation.current) {
       toast.error("Please wait for your account addresses to finish loading or saving.")
       return false
@@ -931,9 +1035,12 @@ export default function CheckoutPage() {
     const data = await response.json().catch(() => null)
     if (!response.ok) { toast.error(data?.error || "Product stock and prices could not be validated."); return false }
     const result = z.object({ success: z.literal(true), amount: z.number().finite().nonnegative(),
+      couponMessage: z.string().nullable().optional().default(null),
       pricing: z.object({ subtotal: z.number().finite(), tax: z.number().finite(), shipping: z.number().finite(),
         total: z.number().finite(), couponDiscount: z.number().finite(),
-        items: z.array(z.object({ id: z.string(), price: z.number().finite().positive() })),
+        coupon: z.object({ code: z.string(), name: z.string(), discount: z.number().finite(),
+          couponRemovable: z.boolean().default(true) }).nullable().optional().default(null),
+        items: z.array(z.object({ id: z.string(), price: z.number().finite().positive(), saraCare: SaraCareSnapshotSchema.optional() })),
         gifts: z.array(GiftAwardSchema).default([]),
       }),
     }).safeParse(data)
@@ -945,15 +1052,32 @@ export default function CheckoutPage() {
     if (giftSelectionSignature(quote.pricing.gifts) !== giftSelectionSignature(cartGifts.gifts)) {
       cartGifts.retry(); toast.error("Your free gifts changed. Review the updated gifts before paying."); return false
     }
-    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
-    const changedPrices = quote.pricing.items.some(item => cart.some(current => current.id === item.id &&
-      current.price !== item.price))
-    refreshItemPrices(Object.fromEntries(quote.pricing.items.map(item => [item.id, item.price])))
-    setCouponDiscount(quote.pricing.couponDiscount)
-    if (changedPrices || Math.round(quote.amount * 100) !== Math.round(payableTotal * 100)) {
-      toast.error("Prices or checkout charges changed. Review the updated total and retry.")
+    if (quote.pricing.items.length !== cart.length) { toast.error("Your cart changed. Refresh checkout before paying."); return false }
+    if (quote.pricing.items.some((item, index) => item.saraCare?.revision !== cart[index].saraCare?.revision)) {
+      refreshSaraCare()
+      toast.error("Sara Care terms or rates changed. Review the refreshed plan before paying.")
       return false
     }
+    const changedPrices = quote.pricing.items.some((item, index) => cart[index].price !== item.price)
+    const prices = Object.fromEntries(cart.map((item, index) => [cartLineKey(item), quote.pricing.items[index].price]))
+    const updatedCart = cart.map(item => ({ ...item, price: prices[cartLineKey(item)] ?? item.price }))
+    const changedCoupon = Boolean(quote.couponMessage) || (appliedCoupon?.code ?? null) !== (quote.pricing.coupon?.code ?? null)
+      || Math.round(couponDiscount * 100) !== Math.round(quote.pricing.couponDiscount * 100)
+    const changedTotal = Math.round(quote.amount * 100) !== Math.round(payableTotal * 100)
+    const updatedCouponContext = JSON.stringify([user?.id ?? null, updatedCart.map(item => [cartLineKey(item), item.quantity, item.price])])
+    const updatedContext = JSON.stringify([updatedCouponContext, quote.pricing.coupon?.code, redeemPoints,
+      fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback, cartGifts.declinedGiftPromotions,
+      cartGifts.selectedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
+    if (changedPrices || changedCoupon || changedTotal) {
+      coupon.acceptCheckoutQuote(quote.pricing.coupon, updatedCart)
+      refreshItemPrices(prices)
+      setVerifiedQuote({ context: updatedContext, ...quote.pricing, amount: quote.amount })
+      setCheckoutChange({ previousTotal: payableTotal, updatedTotal: quote.amount, pricesChanged: changedPrices,
+        couponChanged: changedCoupon, couponMessage: quote.couponMessage, action })
+      return false
+    }
+    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
+    setCouponDiscount(quote.pricing.couponDiscount)
     analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
     return true
     } catch (error) {
@@ -969,6 +1093,7 @@ export default function CheckoutPage() {
         selectedGiftPromotions: cartGifts.selectedGiftPromotions,
         expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
         items: cart.map((item) => ({
+          saraCare: item.saraCare, saraCareSelection: item.saraCareSelection,
           id: item.id,
           sku: item.sku, variantId: item.variantId, ram: item.ram, storage: item.storage,
           color: item.color, size: item.size,
@@ -1179,7 +1304,7 @@ export default function CheckoutPage() {
     try {
     if (!allowStorePayment) { toast.error("Pay at store is unavailable for these quantities. Choose another payment option."); return }
     if (activeStoreRequest) {
-      if (await validateCheckout()) setStoreDialogOpen(true)
+      if (await validateCheckout("store")) setStoreDialogOpen(true)
       return
     }
     if (!payStore) { toast.error(isPickup ? "Choose a pickup store first" : "Choose the store you want to pay"); return }
@@ -1187,7 +1312,7 @@ export default function CheckoutPage() {
       toast.error("Enter a valid 10-digit mobile number so the store can call you")
       return
     }
-    if (!await validateCheckout()) return
+    if (!await validateCheckout("store")) return
     setStoreRequestLoading(true)
     try {
       const attempt = await prepareCheckoutAttempt(checkoutOwner, "store-request", {
@@ -1250,7 +1375,7 @@ export default function CheckoutPage() {
     })
   }
 
-  if (cartLoading || !draftReady) {
+  if (cartHydrating || !draftReady) {
     // Full page loader
     return (
       <div className="flex flex-col min-h-screen">
@@ -1259,6 +1384,7 @@ export default function CheckoutPage() {
           <div className="flex flex-col items-center">
             <span className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1560BD] mb-4"></span>
             <span className="text-[#0F2557] text-lg font-medium">Loading checkout...</span>
+            <SaraCareNotice disabled={isProcessing || paymentPending || !!paymentRecovery} />
           </div>
         </main>
         <Footer />
@@ -1303,7 +1429,7 @@ export default function CheckoutPage() {
     <div className={`flex min-h-screen flex-col bg-white ${styles.checkout}`}>
       <Header />
       <main className="flex-grow">
-        {cartError && <p role="alert" className="mx-auto max-w-6xl rounded bg-red-50 p-4 text-sm text-red-700">{cartError} <Link href="/cart" className="underline">Update cart</Link></p>}
+        {cartError && !saraCareError && <p role="alert" className="mx-auto max-w-6xl rounded bg-red-50 p-4 text-sm text-red-700">{cartError} <Link href="/cart" className="underline">Update cart</Link></p>}
         <div className={`section-container ${styles.container}`}>
           <nav className="sr-only" aria-label="Breadcrumb">
             <Link href="/" className="hover:text-[#1560BD]">
@@ -1326,7 +1452,7 @@ export default function CheckoutPage() {
             </div>
             <ol className={styles.tracker} aria-label="Checkout progress">
               {CHECKOUT_TRACKER.map((label, index) => {
-                const done = index === 0
+                const done = index === (expandedStep ?? (!addressComplete ? 1 : !deliveryComplete ? 2 : !paymentComplete ? 3 : 4)) - 1
                 return (
                   <li key={label} aria-current={done ? "step" : undefined}>
                     <span>{index + 1}</span><strong>{label}</strong>
@@ -1383,14 +1509,10 @@ export default function CheckoutPage() {
             {/* Customer Details - Left side */}
             <div className={styles.detailsColumn} inert={Boolean(paymentRecovery) || paymentPending || isProcessing || storeRequestLoading}>
               {(
-                <section className={styles.panel} aria-labelledby="delivery-address-heading">
-                  <h2 id="delivery-address-heading" className={styles.sectionTitle}>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1560BD] text-[11px] font-bold text-white">
-                      1
-                    </span>
-                    Delivery Address
-                    {!editingAddress && <button type="button" className="ml-auto text-xs font-medium text-[#0054F0]" onClick={startNewAddress}>+ Add New Address</button>}
-                  </h2>
+                <CheckoutSection id="delivery-address" number={1} title="Delivery Address" summary={addressSummary}
+                  expanded={expandedStep === 1} completed={addressComplete}
+                  onToggle={() => setExpandedStep(previous => previous === 1 ? null : 1)}>
+                  {!editingAddress && <button type="button" className="mb-3 text-xs font-medium text-[#0054F0]" onClick={startNewAddress}>+ Add New Address</button>}
                   <p className={styles.sectionHint}>{user ? "Choose a saved address or save a new one for future checkouts." : "Enter your delivery details below."}</p>
                   {profileLoading && <p role="status" className="mb-4 text-sm text-gray-600">Loading your saved account details...</p>}
                   {profileError && <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -1410,7 +1532,7 @@ export default function CheckoutPage() {
                         </span>
                       </button>
                       <div className={styles.addressActions}>
-                        <button type="button" onClick={() => { selectAddress(address); setEditingAddress(true) }}>Edit</button>
+                        <button type="button" onClick={() => { selectAddress(address, false); setEditingAddress(true); openCheckoutStep(1) }}>Edit</button>
                         <button type="button" onClick={() => void removeAddress(address.id)} disabled={addressSaving}>Remove</button>
                       </div>
                     </div>)}
@@ -1424,7 +1546,7 @@ export default function CheckoutPage() {
                           <p>{customerData.address}</p><p>{customerData.city} - {customerData.pincode}, {customerData.state}</p>
                           <p>Mobile: {customerData.phone}</p>
                         </div>
-                        <button type="button" onClick={() => setEditingAddress(true)}>Edit</button>
+                        <button type="button" onClick={() => { setEditingAddress(true); openCheckoutStep(1) }}>Edit</button>
                       </div>
                       <button type="button" className={styles.newAddressCard} onClick={startNewAddress}><span>+</span><strong>Add a delivery address</strong><small>Keep your contact details and enter another address.</small></button>
                     </div>
@@ -1657,26 +1779,34 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                   )}
-                  {!isPickup && <div className={styles.addressFormActions}>
-                    {user && <button type="button" onClick={() => void saveAddress()} disabled={addressSaving || addressesLoading}>
+                  <div className={styles.addressFormActions}>
+                    {user && !isPickup && <button type="button" onClick={() => void saveAddress()} disabled={addressSaving || addressesLoading}>
                       {addressSaving ? "Saving address..." : selectedAddressId ? "Save address changes" : "Save delivery address"}
                     </button>}
-                    <button type="button" onClick={useEnteredAddress}>{user ? "Use without saving" : "Use this address"}</button>
+                    <button type="button" onClick={useEnteredAddress}>{isPickup && user ? "Continue to Delivery Options" : user ? "Use without saving & continue" : "Use this address & continue"}</button>
+                    {user && !isPickup && <button type="button" onClick={() => {
+                      if (!validateContactDetails()) return
+                      changeFulfilmentMethod("pickup")
+                      setEditingAddress(false)
+                      openCheckoutStep(2)
+                    }}>Choose store pickup</button>}
                     {selectedAddressId && <button type="button" onClick={() => {
                       const original = savedAddresses.find(address => address.id === selectedAddressId)
                       if (original) selectAddress(original)
                     }}>Cancel edit</button>}
                     {!user && <small>Sign in to save addresses for future checkouts.</small>}
-                  </div>}
+                  </div>
                   </fieldset>
-                </section>
+                  {!editingAddress && <div className={styles.stepContinue}><button type="button" onClick={() => openCheckoutStep(2)} disabled={!addressComplete}>Continue to Delivery Options <ArrowRight size={15} /></button></div>}
+                </CheckoutSection>
               )}
 
-              <section className={styles.panel} aria-labelledby="delivery-options-heading">
-                <h2 id="delivery-options-heading" className={styles.sectionTitle}><span>2</span>Delivery Options</h2>
+              <CheckoutSection id="delivery-options" number={2} title="Delivery Options" summary={deliverySummary}
+                expanded={expandedStep === 2} completed={deliveryComplete} disabled={!addressComplete}
+                onToggle={() => setExpandedStep(previous => previous === 2 ? null : 2)}>
                 <p className={styles.sectionHint}>Choose how you would like to receive your order.</p>
                 <FulfilmentSelector method={fulfilmentMethod} onMethodChange={changeFulfilmentMethod} selectedStore={pickupStore} onStoreChange={setPickupStore}
-                  deliveryPincode={customerData.pincode} deliveryCity={customerData.city} stock={storeStock}
+                  nearby={nearbyStores} stock={storeStock}
                   deliveryFeeLabel={isLoadingSettings || settingsError || !settingsData ? "Charges confirmed at payment" : shipping > 0 ? `₹${money(shipping)}` : "FREE"}>
                   <div className={styles.deliveryNotice}><Truck size={34} /><div>
                     <small>{isPickup ? "Store pickup" : "Home delivery service area"}</small>
@@ -1687,16 +1817,14 @@ export default function CheckoutPage() {
                 {!isPickup && pincodeRulesLoading && <p role="status" className={styles.sectionHint}>Loading delivery availability...</p>}
                 {!isPickup && pincodeRulesError && <p role="alert" className="mt-3 text-sm text-red-700">{pincodeRulesError} <button type="button"
                   onClick={() => setPincodeRulesAttempt(value => value + 1)} className="underline">Retry delivery availability</button></p>}
-              </section>
+                <div className={styles.stepContinue}><button type="button" onClick={() => void continueDelivery()}
+                  disabled={profileLoading || addressesLoading || storeStock.loading || pincodeRulesLoading}>Continue to Payment <ArrowRight size={15} /></button></div>
+              </CheckoutSection>
 
               {(
-                <section className={styles.panel} aria-labelledby="payment-method-heading">
-                  <h2 id="payment-method-heading" className={styles.sectionTitle}>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1560BD] text-[11px] font-bold text-white">
-                      3
-                    </span>
-                    Payment Method
-                  </h2>
+                <CheckoutSection id="payment-method" number={3} title="Payment Method" summary={paymentSummary}
+                  expanded={expandedStep === 3} completed={paymentComplete} disabled={!deliveryComplete}
+                  onToggle={() => setExpandedStep(previous => previous === 3 ? null : 3)}>
                   <p className={styles.sectionHint}>{isPickup ? "Pay online or choose Pay at Store after selecting a store with your items in stock."
                     : "Pay online with UPI, cards or another available option at the secure payment gateway."}</p>
                   {paymentConfigError && <p role="alert" className="text-sm text-red-700">{paymentConfigError}</p>}
@@ -1709,6 +1837,15 @@ export default function CheckoutPage() {
                       ? `Choose ${offline.length > 1 ? `${offline.slice(0, -1).join(", ")} or ${offline.at(-1)}` : offline[0]}.`
                       : "Please try again later."}</p>
                   })()}
+                  {isPickup && pickupStore && <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                    <p className="font-semibold text-[#0f2557]">Pickup store: {pickupStore.name}</p>
+                    {pickupStore.storeCode && <p className="mt-1 text-xs text-slate-600">Store code: {pickupStore.storeCode}</p>}
+                    <p className="mt-1 text-xs text-slate-600">{pickupStore.address}</p>
+                    {(storeStock.byStore[pickupStore.id] || []).map(item => <p key={item.itemCode} className="mt-1 text-xs text-slate-600">
+                      Item No. {item.itemCode}: {item.available} in stock · {item.required} in your order
+                    </p>)}
+                    <p className="mt-2 text-xs text-slate-600">Pay online or choose Pay at Store for this pickup store.</p>
+                  </div>}
                   <CheckoutPaymentOptions providers={paymentProviders} codEnabled={false} instoreEnabled={false}
                     storePaymentEnabled={allowStorePayment}
                     selected={paymentMethod === "online" ? paymentProvider : paymentMethod}
@@ -1727,8 +1864,21 @@ export default function CheckoutPage() {
                       value={payStore} onChange={setPayStore} />
                   </CheckoutPaymentOptions>
 
-                </section>
+                  <div className={styles.stepContinue}><button type="button" onClick={continuePayment}
+                    disabled={paymentConfigLoading || !paymentAvailable}>Continue to Review <ArrowRight size={15} /></button></div>
+                </CheckoutSection>
               )}
+              <CheckoutSection id="checkout-review" number={4} title="Review & Place Order"
+                summary="Confirm your details and place your order" expanded={expandedStep === 4} completed={false} disabled={!paymentComplete}
+                onToggle={() => setExpandedStep(previous => previous === 4 ? null : 4)}>
+                <dl className={styles.stepReview}>
+                  <div><dt>{isPickup ? "Contact details" : "Delivery address"}</dt><dd>{addressSummary}</dd></div>
+                  <div><dt>Delivery option</dt><dd>{deliverySummary}</dd></div>
+                  <div><dt>Payment method</dt><dd>{paymentSummary}</dd></div>
+                  <div><dt>Order total</dt><dd>{saraCareLoading ? "Updating…" : money(payableTotal)}</dd></div>
+                </dl>
+                <p className="mt-4 text-sm text-gray-600">Review your items in the order summary, then place your order.</p>
+              </CheckoutSection>
             </div>
 
             {/* Order Summary - Right side */}
@@ -1750,13 +1900,30 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Cart Items */}
+                <SaraCareNotice disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery} />
                 <div className={styles.summaryItems}>
                   {cart.map((item) => {
                     const lineKey = cartLineKey(item)
                     const title = shortProductTitle(item.name) || "Product"
-                    const href = item.type === "software" ? "/software" : `/product/${encodeURIComponent(item.id)}`
+                    const href = isSaraCare(item) ? "/sara-care" : item.type === "software" ? "/software" : `/product/${encodeURIComponent(item.id)}`
+                    if (item.saraCare) return <div key={lineKey} className={styles.careProduct}>
+                      <div className={styles.careProductHeader}>
+                        <span className={styles.careIcon}><Shield size={18} /></span>
+                        <div><strong>Sara Care · {saraCareDurationLabel(item.saraCare.durationYears)}</strong><span>Protection product</span></div>
+                        <b>₹{money(item.price * item.quantity)}</b>
+                      </div>
+                      <p className={styles.careCoveredDevice}>For {cleanProductName(item.saraCare.parentName)}</p>
+                      <p>Qty: {item.quantity} · ₹{money(item.price)} per device · GST included</p>
+                      <SaraCareOptions item={item} variant="checkout" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId} />
+                      <p>Begins on {item.saraCare.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}, according to the coverage terms.</p>
+                      <div className={styles.careProductActions}><Link href="/sara-care" target="_blank" rel="noopener noreferrer">About Sara Care</Link>
+                        <button type="button" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId}
+                          onClick={() => removeFromCart(lineKey)} aria-label={`Remove Sara Care for ${item.saraCare.parentName}`}><Trash2 size={13} />Remove Care</button>
+                      </div>
+                    </div>
                     return (
-                    <div key={lineKey} className={styles.summaryRow}>
+                    <div key={lineKey} className={styles.summaryItem}>
+                    <div className={styles.summaryRow}>
                       <a href={href} target="_blank" rel="noopener noreferrer" className={styles.summaryImage} aria-label={`Open ${title} in a new tab`}>
                         <CartProductImage src={item.image} name={title} />
                       </a>
@@ -1782,7 +1949,7 @@ export default function CheckoutPage() {
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                           <button type="button" onClick={() => void moveItemToWishlist(lineKey)}
-                            disabled={!!movingWishlistId || storeRequestLoading}
+                            disabled={isSaraCare(item) || !!movingWishlistId || storeRequestLoading}
                             aria-label={`Move ${title} to wishlist`}
                             className="inline-flex items-center gap-1 text-xs font-medium text-[#1560BD] hover:underline disabled:opacity-50">
                             <Heart className="h-3.5 w-3.5" />
@@ -1800,12 +1967,14 @@ export default function CheckoutPage() {
                         <p className="text-sm font-semibold flex-shrink-0">₹{money(item.price * item.quantity)}</p>
                       </div>
                     </div>
+                    <SaraCareOptions item={item} variant="checkout" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId} />
+                    </div>
                     )
                   })}
                 </div>
 
                 {/* Coupon input */}
-                <CartGifts quote={cartGifts} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
+                <CartGifts quote={cartGifts} compact disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
                 <CartCoupon id="checkout-coupon" coupon={coupon} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
 
                 {catalogueLoading && <p role="status" className="text-xs text-gray-600">Refreshing prices and stock...</p>}
@@ -1815,6 +1984,7 @@ export default function CheckoutPage() {
                   <h3 className="mb-3 font-semibold text-sm">Price Details</h3>
                   <div className="flex justify-between text-sm"><span className="text-gray-600">Total MRP</span><span>₹{money(totalMrp)}</span></div>
                   <div className="flex justify-between text-sm text-green-700"><span>Product Discount</span><span>− ₹{money(productDiscount)}</span></div>
+                  {careGross > 0 && <div className="flex justify-between gap-2 text-sm"><span className="text-gray-600">Sara Care</span><span aria-live="polite">{saraCareLoading ? "Updating…" : `₹${money(careGross)}`}</span></div>}
                   <div className="flex justify-between text-sm"><span className="text-gray-600">Delivery Charges</span><span className={shipping === 0 ? "text-green-700" : ""}>{hasHardware && !isPickup && (isLoadingSettings || settingsError || !settingsData) ? "Confirming..." : shipping > 0 ? `₹${money(shipping)}` : "FREE"}</span></div>
                   <details className="text-xs text-gray-600"><summary className="cursor-pointer">GST breakdown (included in prices)</summary>
                   <div className="flex justify-between text-sm">
@@ -1833,6 +2003,7 @@ export default function CheckoutPage() {
                       <span>₹{money(hardwareGST)}</span>
                     </div>
                   )}
+                  {careGST > 0 && <div className="flex justify-between text-sm"><span className="text-gray-600">GST (18% on Sara Care)</span><span>₹{money(careGST)}</span></div>}
                   </details>
                   {couponDiscount > 0 && (
                     <div className="flex justify-between text-sm text-green-600">
@@ -1848,7 +2019,7 @@ export default function CheckoutPage() {
                   )}
                   <div className="flex justify-between text-lg font-bold border-t pt-2">
                     <span>Total Amount</span>
-                    <span>₹{money(payableTotal)}</span>
+                    <span aria-live="polite">{saraCareLoading ? "Updating…" : `₹${money(payableTotal)}`}</span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">Inclusive of all taxes. Final prices are confirmed server-side.</p>
                   {productDiscount + couponDiscount > 0 && <p className={styles.savings}><Tag size={17} />You are saving ₹{money(productDiscount + couponDiscount)} on this order.</p>}
@@ -1864,9 +2035,13 @@ export default function CheckoutPage() {
                     }}
                   />
                 )}
-                {paymentMethod === "store-payment" ? (
+                {!paymentComplete || expandedStep !== 4 ? <button type="button" className={`w-full ${styles.primaryButton}`}
+                  onClick={() => openCheckoutStep(!addressComplete ? 1 : !deliveryComplete ? 2 : !paymentComplete ? 3 : 4)}>
+                  {!addressComplete ? "Complete Delivery Address" : !deliveryComplete ? "Choose Delivery Options" : !paymentComplete ? "Choose Payment Method" : "Review & Place Order"}
+                  <ArrowRight size={16} />
+                </button> : paymentMethod === "store-payment" ? (
                   <button type="button" onClick={() => void requestStorePayment()}
-                    disabled={storeRequestLoading || isProcessing || !allowStorePayment}
+                    disabled={saraCareLoading || !!saraCareError || storeRequestLoading || isProcessing || !allowStorePayment}
                     className="flex w-full items-center justify-center rounded-md bg-[#0054F0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
                     {storeRequestLoading ? "Sending to store..."
                       : activeStoreRequest ? "Enter transaction ID"
@@ -1884,13 +2059,15 @@ export default function CheckoutPage() {
                   onProcessingChange={setPaymentPending}
                   amount={payableTotal}
                   beforePayment={validateCheckout}
+                  startPaymentRef={startPaymentRef}
+                  onCheckoutChanged={async () => { await validateCheckout() }}
                   orderDetails={{ customer: customerData, items: cart, coupon: appliedCoupon ? { code: appliedCoupon.code } : null,
                     declinedGiftPromotions: cartGifts.declinedGiftPromotions,
                     selectedGiftPromotions: cartGifts.selectedGiftPromotions,
                     expectedGifts: cartGifts.gifts.map(({ promotionId, giftId, sku, quantity }) => ({ promotionId, giftId, sku, quantity })),
                     redeemPoints, fulfilment: { method: fulfilmentMethod, storeId: fulfilmentStoreId }, total: payableTotal }}
                   onSuccess={handlePaymentSuccess}
-                  disabled={Boolean(paymentRecovery || recoveringPayment || cartError || storeStock.error) || !storeStock.storeIds ||
+                  disabled={saraCareLoading || Boolean(paymentRecovery || recoveringPayment || cartError || storeStock.error) || !storeStock.storeIds ||
                     (isPickup ? !pickupStore || !storeStock.storeIds.has(pickupStore.id) : !storeStock.deliveryAvailable)}
                   onCancel={() => toast.error("Payment cancelled")}
                 /> : <a href="#payment-method-heading" className={styles.primaryButton}>Verify in-store purchase <ArrowRight size={16} /></a>}
@@ -1899,7 +2076,7 @@ export default function CheckoutPage() {
                 {hasHardware && shipping > 0 && (
                   <div className="mt-4 rounded-lg bg-[#F4F8FD] p-3">
                     <p className="text-[12px] text-[#1560BD]">
-                      Add ₹{(freeShippingThreshold - (softwareTotal + hardwareTotal)).toLocaleString("en-IN")} more for free delivery!
+                      Add ₹{money(Math.max(0, freeShippingThreshold - hardwareGross))} more for free delivery!
                     </p>
                   </div>
                 )}
@@ -1939,6 +2116,36 @@ export default function CheckoutPage() {
         </div>
       </main>
 
+        <Dialog open={!!checkoutChange} onOpenChange={open => { if (!open) setCheckoutChange(null) }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{checkoutChange?.pricesChanged ? "Product cost is updated" : "Your checkout total is updated"}</DialogTitle>
+              <DialogDescription>
+                We checked current prices and coupon availability before payment. Your cart now shows the updated value.
+              </DialogDescription>
+            </DialogHeader>
+            {checkoutChange?.couponChanged && <p className="text-sm text-amber-800">
+              {checkoutChange.couponMessage ? `Your coupon is no longer available: ${checkoutChange.couponMessage}` : "Your coupon discount has changed."}
+            </p>}
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between"><dt>Previous total</dt><dd>₹{money(checkoutChange?.previousTotal ?? 0)}</dd></div>
+              <div className="flex justify-between font-semibold"><dt>Updated total</dt><dd>₹{money(checkoutChange?.updatedTotal ?? 0)}</dd></div>
+            </dl>
+            <p className="text-sm">Do you want to continue with the updated total?</p>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setCheckoutChange(null)} className="rounded-md border px-4 py-2 text-sm">Review cart</button>
+              <button type="button" disabled={paymentPending || storeRequestLoading || applyingCoupon || cartGifts.loading}
+                onClick={() => {
+                  const action = checkoutChange?.action
+                  setCheckoutChange(null)
+                  if (action === "store") void requestStorePayment()
+                  else void startPaymentRef.current?.()
+                }} className="rounded-md bg-[#1560BD] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                Continue
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       {storeDialogOpen && activeStoreRequest && (
         <PayAtStoreDialog
           storeName={activeStoreRequest.store.name}

@@ -5,7 +5,9 @@ import { sendEmail } from "@/lib/email"
 import { requireAdmin, getSession } from "@/lib/auth"
 import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { notifyCustomerOrderConfirmed } from "@/lib/order-confirmation-whatsapp"
 import { verifyGuestAccessToken } from "@/lib/guest-order"
+import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
 import { rebuildCustomerProfile, recordEvent, EARNING_STATUSES } from "@/lib/customer-profile"
 import { awardPointsForOrder, reverseOrderPoints } from "@/lib/loyalty"
 import { notifyOrderStatus } from "@/lib/push"
@@ -34,6 +36,8 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    if (session) await linkGuestOrdersToAccount(session.user)
 
     let collection = await getCollection<OrderDocument>("orders")
     let orderId
@@ -76,7 +80,7 @@ export async function GET(
     const ownerId = normalizedOrder.userId || normalizedOrder.customerId || null
     const isOwner = !!session && !!ownerId && String(ownerId) === session.user.id
     const isGuestHolder =
-      !ownerId && verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
+      verifyGuestAccessToken(guestToken, order.guestAccessTokenHash)
 
     if (!isAdminUser && !isOwner && !isGuestHolder) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 })
@@ -95,6 +99,7 @@ export async function GET(
       shipping: normalizedOrder.shipping || normalizedOrder.summary?.shipping || 0,
       coupon: normalizedOrder.coupon || null,
       items: normalizedOrder.items || [],
+      giftPromotions: normalizedOrder.giftPromotions || [],
       customer: normalizedOrder.customer || {},
       shippingAddress: normalizedOrder.shippingAddress || (normalizedOrder.customer?.address && typeof normalizedOrder.customer.address === 'object' ? {
         name: normalizedOrder.customer.name || "",
@@ -329,6 +334,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     const adminNotification = updateData.status === "confirmed"
       ? await notifyAdminOrder(existingOrder._id, isPartnerOrder ? "partner_orders" : "orders")
       : null
+    if (!isPartnerOrder && updateData.status === "confirmed") await notifyCustomerOrderConfirmed(existingOrder._id)
 
     // Reaching a value-realising status changes lifetime spend and tier, so refresh
     // the rollup now rather than waiting for the nightly rebuild. Never fatal.

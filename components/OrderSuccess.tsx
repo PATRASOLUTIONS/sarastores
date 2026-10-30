@@ -8,7 +8,9 @@ import { toast } from "react-hot-toast"
 import { useCart } from "@/hooks/useCart"
 import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import CartProductImage from "@/components/CartProductImage"
+import OrderGiftItems from "@/components/OrderGiftItems"
 import { orderJourneyStage, type OrderConfirmation } from "@/lib/order-confirmation"
+import { saraCareDurationLabel } from "@/lib/sara-care-types"
 import styles from "./OrderSuccess.module.css"
 
 const productSchema = z.object({
@@ -103,8 +105,13 @@ export default function OrderSuccess({ order, guestToken }: { order: OrderConfir
       <section className={styles.panel}><h2>Order Summary ({order.items.length} {order.items.length === 1 ? "item" : "items"})</h2>
         <ul className={styles.items}>{order.items.map((item, index) => <li key={`${item.id || item.productId}-${index}`}>
           <span className={styles.itemImage}><CartProductImage src={item.image || undefined} name={cleanProductName(item.name)} /></span>
-          <div><strong>{cleanProductName(item.name)}</strong><small>Qty: {item.quantity}</small></div><b>₹{money(item.price * item.quantity)}</b>
+          <div><strong>{cleanProductName(item.name)}</strong><small>Qty: {item.quantity}</small>
+            {item.saraCare && <><small>{saraCareDurationLabel(item.saraCare.durationYears)} protection for {item.saraCare.parentName}</small>
+              <small>Coverage begins on {item.saraCare.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}.</small>
+              <details><summary>Coverage terms</summary><p className="whitespace-pre-wrap text-xs">{item.saraCare.terms}</p></details></>}
+          </div><b>₹{money(item.price * item.quantity)}</b>
         </li>)}</ul>
+        <OrderGiftItems gifts={order.giftPromotions} />
         <div className={styles.total}><span>{paid ? "Total Paid" : "Order Total"}</span><strong>₹{money(order.total)}</strong></div>
       </section>
       <section className={styles.panel}><h2>{pickup ? "Pickup Details" : "Delivery Details"}</h2>

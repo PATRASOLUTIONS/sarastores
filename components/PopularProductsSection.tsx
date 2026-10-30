@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import { isProductUnavailable } from "@/lib/product-availability"
 import { ShoppingCart, TrendingUp, Eye } from "lucide-react"
 import { productCardResponseSchema } from "@/lib/product-card-response"
 import { z } from "zod"
@@ -132,7 +133,8 @@ export default function PopularProductsSection() {
                 <p className="text-gray-600 mb-4 line-clamp-2">{product.description}</p>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-2xl font-bold text-blue-800">₹{product.price.toLocaleString("en-IN")}</span>
+                  {isProductUnavailable(product) ? <span className="text-sm font-semibold text-red-700">Currently unavailable</span> :
+                    <span className="text-2xl font-bold text-blue-800">₹{product.price.toLocaleString("en-IN")}</span>}
                   <div className="flex items-center text-green-600 text-sm font-medium">
                     <TrendingUp className="h-4 w-4 mr-1" />
                     <span>High Demand</span>

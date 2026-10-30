@@ -1,6 +1,8 @@
 import { z } from "zod"
+import { SaraCareInputFields } from "@/lib/sara-care-types"
 
 export const PurchasedItemsSchema = z.array(z.object({
+  ...SaraCareInputFields,
   id: z.string().optional(), productId: z.string().optional(), quantity: z.number().int().positive(),
   type: z.string().nullish(), sku: z.string().nullish(), color: z.string().nullish(), size: z.string().nullish(),
   variantId: z.string().nullish(), ram: z.string().nullish(), storage: z.string().nullish(), kgenVariantId: z.string().nullish(),

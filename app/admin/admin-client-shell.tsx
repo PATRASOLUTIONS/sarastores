@@ -7,6 +7,7 @@ import { AdminHeader } from "@/components/AdminHeader"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
+import { staffCanAccessPage, staffLandingPage } from "@/lib/admin-access"
 
 export default function AdminClientShell({
   children,
@@ -66,18 +67,10 @@ export default function AdminClientShell({
       return
     }
 
-    // Non-admin staff with dashboardAccess are restricted to their
-    // allowedPages list. If the list is empty/missing, they only get the
-    // /admin/dashboard landing page.
-    const allowedPages = user.allowedPages
-    const effectiveAllowed: string[] = Array.isArray(allowedPages) && allowedPages.length > 0
-      ? allowedPages
-      : ["/admin/dashboard"]
-
-    const ok = effectiveAllowed.some(p => pathname === p || pathname.startsWith(p + "/"))
+    const ok = staffCanAccessPage(user, pathname)
     if (!ok) {
-      toast.error("You don't have access to this page. Redirecting to Dashboard.")
-      router.replace("/admin/dashboard")
+      toast.error("You don't have access to this page.")
+      router.replace(staffLandingPage(user))
     }
   }, [pathname, user, router])
 

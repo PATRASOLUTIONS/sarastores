@@ -10,6 +10,7 @@ import { handleApiError, RateLimitUnavailableError } from "@/lib/api-error"
 import { RecaptchaConfigurationError } from "@/lib/recaptcha-config"
 import { ACCOUNT_EMAIL_COLLATION, ensureAccountEmailIndex, isDuplicateAccountEmail } from "@/lib/account-email-index"
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
+import { buildVerificationEmail, verificationUrl } from "@/lib/verification-email"
 
 // Use dynamic import for email functions to prevent build-time issues
 const getEmailFunctions = async () => {
@@ -185,32 +186,12 @@ export async function POST(request: NextRequest) {
     // Send verification email - wrapped in try/catch to prevent build errors
     try {
       const { sendEmail } = await getEmailFunctions()
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-      const verifyUrl = `${siteUrl}/api/auth/verify-email?token=${verificationToken}&userId=${result.insertedId.toString()}`
+      const verifyUrl = verificationUrl(verificationToken, result.insertedId.toString())
 
       await sendEmail({
         to: email,
         subject: "Verify your email address - Sara Electronics",
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head><meta charset="utf-8"></head>
-          <body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
-            <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;padding:30px;text-align:center">
-              <h2 style="color:#111827;margin-top:0">Welcome to Sara Electronics!</h2>
-              <p style="color:#374151;line-height:1.6">Hi ${name.trim()},</p>
-              <p style="color:#374151;line-height:1.6">Thanks for creating your account. Please verify your email address to get started.</p>
-              <p style="margin:30px 0">
-                <a href="${verifyUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:bold;font-size:16px">
-                  Verify Email Address
-                </a>
-              </p>
-              <p style="color:#6b7280;font-size:13px">This link expires in 24 hours.</p>
-              <p style="color:#6b7280;font-size:13px">If you didn't create an account, you can safely ignore this email.</p>
-            </div>
-          </body>
-          </html>
-        `,
+        ...buildVerificationEmail(name, verifyUrl),
       })
       if (process.env.NODE_ENV === "development") console.log("Verification email sent to:", email)
     } catch (emailError) {

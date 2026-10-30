@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { requireUser } from "@/lib/auth"
+import { getOrderAdminScope, orderWithinAdminScope } from "@/lib/order-access"
+import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
+
+export const dynamic = "force-dynamic"
 
 const STATUS_MAP: Record<string, { key: string; label: string }> = {
   pending: { key: "ordered", label: "Order Placed" },
@@ -87,6 +92,9 @@ function buildTimeline(order: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireUser()
+    if (!guard.ok) return guard.response
+
     // Order IDs are sequential, so an unthrottled lookup is a walkable index of
     // every order on the platform.
     const limit = await checkRateLimit(request, { windowMs: 60_000, maxRequests: 15 })
@@ -103,6 +111,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Order ID is required" }, { status: 400 })
     }
 
+    await linkGuestOrdersToAccount(guard.user)
+    const adminScope = await getOrderAdminScope({ user: guard.user })
     const { db } = await connectToDatabase()
     const orders = db.collection("orders")
     const partnerOrders = db.collection("partner_orders")
@@ -150,19 +160,8 @@ export async function GET(request: NextRequest) {
     conditions.push({ _id: clean } as Record<string, unknown>)
     conditions.push({ orderNumber: clean })
 
-    /*
-     * Deliberately no lookup by customer email or phone.
-     *
-     * This endpoint is unauthenticated, so matching on those fields let anyone
-     * who knew a shopper's email address or mobile number read back their order
-     * ID, tracking number, carrier, status and destination city. An email
-     * address is not a secret and is not proof of ownership.
-     *
-     * Order IDs are sequential (SARAECOM-<seq> from the counters collection),
-     * so they are not sufficient on their own either — which is exactly why
-     * /api/orders/[id] requires a session or the guest capability token minted
-     * at checkout. What is returned here is limited to shipment progress.
-     */
+    // Email and phone are not credentials. Ownership is checked below using
+    // the authenticated account, including verified-email guest-order linking.
 
     // Single query with $or instead of 15+ sequential findOne() calls
     let order = await orders.findOne({ $or: conditions })
@@ -172,11 +171,13 @@ export async function GET(request: NextRequest) {
       order = await partnerOrders.findOne({ $or: [{ orderId: clean }] })
     }
 
-    if (!order) {
+    const ownerId = order?.userId || order?.customerId
+    const isOwner = !!ownerId && String(ownerId) === guard.user.id
+    if (!order || (!isOwner && !orderWithinAdminScope(adminScope, order))) {
       return NextResponse.json({
         error: "Order not found. Please check your order ID and try again.",
         hint: "Enter the order ID from your confirmation email (with or without #) or the payment ID (pay_...). Tracking by email or phone is not supported.",
-      }, { status: 404 })
+      }, { status: 404, headers: { "Cache-Control": "private, no-store" } })
     }
 
     const statusKey = STATUS_MAP[order.status]?.key || "ordered"
@@ -196,7 +197,7 @@ export async function GET(request: NextRequest) {
         destination: order.shippingAddress?.city || order.city || "Your City",
         events: timeline,
       },
-    })
+    }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (error) {
     console.error("Track order error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

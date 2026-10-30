@@ -3,6 +3,8 @@ import test from "node:test"
 import { ObjectId } from "mongodb"
 import { NextRequest } from "next/server.js"
 import { sourceLoader } from "./source-loader.mjs"
+import * as React from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 
 const storeId = new ObjectId().toString()
 const store = { id: storeId, name: "Fixture Store", phone: "9876543210", email: "store@example.invalid", address: "Fixture Road" }
@@ -47,6 +49,57 @@ function requestLoader({ env = {}, loaded = store, limited = false, stocked = tr
   }, { env })
   return { route: loader.load("app/api/payment/store-request/route.ts"), intents, notifications }
 }
+
+test("notification configuration reports missing names without exposing credentials", () => {
+  const absent = sourceLoader().load("lib/store-payment.ts").getStorePaymentNotificationConfiguration()
+  assert.equal(absent.whatsapp, false); assert.equal(absent.email, false)
+  assert.deepEqual([...absent.missing], ["ASKEVA_API_KEY", "ASKEVA_API_URL", "SMTP_HOST", "SMTP_USER", "SMTP_PASS"])
+  const complete = sourceLoader({}, { env: {
+    ASKEVA_API_KEY: "synthetic-private-key", ASKEVA_API_URL: "https://provider.invalid",
+    SMTP_HOST: "mail.invalid",
+    SMTP_USER: "synthetic-user", SMTP_PASS: "synthetic-private-password",
+  } }).load("lib/store-payment.ts").getStorePaymentNotificationConfiguration()
+  assert.deepEqual(JSON.parse(JSON.stringify(complete)), { whatsapp: true, email: true, missing: [] })
+  for (const secret of ["synthetic-private-key", "synthetic-private-password", "synthetic-user", "provider.invalid"]) assert.equal(JSON.stringify(complete).includes(secret), false)
+})
+
+test("a store WhatsApp exception does not prevent platform-manager and email notifications", async () => {
+  const calls = [], mails = []
+  const loader = sourceLoader({
+    "@/lib/whatsapp-template": { sendWhatsAppTemplate: async phone => {
+      calls.push(phone)
+      if (phone === store.phone) throw new Error("Synthetic provider failure")
+      return { success: true }
+    } },
+    "@/lib/email": { sendEmail: async mail => { mails.push(mail); return { success: true } } },
+  }, { context: { console: { ...console, error() {} } } })
+  const result = await loader.load("lib/store-payment.ts").notifyStoreOfPaymentRequest(store,
+    { orderId: "FIXTURE", customer, delivery: "Store pickup", items: [], total: 10 },
+    { notifyStoreManager: true, platformManagers: [{ name: "Ops", phone: "9000000001" }] })
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { whatsapp: false, email: true, managers: 1 })
+  assert.deepEqual(calls, [store.phone, "9000000001"]); assert.equal(mails.length, 1)
+})
+
+test("email failure returns its channel status without losing an accepted WhatsApp notification", async () => {
+  const loader = sourceLoader({
+    "@/lib/whatsapp-template": { sendWhatsAppTemplate: async () => ({ success: true }) },
+    "@/lib/email": { sendEmail: async () => { throw new Error("Synthetic mail failure") } },
+  }, { context: { console: { ...console, error() {} } } })
+  const result = await loader.load("lib/store-payment.ts").notifyStoreOfPaymentRequest(store,
+    { orderId: "FIXTURE", customer, delivery: "Store pickup", items: [], total: 10 })
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { whatsapp: true, email: false, managers: 0 })
+})
+
+test("Pay at Store dialog does not claim the store received a failed notification", () => {
+  const Dialog = sourceLoader({ react: { ...React, useEffect() {}, useState: initial => [initial, () => {}] } })
+    .load("components/PayAtStore.tsx").PayAtStoreDialog
+  const props = { storeName: "Fixture store", orderReference: "FIXTURE", amount: 10, customerPhone: "", submitting: false, onSubmit() {}, onClose() {} }
+  const failed = renderToStaticMarkup(React.createElement(Dialog, { ...props, storeNotified: false }))
+  assert.ok(failed.includes("We could not notify the store automatically")); assert.ok(failed.includes("Call the store"))
+  assert.equal(failed.includes("A store manager will call you"), false)
+  const sent = renderToStaticMarkup(React.createElement(Dialog, { ...props, storeNotified: true }))
+  assert.ok(sent.includes("was sent to")); assert.ok(sent.includes("A store manager will call you"))
+})
 
 test("pay at store request binds a 24h intent to the store and messages it with the order, delivery and price", async () => {
   const fixture = requestLoader()
@@ -104,13 +157,13 @@ test("pay at store request is refused when disabled, rate limited, invalid, for 
   }
 })
 
-test("store WhatsApp uses the configured template with eight flat parameters and the store email escapes customer text", async () => {
+test("store WhatsApp uses the platform template without an env setting, with eight flat parameters and escaped email text", async () => {
   const sent = []
   const mails = []
   const loader = sourceLoader({
     "@/lib/email": { sendEmail: async mail => { mails.push(mail); return { success: true } } },
   }, {
-    env: { ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid", STORE_ORDER_WHATSAPP_TEMPLATE: "store_order_v1" },
+    env: { ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid" },
     fetch: async (_url, init) => {
       sent.push(JSON.parse(init.body))
       return Response.json({ messaging_product: "whatsapp", messages: [{ id: "fixture-message" }] })
@@ -125,7 +178,7 @@ test("store WhatsApp uses the configured template with eight flat parameters and
   })
   assert.deepEqual({ ...result }, { whatsapp: true, email: true, managers: 0 })
   assert.equal(sent[0].to, "919876543210")
-  assert.equal(sent[0].template.name, "store_order_v1")
+  assert.equal(sent[0].template.name, "sara_store_new_order")
   const params = sent[0].template.components[0].parameters.map(parameter => parameter.text)
   assert.equal(params.length, 8)
   assert.equal(params[0], "SARAECOM-555001")
@@ -146,7 +199,6 @@ test("platform managers get their own template with the store name, the store ma
   }, {
     env: {
       ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid",
-      STORE_ORDER_WHATSAPP_TEMPLATE: "store_order_v1", PLATFORM_MANAGER_WHATSAPP_TEMPLATE: "platform_order_v1",
     },
     fetch: async (_url, init) => {
       const body = JSON.parse(init.body)
@@ -163,8 +215,8 @@ test("platform managers get their own template with the store name, the store ma
   assert.deepEqual([...sent].sort(), ["919000000001", "919876543210"])
   const toStore = bodies.find(body => body.to === "919876543210").template
   const toManager = bodies.find(body => body.to === "919000000001").template
-  assert.deepEqual([toStore.name, toStore.components[0].parameters.length], ["store_order_v1", 8])
-  assert.deepEqual([toManager.name, toManager.components[0].parameters.length], ["platform_order_v1", 9])
+  assert.deepEqual([toStore.name, toStore.components[0].parameters.length], ["sara_store_new_order", 8])
+  assert.deepEqual([toManager.name, toManager.components[0].parameters.length], ["sara_platform_order_v2", 9])
   assert.equal(toManager.components[0].parameters[1].text, "Fixture Store")
   assert.equal(toManager.components[0].parameters[6].text, "Coupon X: -Rs. 5")
   sent.length = 0
@@ -173,7 +225,7 @@ test("platform managers get their own template with the store name, the store ma
   assert.deepEqual([...sent].sort(), ["919000000001", "919876543210"])
 })
 
-test("customer gets the order-confirmed WhatsApp with payment and delivery details, and nothing without a template", async () => {
+test("customer gets the platform confirmation template without an env setting, and nothing without a valid phone", async () => {
   const bodies = []
   const load = env => sourceLoader({}, {
     env: { ASKEVA_API_KEY: "fixture-key", ASKEVA_API_URL: "https://provider.invalid", ...env },
@@ -188,12 +240,12 @@ test("customer gets the order-confirmed WhatsApp with payment and delivery detai
     items: [{ name: "Fixture TV", quantity: 1, price: 1234 }],
     customer: { name: "Synthetic Shopper", phone: customer.phone, address: "1 Fixture Street", city: "Bengaluru", zipCode: "560001" },
   }
-  assert.equal((await load({}).sendStorePaymentConfirmedWhatsApp(order)).status, "skipped")
+  assert.equal((await load({}).sendStorePaymentConfirmedWhatsApp({ ...order, customer: { ...order.customer, phone: "" } })).status, "skipped")
   assert.equal(bodies.length, 0)
-  const result = await load({ CUSTOMER_ORDER_CONFIRMED_WHATSAPP_TEMPLATE: "order_confirmed_v1" }).sendStorePaymentConfirmedWhatsApp(order)
+  const result = await load({}).sendStorePaymentConfirmedWhatsApp(order)
   assert.equal(result.status, "sent")
   assert.equal(bodies[0].to, `91${customer.phone}`)
-  assert.equal(bodies[0].template.name, "order_confirmed_v1")
+  assert.equal(bodies[0].template.name, "sara_order_confirmed_v2")
   const params = bodies[0].template.components[0].parameters.map(parameter => parameter.text)
   assert.deepEqual(params, [
     "Synthetic Shopper", "SARAECOM-555003", "Fixture TV x1 (Rs. 1,234)", "Rs. 1,234",
@@ -241,6 +293,7 @@ test("the WhatsApp recipients admin route requires a full admin and saves valida
   assert.equal((await load(false).PUT(put({}))).status, 403)
   const route = load(true)
   const listed = await (await route.GET()).json()
+  assert.deepEqual(listed.templates, { store: true, platformManager: true, customer: true })
   assert.deepEqual([listed.stores[0].name, listed.stores[0].listedPhone, listed.settings.notifyStoreManager], ["Fixture Store", "9876543210", true])
   assert.equal((await route.PUT(put({ platformManagers: [{ name: "Ops", phone: "123" }] }))).status, 400)
   assert.equal(writes.length, 0)
@@ -288,7 +341,7 @@ test("checkout shows the product title, not the marketing description that follo
   assert.equal(shortProductTitle(""), "")
 })
 
-test("store notification still emails the store when no WhatsApp template is configured", async () => {
+test("store notification still emails the store when the WhatsApp provider is not configured", async () => {
   const mails = []
   const loader = sourceLoader({
     "@/lib/email": { sendEmail: async mail => { mails.push(mail); return { success: true } } },

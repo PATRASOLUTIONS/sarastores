@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse, after } from "next/server"
+import { SaraCareInputFields } from "@/lib/sara-care-types"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { createGuestAccessToken, hashGuestAccessToken } from "@/lib/guest-order"
+import { linkGuestOrdersToAccount } from "@/lib/guest-order-linking"
 import { redeemPoints, quoteRedemption, reverseOrderPoints } from "@/lib/loyalty"
 import { generateOrderId } from "@/lib/order-id"
 import { priceOrder, consumeOrderCoupon } from "@/lib/order-pricing"
@@ -19,6 +21,7 @@ import { StorePaymentTransactionSchema } from "@/types/store-payment"
 import { PaymentProviderError } from "@/lib/hosted-payment-providers"
 import { getOrderAdminScope } from "@/lib/order-access"
 import { notifyAdminOrder } from "@/lib/order-notifications"
+import { notifyCustomerOrderConfirmed } from "@/lib/order-confirmation-whatsapp"
 import { GuestCheckoutCustomerSchema, CheckoutContactSchema } from "@/lib/validation"
 import { validateCheckoutCustomer } from "@/lib/checkout-customer"
 import { ACTIVE_RETAIL_STORE_FILTER } from "@/lib/store-locations"
@@ -34,6 +37,7 @@ export const dynamic = "force-dynamic"
 interface OrderListDocument {
   id: string
   userId?: string
+  customerId?: string
   orderId?: string
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -140,6 +144,8 @@ export async function GET(request: NextRequest) {
     const orderScope = await getOrderAdminScope(session)
     const isStaff = !isAdminRole && orderScope.kind !== "none"
 
+    await linkGuestOrdersToAccount(session.user)
+
     const employeeId = isAdminRole ? request.nextUrl.searchParams.get("employeeId") : null
     const limit = request.nextUrl.searchParams.get("limit")
     const couponCode = isAdminRole ? request.nextUrl.searchParams.get("couponCode") : null
@@ -161,17 +167,19 @@ export async function GET(request: NextRequest) {
     const collection = await getCollection("orders")
 
     let query: Record<string, unknown> = {}
-    if (userId) query = { ...query, userId }
+    if (userId) query = { $or: [{ userId }, { userId: { $in: [null, ""] }, customerId: userId }] }
     if (isStaff) {
       query = { ...query, ...orderScope.filter }
     }
     if (employeeId) {
       query = {
-        ...query,
-        $or: [
-          { "paymentDetails.employeeId": employeeId },
-          { "paymentDetails.verifiedEmail": employeeId },
-          { employeeId }
+        $and: [
+          query,
+          { $or: [
+            { "paymentDetails.employeeId": employeeId },
+            { "paymentDetails.verifiedEmail": employeeId },
+            { employeeId }
+          ] },
         ]
       }
     }
@@ -189,7 +197,7 @@ export async function GET(request: NextRequest) {
     const orders = await ordersQuery.toArray()
 
     const normalizedOrders = normalizeId(orders).map((order: OrderListDocument) => ({
-      userId: order.userId || null,
+      userId: order.userId || order.customerId || null,
       id: order.id,
       orderId: order.orderId || null,
       date: order.createdAt || new Date().toISOString(),
@@ -361,6 +369,7 @@ async function createOrder(request: NextRequest) {
     // Prices, totals, coupon value and order status are always derived server-side.
     const orderSchema = z.object({
       items: z.array(z.object({
+        ...SaraCareInputFields,
         id: z.string().optional(),
         productId: z.string().optional(),
         sku: z.string().nullish(),
@@ -496,7 +505,7 @@ async function createOrder(request: NextRequest) {
       fulfilment: parsed.data.fulfilment,
     })
     if (!pricing.ok) {
-      return NextResponse.json({ error: pricing.error }, { status: 400 })
+      return NextResponse.json({ error: pricing.error, ...(pricing.code ? { code: pricing.code } : {}) }, { status: 400 })
     }
     pricing.gifts = await quoteGiftPromotions(pricing.items, userId, parsed.data.declinedGiftPromotions, undefined, parsed.data.selectedGiftPromotions)
     if (parsed.data.expectedGifts && giftSelectionSignature(parsed.data.expectedGifts) !== giftSelectionSignature(pricing.gifts)) return NextResponse.json({
@@ -747,7 +756,7 @@ async function createOrder(request: NextRequest) {
       if (!latest.ok) throw new CheckoutConflictError(latest.error)
       latest.gifts = await quoteGiftPromotions(latest.items, userId, parsed.data.declinedGiftPromotions, transaction, parsed.data.selectedGiftPromotions)
       if (method === "store-payment" && checkoutIntent?.store) {
-        const holding = await storesHoldingStock(latest.items.filter(item => item.type !== "software")
+        const holding = await storesHoldingStock(latest.items.filter(item => item.type === "hardware")
           .map(item => ({ sku: item.sku || null, quantity: item.quantity })), transaction)
         if (!holding.has(checkoutIntent.store.id)) {
           throw new CheckoutConflictError("Pay at store is unavailable for the requested quantities. Please choose home delivery and pay online.")
@@ -829,11 +838,12 @@ async function createOrder(request: NextRequest) {
           },
         }
 
-        await sendEmail({
+        const confirmationEmail = await sendEmail({
           to: customerEmail,
           subject: emailTemplates.ORDER_PENDING.subject.replace("#{orderNumber}", orderId),
           html: emailTemplates.ORDER_PENDING.html(emailData),
         })
+        if (!confirmationEmail.success) console.error("[Orders] Customer confirmation email was not accepted", { orderId })
 
         // A guest has no order history to sign in to, so the capability link is
         // the only way back to this order. Send it separately from the template.
@@ -856,9 +866,10 @@ async function createOrder(request: NextRequest) {
         }
       }
     } catch {
-      // email failure should not fail order creation
+      console.error("[Orders] Customer email notification failed", { orderId })
     }
 
+    if (status === "confirmed") after(() => notifyCustomerOrderConfirmed(insertedId).then(() => {}))
     await notifyAdminOrder(insertedId, "orders", status === "confirmed" ? "confirmed" : "created")
 
     try {

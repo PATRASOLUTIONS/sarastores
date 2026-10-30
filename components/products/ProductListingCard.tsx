@@ -10,6 +10,7 @@ import { useWishlist } from "@/hooks/useWishlist"
 import { formatProductCardName, toastProductName } from "@/utils/cleanProductName"
 import CompareProductButton from "@/components/CompareProductButton"
 import type { CatalogProduct } from "@/utils/catalog"
+import { isProductUnavailable } from "@/lib/product-availability"
 import {
   calculateDiscount,
   emiPerMonth,
@@ -89,13 +90,13 @@ export default function ProductListingCard({ product, offersMode = false, offerL
     "/placeholder.svg"
 
   const mrp = offersMode ? getCatalogMRP(product) : getEffectiveMRP(product)
-  const discount = calculateDiscount(mrp, product.price)
-  const badge = offersMode ? (discount > 0 ? { label: `${discount}% OFF`, tone: "sale" as const } : null) : productBadge(product)
+  const unavailable = isProductUnavailable(product) || !(Number(product.stock) > 0)
+  const discount = unavailable ? 0 : calculateDiscount(mrp, product.price)
+  const badge = unavailable ? null : offersMode ? (discount > 0 ? { label: `${discount}% OFF`, tone: "sale" as const } : null) : productBadge(product)
   const rating = offersMode ? getCatalogRatingInfo(product) : getRatingInfo(product)
   const benefits = offersMode ? offerLabels.slice(0, 2) : productBenefits(product)
   const stock = typeof product.stock === "number" && Number.isSafeInteger(product.stock) && product.stock >= 0 ? product.stock : 0
-  const unavailable = !Number.isFinite(Number(product.price)) || Number(product.price) <= 0 || stock <= 0
-  const stockLabel = stock > 0 ? `${stock.toLocaleString("en-IN")} in stock` : "Out of stock"
+  const stockLabel = unavailable ? "Currently unavailable" : `${stock.toLocaleString("en-IN")} in stock`
   const wishlisted = isInWishlist(id)
   const displayName = formatProductCardName(product.name)
   const keyFeatures = getKeyFeatures(product)
@@ -188,7 +189,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
           )}
         </div>
         <div className="col-span-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-gray-100 pt-3 sm:col-span-1 sm:block sm:border-0 sm:pt-0.5">
-          <span className="text-xl font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</span>
+          {!unavailable && <span className="text-xl font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</span>}
           {discount > 0 && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
               <span className="text-gray-500 line-through">₹{mrp.toLocaleString("en-IN")}</span>
@@ -251,7 +252,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
         </div>}
 
         <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
-          <span className="text-base font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</span>
+          {!unavailable && <span className="text-base font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</span>}
           {discount > 0 && (
             <span className="text-xs text-gray-600 line-through">₹{mrp.toLocaleString("en-IN")}</span>
           )}
@@ -261,7 +262,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
           <p className="mt-1"><span className="inline-block rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">Save ₹{(mrp - Number(product.price)).toLocaleString("en-IN")}</span></p>
         )}
 
-        {!offersMode && product.price >= 5000 && (
+        {!unavailable && !offersMode && product.price >= 5000 && (
           <p className="mt-1 text-[11px] text-gray-500">
             EMI from ₹{emiPerMonth(product.price).toLocaleString("en-IN")}/month
           </p>

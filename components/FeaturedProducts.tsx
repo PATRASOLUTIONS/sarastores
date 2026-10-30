@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import { isProductUnavailable } from "@/lib/product-availability"
 import { ArrowRight, ShoppingCart } from "lucide-react"
 
 // Default featured products if none are found in the database
@@ -35,6 +36,8 @@ interface Product {
   name: string
   description: string
   price: number
+  stock?: number
+  active?: boolean
   image: string
 }
 
@@ -219,7 +222,8 @@ export default function FeaturedProducts({ products: propProducts }: FeaturedPro
                   </div>
                   <p className="text-gray-600 mb-4 line-clamp-2">{product.description}</p>
                   <div className="flex justify-between items-center">
-                    <span className="text-xl font-bold text-blue-800">₹{product.price.toLocaleString("en-IN")}</span>
+                    {isProductUnavailable(product) ? <span className="text-sm font-semibold text-red-700">Currently unavailable</span> :
+                      <span className="text-xl font-bold text-blue-800">₹{product.price.toLocaleString("en-IN")}</span>}
                     <button className="group bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 transition-colors flex items-center">
                       Details
                       <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />

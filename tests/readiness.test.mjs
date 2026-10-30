@@ -1588,19 +1588,21 @@ test("specification mutation validates edit types and prevents lock bypass, stal
   assert.equal((await route.DELETE(new Request("https://fixture.invalid"), context)).status, 409)
 })
 
-test("catalog Excel exports guard themselves and resolve the live subcategory collection", async () => {
+test("catalog Excel exports guard themselves and use the collections required by their sheet contracts", async () => {
   for (const filename of ["app/api/products/export/route.ts", "app/api/products/specifications/export/route.ts"]) {
     let authorized = false
     const names = []
     const sheets = []
+    const collection = name => {
+      names.push(name)
+      return { find: () => ({ sort() { return this }, toArray: async () => name === "sub_categories"
+        ? [{ _id: new ObjectId(), id: "fixture-sub", name: "Fixture subcategory" }]
+        : ["products", "product_specifications"].includes(name) ? [{ sku: "FIXTURE", itemno: "FIXTURE", subCategory: "fixture-sub" }] : [] }) }
+    }
     const route = sourceLoader({
       "@/lib/auth": { requireAdmin: async () => authorized ? { ok: true } : { ok: false, response: new Response("Forbidden", { status: 403 }) } },
-      "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: name => {
-        names.push(name)
-        return { find: () => ({ toArray: async () => name === "sub_categories"
-          ? [{ _id: new ObjectId(), id: "fixture-sub", name: "Fixture subcategory" }]
-          : ["products", "product_specifications"].includes(name) ? [{ sku: "FIXTURE", itemno: "FIXTURE", subCategory: "fixture-sub" }] : [] }) }
-      } } }) },
+      "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products" }, getCollection: async name => collection(name) },
+      "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection } }) },
       xlsx: { utils: { json_to_sheet: rows => { sheets.push(rows); return {} }, book_new: () => ({}), book_append_sheet: () => {} },
         write: () => Buffer.from("fixture") },
     }).load(filename)
@@ -1610,9 +1612,15 @@ test("catalog Excel exports guard themselves and resolve the live subcategory co
     const response = await route.GET()
     assert.equal(response.status, 200)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
-    assert.ok(names.includes("sub_categories"))
-    assert.ok(!names.includes("sub-categories"))
-    assert.equal(sheets[0][0]["sub-category/PROD DESC"], "fixture-sub") // Canonical taxonomy text takes precedence.
+    if (filename === "app/api/products/export/route.ts") {
+      assert.deepEqual(names.sort(), ["products", "store_stock"])
+      assert.equal(sheets.length, 2)
+      assert.equal(sheets[0][0].itemno, "FIXTURE")
+    } else {
+      assert.ok(names.includes("sub_categories"))
+      assert.ok(!names.includes("sub-categories"))
+      assert.equal(sheets[0][0]["sub-category/PROD DESC"], "fixture-sub")
+    }
   }
 })
 
@@ -4087,12 +4095,15 @@ test("price imports share preview/execution validation, deduplicate consistently
     "@/lib/db-service": { getCollection: async name => {
       assert.equal(name, "products")
       return {
-        find: query => { assert.ok(query.$or[1].sku.$in.includes("B")); return { toArray: async () => products } },
-        findOneAndUpdate: async (filter, update) => {
-          writes.push({ filter, update })
-          assert.equal(filter.$or[2].mrp.$gte, update.$set.price)
-          if (filter._id.equals(products[2]._id)) return null
-          return { ...products.find(product => product._id.equals(filter._id)), ...update.$set }
+        find: query => { assert.ok(query.$or[0].sku.$in.includes("B")); return { toArray: async () => products } },
+        bulkWrite: async operations => {
+          let matchedCount = 0
+          for (const { updateOne: { filter, update } } of operations) {
+            writes.push({ filter, update })
+            assert.equal(filter.$or[2].mrp.$gte, update.$set.price)
+            if (!filter._id.equals(products[2]._id)) matchedCount++
+          }
+          return { matchedCount }
         },
       }
     } },
@@ -4119,20 +4130,21 @@ test("price imports share preview/execution validation, deduplicate consistently
   assert.equal(result.success + result.failed, preview.updates.length)
   assert.equal(writes.length, 2)
   assert.equal(writes[0].update.$set.price, 90)
-  assert.ok(result.errors.some(error => error.includes("Product changed")))
+  assert.ok(result.errors.some(error => error.includes("products changed")))
 })
 
 test("price imports report row database failures without exposing raw exception details", async () => {
   const loader = sourceLoader({
     "@/lib/db-service": { getCollection: async () => ({
       find: () => ({ toArray: async () => [{ _id: new ObjectId(), itemno: "A", price: 1 }] }),
-      findOneAndUpdate: async () => { throw new Error("Fixture private infrastructure detail") },
+      bulkWrite: async () => { throw new Error("Fixture private infrastructure detail") },
     }) },
   })
   const result = await loader.load("lib/product-price-import.ts").processProductPrices([{ itemno: "A", price: 2 }], false)
   assert.equal(result.success, 0)
   assert.equal(result.failed, 1)
-  assert.equal(result.errors[0], "Row 2: Product update failed for itemno A")
+  assert.match(result.errors[0], /Could not confirm 1 updates/)
+  assert.ok(!result.errors[0].includes("private infrastructure"))
 })
 
 test("Google price sync only fetches bounded HTTPS Google Sheets and approved redirect hosts", async () => {
@@ -4146,7 +4158,7 @@ test("Google price sync only fetches bounded HTTPS Google Sheets and approved re
   }, globals)
   const url = loader.load("lib/product-price-import.ts").googleSheetExportUrl
   assert.equal(url("abc_123"), "https://docs.google.com/spreadsheets/d/abc_123/export?format=csv")
-  assert.equal(url("https://docs.google.com/spreadsheets/d/abc/edit#gid=0"), "https://docs.google.com/spreadsheets/d/abc/export?format=csv")
+  assert.equal(url("https://docs.google.com/spreadsheets/d/abc/edit#gid=0"), "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=0")
   assert.equal(url("https://docs.google.com/spreadsheets/d/e/2PACX-fixture/pub?gid=0"), "https://docs.google.com/spreadsheets/d/e/2PACX-fixture/pub?gid=0&output=csv")
   const route = loader.load("app/api/products/google-sheet-price-sync/route.ts")
   const post = body => route.POST(new NextRequest("https://fixture.invalid/api/products/google-sheet-price-sync", { method: "POST", body: JSON.stringify(body) }))
@@ -4176,7 +4188,7 @@ test("spreadsheet price endpoint validates upload shape, parses real sheets and 
     "@/lib/auth": { requireAdmin: async () => authorized ? { ok: true } : { ok: false, response: Response.json({ error: "Unauthorized" }, { status: 401 }) } },
     "@/lib/db-service": { getCollection: async () => ({
       find: () => ({ toArray: async () => [{ _id: new ObjectId(), itemno: "A", price: 1, mrp: 50 }] }),
-      findOneAndUpdate: async () => { writes++; return { itemno: "A", price: 42 } },
+      bulkWrite: async operations => { writes += operations.length; return { matchedCount: operations.length } },
     }) },
   }, { context: { Blob } })
   const route = loader.load("app/api/products/bulk-price-update/route.ts")

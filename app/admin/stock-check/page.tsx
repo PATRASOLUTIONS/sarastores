@@ -5,6 +5,9 @@ import * as XLSX from "xlsx"
 import { toast } from "react-hot-toast"
 import { AlertTriangle, Download, FileSpreadsheet, RefreshCw, Search, Upload } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
+import { parseStoreStockRows, readStoreStockSpreadsheet, skippedStockWorkbook } from "@/lib/store-stock-import"
+import type { StockChange, SkippedStockRecord } from "@/lib/store-stock-preview"
+import type { StoreStockUploadRow } from "@/lib/store-stock"
 
 interface StoreSummary {
   storeCode: string
@@ -17,6 +20,16 @@ interface StoreSummary {
 }
 
 interface UploadResult {
+  preview: boolean
+  validRows: number
+  changes: StockChange[]
+  totalChanges: number
+  previewPage: number
+  pageSize: number
+  previewToken: string
+  skippedRecords: SkippedStockRecord[]
+  preservedStores: string[]
+  preservedStoreCount: number
   saved: number
   stores: number
   zeroedItems: number
@@ -28,22 +41,11 @@ interface UploadResult {
   skippedRows: number
   blankRows: number
 }
+interface PendingUpload { rows: StoreStockUploadRow[]; replaceStores: boolean; blankRows: number }
 
 interface ItemLookup {
   product: { name: string; sku: string; stock: number } | null
   rows: { storeCode: string; storeName: string; quantity: number; updatedAt: string }[]
-}
-
-const ITEM_COLUMNS = ["Item Code", "ItemCode", "itemcode", "Item No.", "Item No", "itemno", "SKU", "sku"]
-const QUANTITY_COLUMNS = ["Quantity", "quantity", "Qty", "qty", "QTY"]
-const STORE_COLUMNS = ["Store Code", "StoreCode", "storecode", "storeCode"]
-
-function readCell(row: Record<string, unknown>, columns: string[]): string {
-  for (const column of columns) {
-    const value = row[column]
-    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim()
-  }
-  return ""
 }
 
 export default function StockCheckPage() {
@@ -51,6 +53,8 @@ export default function StockCheckPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<UploadResult | null>(null)
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
+  const [previewStale, setPreviewStale] = useState(false)
   const [itemCode, setItemCode] = useState("")
   const [lookup, setLookup] = useState<ItemLookup | null>(null)
   const [searching, setSearching] = useState(false)
@@ -78,9 +82,9 @@ export default function StockCheckPage() {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { "Item Code": "T000946", "Quantity": 5, "Store Code": "BLR001" },
-      { "Item Code": "T000909", "Quantity": 2, "Store Code": "BLR001" },
-      { "Item Code": "T000946", "Quantity": 3, "Store Code": "BLR002" },
+      { "Item No.": "T000946", "Quantity": 5, "Store Code": "BLR001" },
+      { "Item No.": "T000909", "Quantity": 2, "Store Code": "BLR001" },
+      { "Item No.": "T000946", "Quantity": 3, "Store Code": "BLR002" },
     ])
     ws["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 15 }]
     const wb = XLSX.utils.book_new()
@@ -96,7 +100,7 @@ export default function StockCheckPage() {
       if (!data.success) throw new Error(data.message || data.error)
       if (!data.rows.length) { toast.error("No store stock to export", { id: toastId }); return }
       const ws = XLSX.utils.json_to_sheet(data.rows.map((row: { itemCode: string; quantity: number; storeCode: string; storeName: string }) => ({
-        "Item Code": row.itemCode, "Quantity": row.quantity, "Store Code": row.storeCode, "Store Name": row.storeName,
+        "Item No.": row.itemCode, "Quantity": row.quantity, "Store Code": row.storeCode, "Store Name": row.storeName,
       })))
       ws["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 15 }, { wch: 35 }]
       const wb = XLSX.utils.book_new()
@@ -108,41 +112,63 @@ export default function StockCheckPage() {
     }
   }
 
-  // A store upload replaces its full inventory, so incomplete rows must
-  // never be silently dropped before the server zeros omitted items.
   const importRows = async (sheet: Record<string, unknown>[], toastId: string) => {
-    if (sheet.length === 0) { toast.error("No data found in the sheet", { id: toastId }); return }
-
-    const rows = []
-    let blankRows = 0
-    for (const [index, row] of sheet.entries()) {
-      const line = index + 2
-      const code = readCell(row, ITEM_COLUMNS)
-      const storeCode = readCell(row, STORE_COLUMNS)
-      const quantityText = readCell(row, QUANTITY_COLUMNS)
-      if (!code && !storeCode && !quantityText) { blankRows++; continue }
-      if (!code || !storeCode || !quantityText) { toast.error(`Row ${line}: Item Code, Store Code and Quantity are required. Enter 0 explicitly for zero stock.`, { id: toastId }); return }
-      const quantity = Number(quantityText.replace(/,/g, ""))
-      if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > 1000000) { toast.error(`Row ${line}: quantity must be a whole number between 0 and 1,000,000`, { id: toastId }); return }
-      rows.push({ itemCode: code, storeCode, quantity })
-    }
-    if (rows.length === 0) { toast.error("No row has both an item code and a store code", { id: toastId }); return }
-
+    const { rows, blankRows } = parseStoreStockRows(sheet)
+    const pending = { rows, blankRows, replaceStores: false }
+    setPendingUpload(pending)
+    const data = await fetchStockPreview(pending)
+    setResult({ ...data, blankRows })
+    setPreviewStale(false)
+    toast.success(`${data.validRows} row(s) ready to save; ${data.skippedRows} unknown row(s) skipped`, { id: toastId })
+  }
+  const fetchStockPreview = async (pending: PendingUpload, page = 0, token?: string): Promise<Omit<UploadResult, "blankRows">> => {
     const res = await apiFetch("/api/admin/store-stock", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: pending.rows, replaceStores: pending.replaceStores, preview: true, previewPage: page,
+        ...(token ? { previewToken: token } : {}) }),
     })
     const data = await res.json()
-    if (data.success) {
+    if (!res.ok || !data.success) {
+      if (res.status === 409) setPreviewStale(true)
+      throw new Error(data.message || data.error || "Stock preview failed")
+    }
+    return data
+  }
+  const refreshPreview = async (page = 0, checkToken = false) => {
+    if (!pendingUpload || uploadInFlight.current) return
+    uploadInFlight.current = true
+    setUploading(true)
+    try {
+      const data = await fetchStockPreview(pendingUpload, page, checkToken ? result?.previewToken : undefined)
+      setResult({ ...data, blankRows: pendingUpload.blankRows })
+      setPreviewStale(false)
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Preview could not be refreshed") }
+    finally { uploadInFlight.current = false; setUploading(false) }
+  }
+  const applyPreview = async () => {
+    if (!pendingUpload || !result?.preview || !result.validRows || previewStale || uploadInFlight.current) return
+    uploadInFlight.current = true
+    setUploading(true)
+    const toastId = toast.loading("Applying stock changes...")
+    try {
+      const res = await apiFetch("/api/admin/store-stock", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: pendingUpload.rows, replaceStores: pendingUpload.replaceStores, previewToken: result.previewToken }) })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        if (res.status === 409) setPreviewStale(true)
+        throw new Error(data.message || data.error || "Stock changes could not be applied")
+      }
+      setResult({ ...data, blankRows: pendingUpload.blankRows })
       toast.success(`Saved ${data.saved} rows for ${data.stores} store(s)`, { id: toastId })
-      setResult({ ...data, blankRows })
       await loadSummary()
       if (lookupCode) await loadItemLookup(lookupCode)
-    } else {
-      toast.error(data.message || data.error || "Upload failed", { id: toastId })
-      if (data.unknownStores || data.unknownItems) setResult({ saved: 0, stores: 0, zeroedItems: 0, productsUpdated: 0, ...data, blankRows })
-    }
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Stock changes could not be applied", { id: toastId }) }
+    finally { uploadInFlight.current = false; setUploading(false) }
+  }
+  const downloadSkipped = () => {
+    if (!pendingUpload || !result?.skippedRecords.length) return
+    const workbook = skippedStockWorkbook(pendingUpload.rows, result.skippedRecords)
+    XLSX.writeFile(workbook, `skipped_stock_rows_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,15 +178,13 @@ export default function StockCheckPage() {
     uploadInFlight.current = true
     setUploading(true)
     setResult(null)
+    setPendingUpload(null)
+    setPreviewStale(false)
     const toastId = toast.loading("Processing file...")
     try {
       if (!/\.(xlsx|xls)$/i.test(file.name)) throw new Error("Choose an Excel .xlsx or .xls file")
       if (file.size > 10 * 1024 * 1024) throw new Error("File exceeds 10 MB")
-      const workbook = XLSX.read(await file.arrayBuffer(), { sheetRows: 50002 })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      if (!sheet) throw new Error("Spreadsheet has no worksheet")
-      if (sheet["!fullref"]) throw new Error("Upload at most 50,000 rows")
-      await importRows(XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet), toastId)
+      await importRows(readStoreStockSpreadsheet(await file.arrayBuffer()), toastId)
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Failed to process Excel file", { id: toastId })
     } finally {
@@ -178,6 +202,8 @@ export default function StockCheckPage() {
     uploadInFlight.current = true
     setUploading(true)
     setResult(null)
+    setPendingUpload(null)
+    setPreviewStale(false)
     const toastId = toast.loading("Fetching Google Sheet...")
     try {
       const res = await apiFetch("/api/admin/store-stock/google-sheet", {
@@ -188,8 +214,8 @@ export default function StockCheckPage() {
       const data = await res.json()
       if (!data.success) { toast.error(data.message || data.error || "Failed to fetch Google Sheet", { id: toastId }); return }
       await importRows(data.rows, toastId)
-    } catch {
-      toast.error("Failed to import Google Sheet", { id: toastId })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to import Google Sheet", { id: toastId })
     } finally {
       uploadInFlight.current = false
       setUploading(false)
@@ -224,7 +250,7 @@ export default function StockCheckPage() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="mb-6">
         <h1 className="mb-2 text-3xl font-bold text-gray-900">Stock Check</h1>
-        <p className="text-gray-600">Upload each store&apos;s stock by item code. A product&apos;s stock on the website is the total across all stores.</p>
+        <p className="text-gray-600">Upload Excel or paste a Google Sheets link to update stock for matching item numbers already on the platform. A product&apos;s website stock is the total across all stores.</p>
       </div>
 
       <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
@@ -251,29 +277,57 @@ export default function StockCheckPage() {
           </button>
         </form>
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
-          <p className="mb-1 font-medium">Columns: Item Code, Quantity, Store Code</p>
-          <p>Item Code is the product SKU / Item No. Store Code comes from Store Locations.</p>
-          <p>Every row needs an existing Item Code, Store Code and an explicit Quantity. Invalid or unknown codes stop the upload without changing stock.</p>
-          <p>Google Sheets: share the sheet as &quot;Anyone with the link can view&quot;. The first tab is read.</p>
+          <p className="mb-1 font-medium">Columns: Item No., Store Code, Quantity</p>
+          <p>Item No. (or itemno) matches an existing catalogue item number or SKU. Store Code comes from Store Locations. Column names can use spaces, underscores or uppercase letters. Keep item numbers and store codes as text to preserve leading zeros.</p>
+          <p>Upload the full sheet with up to 50,000 rows (10 MB). Only matching items at known stores are updated; items absent from the sheet keep their stock. No products are created.</p>
+          <p>For Google Sheets, share as &quot;Anyone with the link can view&quot; or publish to the web, then paste the link to the stock tab.</p>
+          <p>Unknown item or store codes are skipped and can be downloaded in Excel. Review the previous and new stock quantities before applying valid rows.</p>
           <p className="mt-1 flex items-start gap-1 font-medium text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            Each store in the sheet is replaced in full: that store&apos;s items not listed in the sheet are set to 0.
+            Only matching item/store quantities from the sheet are updated. Other items and stores keep their stock.
           </p>
         </div>
 
         {result && (
           <div className="mt-4 rounded-xl border p-4 text-sm">
-            <p className="font-medium text-gray-900">
-              {result.saved} rows saved for {result.stores} store(s) · {result.zeroedItems} item(s) set to 0 · {result.productsUpdated} product stock total(s) updated
-            </p>
-            {result.blankRows > 0 && <p className="mt-1 text-amber-800">{result.blankRows} row(s) skipped because the item code or store code is empty.</p>}
-            {result.skippedRows > 0 && <p className="mt-1 text-amber-800">{result.skippedRows} row(s) skipped because the store code or item code is unknown.</p>}
-            {result.unknownStoreCount > 0 && <p className="mt-1 text-red-700">
-              Unknown store codes ({result.unknownStoreCount}): {result.unknownStores.join(", ")}{result.unknownStoreCount > result.unknownStores.length ? "…" : ""}
-            </p>}
-            {result.unknownItemCount > 0 && <p className="mt-1 text-red-700">
-              Unknown item codes ({result.unknownItemCount}): {result.unknownItems.join(", ")}{result.unknownItemCount > result.unknownItems.length ? "…" : ""}
-            </p>}
+            <h2 className="text-lg font-semibold text-gray-900">{result.preview ? "Stock change preview" : "Stock changes saved"}</h2>
+            <p className="mt-1 text-gray-700">{result.preview ? `${result.validRows} valid row(s) ready to save` : `${result.saved} row(s) saved`} for {result.stores} store(s). {result.skippedRows} unknown row(s) skipped.</p>
+            {result.blankRows > 0 && <p className="mt-1 text-gray-600">{result.blankRows} completely blank row(s) ignored.</p>}
+            {result.zeroedItems > 0 && <p className="mt-1 text-amber-800">{result.zeroedItems} omitted item/store stock row(s) {result.preview ? "will be set" : "set"} to zero by full replacement.</p>}
+            {result.preservedStoreCount > 0 && <p className="mt-2 rounded bg-amber-50 p-2 text-amber-900">Omitted items are kept for {result.preservedStores.join(", ")}{result.preservedStoreCount > result.preservedStores.length ? " and other stores" : ""} because some rows for those stores were unknown. Only their valid listed rows are updated.</p>}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {result.skippedRows > 0 && <button type="button" onClick={downloadSkipped} className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-medium text-amber-900"><Download size={16} />Download skipped rows ({result.skippedRows})</button>}
+              {result.preview && <>
+                <button type="button" onClick={() => void applyPreview()} disabled={uploading || previewStale || !result.validRows} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50">{uploading ? "Processing..." : `Apply ${result.validRows} valid row(s)`}</button>
+                <button type="button" onClick={() => void refreshPreview()} disabled={uploading} className="rounded-lg border px-3 py-2 disabled:opacity-50">Refresh preview</button>
+                <button type="button" disabled={uploading} onClick={() => { setResult(null); setPendingUpload(null); setPreviewStale(false) }} className="rounded-lg border px-3 py-2 disabled:opacity-50">Cancel preview</button>
+              </>}
+            </div>
+            {previewStale && <p role="alert" className="mt-2 text-amber-800">Stock changed since this preview. Refresh it to review the latest quantities before applying.</p>}
+            {result.changes.length > 0 ? <>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[950px] text-left text-sm">
+                  <thead className="border-b bg-gray-50 text-xs text-gray-600"><tr>
+                    <th className="p-2">Item No.</th><th className="p-2">Product</th><th className="p-2">Store Code</th><th className="p-2">Store</th>
+                    <th className="p-2 text-right">Previous overall stock</th><th className="p-2 text-right">New overall stock</th>
+                    <th className="p-2 text-right">Previous store stock</th><th className="p-2 text-right">New store stock</th>
+                  </tr></thead>
+                  <tbody>{result.changes.map(row => <tr key={`${row.storeCode}:${row.sku}`} className="border-b last:border-0">
+                    <td className="p-2 font-mono">{row.itemCode}{row.source === "omitted" && <span className="mt-1 block font-sans text-xs text-amber-800">Omitted: set to zero</span>}</td>
+                    <td className="p-2">{row.productName || "-"}</td><td className="p-2 font-mono">{row.storeCode}</td><td className="p-2">{row.storeName}</td>
+                    <td className="p-2 text-right">{row.previousOverallStock.toLocaleString("en-IN")}</td><td className="p-2 text-right font-semibold text-blue-700">{row.currentOverallStock.toLocaleString("en-IN")}</td>
+                    <td className="p-2 text-right">{row.previousStoreStock.toLocaleString("en-IN")}</td><td className="p-2 text-right font-semibold text-blue-700">{row.currentStoreStock.toLocaleString("en-IN")}</td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
+                <span>Showing {result.previewPage * result.pageSize + 1} to {Math.min((result.previewPage + 1) * result.pageSize, result.totalChanges)} of {result.totalChanges} item/store changes. Overall totals include all stores for each item.</span>
+                {result.preview && result.totalChanges > result.pageSize && <div className="flex gap-2">
+                  <button type="button" disabled={uploading || result.previewPage === 0} onClick={() => void refreshPreview(result.previewPage - 1, true)} className="rounded border px-3 py-2 disabled:opacity-50">Previous</button>
+                  <button type="button" disabled={uploading || (result.previewPage + 1) * result.pageSize >= result.totalChanges} onClick={() => void refreshPreview(result.previewPage + 1, true)} className="rounded border px-3 py-2 disabled:opacity-50">Next</button>
+                </div>}
+              </div>
+            </> : <p className="mt-3 text-gray-600">No known item/store rows to update. Download the skipped rows to correct their codes.</p>}
           </div>
         )}
       </div>
@@ -294,7 +348,7 @@ export default function StockCheckPage() {
           <div className="mt-4">
             <p className="mb-2 text-sm text-gray-700">Item {lookupCode}: cumulative uploaded stock <strong>{lookup.rows.reduce((total, row) => total + row.quantity, 0)}</strong>.</p>
             {lookup.product && lookup.product.stock !== lookup.rows.reduce((total, row) => total + row.quantity, 0) && <p role="alert" className="mb-2 rounded bg-amber-50 p-2 text-sm text-amber-900">
-              The product stock differs from its uploaded total. Upload a complete stock sheet for this item&apos;s stores to recalculate it.
+              The product stock differs from its uploaded total. Upload the current quantities for this item to recalculate its total.
             </p>}
             {lookup.product
               ? <p className="mb-2 text-sm text-gray-700"><strong>{lookup.product.name}</strong> · website stock <strong>{lookup.product.stock}</strong></p>

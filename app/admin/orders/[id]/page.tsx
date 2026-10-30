@@ -8,15 +8,18 @@ import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import type { GiftAward } from "@/lib/gift-validation"
+import OrderGiftItems from "@/components/OrderGiftItems"
+import { saraCareDurationLabel, type SaraCareSnapshot } from "@/lib/sara-care-types"
 
 interface OrderItem {
+  saraCare?: SaraCareSnapshot
   id?: string
   productId: string
   name: string
   price: number
   quantity: number
   image?: string
-  type?: 'product' | 'software'
+  type?: 'product' | 'hardware' | 'software' | 'service'
   maxDevices?: number
   validityYears?: number
   licenseKey?: string
@@ -936,10 +939,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
 
               <div className="border-t pt-4">
                 <h3 className="font-medium mb-3">Order Items</h3>
-                {!!order.giftPromotions?.length && <section className="mb-4 rounded border border-green-200 bg-green-50 p-3" aria-label="Free gifts to include">
-                  <h4 className="font-semibold text-green-900">Free gifts to include with this order</h4>
-                  {order.giftPromotions.map(gift => <p className="mt-1 text-sm" key={gift.promotionId}>{gift.name} · SKU {gift.sku} · Qty {gift.quantity} · FREE · {gift.code}</p>)}
-                </section>}
+                <OrderGiftItems gifts={order.giftPromotions} heading="Free gifts to include with this order" showPromotion />
                 <div className="space-y-4">
                   {order.items && Array.isArray(order.items) && order.items.length > 0 ? (
                     order.items.map((item, index) => (
@@ -957,6 +957,12 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                            {item.saraCare && <div className="mt-1 text-xs text-orange-900">
+                              <p>{saraCareDurationLabel(item.saraCare.durationYears)} protection for {item.saraCare.parentName}</p>
+                              <p>{item.saraCare.percentage}% of {item.saraCare.basis === "mrp" ? "MRP" : "selling price"} · ₹{item.saraCare.basisAmount.toLocaleString("en-IN")}</p>
+                              <p>Coverage begins on {item.saraCare.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}, according to the saved terms.</p>
+                              <details><summary className="cursor-pointer">Purchased coverage terms</summary><p className="whitespace-pre-wrap">{item.saraCare.terms}</p></details>
+                            </div>}
                             <div className="text-sm text-gray-500">
                               ₹{item.price.toFixed(2)} × {item.quantity}
                               {item.type === 'software' && (

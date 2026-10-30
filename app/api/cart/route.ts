@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { SaraCareInputFields } from "@/lib/sara-care-types"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { getCurrentUserId } from "@/lib/auth"
 import { z } from "zod"
@@ -16,7 +17,7 @@ type StoredCartItem = {
 
 async function removeInactiveProducts(items: StoredCartItem[]): Promise<StoredCartItem[]> {
   const hardwareIds = [...new Set(items
-    .filter(item => item.type !== "software")
+    .filter(item => item.type !== "software" && item.type !== "service")
     .flatMap(item => [item.productId, item.id])
     .filter((id): id is string => typeof id === "string" && id.length > 0))]
   if (hardwareIds.length === 0) return items
@@ -36,7 +37,7 @@ async function removeInactiveProducts(items: StoredCartItem[]): Promise<StoredCa
     ...(product.id ? [product.id] : []),
   ]))
   return items.filter(item =>
-    item.type === "software" || ![item.productId, item.id].some(id => id && hiddenIds.has(id)),
+    item.type === "software" || item.type === "service" || ![item.productId, item.id].some(id => id && hiddenIds.has(id)),
   )
 }
 
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
 
     // Inline schema for cart validation
     const cartItemSchema = z.object({
+      ...SaraCareInputFields,
       productId: z.string().min(1).optional(),
       id: z.string().optional(),
       name: z.string().optional(),
@@ -105,7 +107,7 @@ export async function POST(request: NextRequest) {
     const cartSchema = z.object({
       // A preserved checkout may contain both 20-line selections. Allow
       // trimming that saved cart; priceOrder still rejects new oversized carts.
-      items: z.array(cartItemSchema).max(MAX_CART_PRODUCTS * 2, "Your cart contains too many purchase options."),
+      items: z.array(cartItemSchema).max(MAX_CART_PRODUCTS * 4, "Your cart contains too many purchase options."),
     })
 
     const parsed = cartSchema.safeParse(body)
@@ -131,6 +133,7 @@ export async function POST(request: NextRequest) {
     const validatedItems = pricing?.ok ? items.map((item, index) => ({
       ...item, id: pricing.items[index].id, productId: pricing.items[index].id,
       price: pricing.items[index].price, quantity: pricing.items[index].quantity,
+      ...(pricing.items[index].saraCare ? { saraCare: pricing.items[index].saraCare } : {}),
     })) : items.map(item => ({ ...item, price: previous.get(cartLineKey(item))?.price || item.price }))
 
     if (existingCart) {

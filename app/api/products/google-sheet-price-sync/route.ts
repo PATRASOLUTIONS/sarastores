@@ -6,6 +6,8 @@ import { readPriceSpreadsheet, processProductPrices, googleSheetExportUrl, fetch
 
 const requestSchema = z.object({ sheetId: z.string().trim().min(1).max(2048), preview: z.boolean().default(false) })
 
+export const maxDuration = 300
+
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response

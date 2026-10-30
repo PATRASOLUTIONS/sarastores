@@ -34,6 +34,7 @@ const GUARDS = [
 
 /** route -> why it is reachable without an identified caller. */
 const INTENTIONALLY_PUBLIC = {
+  "/api/sara-care/quote": "read-only catalogue protection quote for guest carts; validated and rate limited; no account data",
   "/api/auth/login": "issues the session; cannot require one",
   "/api/auth/logout": "clears the cookie; must work with an expired session",
   "/api/auth/signup": "creates the account",

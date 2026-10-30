@@ -15,7 +15,7 @@ export interface PayAtStoreChoice {
  * Which store the shopper will pay. Pickup orders pay where they collect;
  * otherwise only stores holding the whole cart are offered.
  */
-export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, deliveryCity, stock, value, onChange }: {
+type StorePickerProps = {
   isPickup: boolean
   pickupStore: PayAtStoreChoice | null
   deliveryPincode: string
@@ -23,10 +23,26 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
   stock: StoreStockState
   value: PayAtStoreChoice | null
   onChange: (store: PayAtStoreChoice | null) => void
-}) {
+}
+
+export function PayAtStoreStorePicker(props: StorePickerProps) {
+  const { isPickup, pickupStore, value, onChange } = props
+  useEffect(() => {
+    if (isPickup && value?.id !== pickupStore?.id) onChange(pickupStore)
+  }, [isPickup, pickupStore, value, onChange])
+
+  if (isPickup) {
+    return <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      {pickupStore ? <>You will pay <strong>{pickupStore.name}</strong>, the store you are collecting from.</>
+        : "Choose a pickup store in Delivery Options to pay at that store."}
+    </p>
+  }
+  return <DeliveryPaymentStorePicker {...props} />
+}
+
+function DeliveryPaymentStorePicker({ deliveryPincode, deliveryCity, stock, value, onChange }: StorePickerProps) {
   const { stores: ranked, loading: storesLoading, error: storesError, retry: retryStores, nearestId: rankedNearestId } =
     useNearbyStores(deliveryPincode, deliveryCity, { url: "/api/payment/stores", allStores: true })
-  const [showAll, setShowAll] = useState(false)
   const loading = storesLoading || stock.loading || (!stock.storeIds && !stock.error)
   const error = storesError || stock.error
   const retry = () => { retryStores(); stock.retry() }
@@ -38,10 +54,6 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
   const farMessage = farStoreMessage(stores.find(store => store.acceptsPayAtStore !== false)?.distance, stock.farDistanceKm)
 
   useEffect(() => {
-    if (isPickup) {
-      if (value?.id !== pickupStore?.id) onChange(pickupStore)
-      return
-    }
     if (value && !loading && !stores.some(store => store.id === value.id && store.acceptsPayAtStore !== false)) {
       onChange(null)
       return
@@ -50,16 +62,8 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
       const nearest = stores.find(store => store.id === nearestId)
       if (nearest) onChange({ id: nearest.id, name: nearest.name })
     }
-  }, [isPickup, pickupStore, value, nearestId, stores, loading, onChange])
+  }, [value, nearestId, stores, loading, onChange])
 
-  if (isPickup) {
-    return <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-      {pickupStore ? <>You will pay <strong>{pickupStore.name}</strong>, the store you are collecting from.</>
-        : "Choose a pickup store in Delivery Options to pay at that store."}
-    </p>
-  }
-
-  const visible = showAll ? stores : stores.slice(0, 4)
   return <div className="mt-3 rounded-lg border border-slate-200 p-3">
     <p className="mb-2 text-sm font-semibold text-slate-900">Choose the store you want to pay</p>
     {loading ? <p className="text-sm text-slate-600">Loading stores…</p>
@@ -67,11 +71,11 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
         : stores.length === 0 ? <p className="text-sm text-slate-600">None of our stores has every item in your cart in stock. Please pay online.</p>
           : <>
             {farMessage && <p role="note" className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{farMessage}</p>}
-            <ul className="grid gap-2">
-              {visible.map(store => {
+            <ul className="flex flex-nowrap gap-2 overflow-x-auto pb-2" aria-label="Payment stores" tabIndex={0}>
+              {stores.map(store => {
                 const available = store.acceptsPayAtStore !== false
                 return (
-                <li key={store.id}>
+                <li key={store.id} className="w-64 shrink-0">
                   <label className={`flex items-start gap-2 rounded-md border p-2 text-xs ${!available ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
                     : value?.id === store.id ? "cursor-pointer border-[#1560BD] bg-blue-50/60" : "cursor-pointer border-slate-200 hover:border-slate-400"}`}>
                     <input type="radio" name="payAtStore" className="mt-0.5 accent-[#1560BD]" checked={value?.id === store.id} disabled={!available}
@@ -90,9 +94,6 @@ export function PayAtStoreStorePicker({ isPickup, pickupStore, deliveryPincode, 
                 )
               })}
             </ul>
-            {stores.length > 4 && <button type="button" onClick={() => setShowAll(value => !value)} className="mt-2 text-xs font-semibold text-[#1560BD] underline">
-              {showAll ? "Show fewer stores" : `Show all ${stores.length} stores`}
-            </button>}
           </>}
   </div>
 }
@@ -129,8 +130,12 @@ export function PayAtStoreDialog({ storeName, orderReference, amount, customerPh
   }
 
   const steps = [
-    { icon: Store, text: <><strong>{storeName}</strong> has received your order <strong>{orderReference}</strong>.</> },
-    { icon: PhoneCall, text: <>A store manager will call you{customerPhone ? <> on <strong>{customerPhone}</strong></> : null}.</> },
+    { icon: Store, text: storeNotified
+      ? <>Your payment request <strong>{orderReference}</strong> was sent to <strong>{storeName}</strong>.</>
+      : <>Your payment request <strong>{orderReference}</strong> is ready for <strong>{storeName}</strong>. We could not notify the store automatically.</> },
+    { icon: PhoneCall, text: storeNotified
+      ? <>A store manager will call you{customerPhone ? <> on <strong>{customerPhone}</strong></> : null}.</>
+      : <>Call the store and quote your request number to arrange payment.</> },
     { icon: MessageCircle, text: <>They will send a payment link to your WhatsApp. Pay <strong>₹{amount.toLocaleString("en-IN")}</strong>.</> },
     { icon: Receipt, text: <>Enter the platform you paid with and the transaction ID below to place your order.</> },
   ]

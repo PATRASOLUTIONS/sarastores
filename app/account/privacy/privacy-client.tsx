@@ -114,6 +114,14 @@ export default function PrivacyCentreClient() {
     setExporting(true)
     try {
       const res = await apiFetch("/api/account/export")
+      if (res.status === 403) {
+        const data = await res.json().catch(() => null)
+        if (data?.code === "EMAIL_VERIFICATION_REQUIRED") {
+          toast.error("Verify your email address before downloading your data.")
+          router.push("/verify-email")
+          return
+        }
+      }
       if (!res.ok) throw new Error("export failed")
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -130,7 +138,7 @@ export default function PrivacyCentreClient() {
     } finally {
       setExporting(false)
     }
-  }, [])
+  }, [router])
 
   const handleDelete = useCallback(async () => {
     if (deleteConfirm.trim().toUpperCase() !== "DELETE") {

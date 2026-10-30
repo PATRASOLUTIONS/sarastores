@@ -14,6 +14,7 @@ import {
   Heart,
   MapPin,
   RefreshCw,
+  Share2,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -22,6 +23,8 @@ import {
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import ProductLoading from "@/components/product/ProductLoading"
+import ProductSaraCare, { useProductSaraCare } from "@/components/product/ProductSaraCare"
+import type { SaraCareYears } from "@/lib/sara-care-types"
 import ProductSpecificationTabs from "@/components/ProductSpecificationTabs"
 import { RailCards, Stars } from "@/components/product/PdpBlocks"
 import ProductReviewsSection from "@/components/ProductReviewsSection"
@@ -30,6 +33,7 @@ import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
 import { applicableOffers, isEmiOffer } from "@/lib/razorpay-offers"
 import { useBanners } from "@/hooks/useBanners"
 import { useCart } from "@/hooks/useCart"
+import { isProductUnavailable } from "@/lib/product-availability"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
@@ -58,6 +62,7 @@ const TABS = [
   { id: "emi", label: "EMI Options" },
   { id: "reviews", label: "Reviews" },
   { id: "faqs", label: "FAQs" },
+  { id: "sara-care", label: "Sara Care" },
 ]
 
 const TRUST = [
@@ -122,6 +127,27 @@ function variantOptionParts(value: string): { storage: string; color: string } {
   const storage = match[0].replace(/[()]/g, "").replace(/\s+/g, "")
   const color = name.slice(match.index + match[0].length).replace(/^[\s,/-]+/, "").trim()
   return { storage: storage.toUpperCase(), color }
+}
+
+const COLOR_SWATCHES: Record<string, string> = {
+  "natural titanium": "#a6a198", "desert titanium": "#bfa48f", "blue titanium": "#485568",
+  "white titanium": "#e4e2dd", "black titanium": "#3c3c3d", "rose gold": "#c9948a",
+  "space gray": "#66686c", "space grey": "#66686c", "space black": "#29292b",
+  "deep purple": "#665669", "icy blue": "#b9d6df", "ice blue": "#b9d6df",
+  ultramarine: "#4c62c6", starlight: "#eee9df", midnight: "#252d39", graphite: "#535457",
+  silver: "#d6d8db", gold: "#d4b877", black: "#222222", white: "#f5f5f3",
+  gray: "#8b8d90", grey: "#8b8d90", blue: "#4b79b4", navy: "#233952",
+  green: "#6c8b72", teal: "#4e9691", mint: "#b4d8c3", lime: "#c1d882",
+  pink: "#eabac6", purple: "#9e88b8", lavender: "#c5b6dc", violet: "#9b86be",
+  red: "#bc4547", coral: "#e99182", orange: "#eaa064", yellow: "#ead477",
+  cream: "#eee5cf", beige: "#d8c6b0", brown: "#94765e", sky: "#a2cce3",
+}
+const COLOR_SWATCH_KEYS = Object.keys(COLOR_SWATCHES).sort((a, b) => b.length - a.length)
+function colorSwatch(value: string): string {
+  const color = value.trim().toLowerCase().replace(/[_-]/g, " ").replace(/\s+/g, " ")
+  if (/^#[a-f0-9]{3}(?:[a-f0-9]{3})?$/.test(color)) return color
+  const match = COLOR_SWATCH_KEYS.find(key => color.includes(key))
+  return match ? COLOR_SWATCHES[match] : "#cbd5e1"
 }
 
 function Gallery({ images, name }: { images: string[]; name: string }) {
@@ -255,6 +281,9 @@ export default function ProductDetailPage() {
   const [specsError, setSpecsError] = useState("")
   const [adding, setAdding] = useState<"cart" | "buy" | null>(null)
   const [tab, setTab] = useState("overview")
+  const [careSelection, setCareSelection] = useState<SaraCareYears | null | undefined>(undefined)
+  useEffect(() => { setCareSelection(undefined) }, [slug])
+  const productCare = useProductSaraCare({ productId: !loading && product?.id ? String(product.id) : "", selection: careSelection, onSelect: setCareSelection })
   const [reviewStats, setReviewStats] = useState<{ rating: number; count: number } | null>(null)
   const updateReviewStats = useCallback((next: { rating: number; count: number }) => {
     setReviewStats(previous => previous?.rating === next.rating && previous.count === next.count ? previous : next)
@@ -450,10 +479,10 @@ export default function ProductDetailPage() {
           {cleanProductName(c.name)}
         </p>
         <p className="mt-1 text-[11px] font-bold text-gray-900">
-          ₹{Number(c.price).toLocaleString("en-IN")}
+          {isProductUnavailable(c) ? "Currently unavailable" : `₹${Number(c.price).toLocaleString("en-IN")}`}
         </p>
       </Link>
-      <button type="button" className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd]" onClick={async () => {
+      <button type="button" disabled={isProductUnavailable(c)} className="mt-2 w-full rounded border border-[#1560bd] py-1.5 text-xs font-semibold text-[#1560bd] disabled:opacity-50" onClick={async () => {
         const added = await addToCart({ id: String(c.id), name: c.name, price: c.price, image: c.image, quantity: 1, color: null, size: null, stock: c.stock })
         if (added) toast.success(`${toastProductName(c.name)} added to cart`)
       }}>Add</button>
@@ -468,7 +497,7 @@ export default function ProductDetailPage() {
   const recordedRating = { rating: Number(product.rating || reviewSummary?.average) || (reviewRating.length ? reviewRating.reduce((sum: number, value: number) => sum + value, 0) / reviewRating.length : 0),
     count: Number(product.reviewsCount || reviewSummary?.count) || recordedReviews.length }
   const rating = reviewStats || recordedRating
-  const inStock = typeof product.stock === "number" ? product.stock > 0 : product.inStock !== false
+  const inStock = !isProductUnavailable(product)
   const wishlisted = isInWishlist(String(product.id))
   const freeShippingThreshold = Number(settings?.freeShippingThreshold ?? 10000)
   const freeDelivery = Number(product.price) >= freeShippingThreshold
@@ -478,16 +507,48 @@ export default function ProductDetailPage() {
   const colorOptions = [...new Set(variantChoices.map(option => option.color).filter(Boolean))]
   const storageOptions = [...new Set(variantChoices.map(option => option.storage).filter(Boolean))]
   const hasVariantSelectors = variantChoices.length > 1 && (colorOptions.length > 1 || storageOptions.length > 1)
+  const carePrice = productCare.selectedPlan?.price ?? 0
+  const purchaseTotal = Number(product.price) + carePrice
+  const carePending = productCare.selected !== null && Boolean(productCare.loading || productCare.error || productCare.saraCareLoading || (productCare.offer && !productCare.selectedPlan))
+  const buyNowLabel = `Buy Now · ₹${purchaseTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const variantAvailable = (variant: CatalogProduct | undefined) =>
     Boolean(variant && variant.active !== false && Number(variant.price) > 0 &&
       (typeof variant.stock !== "number" || variant.stock > 0))
 
+  const handleShare = async () => {
+    const url = `${window.location.origin}${window.location.pathname}`
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url)
+      } else {
+        const input = document.createElement("textarea")
+        input.value = url
+        input.style.position = "fixed"
+        input.style.opacity = "0"
+        input.setAttribute("readonly", "")
+        const previousFocus = document.activeElement
+        document.body.appendChild(input)
+        try {
+          input.select()
+          if (!document.execCommand("copy")) throw new Error("Copy failed")
+        } finally {
+          input.remove()
+          if (previousFocus instanceof HTMLElement) previousFocus.focus()
+        }
+      }
+      toast.success("Product link copied to clipboard")
+    } catch {
+      toast.error("Unable to copy the link. Please copy it from the address bar.")
+    }
+  }
+
   const handleAddToCart = async (buyNow: boolean) => {
-    if (adding) return
+    if (adding || !inStock || carePending) return
     setAdding(buyNow ? "buy" : "cart")
     try {
       const added = await addToCart({
         id: String(product.id),
+        saraCareSelection: productCare.selectedPlan ? productCare.selectedPlan.years : null,
         name: product.name,
         price: product.price,
         image: images[0] || "/placeholder.svg",
@@ -574,6 +635,16 @@ export default function ProductDetailPage() {
                 {name}
               </h1>
 
+              <button
+                type="button"
+                onClick={handleShare}
+                title="Copy product link"
+                className="mt-3 inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-[13px] font-semibold text-[#1560BD] hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1560BD] focus-visible:ring-offset-2"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                Share
+              </button>
+
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="flex items-center gap-1.5">
                   <Stars rating={rating.rating} />
@@ -589,7 +660,7 @@ export default function ProductDetailPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                {discount >= 10 && (
+                {inStock && discount >= 10 && (
                   <span className="rounded bg-[#E11D2E] px-2 py-0.5 text-[11px] font-bold text-white">
                     {discount}% OFF
                   </span>
@@ -601,7 +672,7 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {inStock ? <><div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="font-heading text-2xl font-bold text-gray-900">
                   ₹{Number(product.price).toLocaleString("en-IN")}
                 </span>
@@ -614,42 +685,39 @@ export default function ProductDetailPage() {
                   </>
                 )}
               </div>
-              <p className="mt-1 text-[12px] text-gray-500">Inclusive of all taxes</p>
+              <p className="mt-1 text-[12px] text-gray-500">Inclusive of all taxes</p></> :
+                <p className="mt-4 text-sm font-semibold text-red-700">Currently unavailable</p>}
 
               {hasVariantSelectors && (
                 <div className="mt-5 space-y-4 border-t border-gray-100 pt-4">
                   {colorOptions.length > 1 && (
                     <div>
                       <h2 className="text-[13px] font-bold text-gray-900">
-                        Color: <span className="font-medium text-gray-600">{currentVariant.color}</span>
+                        Color
                       </h2>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {colorOptions.map(color => {
                           const exact = variantChoices.find(option =>
                             option.color === color && option.storage === currentVariant.storage)?.product
-                          const representative = exact || variantChoices.find(option => option.color === color)?.product
                           const available = variantAvailable(exact)
                           const selected = color === currentVariant.color
-                          const content = <>
-                            <span className="flex h-9 w-9 items-center justify-center overflow-hidden bg-white">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={representative?.image || "/placeholder.svg"} alt="" className="h-full w-full object-contain" />
-                            </span>
-                            <span className="max-w-24 truncate">{color}</span>
-                          </>
+                          const content = <span aria-hidden="true" className="block h-full w-full rounded-full border border-black/10" style={{ backgroundColor: colorSwatch(color) }} />
                           return available && exact ? (
                             <Link
                               key={color}
                               href={`/product/${exact.slug || exact.id}`}
+                              prefetch={false}
+                              title={color}
+                              aria-label={`Select ${color}`}
                               aria-current={selected ? "page" : undefined}
-                              className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-semibold ${
-                                selected ? "border-[#1560BD] bg-blue-50 ring-1 ring-[#1560BD]" : "border-gray-300 hover:border-[#1560BD]"
+                              className={`block h-10 w-10 rounded-full border-2 p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1560BD] ${
+                                selected ? "border-[#1560BD] ring-1 ring-[#1560BD]" : "border-transparent hover:border-gray-300"
                               }`}
                             >
                               {content}
                             </Link>
                           ) : (
-                            <span key={color} title={`${color} is unavailable in ${currentVariant.storage}`} className="flex cursor-not-allowed items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2 py-1.5 text-[11px] font-semibold text-gray-400 opacity-60">
+                            <span key={color} role="img" aria-label={`${color} unavailable`} title={`${color} is unavailable in ${currentVariant.storage}`} className="block h-10 w-10 cursor-not-allowed rounded-full border-2 border-transparent p-1 opacity-40">
                               {content}
                             </span>
                           )
@@ -704,7 +772,7 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {liveOffers.some(isEmiOffer) && (
+              {inStock && liveOffers.some(isEmiOffer) && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#1560BD]" />
                   <span className="text-[13px] font-medium text-gray-800">
@@ -758,11 +826,13 @@ export default function ProductDetailPage() {
                     </div>
                   </div>}
 
+                  <ProductSaraCare productName={name} care={productCare} compact disabled={adding !== null || !inStock} />
+
                   <div className="flex gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => handleAddToCart(false)}
-                      disabled={!inStock || adding !== null}
+                      disabled={!inStock || adding !== null || carePending}
                       className="h-10 flex-1 rounded-md border border-[#1560BD] text-[13px] font-semibold text-[#1560BD] transition-colors hover:bg-[#1560BD] hover:text-white disabled:opacity-50"
                     >
                       {adding === "cart" ? "Adding…" : "Add to Cart"}
@@ -780,11 +850,11 @@ export default function ProductDetailPage() {
                   <button
                     type="button"
                     onClick={() => handleAddToCart(true)}
-                    disabled={!inStock || adding !== null}
+                    disabled={!inStock || adding !== null || carePending}
                     className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-[#1560BD] text-[13px] font-semibold text-white transition-colors hover:bg-[#0D4C99] disabled:opacity-50"
                   >
                     <ShoppingBag className="h-4 w-4" />
-                    {adding === "buy" ? "Taking you to checkout…" : "Buy Now"}
+                    {adding === "buy" ? "Taking you to checkout…" : buyNowLabel}
                   </button>
 
                   {marketing.enabled("trust") && <ul className="grid grid-cols-4 gap-x-2 gap-y-3 border-t border-gray-100 pt-3.5">
@@ -805,7 +875,7 @@ export default function ProductDetailPage() {
           {/* ── Tabs ─────────────────────────────────────────────── */}
           <div id="product-details-tabs" className="min-w-0 scroll-mt-4 bg-white">
             <div className="flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Product details">
-              {TABS.filter(item => item.id !== "faqs" || marketing.enabled("faqs")).map(({ id, label }) => (
+              {TABS.filter(item => (item.id !== "faqs" || marketing.enabled("faqs")) && (item.id !== "sara-care" || !!productCare.offer)).map(({ id, label }) => (
                 <button
                   key={id}
                   type="button"
@@ -927,6 +997,7 @@ export default function ProductDetailPage() {
                 <ProductReviewsSection embedded productId={String(product.id)} productName={name} productImage={images[0]} seedReviews={recordedReviews} average={recordedRating.count ? recordedRating.rating : undefined} count={recordedRating.count} onStatsChange={updateReviewStats} />
               )}
 
+              {tab === "sara-care" && <ProductSaraCare productName={name} care={productCare} disabled={adding !== null} />}
               {tab === "faqs" && marketing.enabled("faqs") && (
                 <dl className="divide-y divide-gray-100">
                   {FAQS.map(({ q, a }, index) => (
@@ -943,15 +1014,16 @@ export default function ProductDetailPage() {
       </main>
 
       {/* Sticky mobile buy bar */}
-      <div className="sticky bottom-0 z-30 flex items-center gap-3 border-t border-gray-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:hidden">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-gray-900">₹{Number(product.price).toLocaleString("en-IN")}</p>
-          {discount > 0 && <p className="text-[11px] text-emerald-700">{discount}% off</p>}
+      <div className="sticky bottom-0 z-30 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2 border-t border-gray-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:hidden">
+        <div className="col-span-2 min-w-0">
+          {inStock ? <><p className="text-sm font-bold text-gray-900">₹{purchaseTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</p>
+          {carePrice > 0 ? <p className="text-[11px] text-gray-600">Includes Sara Care</p> : discount > 0 && <p className="text-[11px] text-emerald-700">{discount}% off</p>}</> :
+            <p className="text-sm font-semibold text-red-700">Currently unavailable</p>}
         </div>
         <button
           type="button"
           onClick={() => handleAddToCart(false)}
-          disabled={!inStock}
+          disabled={!inStock || adding !== null || carePending}
           className="h-10 rounded-md border border-[#1560BD] px-4 text-[13px] font-semibold text-[#1560BD] disabled:opacity-50"
         >
           Add to Cart
@@ -959,10 +1031,10 @@ export default function ProductDetailPage() {
         <button
           type="button"
           onClick={() => handleAddToCart(true)}
-          disabled={!inStock}
-          className="h-10 rounded-md bg-[#1560BD] px-4 text-[13px] font-semibold text-white disabled:opacity-50"
+          disabled={!inStock || adding !== null || carePending}
+          className="h-10 rounded-md bg-[#1560BD] px-2 text-[12px] font-semibold text-white disabled:opacity-50"
         >
-          Buy Now
+          {adding === "buy" ? "Opening checkout…" : buyNowLabel}
         </button>
       </div>
 

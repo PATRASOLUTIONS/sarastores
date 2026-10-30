@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { checkoutCity } from "@/lib/checkout-region"
 import { calculateDistance, coordinates, geocodePincode, type Coordinates } from "@/lib/geo-client"
 
@@ -54,6 +54,8 @@ export function useNearbyStores(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [attempt, setAttempt] = useState(0)
+  // Checkout owns this hook so delivery and payment reuse one store list.
+  const requests = useRef(new Map<string, Promise<NearbyStore[]>>())
 
   useEffect(() => {
     let cancelled = false
@@ -61,12 +63,21 @@ export function useNearbyStores(
     setError("")
     ;(async () => {
       try {
-        const res = await fetch(url, { cache: "no-store" })
-        if (!res.ok) throw new Error("Stores could not be loaded.")
-        const data = await res.json()
+        const requestKey = `${url}:${attempt}`
+        let request = requests.current.get(requestKey)
+        if (!request) {
+          request = (async () => {
+            const res = await fetch(url, { cache: "no-store" })
+            if (!res.ok) throw new Error("Stores could not be loaded.")
+            const data = await res.json()
+            if (!data?.success || !Array.isArray(data.stores)) throw new Error("Invalid stores response.")
+            return data.stores as NearbyStore[]
+          })()
+          requests.current.set(requestKey, request)
+        }
+        const data = await request
         if (cancelled) return
-        if (!data?.success || !Array.isArray(data.stores)) throw new Error("Invalid stores response.")
-        setStores(allStores ? data.stores : data.stores.filter((store: NearbyStore) => checkoutCity(store.city || "") &&
+        setStores(allStores ? data : data.filter((store: NearbyStore) => checkoutCity(store.city || "") &&
           (!store.state || store.state.trim().toLowerCase() === "karnataka")))
       } catch (error) {
         if (cancelled) return
@@ -78,13 +89,6 @@ export function useNearbyStores(
     })()
     return () => { cancelled = true }
   }, [attempt, url, allStores])
-
-  useEffect(() => {
-    const refresh = () => { if (!document.hidden) setAttempt(value => value + 1) }
-    const timer = setInterval(refresh, 30000)
-    window.addEventListener("focus", refresh)
-    return () => { clearInterval(timer); window.removeEventListener("focus", refresh) }
-  }, [])
 
   const ranked = useMemo<RankedStore[]>(() => {
     const homeCity = checkoutCity(deliveryCity || "")

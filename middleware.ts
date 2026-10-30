@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session"
-import { staffCanAccessApi } from "@/lib/admin-access"
 
 async function authorizeRequest(request: NextRequest) {
   // Skip middleware for partner API routes - they have their own CORS and auth handling
@@ -73,8 +72,8 @@ async function authorizeRequest(request: NextRequest) {
   // Central protection for ALL admin APIs. This is defense-in-depth only:
   // it is prefix-based and silently misses new paths, so every handler must
   // still call requireAdmin()/checkAdminAuthorization() itself.
-  // Note: a user granted dashboardAccess after logging in carries a stale
-  // token and must re-authenticate to pass this check.
+  // Page grants are enforced against the live user by each route handler.
+  // Cookie claims can be stale or omitted to stay within the cookie size limit.
   if (
     request.nextUrl.pathname.startsWith("/api/admin") ||
     request.nextUrl.pathname.startsWith("/api/spin-wheel/admin")
@@ -91,9 +90,6 @@ async function authorizeRequest(request: NextRequest) {
         `[Middleware] Admin API ${request.method} ${request.nextUrl.pathname} blocked: insufficient role`
       )
       return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-    if (!staffCanAccessApi(user, request.nextUrl.pathname)) {
-      return NextResponse.json({ error: "You do not have access to this admin area" }, { status: 403 })
     }
     return NextResponse.next()
   }
@@ -114,20 +110,8 @@ async function authorizeRequest(request: NextRequest) {
     const matches = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
     const deny = (status: number, error: string) => NextResponse.json({ error }, { status })
 
-    // Staff accounts must hold the corresponding page permission for protected
-    // reads and all writes. Full admins remain unrestricted, and ordinary
-    // customers are not staff — gating them here blocked every logged-in
-    // shopper from add-to-cart, checkout and reviews.
-    if (
-      user &&
-      user.role !== "admin" &&
-      user.role !== "superadmin" &&
-      user.dashboardAccess &&
-      (isWrite || matches("/api/employees") || (matches("/api/orders") && method === "GET")) &&
-      !staffCanAccessApi(user, path)
-    ) {
-      return deny(403, "You do not have access to this admin area")
-    }
+    // Route handlers enforce current page grants. Do not use the shortened
+    // token list here, or valid staff grants and customer actions are rejected.
 
     // Vendor APIs: any authenticated vendor (admins allowed too)
     if (matches("/api/vendor")) {
@@ -237,19 +221,6 @@ async function authorizeRequest(request: NextRequest) {
   // middleware focused on API authorization so hard navigations to admin pages
   // do not get bounced with a 307 before the layout can hydrate.
   if (request.nextUrl.pathname.startsWith("/admin")) {
-    const isFullAdmin = user?.role === "admin" || user?.role === "superadmin"
-    if (user && !isFullAdmin && user.dashboardAccess) {
-      const allowed = Array.isArray(user.allowedPages) && user.allowedPages.length > 0
-        ? user.allowedPages
-        : ["/admin/dashboard"]
-      const permitted = allowed.some(
-        (page) => request.nextUrl.pathname === page || request.nextUrl.pathname.startsWith(`${page}/`),
-      )
-      if (!permitted) {
-        return NextResponse.redirect(new URL("/admin/dashboard", request.url))
-      }
-    }
-
     // Always let HTML (and RSC) requests through to the admin layout. The
     // admin layout performs the authoritative, server-side check against
     // the signed httpOnly session cookie. The middleware role here is
@@ -328,6 +299,7 @@ export async function middleware(request: NextRequest) {
   if (response.headers.get("x-middleware-next") !== "1") return response
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-sara-request-path", request.nextUrl.pathname)
+  requestHeaders.set("x-sara-request-method", request.method)
   return NextResponse.next({ request: { headers: requestHeaders } })
 }
 

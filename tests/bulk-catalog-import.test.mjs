@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
-import { ObjectId } from "mongodb"
+import { MongoBulkWriteError, ObjectId } from "mongodb"
 import * as XLSX from "xlsx"
 import { sourceLoader } from "./source-loader.mjs"
 
@@ -256,12 +256,15 @@ function priceFixture(products) {
   const writes = []
   const loader = sourceLoader({ "@/lib/db-service": { getCollection: async () => ({
     find: () => ({ toArray: async () => products }),
-    findOneAndUpdate: async (filter, update) => { writes.push({ filter, update }); return update.$set },
+    bulkWrite: async operations => {
+      for (const { updateOne } of operations) writes.push({ filter: updateOne.filter, update: updateOne.update })
+      return { matchedCount: operations.length }
+    },
   }) } })
   return { process: loader.load("lib/product-price-import.ts").processProductPrices, writes }
 }
 
-test("price importer previews and atomically writes all four columns, including zero stock and higher MRP", async () => {
+test("price importer previews and atomically writes price and higher MRP while ignoring stock", async () => {
   const id = new ObjectId()
   const fixture = priceFixture([{ _id: id, itemno: "A", price: 50, mrp: 100, stock: 5 }])
   const rows = [{ itemno: "A", price: 150, mrp: 200, stock: 0 }]
@@ -269,18 +272,16 @@ test("price importer previews and atomically writes all four columns, including 
   assert.equal(preview.updates[0].status, "valid")
   assert.equal(preview.updates[0].mrp, 100)
   assert.equal(preview.updates[0].newMrp, 200)
-  assert.equal(preview.updates[0].oldStock, 5)
-  assert.equal(preview.updates[0].newStock, 0)
   assert.equal(fixture.writes.length, 0)
   assert.equal((await fixture.process(rows, false)).success, 1)
   assert.equal(fixture.writes.length, 1)
   const { filter, update } = fixture.writes[0]
   assert.equal(update.$set.price, 150)
   assert.equal(update.$set.mrp, 200)
-  assert.equal(update.$set.stock, 0)
+  assert.equal(Object.hasOwn(update.$set, "stock"), false)
   assert.equal(filter.mrp, 100)
   assert.equal(filter.price, 50)
-  assert.equal(filter.stock, 5)
+  assert.equal(Object.hasOwn(filter, "stock"), false)
 })
 
 test("legacy two-column and blank optional price imports preserve MRP and stock", async () => {
@@ -291,10 +292,9 @@ test("legacy two-column and blank optional price imports preserve MRP and stock"
   assert.equal(Object.hasOwn(fixture.writes[0].update.$set, "mrp"), false)
 })
 
-test("invalid MRP/stock rejects entire row without partial price update", async () => {
+test("invalid MRP rejects entire row without partial price update", async () => {
   for (const values of [
     { mrp: 30 }, { mrp: -1 }, { mrp: Infinity }, { mrp: true }, { mrp: "80junk" },
-    { stock: -1 }, { stock: 1.5 }, { stock: Infinity }, { stock: true }, { stock: 1000001 }, { stock: "1junk" },
   ]) {
     const fixture = priceFixture([{ _id: new ObjectId(), itemno: "A", price: 20, mrp: 100, stock: 7 }])
     const rows = [{ itemno: "A", price: 50, ...values }]
@@ -321,10 +321,10 @@ test("bulk UI wires supported-source scraping, queued publish, progress, retries
   assert.ok(page.includes("<BulkScraperImport"))
   assert.ok(page.includes("saveToDatabase: false"))
   const prices = fs.readFileSync(new URL("../app/admin/products/page.tsx", import.meta.url), "utf8")
-  assert.ok(prices.includes("active-products-price-mrp-stock.xlsx"))
-  assert.ok(prices.includes("item.newStock"))
+  assert.ok(prices.includes("active-products-price-mrp.xlsx"))
+  assert.ok(!prices.includes("item.newStock"))
   assert.ok(prices.includes("item.newMrp"))
-  assert.ok(prices.includes("item.newActive"))
+  assert.ok(!prices.includes("item.newActive"))
 })
 
 function queueHarness(fetchProduct, supportedUrl = () => true) {
@@ -804,7 +804,7 @@ function priceDownloadHarness(records, failure = false) {
   return { open, button, files, messages, requests }
 }
 
-test("actual Bulk Price download exports every customer-visible product, not just the displayed page, with five current-value columns", async () => {
+test("actual Bulk Price download exports every customer-visible product, not just the displayed page, with three current-value columns", async () => {
   const records = Array.from({ length: 1205 }, (_, index) => ({
     id: `ID${index}`, itemno: String(index).padStart(6, "0"),
     price: index + 10, mrp: index + 100, stock: index % 5,
@@ -815,14 +815,14 @@ test("actual Bulk Price download exports every customer-visible product, not jus
   harness.open()
   await harness.button("Download active products Excel").props.onClick()
   assert.equal(harness.files.length, 1)
-  assert.equal(harness.files[0].filename, "active-products-price-mrp-stock.xlsx")
+  assert.equal(harness.files[0].filename, "active-products-price-mrp.xlsx")
   assert.equal(harness.requests.length, 13)
   const book = XLSX.read(harness.files[0].bytes, { type: "array" })
   const sheet = book.Sheets["Active Products"]
   const values = XLSX.utils.sheet_to_json(sheet)
-  assert.deepEqual(XLSX.utils.sheet_to_json(sheet, { header: 1 })[0], ["itemno", "price", "mrp", "stock", "active"])
+  assert.deepEqual(XLSX.utils.sheet_to_json(sheet, { header: 1 })[0], ["itemno", "price", "mrp"])
   assert.equal(values.length, 603)
-  assert.deepEqual(values[0], { itemno: "000000", price: 10, mrp: 100, stock: 0, active: "active" })
+  assert.deepEqual(values[0], { itemno: "000000", price: 10, mrp: 100 })
   assert.equal(values.at(-1).itemno, "001204")
   assert.equal(values.some(value => value.itemno === "000001" || value.itemno === "HIDDEN"), false)
   assert.equal(harness.button("Download active products Excel").props.disabled, false)
@@ -841,9 +841,9 @@ test("active price export preserves actual zero/missing values and legacy item n
   assert.equal(rows[0].itemno, "000001")
   assert.equal(rows[0].price, 0)
   assert.equal(rows[0].mrp, 0)
-  assert.equal(rows[0].stock, 0)
+  assert.deepEqual(Object.keys(rows[0]), ["itemno", "price", "mrp"])
   assert.equal(rows[1].price, "")
-  assert.equal(rows[1].stock, "")
+  assert.equal(Object.hasOwn(rows[1], "stock"), false)
   assert.equal(rows[1].mrp, "")
   assert.throws(() => buildActiveProductPriceSheet([]), /no customer-visible products/)
   assert.throws(() => buildActiveProductPriceSheet([{ id: "D", active: true }]), /no item number/)
@@ -867,111 +867,155 @@ test("download errors or no active products show an explicit error and create no
   }
 })
 
-test("visibility accepts active/inactive and explicit boolean/numeric equivalents with accurate preview and atomic updates", async () => {
-  for (const [value, expected] of [
-    ["active", true], [" ACTIVE ", true], [true, true], ["true", true], [1, true], ["1", true],
-    ["inactive", false], [" InActive ", false], [false, false], ["false", false], [0, false], ["0", false],
-  ]) {
-    const fixture = priceFixture([{ _id: new ObjectId(), itemno: "A", price: 50, mrp: 100, stock: 3, active: !expected }])
-    const rows = [{ itemno: "A", price: 60, mrp: 120, stock: 0, active: value }]
-    const preview = await fixture.process(rows, true)
-    assert.equal(preview.updates[0].status, "valid")
-    assert.equal(preview.updates[0].oldActive, !expected)
-    assert.equal(preview.updates[0].newActive, expected)
-    assert.equal(fixture.writes.length, 0)
+test("legacy visibility and stock columns are ignored even when invalid", async () => {
+  for (const active of [true, false, "inactive", "invalid", {}, null]) {
+    const fixture = priceFixture([{ _id: new ObjectId(), itemno: "A", price: 50, mrp: 100, stock: 3, active: true }])
+    const rows = [{ itemno: "A", price: 60, mrp: 120, stock: -5, active }]
+    assert.equal((await fixture.process(rows, true)).updates[0].status, "valid")
     assert.equal((await fixture.process(rows, false)).success, 1)
-    assert.equal(fixture.writes[0].filter.active, !expected)
-    assert.equal(fixture.writes[0].update.$set.active, expected)
-    assert.equal(fixture.writes[0].update.$set.price, 60)
-    assert.equal(fixture.writes[0].update.$set.mrp, 120)
-    assert.equal(fixture.writes[0].update.$set.stock, 0)
-  }
-})
-
-test("blank or omitted visibility preserves the stored flag for legacy four/two-column files", async () => {
-  for (const value of [undefined, null, "", "  "]) {
-    for (const stored of [true, false, undefined]) {
-      const fixture = priceFixture([{ _id: new ObjectId(), itemno: "A", price: 50, mrp: 100, stock: 3, active: stored }])
-      const rows = [{ itemno: "A", price: 60, active: value }]
-      const preview = await fixture.process(rows, true)
-      assert.equal(preview.updates[0].newActive, stored === true)
-      assert.equal((await fixture.process(rows, false)).success, 1)
-      assert.equal(Object.hasOwn(fixture.writes[0].update.$set, "active"), false)
-      assert.equal(Object.hasOwn(fixture.writes[0].filter, "active"), false)
+    const { filter, update } = fixture.writes[0]
+    assert.equal(update.$set.price, 60)
+    assert.equal(update.$set.mrp, 120)
+    for (const field of ["active", "status", "stock"]) {
+      assert.equal(Object.hasOwn(update.$set, field), false)
+      assert.equal(Object.hasOwn(filter, field), false)
     }
   }
 })
 
-test("invalid visibility blocks the whole row without changing price, MRP or stock", async () => {
-  for (const value of ["visible", "yes", 2, -1, {}, [], ["active"], "falseish"]) {
-    const fixture = priceFixture([{ _id: new ObjectId(), itemno: "A", price: 50, mrp: 100, stock: 3, active: true }])
-    const rows = [{ itemno: "A", price: 60, mrp: 120, stock: 0, active: value }]
-    const preview = await fixture.process(rows, true)
-    assert.equal(preview.updates[0].status, "error")
-    assert.match(preview.updates[0].error, /Active must be/)
-    assert.equal((await fixture.process(rows, false)).failed, 1)
-    assert.equal(fixture.writes.length, 0)
-  }
+test("18,000 rows are matched and written in bounded batches without creating products", async () => {
+  const products = Array.from({ length: 18000 }, (_, i) => ({ _id: new ObjectId(), itemno: `ITEM${i}`, price: 50, mrp: 100 }))
+  const byCode = new Map(products.map(product => [product.itemno, product]))
+  let reads = 0, writes = 0, processed = 0
+  const importer = sourceLoader({ "@/lib/db-service": { getCollection: async () => ({
+    find: (query, options) => {
+      reads++
+      assert.ok(query.$or[0].sku.$in.length <= 1000)
+      assert.equal(options.projection.price, 1)
+      const codes = query.$or[0].sku.$in
+      return { toArray: async () => codes.map(code => byCode.get(code)).filter(Boolean) }
+    },
+    bulkWrite: async (operations, options) => {
+      writes++
+      assert.ok(operations.length <= 500)
+      assert.equal(options.ordered, false)
+      for (const { updateOne } of operations) {
+        assert.equal(updateOne.upsert, false)
+        assert.equal(updateOne.filter.price, 50)
+        assert.equal(updateOne.filter.mrp, 100)
+        assert.equal(updateOne.update.$set.price, 60)
+        assert.equal(updateOne.update.$set.mrp, 120)
+      }
+      processed += operations.length
+      return { matchedCount: operations.length }
+    },
+  }) } }).load("lib/product-price-import.ts")
+  const rows = products.map(product => ({ itemno: product.itemno, price: 60, mrp: 120 }))
+  const preview = await importer.processProductPrices(rows, true)
+  assert.equal(preview.updates.length, 18000)
+  assert.ok(preview.updates.every(row => row.status === "valid"))
+  assert.equal(writes, 0)
+  reads = 0
+  const result = await importer.processProductPrices(rows, false)
+  assert.equal(result.success, 18000)
+  assert.equal(result.failed, 0)
+  assert.equal(reads, 36)
+  assert.equal(writes, 36)
+  assert.equal(processed, 18000)
 })
 
-test("active-product workbook round-trip can hide and reactivate a product through the existing price upload route", async () => {
-  const product = { _id: new ObjectId(), itemno: "000123", sku: "000123", price: 50, mrp: 100, stock: 3, active: true }
-  const catalog = adminCatalogFixture([product], { fullAdmin: false })
-  const { buildActiveProductPriceSheet } = sourceLoader().load("lib/admin-products-client.ts")
-  const rows = buildActiveProductPriceSheet([{ ...product, id: product._id.toString() }])
+test("case-insensitive and legacy item numbers match; duplicates use last row and unknown numbers fail", async () => {
+  const fixture = priceFixture([{ _id: new ObjectId(), raw: { "Item No.": "AbC" }, price: 50, mrp: 100 }])
+  const result = await fixture.process([
+    { itemno: "abc", price: 60, mrp: 120 },
+    { itemno: "ABC", price: 70, mrp: 130 },
+    { itemno: "UNKNOWN", price: 60, mrp: 120 },
+  ], false)
+  assert.equal(result.success, 1)
+  assert.equal(result.failed, 1)
+  assert.equal(result.ignoredDuplicates, 1)
+  assert.equal(fixture.writes[0].update.$set.price, 70)
+  assert.match(result.errors[0], /Product not found/)
+})
+
+test("concurrent price changes report unmatched writes accurately", async () => {
+  const importer = sourceLoader({ "@/lib/db-service": { getCollection: async () => ({
+    find: () => ({ toArray: async () => [{ _id: new ObjectId(), itemno: "A", price: 50, mrp: 100 }] }),
+    bulkWrite: async () => ({ matchedCount: 0 }),
+  }) } }).load("lib/product-price-import.ts")
+  const result = await importer.processProductPrices([{ itemno: "A", price: 60, mrp: 120 }], false)
+  assert.equal(result.success, 0)
+  assert.equal(result.failed, 1)
+  assert.match(result.errors[0], /changed before updating/)
+})
+
+test("partially successful bulk writes report acknowledged matches without claiming full success", async () => {
+  const products = ["A", "B"].map(itemno => ({ _id: new ObjectId(), itemno, price: 50, mrp: 100 }))
+  const importer = sourceLoader({ "@/lib/db-service": { getCollection: async () => ({
+    find: () => ({ toArray: async () => products }),
+    bulkWrite: async () => { throw new MongoBulkWriteError({ message: "Fixture write failure", writeErrors: [] }, { matchedCount: 1 }) },
+  }) } }).load("lib/product-price-import.ts")
+  const result = await importer.processProductPrices(products.map(product => ({ itemno: product.itemno, price: 60, mrp: 120 })), false)
+  assert.equal(result.success, 1)
+  assert.equal(result.failed, 1)
+  assert.match(result.errors[0], /Could not confirm 1 updates/)
+})
+
+test("Google Sheets links preserve selected tabs and always fetch fresh CSV data", async () => {
+  const urls = []
+  const importer = sourceLoader({}, { fetch: async (url, options) => {
+    urls.push(url)
+    assert.equal(options.cache, "no-store")
+    return new Response("itemno,price,mrp\n000123,60,120\n")
+  } }).load("lib/product-price-import.ts")
+  const expected = "https://docs.google.com/spreadsheets/d/FIXTURE/export?format=csv&gid=42"
+  assert.equal(importer.googleSheetExportUrl("https://docs.google.com/spreadsheets/d/FIXTURE/edit#gid=42"), expected)
+  assert.equal(importer.googleSheetExportUrl("https://docs.google.com/spreadsheets/d/FIXTURE/edit?gid=42"), expected)
+  assert.equal(importer.googleSheetExportUrl("https://evil.invalid/spreadsheets/d/FIXTURE"), null)
+  const response = await importer.fetchGoogleSheet(expected)
+  const rows = importer.readPriceSpreadsheet(await importer.readBoundedSheet(response))
+  assert.equal(rows[0].itemno, "000123")
+  assert.equal(Number(rows[0].price), 60)
+  assert.deepEqual(urls, [expected])
+})
+
+test("Excel formatted item numbers retain leading zeros", () => {
+  const { readPriceSpreadsheet } = sourceLoader().load("lib/product-price-import.ts")
+  const book = XLSX.utils.book_new()
+  const sheet = XLSX.utils.json_to_sheet([{ itemno: 123, price: 60, mrp: 120 }])
+  sheet.A2.z = "000000"
+  XLSX.utils.book_append_sheet(book, sheet, "Prices")
+  const rows = readPriceSpreadsheet(XLSX.write(book, { type: "array", bookType: "xlsx" }))
+  assert.equal(rows[0].itemno, "000123")
+})
+
+test("Google Sheets endpoint previews and updates prices directly from the pasted link", async () => {
   const writes = []
+  let fetches = 0
   const loader = sourceLoader({
     "@/lib/auth": { requireAdmin: async () => ({ ok: true }) },
     "@/lib/db-service": { getCollection: async () => ({
-      find: () => ({ toArray: async () => [product] }),
-      findOneAndUpdate: async (filter, update) => {
-        assert.equal(filter.active, product.active)
-        writes.push(update.$set)
-        Object.assign(product, update.$set)
-        return product
-      },
+      find: () => ({ toArray: async () => [{ _id: new ObjectId(), itemno: "000123", price: 50, mrp: 100, active: true }] }),
+      bulkWrite: async operations => { writes.push(...operations); return { matchedCount: operations.length } },
     }) },
-  }, { context: { Blob } })
-  const route = loader.load("app/api/products/bulk-price-update/route.ts")
-  const post = async (active, preview) => {
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows.map(row => ({ ...row, active }))), "Active Products")
-    const bytes = XLSX.write(book, { type: "array", bookType: "xlsx" })
-    const form = new FormData()
-    form.set("file", new Blob([bytes]), "active-products.xlsx")
-    form.set("preview", String(preview))
-    return route.POST(new Request("https://fixture.invalid/api/products/bulk-price-update", { method: "POST", body: form }))
-  }
-  const visible = async () => (await (await catalog.route.GET(new Request("https://fixture.invalid/api/products"))).json()).length
-  assert.equal(await visible(), 1)
-  const preview = await (await post("inactive", true)).json()
+  }, { fetch: async url => {
+    assert.equal(url, "https://docs.google.com/spreadsheets/d/FIXTURE/export?format=csv&gid=42")
+    fetches++
+    return new Response("itemno,price,mrp\n000123,60,120\n")
+  } })
+  const route = loader.load("app/api/products/google-sheet-price-sync/route.ts")
+  const post = preview => route.POST(new Request("https://fixture.invalid/api/products/google-sheet-price-sync", {
+    method: "POST", body: JSON.stringify({ sheetId: "https://docs.google.com/spreadsheets/d/FIXTURE/edit#gid=42", preview }),
+  }))
+  const preview = await (await post(true)).json()
   assert.equal(preview.updates[0].sku, "000123")
-  assert.equal(preview.updates[0].newActive, false)
-  assert.equal(product.active, true)
-  assert.equal((await (await post("inactive", false)).json()).success, 1)
-  assert.equal(await visible(), 0)
-  assert.equal((await (await post("active", false)).json()).success, 1)
-  assert.equal(await visible(), 1)
-  assert.equal(writes.length, 2)
-})
-
-test("concurrent visibility changes reject the price row rather than overwriting customer visibility", async () => {
-  const product = { _id: new ObjectId(), itemno: "A", price: 50, mrp: 100, stock: 3, active: true }
-  const importer = sourceLoader({ "@/lib/db-service": { getCollection: async () => ({
-    find: () => ({ toArray: async () => [product] }),
-    findOneAndUpdate: async filter => {
-      assert.equal(filter.active, true)
-      product.active = false
-      return null
-    },
-  }) } }).load("lib/product-price-import.ts")
-  const result = await importer.processProductPrices([{ itemno: "A", price: 60, mrp: 120, stock: 0, active: "active" }], false)
-  assert.equal(result.success, 0)
-  assert.match(result.errors[0], /Product changed/)
-  assert.equal(product.price, 50)
-  assert.equal(product.mrp, 100)
-  assert.equal(product.stock, 3)
-  assert.equal(product.active, false)
+  assert.equal(preview.updates[0].newMrp, 120)
+  assert.equal(writes.length, 0)
+  assert.equal((await (await post(false)).json()).success, 1)
+  assert.equal(fetches, 2)
+  assert.equal(writes[0].updateOne.update.$set.price, 60)
+  assert.equal(writes[0].updateOne.update.$set.mrp, 120)
+  assert.equal(Object.hasOwn(writes[0].updateOne.update.$set, "active"), false)
 })
 
 const metadataSheet = () => sourceLoader().load("lib/product-metadata-sheet.ts")

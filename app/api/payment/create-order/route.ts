@@ -33,7 +33,7 @@ async function createPayment(request: NextRequest) {
     if (!customer.ok) return NextResponse.json({ error: customer.error }, { status: 400 })
     stage = "pricing"
     const quote = await quoteCheckout(parsed.data.items, { ...parsed.data, userId })
-    if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400 })
+    if (!quote.ok) return NextResponse.json({ error: quote.error, ...("code" in quote ? { code: quote.code } : {}) }, { status: 400 })
     if (Math.round(quote.amount * 100) !== parsed.data.expectedAmount) {
       return NextResponse.json({ error: "Your checkout total changed. Review the updated total before paying." }, { status: 409, headers: { "Checkout-Retry-Safe": "true" } })
     }

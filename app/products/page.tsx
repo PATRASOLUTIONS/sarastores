@@ -220,6 +220,7 @@ export default function ProductsPage() {
   const marketing = useMarketingContent("products")
   const pathname = usePathname()
   const offersPage = pathname === "/offers"
+  const defaultAvailability = offersPage ? "all" : "in"
   const searchParams = useSearchParams()
 
   const [searchTerm, setSearchTerm] = useState("")
@@ -233,7 +234,7 @@ export default function ProductsPage() {
   const [priceRange, setPriceRange] = useState<[number, number]>([0, PRICE_MAX])
   const [minDiscount, setMinDiscount] = useState(0)
   const [minRating, setMinRating] = useState(0)
-  const [availability, setAvailability] = useState<"all" | "in" | "out">("all")
+  const [availability, setAvailability] = useState<"all" | "in" | "out">(defaultAvailability)
   const [facetSelection, setFacetSelection] = useState<FacetSelection>({})
   const [sortBy, setSortBy] = useState("relevance")
   const [view, setView] = useState<"grid" | "list">("grid")
@@ -301,7 +302,8 @@ export default function ProductsPage() {
     setMinDiscount(0)
     setMinRating(0)
     const availabilityFromUrl = searchParams.get("availability")
-    setAvailability(availabilityFromUrl === "in" || availabilityFromUrl === "out" ? availabilityFromUrl : "all")
+    setAvailability(availabilityFromUrl === "in" || availabilityFromUrl === "out" || availabilityFromUrl === "all"
+      ? availabilityFromUrl : defaultAvailability)
 
     const sortFromUrl = searchParams.get("sort")
     setSortBy(sortFromUrl || "relevance")
@@ -326,7 +328,7 @@ export default function ProductsPage() {
     if (subCategoryFromUrl) selections.push(subCategoryFromUrl)
     if (subCategoriesFromUrl) selections.push(...subCategoriesFromUrl.split(",").map((s) => s.trim()).filter(Boolean))
     setSelectedSubCategories(selections)
-  }, [offersPage, searchParams])
+  }, [defaultAvailability, offersPage, searchParams])
 
   useEffect(() => {
     let cancelled = false
@@ -729,7 +731,7 @@ export default function ProductsPage() {
     setPriceRange([0, PRICE_MAX])
     setMinDiscount(0)
     setMinRating(0)
-    setAvailability("all")
+    setAvailability(defaultAvailability)
     setFacetSelection({})
     setSearchTerm("")
   }
@@ -1099,6 +1101,13 @@ export default function ProductsPage() {
                   </span>
                 </h1>
               </div>
+              {!offersPage && <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" checked={availability === "in"}
+                  onChange={event => setAvailability(event.target.checked ? "in" : "all")}
+                  className="h-4 w-4 rounded border-gray-300 text-[#1560BD] focus:ring-[#1560BD]" />
+                In stock only
+                <span className="text-xs font-normal text-gray-500">({availabilityCounts.in.toLocaleString("en-IN")})</span>
+              </label>}
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative w-full sm:w-52 sm:shrink-0">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

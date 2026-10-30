@@ -10,6 +10,7 @@ import { bannerGradient, bannerIsPhotoOnly, type SiteBanner } from "@/hooks/useB
 import { cleanProductName } from "@/utils/cleanProductName"
 import styles from "./homepage.module.css"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
+import { isProductUnavailable } from "@/lib/product-availability"
 
 export interface HomeProduct {
   id: string
@@ -195,7 +196,8 @@ export function HomepageDeals({ products, loading, error, retry }: {
 }
 
 export function HomeProductCard({ product, warrantyLabel = "Brand warranty included" }: { product: HomeProduct; warrantyLabel?: string }) {
-  const mrp = product.mrp && product.mrp > product.price ? product.mrp : undefined
+  const unavailable = isProductUnavailable(product)
+  const mrp = !unavailable && product.mrp && product.mrp > product.price ? product.mrp : undefined
   const discount = mrp ? Math.round((1 - product.price / mrp) * 100) : 0
   const name = cleanProductName(product.name)
   return (
@@ -209,10 +211,10 @@ export function HomeProductCard({ product, warrantyLabel = "Brand warranty inclu
         }} />
       </Link>
       <Link href={`/product/${product.slug || product.id}`} className={styles.productName}>{name}</Link>
-      <p className={styles.price}>
+      {unavailable ? <p className="text-sm font-semibold text-red-700">Currently unavailable</p> : <p className={styles.price}>
         <strong>₹{product.price.toLocaleString("en-IN")}</strong>
         {mrp && <del>₹{mrp.toLocaleString("en-IN")}</del>}
-      </p>
+      </p>}
       <p className={styles.rating}>
         {product.rating ? <><Star size={14} fill="currentColor" aria-hidden /><span>{product.rating.toFixed(1)}{product.reviewsCount ? ` (${product.reviewsCount.toLocaleString("en-IN")})` : ""}</span></> : <span className={styles.warranty}>{warrantyLabel}</span>}
       </p>

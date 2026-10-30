@@ -10,6 +10,7 @@ import { purchaseAvailabilityError } from "@/lib/purchase-validation"
  */
 export const PUBLIC_PRODUCT_FILTER = Object.freeze({
   active: true,
+  serviceKind: { $ne: "sara-care" },
   disabled: { $ne: true }, enabled: { $ne: false }, isActive: { $ne: false },
   deleted: { $ne: true }, isDeleted: { $ne: true }, deletedAt: null,
   discontinued: { $ne: true },
@@ -18,5 +19,6 @@ export const PUBLIC_PRODUCT_FILTER = Object.freeze({
 
 export function isPublicProduct<T>(product: T): product is T & { active: true } {
   return typeof product === "object" && product !== null && "active" in product
-    && product.active === true && !purchaseAvailabilityError(product)
+    && product.active === true && !("serviceKind" in product && product.serviceKind === "sara-care")
+    && !purchaseAvailabilityError(product)
 }

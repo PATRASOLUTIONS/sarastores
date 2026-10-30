@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { z } from "zod"
 import type { StoreItemAvailability } from "@/lib/store-stock"
 
@@ -18,9 +18,9 @@ export interface StoreStockState {
 }
 
 /** Which stores can serve the whole cart from their own stock. */
-export function useStoreStock(items: { id: string; quantity: number }[]): StoreStockState {
+export function useStoreStock(items: { id: string; quantity: number; type?: string; saraCare?: unknown }[]): StoreStockState {
   const quantities = new Map<string, number>()
-  for (const item of items) quantities.set(item.id, (quantities.get(item.id) || 0) + item.quantity)
+  for (const item of items.filter(item => item.type !== "service" && !item.saraCare)) quantities.set(item.id, (quantities.get(item.id) || 0) + item.quantity)
   const key = [...quantities].map(([id, quantity]) => `${id}:${quantity}`).sort().join(",")
   const [result, setResult] = useState<{ key: string; storeIds: Set<string> | null;
     byStore: Record<string, StoreItemAvailability[]>; deliveryAvailable: boolean; availabilityError: string; error: string }>({
@@ -29,42 +29,48 @@ export function useStoreStock(items: { id: string; quantity: number }[]): StoreS
   const [farDistanceKm, setFarDistanceKm] = useState(15)
   const [loading, setLoading] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  // Retain in-flight and completed checks through effect replay and section changes.
+  const requests = useRef(new Map<string, Promise<{
+    storeIds: string[]; byStore: Record<string, StoreItemAvailability[]>; deliveryAvailable: boolean;
+    availabilityError: string; farDistanceKm: number
+  }>>())
 
   useEffect(() => {
     setResult(previous => previous.key === key && previous.storeIds
       ? { ...previous, error: "" } : { key, storeIds: null, byStore: {}, deliveryAvailable: false, availabilityError: "", error: "" })
     if (!key) return
-    const controller = new AbortController()
+    let cancelled = false
     setLoading(true)
-    fetch(`/api/stores/availability?items=${encodeURIComponent(key)}`, { cache: "no-store", signal: controller.signal })
-      .then(async response => {
-        const data = await response.json().catch(() => null)
-        const parsed = z.object({ success: z.literal(true), storeIds: z.array(z.string()), deliveryAvailable: z.boolean(),
-          byStore: z.record(z.array(z.object({ itemCode: z.string(), required: z.number().int().positive(), available: z.number().int().nonnegative() }))),
-          farDistanceKm: z.number().positive(),
-          availabilityError: z.string().default(""),
-        }).safeParse(data)
-        if (!response.ok || !parsed.success) throw new Error(data?.error || "Store stock could not be checked.")
-        setResult({ key, storeIds: new Set(parsed.data.storeIds), byStore: parsed.data.byStore,
-          deliveryAvailable: parsed.data.deliveryAvailable, availabilityError: parsed.data.availabilityError, error: "" })
-        setFarDistanceKm(parsed.data.farDistanceKm)
+    const requestKey = `${key}|${attempt}`
+    let request = requests.current.get(requestKey)
+    if (!request) {
+      request = fetch(`/api/stores/availability?items=${encodeURIComponent(key)}`, { cache: "no-store" })
+        .then(async response => {
+          const data = await response.json().catch(() => null)
+          const parsed = z.object({ success: z.literal(true), storeIds: z.array(z.string()), deliveryAvailable: z.boolean(),
+            byStore: z.record(z.array(z.object({ itemCode: z.string(), required: z.number().int().positive(), available: z.number().int().nonnegative() }))),
+            farDistanceKm: z.number().positive(),
+            availabilityError: z.string().default(""),
+          }).safeParse(data)
+          if (!response.ok || !parsed.success) throw new Error(data?.error || "Store stock could not be checked.")
+          return parsed.data
+        })
+      requests.current.set(requestKey, request)
+    }
+    request.then(data => {
+        if (cancelled) return
+        setResult({ key, storeIds: new Set(data.storeIds), byStore: data.byStore,
+          deliveryAvailable: data.deliveryAvailable, availabilityError: data.availabilityError, error: "" })
+        setFarDistanceKm(data.farDistanceKm)
       })
       .catch((reason: unknown) => {
-        if (controller.signal.aborted) return
+        if (cancelled) return
         console.error("[Checkout] Store stock check failed:", reason)
         setResult({ key, storeIds: null, byStore: {}, deliveryAvailable: false, availabilityError: "", error: "Stock could not be checked." })
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
-    return () => controller.abort()
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [key, attempt])
-
-  useEffect(() => {
-    const refresh = () => { if (!document.hidden) setAttempt(value => value + 1) }
-    const timer = setInterval(refresh, 30000)
-    window.addEventListener("focus", refresh)
-    document.addEventListener("visibilitychange", refresh)
-    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh) }
-  }, [])
   const current = result.key === key ? result : null
   return { storeIds: current?.storeIds ?? null, byStore: current?.byStore ?? {}, deliveryAvailable: current?.deliveryAvailable ?? false,
     availabilityError: current?.availabilityError ?? "",

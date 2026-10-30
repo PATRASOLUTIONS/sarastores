@@ -13,6 +13,7 @@ import { useCart } from "@/hooks/useCart"
 import { toast } from "react-hot-toast"
 import { formatPrice } from "@/utils/formatPrice"
 import { getCatalogMRP } from "@/lib/product-display"
+import { isProductUnavailable } from "@/lib/product-availability"
 import { productImageUrls } from "@/lib/product-images"
 import type { ProductCardResponse } from "@/lib/product-card-response"
 import { EmiFromBadge } from "@/components/EmiCalculator"
@@ -63,9 +64,10 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist()
   const isWishlisted = isInWishlist(productId)
   const { addToCart } = useCart()
+  const unavailable = isProductUnavailable(product)
 
   const handleAddToCart = async () => {
-    if (!product) return
+    if (unavailable || isAdding) return
 
     setIsAdding(true)
 
@@ -111,7 +113,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
 
   // Derived from the resolved MRP so the badge can never contradict the prices shown.
   const discount =
-    effectiveOriginalPrice > product.price
+    !unavailable && effectiveOriginalPrice > product.price
       ? Math.round(((effectiveOriginalPrice - product.price) / effectiveOriginalPrice) * 100)
       : 0
 
@@ -220,7 +222,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
 
 
           <div className="flex items-end justify-between mb-4">
-            <div>
+            {unavailable ? <p className="text-sm font-semibold text-red-700">Currently unavailable</p> : <div>
               <div className="flex items-baseline gap-3">
                 <span className="text-lg sm:text-xl font-extrabold text-gray-900">{formatPrice(product.price)}</span>
                 {discount > 0 && <span className="text-sm text-gray-600 line-through">{formatPrice(effectiveOriginalPrice)}</span>}
@@ -229,7 +231,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
               <div className="mt-0.5">
                 <EmiFromBadge price={product.price} />
               </div>
-            </div>
+            </div>}
             <div className="ml-3 flex items-center">
               {/* <div className="bg-yellow-100 text-yellow-800 text-sm font-semibold px-2 py-1 rounded">{discount}%</div> */}
             </div>
@@ -245,6 +247,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
               }}
               className="w-full border border-brand-accent bg-white text-orange-700 py-2.5 rounded-xl font-semibold hover:bg-orange-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-accent/40 flex items-center justify-center gap-2 active:scale-[0.98] transition-all duration-200"
               aria-label="Add to cart"
+              disabled={unavailable || isAdding}
             >
               {isAdding ? (
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

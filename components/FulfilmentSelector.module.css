@@ -15,8 +15,9 @@
 .storeHeading > button { color: #0054f0; font-size: 10px; white-space: nowrap; }
 .cityFilter { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #526079; margin-bottom: 10px; }
 .cityFilter select { padding: 6px 10px; border: 1px solid #d3dce9; border-radius: 4px; background: #fff; color: #101828; }
-.storeGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-height: 390px; overflow-y: auto; }
-.storeGrid > li { min-width: 0; }
+.storeGrid { display: flex; flex-wrap: nowrap; gap: 12px; overflow-x: auto; padding: 2px 2px 12px; scroll-snap-type: x proximity; }
+.storeGrid > li { flex: 0 0 calc((100% - 24px) / 3); min-width: 210px; scroll-snap-align: start; }
+.storeGrid:focus-visible { outline: 2px solid #0054f0; outline-offset: 2px; }
 .storeGrid button { position: relative; display: block; width: 100%; height: 100%; text-align: left; border: 1px solid #e1e8f1; border-radius: 5px; padding: 12px 10px 6px 38px; background: #fff; }
 .storeGrid .selectedStore { border-color: #0054f0; }
 .storeRadio { position: absolute; left: 12px; top: 13px; width: 16px; height: 16px; border: 1.5px solid #a8b5c9; border-radius: 50%; }
@@ -39,7 +40,8 @@
   .options > button { min-height: 72px; }
   .options strong { font-size: 13px; }
   .options small { font-size: 12px; }
-  .storeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .storeGrid { gap: 8px; }
+  .storeGrid > li { flex-basis: 78%; min-width: 210px; }
   .storeGrid button { padding: 10px; }
   .storeImage { margin-left: 20px; }
   .storeRadio { left: 9px; top: 12px; }

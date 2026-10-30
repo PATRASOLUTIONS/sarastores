@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { Search, Package, Truck, MapPin, CheckCircle2, Clock, Loader2, ArrowRight, Box, Warehouse, Home, CircleDot } from "lucide-react"
@@ -638,6 +639,7 @@ function AnimatedTrackingVisual({ currentStep }: { currentStep: number }) {
 }
 
 export default function TrackOrderPage() {
+  const router = useRouter()
   const [orderId, setOrderId] = useState("")
   const [loading, setLoading] = useState(false)
   const [tracking, setTracking] = useState<TrackingData | null>(null)
@@ -653,6 +655,10 @@ export default function TrackOrderPage() {
     setTracking(null)
     try {
       const res = await fetch(`/api/orders/track?orderId=${encodeURIComponent(orderId.trim())}`)
+      if (res.status === 401) {
+        router.push("/login?redirect=/track")
+        return
+      }
       const data = await res.json()
       if (res.ok && data.tracking) {
         setTracking(data.tracking)

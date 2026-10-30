@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/auth"
 import { handleApiError } from "@/lib/api-error"
 import { MAX_PRICE_IMPORT_BYTES, readPriceSpreadsheet, processProductPrices } from "@/lib/product-price-import"
 
+export const maxDuration = 300
+
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response

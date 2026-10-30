@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { sourceLoader } from "./source-loader.mjs"
+import { NextRequest } from "next/server.js"
 
 function browser() {
   const entries = new Map()
@@ -11,6 +12,59 @@ function browser() {
     setItem: (key, value) => entries.set(key, value),
   } } }
 }
+
+test("checkout validation requotes an expired coupon without creating a payment or hiding stock failures", async () => {
+  const calls = []
+  let failure = { ok: false, code: "COUPON_UNAVAILABLE", error: "Coupon expired" }
+  const pricing = { items: [{ id: "fixture-product", price: 118 }], total: 118, coupon: null, couponDiscount: 0 }
+  const loader = sourceLoader({
+    "@/lib/auth": { getSession: async () => ({ user: { id: "session-user" } }) },
+    "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { API: {} } },
+    "@/lib/checkout-payment": {
+      CheckoutQuoteSchema: sourceLoader().load("lib/checkout-payment.ts").CheckoutQuoteSchema,
+      quoteCheckout: async (_items, options) => {
+        calls.push(options)
+        return options.couponCode ? failure : { ok: true, pricing, amount: 118 }
+      },
+    },
+  })
+  const route = loader.load("app/api/cart/validate/route.ts")
+  const request = () => new NextRequest("https://fixture.invalid/api/cart/validate", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: [{ id: "fixture-product", quantity: 1 }], couponCode: "EXPIRED", userId: "untrusted" }),
+  })
+  const response = await route.POST(request())
+  assert.equal(response.status, 200)
+  const result = await response.json()
+  assert.equal(result.couponMessage, "Coupon expired")
+  assert.equal(result.amount, 118)
+  assert.equal(result.pricing.coupon, null)
+  assert.deepEqual(calls.map(options => [options.couponCode, options.userId]), [["EXPIRED", "session-user"], [null, "session-user"]])
+  assert.match(response.headers.get("cache-control"), /no-store/)
+  calls.length = 0
+  failure = { ok: false, error: "Product is unavailable" }
+  const refused = await route.POST(request())
+  assert.equal(refused.status, 400)
+  assert.equal(calls.length, 1, "Stock failures must not retry without a coupon")
+})
+
+test("server order pricing identifies a no-longer-valid coupon and preserves current product prices", async () => {
+  const loader = sourceLoader({
+    "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products", COUPONS: "coupons" }, getCollection: async name => ({
+      find: () => ({ toArray: async () => name === "software_products" ? [{ id: "fixture-software", name: "Fixture", price: 236, active: true, trackInventory: false }] : [] }),
+      findOne: async () => name === "coupons" ? { code: "EXPIRED", name: "Expired", active: true, type: "fixed", value: 10, endDate: "2000-01-01" } : null,
+    }) },
+  })
+  const { priceOrder } = loader.load("lib/order-pricing.ts")
+  const items = [{ id: "fixture-software", quantity: 1, price: 118 }]
+  const refused = await priceOrder(items, { userId: null, couponCode: "EXPIRED" })
+  assert.equal(refused.ok, false)
+  assert.equal(refused.code, "COUPON_UNAVAILABLE")
+  const current = await priceOrder(items, { userId: null })
+  assert.equal(current.ok, true)
+  assert.equal(current.items[0].price, 236)
+  assert.equal(current.total, 236)
+})
 
 function couponHook(environment, server, method = "delivery") {
   const slots = []

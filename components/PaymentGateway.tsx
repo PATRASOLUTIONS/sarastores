@@ -69,6 +69,8 @@ interface PaymentGatewayProps {
   onProcessingChange?: (processing: boolean) => void
   provider?: PaymentProvider | null
   getHostedOrderData?: () => Record<string, unknown>
+  startPaymentRef?: React.MutableRefObject<(() => Promise<void>) | null>
+  onCheckoutChanged?: () => Promise<void>
 }
 
 export default function PaymentGateway({
@@ -86,6 +88,8 @@ export default function PaymentGateway({
   onProcessingChange,
   provider = "razorpay",
   getHostedOrderData,
+  startPaymentRef,
+  onCheckoutChanged,
 }: PaymentGatewayProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -128,7 +132,8 @@ export default function PaymentGateway({
       const json: unknown = await response.json()
       if (!response.ok) {
         if ([400, 403, 404, 429].includes(response.status) || response.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
-        const failure = json as { error?: string }
+        const failure = json as { error?: string; code?: string }
+        if ((response.status === 409 && response.headers.get("Checkout-Retry-Safe") === "true") || failure.code === "COUPON_UNAVAILABLE") await onCheckoutChanged?.()
         throw new Error(failure.error || "Payment could not be started")
       }
       const data = HostedCheckoutResponseSchema.parse(json)
@@ -217,6 +222,7 @@ export default function PaymentGateway({
       if (!orderResponse.ok) {
         if ([400, 403, 404, 429].includes(orderResponse.status) || orderResponse.headers.get("Checkout-Retry-Safe") === "true") clearCheckoutAttempt(checkoutOwner)
         const failure = await orderResponse.json().catch(() => null)
+        if ((orderResponse.status === 409 && orderResponse.headers.get("Checkout-Retry-Safe") === "true") || failure?.code === "COUPON_UNAVAILABLE") await onCheckoutChanged?.()
         throw new Error(failure?.error || "Failed to create payment order")
       }
 
@@ -344,8 +350,7 @@ export default function PaymentGateway({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const startPayment = async () => {
     if (disabled || isProcessing || submitting.current) return
     submitting.current = true
     setIsProcessing(true)
@@ -366,6 +371,12 @@ export default function PaymentGateway({
       submitting.current = false
     }
   }
+  useEffect(() => {
+    if (!startPaymentRef) return
+    startPaymentRef.current = startPayment
+    return () => { startPaymentRef.current = null }
+  })
+  const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); await startPayment() }
 
   return (
     <div>
