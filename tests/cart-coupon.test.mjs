@@ -102,7 +102,7 @@ function couponHook(environment, server, method = "delivery") {
   }, { context: environment.context })
   const useCartCoupon = loader.load("hooks/useCartCoupon.ts").useCartCoupon
   let value
-  const render = () => {
+  const CartCouponFixture = () => {
     cursor = 0
     value = useCartCoupon(items, owner, { method })
     const effects = pending; pending = []
@@ -110,10 +110,10 @@ function couponHook(environment, server, method = "delivery") {
     return value
   }
   const settle = async () => {
-    for (let i = 0; i < 8; i++) { render(); await new Promise(resolve => setImmediate(resolve)) }
-    return render()
+    for (let i = 0; i < 8; i++) { CartCouponFixture(); await new Promise(resolve => setImmediate(resolve)) }
+    return CartCouponFixture()
   }
-  return { render, settle, get value() { return value },
+  return { render: CartCouponFixture, settle, get value() { return value },
     quantity: quantity => { items = [{ ...items[0], quantity }] }, owner: next => { owner = next },
     cleanup: () => slots.forEach(slot => slot?.cleanup?.()) }
 }

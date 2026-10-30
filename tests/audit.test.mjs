@@ -98,13 +98,22 @@ test("server authorization uses live roles instead of stale signed privileges", 
   assert.equal((await loader.load("lib/auth.ts").requireFullAdmin()).ok, false)
 })
 
-test("middleware denies restricted staff on sensitive APIs and overwrites spoofed route headers", async () => {
+test("middleware defers page grants to the live route guard and overwrites spoofed route headers", async () => {
   const loader = sourceLoader({
     "@/lib/session": { SESSION_COOKIE: "session", verifySessionToken: async () => ({ ...user, dashboardAccess: true, allowedPages: ["/admin/orders"] }) },
+    "@/lib/auth-credentials": { getAuthenticatedUserById: async () => ({ ...user, dashboardAccess: true, allowedPages: ["/admin/orders"] }) },
+    "@/lib/session-revocation": { isSessionRevoked: async () => false },
+    "next/headers": {
+      cookies: async () => ({ get: () => ({ value: "fixture-token" }) }),
+      headers: async () => new Headers({ "x-sara-request-path": "/api/admin/partners", "x-sara-request-method": "GET" }),
+    },
   })
   const middleware = loader.load("middleware.ts").middleware
-  const denied = await middleware(new NextRequest("http://localhost:3010/api/admin/partners"))
-  assert.equal(denied.status, 403)
+  const forwarded = await middleware(new NextRequest("http://localhost:3010/api/admin/partners"))
+  assert.equal(forwarded.headers.get("x-middleware-next"), "1")
+  const denied = await loader.load("lib/auth.ts").requireAdmin()
+  assert.equal(denied.ok, false)
+  assert.equal(denied.response.status, 401)
   const allowed = await middleware(new NextRequest("http://localhost:3010/api/orders", {
     headers: { "x-sara-request-path": "/api/users" },
   }))
