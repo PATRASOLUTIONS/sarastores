@@ -295,8 +295,10 @@ export default function AdminProducts() {
 
     failed: number;
     errors: string[];
+    ignoredUnmatched?: number;
   } | null>(null)
   const [previewData, setPreviewData] = useState<PricePreview[] | null>(null)
+  const [pricePreviewIgnored, setPricePreviewIgnored] = useState(0)
   const [pricePreviewPage, setPricePreviewPage] = useState(1)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isPriceExporting, setIsPriceExporting] = useState(false)
@@ -949,6 +951,7 @@ export default function AdminProducts() {
       if (preview) {
         setGoogleSheetId("")
         setPreviewData(result.updates)
+        setPricePreviewIgnored(result.ignoredUnmatched || 0)
         setPricePreviewPage(1)
         setIsPreviewLoading(false)
         setShowPriceUpdateModal(false)
@@ -1004,6 +1007,7 @@ export default function AdminProducts() {
       if (preview) {
         setPriceUpdateFile(null)
         setPreviewData(result.updates)
+        setPricePreviewIgnored(result.ignoredUnmatched || 0)
         setPricePreviewPage(1)
         setIsPreviewLoading(false)
         setShowPriceUpdateModal(false)
@@ -1858,6 +1862,7 @@ export default function AdminProducts() {
                   <div className="flex gap-6 text-sm">
                     <p className="text-green-600 font-medium">✓ Success: {priceUpdateResult.success}</p>
                     <p className="text-red-500 font-medium">✗ Failed: {priceUpdateResult.failed}</p>
+                    <p className="text-gray-500">Unmatched rows ignored: {priceUpdateResult.ignoredUnmatched || 0}</p>
                   </div>
 
                   {priceUpdateResult.errors.length > 0 && (
@@ -1904,6 +1909,7 @@ export default function AdminProducts() {
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col">
+              <p className="mb-3 text-sm text-gray-600">Only products with matching item numbers in the database are shown. Unmatched rows ignored: {pricePreviewIgnored}.</p>
               <div className="overflow-auto border rounded-lg flex-1">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
@@ -1917,6 +1923,7 @@ export default function AdminProducts() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
+                    {previewData.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">No matching item numbers found. Nothing will be updated.</td></tr>}
                     {previewData.slice((pricePreviewPage - 1) * 100, pricePreviewPage * 100).map((item, idx) => (
                       <tr key={idx} className={item.status === 'error' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'}>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.sku}</td>
