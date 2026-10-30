@@ -104,6 +104,7 @@ export default function AdminEmployeesPage() {
   const [editing, setEditing] = useState<Employee | "new" | null>(null)
   const [form, setForm] = useState<EmployeeForm>(EMPTY_FORM)
   const [formFailure, setFormFailure] = useState<EmployeeFailure | null>(null)
+  const [deleteFailure, setDeleteFailure] = useState<{ name: string; failure: EmployeeFailure } | null>(null)
   const failureRef = useRef<HTMLDivElement>(null)
   const [bulkFailures, setBulkFailures] = useState<Array<{ row: number; email: string; failure: EmployeeFailure }>>([])
   const [bulkNotAttempted, setBulkNotAttempted] = useState(0)
@@ -228,14 +229,25 @@ export default function AdminEmployeesPage() {
   }
 
   const remove = async (employee: Employee) => {
+    if (saving) return
     if (!employee.id || !confirm(`Delete ${employee.name} and disable their staff login?`)) return
+    if (!lock.acquire()) return
+    setSaving(true)
+    setDeleteFailure(null)
     try {
       const response = await apiFetch(`/api/employees/${employee.id}`, { method: "DELETE" })
-      if (!response.ok) throw new Error()
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new EmployeeRequestError(employeeResponseFailure(response.status, result, "delete"))
+      if (!result || result.success !== true) throw new EmployeeRequestError(employeeNetworkFailure("delete"))
       toast.success("Staff member deleted")
       await load()
-    } catch {
-      toast.error("Could not delete staff member")
+    } catch (error) {
+      const failure = error instanceof EmployeeRequestError ? error.failure : employeeNetworkFailure("delete")
+      setDeleteFailure({ name: employee.name, failure })
+      toast.error(failure.error)
+    } finally {
+      lock.release()
+      setSaving(false)
     }
   }
 
@@ -395,6 +407,11 @@ export default function AdminEmployeesPage() {
           <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"><Plus className="h-4 w-4" /> Add staff</button>
         </div>
       </header>
+
+      {deleteFailure && <section role="alert" className="rounded-md border border-red-300 bg-red-50 p-4 text-red-900">
+        <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Could not confirm deletion of {deleteFailure.name}</h2><button type="button" onClick={() => setDeleteFailure(null)} className="text-sm underline">Dismiss</button></div>
+        <FailureDetails failure={deleteFailure.failure} />
+      </section>}
 
       {bulkFailures.length > 0 && <section aria-label="Staff import failures" className="rounded-md border border-red-200 bg-red-50 p-4 text-red-900">
         <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Staff import: rows needing attention</h2><button type="button" onClick={() => setBulkFailures([])} className="text-sm underline">Dismiss report</button></div>

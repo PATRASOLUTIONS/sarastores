@@ -63,7 +63,7 @@ function accessFields(input: EmployeeFields) {
   }
 }
 
-async function employeeTransaction<T>(work: (session: ClientSession) => Promise<T>): Promise<T> {
+async function prepareEmployeeCreationIndexes() {
   const employees = await getCollection<EmployeeDocument>("employees")
   const users = await getCollection<EmployeeUser>("users")
   try {
@@ -74,6 +74,21 @@ async function employeeTransaction<T>(work: (session: ClientSession) => Promise<
     if (error && typeof error === "object" && "code" in error && error.code === 11000) throw new EmployeeError(
       "Existing staff or login records contain duplicate IDs or emails, so the database uniqueness check could not be prepared.", 409,
       { code: "EXISTING_STAFF_DUPLICATES", action: "Ask the system administrator to reconcile the existing duplicate records, then retry. A different email in this form will not fix the database setup." })
+    throw error
+  }
+}
+
+async function employeeTransaction<T>(work: (session: ClientSession) => Promise<T>): Promise<T> {
+  // Login emails must remain unique even when legacy staff profiles share an
+  // email. Do not rebuild the staff-email index as a prerequisite to editing
+  // or deleting one profile.
+  const users = await getCollection<EmployeeUser>("users")
+  try {
+    await users.createIndex({ email: 1 }, { unique: true, name: "email_unique" })
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === 11000) throw new EmployeeError(
+      "Existing login accounts contain duplicate emails, so account uniqueness could not be prepared.", 409,
+      { code: "EXISTING_STAFF_DUPLICATES", action: "Ask the system administrator to reconcile the duplicate login accounts before retrying." })
     throw error
   }
   const { client } = await connectToDatabase()
@@ -92,10 +107,12 @@ async function linkedUser(employee: EmployeeDocument, session: ClientSession) {
   const matches = employee.userId && ObjectId.isValid(employee.userId)
     ? await users.find({ _id: new ObjectId(employee.userId) }, { session }).limit(2).toArray()
     : await users.find({ $or: [{ employeeId: employee.employeeId }, { email: employee.email }] }, { session }).limit(2).toArray()
-  if (matches.length > 1 || matches.some(user => user.role !== "user" ||
-    (user.employeeId && user.employeeId !== employee.employeeId))) {
-    throw new EmployeeError("Linked account is ambiguous or privileged; reconcile it before editing staff", 409)
-  }
+  if (matches.length > 1) throw new EmployeeError("This staff record matches more than one login account.", 409,
+    { code: "STAFF_LOGIN_AMBIGUOUS", action: "Ask the system administrator to link this staff record to the correct login account, then retry." })
+  if (matches.some(user => user.role !== "user")) throw new EmployeeError("This staff record is linked to an administrator, superadmin or vendor login.", 409,
+    { code: "STAFF_LOGIN_PRIVILEGED", action: "Reconcile the staff profile and privileged login before changing or removing it. Staff management cannot downgrade or disable a privileged account." })
+  if (matches.some(user => user.employeeId && user.employeeId !== employee.employeeId)) throw new EmployeeError("The linked login belongs to a different Employee ID.", 409,
+    { code: "STAFF_LOGIN_MISMATCH", action: "Ask the system administrator to correct the staff-to-login link before retrying, so another staff member's access is not changed." })
   return matches[0] ?? null
 }
 
@@ -107,6 +124,7 @@ async function revokeEmployeeSessions(userId: string, session: ClientSession) {
 }
 
 export async function createEmployee(input: z.infer<typeof CreateEmployeeSchema>) {
+  await prepareEmployeeCreationIndexes()
   const password = input.password || randomBytes(24).toString("base64url")
   const hash = await bcrypt.hash(password, 12)
   return employeeTransaction(async session => {
@@ -162,6 +180,17 @@ export async function updateEmployee(id: string, fields: z.infer<typeof UpdateEm
     const users = await getCollection<EmployeeUser>("users")
     const employee = await employees.findOne({ _id: new ObjectId(id) }, { session })
     if (!employee) throw new EmployeeError("Employee not found", 404)
+    const changedIdentity: Array<{ employeeId: string } | { email: string }> = []
+    if (fields.employeeId !== employee.employeeId) changedIdentity.push({ employeeId: fields.employeeId })
+    if (fields.email !== employee.email) changedIdentity.push({ email: fields.email })
+    if (changedIdentity.length) {
+      const conflicts = await employees.find({ _id: { $ne: employee._id }, $or: changedIdentity }, { session }).limit(2).toArray()
+      const fieldErrors: Record<string, string[]> = {}
+      if (fields.employeeId !== employee.employeeId && conflicts.some(record => record.employeeId === fields.employeeId)) fieldErrors.employeeId = ["This Employee ID already belongs to another staff member."]
+      if (fields.email !== employee.email && conflicts.some(record => record.email === fields.email)) fieldErrors.email = ["This login email already belongs to another staff member."]
+      if (Object.keys(fieldErrors).length) throw new EmployeeError("The new staff identity conflicts with another staff record.", 409,
+        { code: "DUPLICATE_STAFF", fieldErrors, action: "Use a different Employee ID or login email, or keep this staff member's current details." })
+    }
     const user = await linkedUser(employee, session)
     if (!user) throw new EmployeeError("Employee login is missing; reconcile it before editing access", 409)
     const collision = await users.findOne({ email: fields.email, _id: { $ne: user._id } }, { session })
