@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import {
   BarChart3,
@@ -25,7 +25,8 @@ import * as XLSX from "xlsx"
 import { apiFetch } from "@/lib/api-client"
 import { ADMIN_MENU_PATHS } from "@/components/AdminSidebar"
 import type { Employee } from "@/types/employee"
-import { EmployeeCreationResponseSchema, EmployeeListResponseSchema } from "@/lib/validation"
+import { EmployeeCreationResponseSchema, EmployeeListResponseSchema, emailSchema, nameSchema } from "@/lib/validation"
+import { EMPLOYEE_FIELD_LABELS, EmployeeRequestError, employeeNetworkFailure, employeeResponseFailure, employeeValidationFailure, type EmployeeFailure } from "@/lib/employee-failure"
 import { z } from "zod"
 
 const employeeSalesSchema = z.array(z.object({
@@ -77,6 +78,21 @@ const pageGroups = Object.entries(
   }, {}),
 )
 
+const staffIdentitySchema = z.object({
+  employeeId: z.string().trim().min(1, "Enter an Employee ID.").max(100, "Employee ID must be at most 100 characters."),
+  name: z.string().trim().pipe(nameSchema),
+  email: z.string().trim().pipe(emailSchema),
+})
+
+function FailureDetails({ failure }: { failure: EmployeeFailure }) {
+  return <>
+    <p className="mt-1 text-sm font-semibold">{failure.error}</p>
+    {failure.fieldErrors && <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{Object.entries(failure.fieldErrors).flatMap(([field, messages]) => messages.map((message, index) => <li key={`${field}-${index}`}><strong>{EMPLOYEE_FIELD_LABELS[field] || "Staff details"}:</strong> {message}</li>))}</ul>}
+    {failure.action && <p className="mt-3 text-sm"><strong>What to do:</strong> {failure.action}</p>}
+    {failure.reference && <p className="mt-2 break-all text-xs">Support reference: {failure.reference}</p>}
+  </>
+}
+
 export default function AdminEmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [stores, setStores] = useState<StoreLocation[]>([])
@@ -87,6 +103,11 @@ export default function AdminEmployeesPage() {
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all")
   const [editing, setEditing] = useState<Employee | "new" | null>(null)
   const [form, setForm] = useState<EmployeeForm>(EMPTY_FORM)
+  const [formFailure, setFormFailure] = useState<EmployeeFailure | null>(null)
+  const [deleteFailure, setDeleteFailure] = useState<{ name: string; failure: EmployeeFailure } | null>(null)
+  const failureRef = useRef<HTMLDivElement>(null)
+  const [bulkFailures, setBulkFailures] = useState<Array<{ row: number; email: string; failure: EmployeeFailure }>>([])
+  const [bulkNotAttempted, setBulkNotAttempted] = useState(0)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [salesEmployee, setSalesEmployee] = useState<Employee | null>(null)
   const [salesOrders, setSalesOrders] = useState<z.infer<typeof employeeSalesSchema>>([])
@@ -118,12 +139,21 @@ export default function AdminEmployeesPage() {
     load()
   }, [])
 
+  useEffect(() => {
+    if (formFailure) {
+      failureRef.current?.focus()
+      failureRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
+  }, [formFailure])
+
   const openCreate = () => {
+    setFormFailure(null)
     setForm({ ...EMPTY_FORM, allowedPages: [], storeIds: [] })
     setEditing("new")
   }
 
   const openEdit = (employee: Employee) => {
+    setFormFailure(null)
     setForm({
       employeeId: employee.employeeId,
       name: employee.name,
@@ -141,26 +171,32 @@ export default function AdminEmployeesPage() {
 
   const closeEditor = () => {
     if (saving) return
+    setFormFailure(null)
     setEditing(null)
     setForm({ ...EMPTY_FORM, allowedPages: [], storeIds: [] })
   }
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!form.employeeId.trim() || !form.name.trim() || !form.email.trim()) {
-      toast.error("Employee ID, name and email are required")
-      return
-    }
+    if (saving) return
+    const identity = staffIdentitySchema.safeParse(form)
+    const validation = identity.success ? null : employeeValidationFailure(identity.error.issues)
+    const fieldErrors = { ...validation?.fieldErrors }
     if (form.dashboardAccess && form.allowedPages.length === 0) {
-      toast.error("Select at least one dashboard page")
-      return
+      fieldErrors.allowedPages = ["Select at least one dashboard page, or turn off dashboard access."]
     }
     if (form.storeAccess === "selected" && form.storeIds.length === 0) {
-      toast.error("Select at least one store")
+      fieldErrors.storeIds = ["Select at least one store, or change store access to No stores or All stores."]
+    }
+    if (Object.keys(fieldErrors).length) {
+      const failure = { error: "Some staff details are invalid or missing.", fieldErrors, action: "Correct the fields listed below, then submit the form again." }
+      setFormFailure(failure)
+      toast.error(failure.error)
       return
     }
 
     if (!lock.acquire()) return
+    setFormFailure(null)
     setSaving(true)
     try {
       const id = editing !== "new" && editing?.id
@@ -168,21 +204,24 @@ export default function AdminEmployeesPage() {
         method: id ? "PUT" : "POST",
         json: form,
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result?.error || "Could not save staff member")
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new EmployeeRequestError(employeeResponseFailure(response.status, result))
       if (!id) {
-        const created = EmployeeCreationResponseSchema.parse(result)
-        const password = created.temporaryPassword
+        const created = EmployeeCreationResponseSchema.safeParse(result)
+        if (!created.success) throw new EmployeeRequestError({ error: "The server accepted the request, but the staff creation details could not be read.", action: "Reload the staff list before retrying. If the staff member exists, use that record. If their temporary password was not shown, use password recovery instead of creating another account." })
+        const password = created.data.temporaryPassword
         if (password) {
           setTemporaryLogins(current => [...current, { email: form.email, password }])
         }
-      }
+      } else if (!result || result.success !== true) throw new EmployeeRequestError(employeeNetworkFailure())
       toast.success(id ? "Staff access updated" : "Staff member created")
       setEditing(null)
       setForm({ ...EMPTY_FORM, allowedPages: [], storeIds: [] })
       await load()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save staff member")
+      const failure = error instanceof EmployeeRequestError ? error.failure : employeeNetworkFailure()
+      setFormFailure(failure)
+      toast.error(failure.error)
     } finally {
       lock.release()
       setSaving(false)
@@ -190,14 +229,25 @@ export default function AdminEmployeesPage() {
   }
 
   const remove = async (employee: Employee) => {
+    if (saving) return
     if (!employee.id || !confirm(`Delete ${employee.name} and disable their staff login?`)) return
+    if (!lock.acquire()) return
+    setSaving(true)
+    setDeleteFailure(null)
     try {
       const response = await apiFetch(`/api/employees/${employee.id}`, { method: "DELETE" })
-      if (!response.ok) throw new Error()
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new EmployeeRequestError(employeeResponseFailure(response.status, result, "delete"))
+      if (!result || result.success !== true) throw new EmployeeRequestError(employeeNetworkFailure("delete"))
       toast.success("Staff member deleted")
       await load()
-    } catch {
-      toast.error("Could not delete staff member")
+    } catch (error) {
+      const failure = error instanceof EmployeeRequestError ? error.failure : employeeNetworkFailure("delete")
+      setDeleteFailure({ name: employee.name, failure })
+      toast.error(failure.error)
+    } finally {
+      lock.release()
+      setSaving(false)
     }
   }
 
@@ -261,6 +311,11 @@ export default function AdminEmployeesPage() {
   const bulkUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    if (!lock.acquire()) return
+    setSaving(true)
+    setBulkFailures([])
+    setBulkNotAttempted(0)
+    const failures: typeof bulkFailures = []
     const toastId = toast.loading("Importing staff...")
     try {
       if (file.size > 10 * 1024 * 1024) throw new Error("Staff spreadsheet exceeds 10 MB")
@@ -270,29 +325,49 @@ export default function AdminEmployeesPage() {
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
       if (!rows.length || rows.length > 500) throw new Error("Import between 1 and 500 staff members at a time")
       let success = 0
-      let failed = 0
-      for (const row of rows) {
+      let notAttempted = 0
+      for (const [index, row] of rows.entries()) {
+        const rowNumber = typeof row.__rowNum__ === "number" ? row.__rowNum__ + 1 : index + 2
         const emailKey = Object.keys(row).find((key) => key.toLowerCase().includes("email"))
         const email = emailKey ? String(row[emailKey] ?? "").trim() : ""
-        if (!email) continue
-        const response = await apiFetch("/api/employees", {
-          method: "POST",
-          json: {
-            ...EMPTY_FORM,
-            name: String(row.Name || row.name || email.split("@")[0]),
-            email,
-            employeeId: String(row["Employee ID"] || row.employeeId || `SM${crypto.randomUUID().slice(0, 8)}`),
-            department: "Store Operations",
-          },
-        })
-        if (response.ok) {
-          const created = EmployeeCreationResponseSchema.parse(await response.json())
-          const password = created.temporaryPassword
-          if (password) setTemporaryLogins(current => [...current, { email, password }])
-          success += 1
-        } else failed += 1
+        if (!email) {
+          failures.push({ row: rowNumber, email: "Missing email", failure: { error: "This row has no login email.", action: "Add a valid email address in the Email column, then import this row again." } })
+          continue
+        }
+        try {
+          const response = await apiFetch("/api/employees", {
+            method: "POST",
+            json: {
+              ...EMPTY_FORM,
+              name: String(row.Name || row.name || email.split("@")[0]),
+              email,
+              employeeId: String(row["Employee ID"] || row.employeeId || `SM${crypto.randomUUID().slice(0, 8)}`),
+              department: "Store Operations",
+            },
+          })
+          const result = await response.json().catch(() => null)
+          if (response.ok) {
+            const created = EmployeeCreationResponseSchema.safeParse(result)
+            if (!created.success) throw new EmployeeRequestError({ error: "The server accepted this row, but its staff creation details could not be read.", action: "Check the staff list for this email before retrying. Use password recovery if the account exists and its temporary password was not shown." })
+            const password = created.data.temporaryPassword
+            if (password) setTemporaryLogins(current => [...current, { email, password }])
+            success += 1
+          } else {
+            failures.push({ row: rowNumber, email, failure: employeeResponseFailure(response.status, result) })
+            if ([401, 403, 429].includes(response.status) || response.status >= 500 || result?.code === "EXISTING_STAFF_DUPLICATES") {
+              notAttempted = rows.length - index - 1
+              break
+            }
+          }
+        } catch (error) {
+          failures.push({ row: rowNumber, email, failure: error instanceof EmployeeRequestError ? error.failure : employeeNetworkFailure() })
+          notAttempted = rows.length - index - 1
+          break
+        }
       }
-      if (failed) toast.error(`${success} imported, ${failed} failed`, { id: toastId })
+      setBulkFailures(failures)
+      setBulkNotAttempted(notAttempted)
+      if (failures.length) toast.error(`${success} imported, ${failures.length} rows need attention${notAttempted ? `, ${notAttempted} not attempted` : ""}. See the import report.`, { id: toastId, duration: 7000 })
       else toast.success(`${success} imported`, { id: toastId })
       setBulkOpen(false)
       await load()
@@ -300,6 +375,8 @@ export default function AdminEmployeesPage() {
       toast.error(error instanceof Error ? error.message : "Could not process that spreadsheet", { id: toastId })
     } finally {
       event.target.value = ""
+      lock.release()
+      setSaving(false)
     }
   }
 
@@ -330,6 +407,18 @@ export default function AdminEmployeesPage() {
           <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"><Plus className="h-4 w-4" /> Add staff</button>
         </div>
       </header>
+
+      {deleteFailure && <section role="alert" className="rounded-md border border-red-300 bg-red-50 p-4 text-red-900">
+        <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Could not confirm deletion of {deleteFailure.name}</h2><button type="button" onClick={() => setDeleteFailure(null)} className="text-sm underline">Dismiss</button></div>
+        <FailureDetails failure={deleteFailure.failure} />
+      </section>}
+
+      {bulkFailures.length > 0 && <section aria-label="Staff import failures" className="rounded-md border border-red-200 bg-red-50 p-4 text-red-900">
+        <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Staff import: rows needing attention</h2><button type="button" onClick={() => setBulkFailures([])} className="text-sm underline">Dismiss report</button></div>
+        <p className="mt-1 text-sm">Correct these rows and upload only the corrected rows. Check the staff list before retrying any row whose result could not be confirmed.</p>
+        {bulkNotAttempted > 0 && <p className="mt-2 text-sm font-semibold">Import stopped: the remaining {bulkNotAttempted} rows were not attempted. Resolve the reason below before uploading those remaining rows.</p>}
+        <div className="mt-3 max-h-96 overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-2">Sheet row</th><th className="p-2">Login email</th><th className="p-2">Reason and next step</th></tr></thead><tbody>{bulkFailures.map(entry => <tr key={entry.row} className="border-t border-red-200 align-top"><td className="p-2">{entry.row}</td><td className="break-all p-2">{entry.email}</td><td className="p-2"><FailureDetails failure={entry.failure} /></td></tr>)}</tbody></table></div>
+      </section>}
 
       {temporaryLogins.length > 0 && (
         <section aria-label="New staff credentials" className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4">
@@ -367,8 +456,12 @@ export default function AdminEmployeesPage() {
 
       {editing && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={editing === "new" ? "Create staff member" : "Edit staff member"}>
-          <form onSubmit={save} className="mx-auto my-2 w-full max-w-6xl overflow-hidden rounded-md bg-white shadow-2xl">
+          <form noValidate onSubmit={save} className="mx-auto my-2 w-full max-w-6xl overflow-hidden rounded-md bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4"><div><h2 className="text-lg font-bold text-gray-950">{editing === "new" ? "Create staff member" : `Edit ${editing.name}`}</h2><p className="text-xs text-gray-500">Identity, dashboard permissions and store scope</p></div><button type="button" title="Close" onClick={closeEditor} className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button></div>
+            {formFailure && <div ref={failureRef} role="alert" tabIndex={-1} className="m-5 rounded-md border border-red-300 bg-red-50 p-4 text-red-900 outline-none focus:ring-2 focus:ring-red-400">
+              <h3 className="font-bold">{editing === "new" ? "Staff creation needs attention" : "Staff update needs attention"}</h3>
+              <FailureDetails failure={formFailure} />
+            </div>}
             <fieldset disabled={saving} className="grid min-w-0 lg:grid-cols-[360px_minmax(0,1fr)]">
               <div className="space-y-5 border-b border-gray-200 p-5 lg:border-b-0 lg:border-r">
                 <section><h3 className="flex items-center gap-2 text-sm font-bold text-gray-900"><UserRound className="h-4 w-4" /> Identity</h3><div className="mt-3 grid gap-3"><label className="text-xs font-semibold text-gray-600">Employee ID *<input value={form.employeeId} onChange={(event) => setForm({ ...form, employeeId: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><label className="text-xs font-semibold text-gray-600">Full name *<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><label className="text-xs font-semibold text-gray-600">Login email *<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold text-gray-600">Department<input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label><label className="text-xs font-semibold text-gray-600">Job title<input value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal" /></label></div><label className="text-xs font-semibold text-gray-600">Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as EmployeeForm["status"] })} className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3 text-sm font-normal"><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div></section>

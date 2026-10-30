@@ -2,7 +2,9 @@ import { NextResponse } from "next/server"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { requireFullAdmin } from "@/lib/auth"
 import { handleApiError } from "@/lib/api-error"
-import { CreateEmployeeSchema, createEmployee, EmployeeError, type EmployeeDocument } from "@/lib/employee-service"
+import { CreateEmployeeSchema, createEmployee, type EmployeeDocument } from "@/lib/employee-service"
+import { employeeValidationFailure } from "@/lib/employee-failure"
+import { employeeApiError } from "@/lib/employee-api-error"
 import { EmployeeListResponseSchema } from "@/lib/validation"
 
 export async function GET() {
@@ -25,10 +27,9 @@ export async function POST(req: Request) {
       console.warn("Invalid employee creation JSON:", error)
       return null
     }))
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid employee" }, { status: 400 })
+    if (!parsed.success) return NextResponse.json(employeeValidationFailure(parsed.error.issues), { status: 400, headers: { "Cache-Control": "no-store" } })
     return NextResponse.json(await createEmployee(parsed.data), { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
-    if (error instanceof EmployeeError) return NextResponse.json({ error: error.message }, { status: error.status })
-    return handleApiError(error, "Failed to create employee")
+    return employeeApiError(error)
   }
 }
