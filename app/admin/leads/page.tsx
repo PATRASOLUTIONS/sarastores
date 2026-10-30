@@ -38,6 +38,12 @@ interface Lead {
     pincode: string
     category: string
     source: string
+    message?: string
+    storeName?: string
+    storeCode?: string
+    contactConsent?: boolean
+    promotionalConsent?: boolean
+    consentAcceptedAt?: string
     status: string
     createdAt: string
     updatedAt: string
@@ -588,6 +594,13 @@ export default function AdminLeadsPage() {
                                         {selectedLead.status.charAt(0).toUpperCase() + selectedLead.status.slice(1)}
                                     </span>
                                 </div>
+                                {selectedLead.source === "store_locator" && <div className="col-span-2 space-y-3 rounded-xl bg-gray-50 p-4">
+                                    <div><p className="text-xs text-gray-500">Store</p><p className="text-sm font-medium">{selectedLead.storeName || "-"}{selectedLead.storeCode ? ` (${selectedLead.storeCode})` : ""}</p></div>
+                                    <div><p className="text-xs text-gray-500">Message</p><p className="whitespace-pre-line text-sm">{selectedLead.message || "-"}</p></div>
+                                    <p className="text-xs text-gray-600">Enquiry notifications, WhatsApp and calls: {selectedLead.contactConsent === true ? "Accepted" : "Not accepted"}</p>
+                                    <p className="text-xs text-gray-600">Promotional messages: {selectedLead.promotionalConsent === true ? "Opted in" : "Not opted in"}</p>
+                                    {selectedLead.consentAcceptedAt && <p className="text-xs text-gray-500">Consent recorded: {formatDate(selectedLead.consentAcceptedAt)}</p>}
+                                </div>}
                                 <div>
                                     <p className="text-xs text-gray-500 flex items-center gap-1 mb-1"><Clock className="h-3 w-3" /> Date</p>
                                     <p className="font-medium text-gray-900 text-sm">{formatDate(selectedLead.createdAt)}</p>

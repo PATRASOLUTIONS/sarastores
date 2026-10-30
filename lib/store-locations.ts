@@ -18,6 +18,7 @@ export interface StoredStoreLocation {
   shopTiming?: string
   shopImage?: string
   googleMapLocation?: string
+  googlePlaceId?: string
   latitude?: number
   longitude?: number
   isActive?: boolean

@@ -11,6 +11,7 @@ import { calculateDistance, coordinates, coordinatesFromGeocode, geocodePincode,
 import Header from "./Header"
 import Footer from "./Footer"
 import { StoreLocatorHero, StoreLocatorTrust } from "./store-locator-chrome"
+import { StoreEnquiryDialog } from "./store-enquiry-dialog"
 import styles from "./store-locator.module.css"
 
 const StoreMap = dynamic(() => import("./store-map"), {
@@ -87,6 +88,7 @@ export function StoreLocator() {
   const [selectedBrand, setSelectedBrand] = useState("all")
   const [sort, setSort] = useState("nearest")
   const [selectedStore, setSelectedStore] = useState<string | null>(null)
+  const [enquiryStore, setEnquiryStore] = useState<Store | null>(null)
   const [showAll, setShowAll] = useState(true)
   const [view, setView] = useState<"map" | "list">("map")
   const [mapReset, setMapReset] = useState(0)
@@ -131,7 +133,15 @@ export function StoreLocator() {
           !("stores" in data) || !Array.isArray(data.stores) || !data.stores.every(isStore)) {
           throw new Error("Unable to load stores. Please try again.")
         }
-        setStores(data.stores)
+        // Shuffle once per successful load; filtering keeps this order stable.
+        const shuffled = [...data.stores]
+        for (let index = shuffled.length - 1; index > 0; index--) {
+          const other = Math.floor(Math.random() * (index + 1))
+          const value = shuffled[index]
+          shuffled[index] = shuffled[other]
+          shuffled[other] = value
+        }
+        setStores(shuffled)
       } catch (error) {
         if (controller.signal.aborted) return
         console.error("Failed to load stores:", error)
@@ -239,7 +249,7 @@ export function StoreLocator() {
     clearLocation()
   }
 
-  function getCurrentLocation() {
+  function getCurrentLocation(automatic = false) {
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser.")
       return
@@ -249,17 +259,23 @@ export function StoreLocator() {
     setLocationError(null)
     navigator.geolocation.getCurrentPosition((position) => {
       if (request !== locationRequest.current) return
-      setSearchQuery("")
+      if (!automatic) setSearchQuery("")
       setGpsLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
       setSort("nearest")
       setLocationLoading(false)
     }, (error) => {
       if (request !== locationRequest.current) return
-      setLocationError(error.code === 1 ? "Location permission denied. Enable location access or search by city or pincode." :
+      setGpsLocation(null)
+      setLocationError(error.code === 1 ? "Location access wasn't granted. Showing stores in a shuffled order; you can still search by city or pincode." :
         error.code === 3 ? "Location request timed out. Please try again." : "Unable to retrieve your location. Please try again.")
       setLocationLoading(false)
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 })
   }
+
+  useEffect(() => {
+    getCurrentLocation(true)
+    return () => { locationRequest.current++ }
+  }, [])
 
   const locatedStores = useMemo<LocatedStore[]>(() => stores.map((store) => {
     const coords = coordinates(store.latitude, store.longitude)
@@ -287,7 +303,7 @@ export function StoreLocator() {
   const filteredStores = useMemo(() => {
     if (nearestFallback) return [nearestFallback.store]
     return matchingStores.filter((store) => !userLocation || (store.distance !== null && store.distance <= radiusKm)).sort((a, b) => {
-    if (sort === "nearest" && userLocation) return (a.distance ?? Infinity) - (b.distance ?? Infinity)
+    if (sort === "nearest") return userLocation ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : 0
     return sort === "name-desc" ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
     })
   }, [matchingStores, nearestFallback, userLocation, radiusKm, sort])
@@ -335,7 +351,7 @@ export function StoreLocator() {
             <option value="all">All Brands</option>
             {brands.map((brand) => <option key={brand}>{brand}</option>)}
           </select>
-          <button className={styles.locationButton} type="button" onClick={getCurrentLocation} disabled={locationLoading}>
+          <button className={styles.locationButton} type="button" onClick={() => getCurrentLocation()} disabled={locationLoading}>
             {locationLoading ? <Loader2 size={19} className="animate-spin" /> : <Target size={19} />}
             {locationLoading ? "Detecting..." : "Use My Location"}
           </button>
@@ -371,11 +387,11 @@ export function StoreLocator() {
             <div className={styles.resultsHeading}>
               <h2>Our Stores <span>({isDataLoading ? "Loading..." : `${filteredStores.length} Stores`})</span></h2>
               <label>Sort By: <select aria-label="Sort stores" value={sort} onChange={(event) => setSort(event.target.value)}>
-                <option value="nearest">Nearest First</option><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
+                <option value="nearest">{userLocation ? "Nearest First" : "Suggested order"}</option><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
               </select></label>
             </div>
             {view === "list" && <div className={styles.listViewToolbar}>{viewTabs}</div>}
-            {!isDataLoading && <p className={styles.distanceHint}>{userLocation ? "Distances are approximate, straight-line distances. Google Maps shows the driving route." : "Search a place, use your location or enter a pincode to see distances."}</p>}
+            {!isDataLoading && <p className={styles.distanceHint}>{userLocation ? "Distances are approximate, straight-line distances. Google Maps shows the driving route." : "Showing stores in a shuffled order. Use your location or search a pincode to find nearby stores."}</p>}
             {isDataLoading ? <div className={styles.empty} role="status"><Loader2 className="animate-spin" /><p>Loading stores...</p></div> :
               dataError ? <div className={styles.empty} role="alert"><AlertCircle /><p>{dataError}</p><button type="button" onClick={() => setRefresh((value) => value + 1)}>Retry</button></div> :
               filteredStores.length === 0 ? <div className={styles.empty}><MapPin /><h3>No stores found</h3><p>{userLocation ? `No matching stores within ${radiusKm} km. Widen the radius or reset filters.` : "Try another city, area or store type."}</p><button type="button" onClick={resetFilters}>Show All Stores</button></div> :
@@ -383,13 +399,14 @@ export function StoreLocator() {
                 {visibleStores.map((store) => {
                   const status = openingStatus(store.hours, now)
                   return (
-                    <article key={store.id} className={`${styles.storeCard} ${selectedStore === store.id ? styles.selectedCard : ""}`} data-store-id={store.id}>
+                    <article key={store.id} className={`${styles.storeCard} ${selectedStore === store.id ? styles.selectedCard : ""}`} data-store-id={store.id}
+                      onClick={event => { if (event.target instanceof Element && !event.target.closest("a, button")) setEnquiryStore(store) }}>
                       {/* A shared fallback illustrates the brand, not this individual branch. */}
                       <img src={store.image || genericPhoto} alt={store.image ? store.name : "SARA storefront illustration"} className={styles.storePhoto} onError={(event) => {
                         if (!event.currentTarget.dataset.fallback) { event.currentTarget.dataset.fallback = "true"; event.currentTarget.src = "/store-locator/storefront.webp" }
                       }} />
                       <div className={styles.storeDetails}>
-                        <h3><button type="button" onClick={() => selectStore(store.id)}>{store.name}</button></h3>
+                        <h3><button type="button" aria-haspopup="dialog" onClick={() => { selectStore(store.id); setEnquiryStore(store) }}>{store.name}</button></h3>
                         <p className={styles.address}>{store.address}</p>
                         <div className={styles.hours}><span className={status === "Open Now" ? styles.open : styles.closed}>{status && <i />}{status || "Opening hours"}</span><span>{store.hours}</span></div>
                         {store.phone && <a className={styles.phone} href={`tel:${store.phone}`} onClick={() => analytics.callClick("store_locator", store.phone)}><Phone size={12} />{store.phone}</a>}
@@ -420,6 +437,7 @@ export function StoreLocator() {
         <StoreLocatorTrust />
       </div>
       <Footer />
+      {enquiryStore && <StoreEnquiryDialog key={enquiryStore.id} store={enquiryStore} origin={userLocation} onClose={() => setEnquiryStore(null)} />}
     </div>
   )
 }

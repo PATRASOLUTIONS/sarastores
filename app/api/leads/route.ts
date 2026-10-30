@@ -4,7 +4,10 @@ import { ObjectId } from "mongodb"
 import { checkAdminAuthorization, requireAdmin } from "@/lib/auth"
 import { withRateLimit } from "@/lib/rate-limit"
 import { LeadQuerySchema, buildLeadFilter } from "@/lib/lead-query"
-import { CreateLeadSchema, UpdateLeadSchema } from "@/lib/validation"
+import { CreateLeadSchema, StoreLocatorLeadSchema, UpdateLeadSchema } from "@/lib/validation"
+import { getCollection } from "@/lib/db-service"
+import { ACTIVE_RETAIL_STORE_FILTER, type StoredStoreLocation } from "@/lib/store-locations"
+import { derivePincode } from "@/lib/store-address"
 
 // GET - Fetch all leads (admin)
 export async function GET(req: Request) {
@@ -56,10 +59,31 @@ export async function GET(req: Request) {
 // POST - Submit a new lead. Public and therefore rate limited.
 export const POST = withRateLimit(async function POST(req: Request) {
     try {
-        const parsed = CreateLeadSchema.safeParse(await req.json().catch(error => {
+        const body: unknown = await req.json().catch(error => {
             console.warn("Invalid lead submission JSON:", error)
             return null
-        }))
+        })
+        if (body && typeof body === "object" && "source" in body && body.source === "store_locator") {
+            const parsed = StoreLocatorLeadSchema.safeParse(body)
+            if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid enquiry" }, { status: 400 })
+            const { storeId, name, email, phone, message, contactConsent, promotionalConsent } = parsed.data
+            const store = await (await getCollection<StoredStoreLocation>("store_locations")).findOne({
+                ...ACTIVE_RETAIL_STORE_FILTER, _id: new ObjectId(storeId),
+            }, { projection: { shopName: 1, storeCode: 1, pincode: 1, locationDescription: 1 } })
+            if (!store) return NextResponse.json({ error: "This store is unavailable. Please select another store." }, { status: 404 })
+            const now = new Date()
+            const result = await (await getCollection("leads")).insertOne({
+                name, email: email.trim().toLowerCase(), phone, message,
+                source: "store_locator", category: "Store enquiry", status: "new",
+                storeId: String(store._id), storeName: store.shopName || "", storeCode: store.storeCode || "",
+                pincode: String(store.pincode || derivePincode(store.locationDescription || "")),
+                contactConsent, promotionalConsent, contactChannels: ["notifications", "whatsapp", "call"],
+                consentVersion: "store-enquiry-2026-10-30", consentAcceptedAt: now,
+                createdAt: now, updatedAt: now,
+            })
+            return NextResponse.json({ success: true, id: String(result.insertedId), message: "Thank you. Your enquiry has been sent to our team." }, { status: 201 })
+        }
+        const parsed = CreateLeadSchema.safeParse(body)
         if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid lead submission" }, { status: 400 })
         const { name, phone, pincode, email, category, source } = parsed.data
 

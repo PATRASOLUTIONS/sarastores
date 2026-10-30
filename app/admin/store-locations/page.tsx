@@ -33,6 +33,7 @@ interface StoreLocation {
   locationType: "store" | "warehouse"
   locationDescription: string
   googleMapLocation: string
+  googlePlaceId?: string
   mobileNo: string
   shopTiming: string
   shopImage: string
@@ -48,6 +49,7 @@ const EMPTY_STORE: Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'> = {
   locationType: "store",
   locationDescription: "",
   googleMapLocation: "",
+  googlePlaceId: "",
   mobileNo: "",
   shopTiming: "9:00 AM - 9:00 PM",
   shopImage: "",
@@ -149,6 +151,14 @@ const StoreForm = ({
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
             placeholder="https://maps.google.com/..."
           />
+        </div>
+
+        <div>
+          <label htmlFor="store-google-place-id" className="mb-2 block text-sm font-medium text-gray-700">Google Place ID (for live business details and reviews)</label>
+          <input id="store-google-place-id" value={store.googlePlaceId || ""} maxLength={200}
+            onChange={event => onChange("googlePlaceId", event.target.value)}
+            className="w-full rounded-xl border border-gray-300 px-4 py-3" placeholder="ChIJ..." />
+          <p className="mt-2 text-xs text-gray-500">Use this branch's Google Place ID. Live details require GOOGLE_PLACES_API_KEY configured on the server.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -303,6 +313,7 @@ export default function StoreLocationsPage() {
         "Location Type": "store",
         "Location Description": "No.4/7, Shop No. 2, Ground Floor, Main Road, City Center, Bangalore - 560001",
         "Google Map Location": "https://maps.google.com/?q=12.9716,77.5946",
+        "Google Place ID": "",
         "Mobile No": "9876543210",
         "Shop Timing": "9:00 AM - 9:00 PM",
         "Shop Image": "https://example.com/shop-image.jpg",
@@ -315,6 +326,7 @@ export default function StoreLocationsPage() {
         "Location Type": "store",
         "Location Description": "Shop No. 15, First Floor, City Mall, MG Road, Bangalore - 560002",
         "Google Map Location": "https://maps.google.com/?q=12.9756,77.6066",
+        "Google Place ID": "",
         "Mobile No": "9876543211",
         "Shop Timing": "10:00 AM - 10:00 PM",
         "Shop Image": "https://example.com/shop2-image.jpg",
@@ -330,6 +342,7 @@ export default function StoreLocationsPage() {
       { wch: 15 }, // Location Type
       { wch: 60 }, // Location Description
       { wch: 50 }, // Google Map Location
+      { wch: 35 }, // Google Place ID
       { wch: 15 }, // Mobile No
       { wch: 20 }, // Shop Timing
       { wch: 40 }, // Shop Image
@@ -356,6 +369,7 @@ export default function StoreLocationsPage() {
       "Location Type": store.locationType,
       "Location Description": store.locationDescription,
       "Google Map Location": store.googleMapLocation,
+      "Google Place ID": store.googlePlaceId || "",
       "Mobile No": store.mobileNo,
       "Shop Timing": store.shopTiming,
       "Shop Image": store.shopImage,
@@ -365,7 +379,7 @@ export default function StoreLocationsPage() {
 
     const ws = XLSX.utils.json_to_sheet(exportData)
     ws['!cols'] = [
-      { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 60 }, { wch: 50 }, { wch: 15 },
+      { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 60 }, { wch: 50 }, { wch: 35 }, { wch: 15 },
       { wch: 20 }, { wch: 40 }, { wch: 30 }, { wch: 10 },
     ]
     
@@ -405,6 +419,8 @@ export default function StoreLocationsPage() {
           : {}),
         locationDescription: String(row["Location Description"] || row.locationDescription || "").trim(),
         googleMapLocation: String(row["Google Map Location"] || row.googleMapLocation || "").trim(),
+        ...(String(row["Google Place ID"] ?? row.googlePlaceId ?? "").trim()
+          ? { googlePlaceId: String(row["Google Place ID"] ?? row.googlePlaceId).trim() } : {}),
         mobileNo: String(row["Mobile No"] || row.mobileNo || "").trim(),
         shopTiming: String(row["Shop Timing"] || row.shopTiming || "9:00 AM - 9:00 PM").trim(),
         shopImage: String(row["Shop Image"] || row.shopImage || "").trim(),
@@ -483,7 +499,7 @@ export default function StoreLocationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shopName: editingStore.shopName, storeCode: editingStore.storeCode, locationType: editingStore.locationType, locationDescription: editingStore.locationDescription,
-          googleMapLocation: editingStore.googleMapLocation, mobileNo: editingStore.mobileNo,
+          googleMapLocation: editingStore.googleMapLocation, googlePlaceId: editingStore.googlePlaceId, mobileNo: editingStore.mobileNo,
           shopTiming: editingStore.shopTiming, shopImage: editingStore.shopImage,
           emailId: editingStore.emailId, isActive: editingStore.isActive,
         })
@@ -867,6 +883,7 @@ export default function StoreLocationsPage() {
                 <li>• Location Type (store or warehouse; blank preserves the existing type)</li>
                 <li>• Location Description</li>
                 <li>• Google Map Location</li>
+                <li>• Google Place ID (optional, for live Google details)</li>
                 <li>• Mobile No</li>
                 <li>• Shop Timing</li>
                 <li>• Shop Image</li>

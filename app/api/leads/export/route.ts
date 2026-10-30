@@ -35,6 +35,11 @@ export async function GET(req: Request) {
             "Pincode": lead.pincode || "",
             "Category": lead.category || "",
             "Source": lead.source || "",
+            "Store": lead.storeName || "",
+            "Store Code": lead.storeCode || "",
+            "Message": lead.message || "",
+            "Enquiry Contact Consent": lead.contactConsent === true ? "Yes" : lead.contactConsent === false ? "No" : "Not recorded",
+            "Promotional Consent": lead.promotionalConsent === true ? "Yes" : lead.promotionalConsent === false ? "No" : "Not recorded",
             "Status": (lead.status || "new").charAt(0).toUpperCase() + (lead.status || "new").slice(1),
             "Date": lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("en-IN", {
                 day: "2-digit",
@@ -58,6 +63,11 @@ export async function GET(req: Request) {
             { wch: 10 },  // Pincode
             { wch: 20 },  // Category
             { wch: 25 },  // Source
+            { wch: 30 },  // Store
+            { wch: 15 },  // Store Code
+            { wch: 60 },  // Message
+            { wch: 25 },  // Enquiry Contact Consent
+            { wch: 25 },  // Promotional Consent
             { wch: 15 },  // Status
             { wch: 20 },  // Date
         ]

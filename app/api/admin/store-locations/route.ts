@@ -23,6 +23,7 @@ export async function GET() {
       locationType: store.locationType || "store",
       locationDescription: store.locationDescription || "",
       googleMapLocation: store.googleMapLocation || "",
+      googlePlaceId: store.googlePlaceId || "",
       mobileNo: store.mobileNo || "",
       shopTiming: store.shopTiming || "9:00 AM - 9:00 PM",
       shopImage: store.shopImage || "",
