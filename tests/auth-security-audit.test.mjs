@@ -98,6 +98,7 @@ function harness({ record = account, env = {} } = {}) {
       },
       rateLimitReset: async key => counts.delete(key), rateLimitResetSeconds: async () => 60,
     },
+    "@/lib/smtp": { verifyEmailTransport: async () => {}, EmailConfigurationError: class extends Error {} },
     "@/lib/email": { sendEmail: async message => { mail.push(message); return { success: true } },
       storefrontOrigin: () => "https://shop.example.invalid", buildPasswordResetEmail: url => `<a href="${url}">Reset</a>` },
     "@/lib/consent": { recordConsent: async data => consents.push(data),

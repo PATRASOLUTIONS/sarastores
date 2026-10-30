@@ -10,11 +10,14 @@ export default [
   {
     ignores: [
       ".next/**",
+      ".next-build-check/**",
       ".next-audit/**",
       ".next-audit-strict/**",
       ".next-audit-dev/**",
       ".next-audit-journey/**",
       "node_modules/**",
+      // Generated Playwright reports contain bundled third-party code.
+      "e2e/.report/**",
       "next-env.d.ts",
       "mobile/**",
       "scripts/legacy/pdf-gen/**",

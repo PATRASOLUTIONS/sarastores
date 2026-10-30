@@ -159,7 +159,7 @@ const StoreForm = ({
           <input id="store-google-place-id" value={store.googlePlaceId || ""} maxLength={200}
             onChange={event => onChange("googlePlaceId", event.target.value)}
             className="w-full rounded-xl border border-gray-300 px-4 py-3" placeholder="ChIJ..." />
-          <p className="mt-2 text-xs text-gray-500">Use this branch's Google Place ID. Live details require GOOGLE_PLACES_API_KEY configured on the server.</p>
+          <p className="mt-2 text-xs text-gray-500">Use this branch&apos;s Google Place ID. Live details require GOOGLE_PLACES_API_KEY configured on the server.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
