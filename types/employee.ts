@@ -1,5 +1,9 @@
 export interface Employee {
   id?: string
+  source?: 'employee' | 'account'
+  accountId?: string
+  accountEmail?: string
+  linkedAccountRole?: string
   employeeId: string
   name: string
   email: string

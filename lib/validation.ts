@@ -768,6 +768,10 @@ export const EmployeeCreationResponseSchema = z.object({
 
 export const EmployeeResponseSchema = z.object({
   id: z.string().min(1),
+  source: z.enum(["employee", "account"]).optional(),
+  accountId: z.string().optional(),
+  accountEmail: z.string().optional(),
+  linkedAccountRole: z.string().optional(),
   employeeId: z.string(),
   name: z.string(),
   email: z.string().email(),

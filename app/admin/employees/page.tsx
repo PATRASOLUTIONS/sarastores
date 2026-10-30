@@ -23,6 +23,7 @@ import {
 import { toast } from "react-hot-toast"
 import * as XLSX from "xlsx"
 import { apiFetch } from "@/lib/api-client"
+import Link from "next/link"
 import { ADMIN_MENU_PATHS } from "@/components/AdminSidebar"
 import type { Employee } from "@/types/employee"
 import { EmployeeCreationResponseSchema, EmployeeListResponseSchema, emailSchema, nameSchema } from "@/lib/validation"
@@ -119,7 +120,7 @@ export default function AdminEmployeesPage() {
     setLoading(true)
     try {
       const [employeesResponse, storesResponse] = await Promise.all([
-        apiFetch("/api/employees"),
+        apiFetch("/api/employees?includeAccessAccounts=true"),
         apiFetch("/api/admin/store-locations"),
       ])
       const [employeeData, storeData] = await Promise.all([
@@ -154,6 +155,7 @@ export default function AdminEmployeesPage() {
   }
 
   const openEdit = (employee: Employee) => {
+    if (employee.source === "account") return
     setFormFailure(null)
     setForm({
       employeeId: employee.employeeId,
@@ -232,6 +234,7 @@ export default function AdminEmployeesPage() {
   }
 
   const remove = async (employee: Employee) => {
+    if (employee.source === "account") return
     if (saving) return
     if (!employee.id || !confirm(`Delete ${employee.name} and disable their staff login?`)) return
     if (!lock.acquire()) return
@@ -386,7 +389,7 @@ export default function AdminEmployeesPage() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return employees.filter((employee) => {
-      const matches = !needle || `${employee.name} ${employee.email} ${employee.employeeId} ${employee.department}`.toLowerCase().includes(needle)
+      const matches = !needle || `${employee.name} ${employee.email} ${employee.accountEmail || ""} ${employee.employeeId} ${employee.department}`.toLowerCase().includes(needle)
       return matches && (status === "all" || employee.status === status)
     })
   }, [employees, query, status])
@@ -402,8 +405,8 @@ export default function AdminEmployeesPage() {
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
           <p className="text-xs font-bold uppercase text-gray-500">People & access</p>
-          <h1 className="mt-1 text-2xl font-bold text-gray-950">Staff access</h1>
-          <p className="mt-1 text-sm text-gray-600">Assign exact admin pages and store visibility to each staff login.</p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-950">Staff & dashboard access</h1>
+          <p className="mt-1 text-sm text-gray-600">All staff profiles and accounts with dashboard or store access, including administrators.</p>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setBulkOpen(true)} className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"><Upload className="h-4 w-4" /> Bulk import</button>
@@ -441,8 +444,8 @@ export default function AdminEmployeesPage() {
       )}
 
       <section className="grid gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-3">
-        <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Total staff</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.length}</p></div>
-        <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Dashboard users</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.filter((employee) => employee.dashboardAccess).length}</p></div>
+        <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Staff & access records</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.length}</p></div>
+        <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Dashboard access records</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.filter((employee) => employee.dashboardAccess).length}</p></div>
         <div className="bg-white p-4"><p className="text-xs font-semibold text-gray-500">Store-scoped users</p><p className="mt-1 text-2xl font-bold text-gray-950">{employees.filter((employee) => employee.storeAccess === "selected").length}</p></div>
       </section>
 
@@ -451,14 +454,16 @@ export default function AdminEmployeesPage() {
         <div className="flex rounded-md border border-gray-300 p-1">{(["all", "active", "inactive"] as const).map((value) => <button key={value} type="button" onClick={() => setStatus(value)} className={`rounded px-3 py-1.5 text-xs font-semibold capitalize ${status === value ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"}`}>{value}</button>)}</div>
       </div>
 
+      <p className="text-xs text-gray-500">Accounts with dashboard or store access are listed even without an employee profile. Use View account for login accounts; staff profiles keep their existing edit and delete actions.</p>
+
       <section className="overflow-hidden border-y border-gray-200 bg-white">
         <div className="hidden grid-cols-[minmax(230px,1.2fr)_minmax(180px,1fr)_minmax(230px,1.1fr)_130px] gap-4 bg-gray-50 px-4 py-2 text-xs font-bold uppercase text-gray-500 md:grid"><span>Staff member</span><span>Assignment</span><span>Access</span><span className="text-right">Actions</span></div>
         {loading ? <div className="flex h-52 items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="h-5 w-5 animate-spin" /> Loading staff...</div> : filtered.length === 0 ? <div className="py-16 text-center text-sm text-gray-500">No staff members match these filters.</div> : filtered.map((employee) => (
           <div key={employee.id} className="grid gap-3 border-t border-gray-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(230px,1.2fr)_minmax(180px,1fr)_minmax(230px,1.1fr)_130px] md:items-center md:gap-4">
-            <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gray-900 text-sm font-bold text-white">{employee.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-950">{employee.name}</p><p className="truncate text-xs text-gray-500">{employee.email} · {employee.employeeId}</p></div></div>
+            <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gray-900 text-sm font-bold text-white">{employee.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-950">{employee.name}</p><p className="truncate text-xs text-gray-500">{employee.email} · {employee.employeeId || "No employee profile"}</p>{employee.accountEmail && employee.accountEmail.toLowerCase() !== employee.email.toLowerCase() && <p className="truncate text-xs text-blue-700">Login: {employee.accountEmail}</p>}</div></div>
             <div><p className="text-sm font-medium text-gray-800">{employee.department || "Unassigned"}</p><p className="text-xs text-gray-500">{employee.role || "Staff"}</p></div>
-            <div className="flex flex-wrap gap-1.5"><span className={`rounded px-2 py-1 text-xs font-semibold ${employee.dashboardAccess ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"}`}>{employee.dashboardAccess ? `${employee.allowedPages?.length || 0} pages` : "No dashboard"}</span><span className="rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{storeLabel(employee)}</span><span className={`rounded px-2 py-1 text-xs font-semibold ${employee.status === "active" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{employee.status}</span></div>
-            <div className="flex justify-start gap-1 md:justify-end"><button type="button" title="View sales" onClick={() => fetchSales(employee)} className="rounded-md border border-gray-200 p-2 text-gray-600 hover:bg-gray-50"><BarChart3 className="h-4 w-4" /></button><button type="button" title="Edit access" onClick={() => openEdit(employee)} className="rounded-md border border-gray-200 p-2 text-gray-700 hover:bg-gray-50"><Pencil className="h-4 w-4" /></button><button type="button" title="Delete" onClick={() => remove(employee)} className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button></div>
+            <div className="flex flex-wrap gap-1.5"><span className={`rounded px-2 py-1 text-xs font-semibold ${employee.dashboardAccess ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"}`}>{employee.dashboardAccess ? (employee.linkedAccountRole === "admin" || employee.linkedAccountRole === "superadmin" ? "All admin pages" : `${employee.allowedPages?.length || 0} pages`) : "No dashboard"}</span><span className="rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{storeLabel(employee)}</span><span className={`rounded px-2 py-1 text-xs font-semibold ${employee.status === "active" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{employee.status}</span></div>
+            <div className="flex justify-start gap-1 md:justify-end">{employee.source === "account" || (employee.accountId && employee.linkedAccountRole && employee.linkedAccountRole !== "user") ? <Link href={`/admin/customers/${employee.accountId}`} title="View login account" className="rounded-md border border-gray-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">View account</Link> : <><button type="button" title="View sales" onClick={() => fetchSales(employee)} className="rounded-md border border-gray-200 p-2 text-gray-600 hover:bg-gray-50"><BarChart3 className="h-4 w-4" /></button><button type="button" title="Edit access" onClick={() => openEdit(employee)} className="rounded-md border border-gray-200 p-2 text-gray-700 hover:bg-gray-50"><Pencil className="h-4 w-4" /></button><button type="button" title="Delete" onClick={() => remove(employee)} className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button></>}</div>
           </div>
         ))}
       </section>
