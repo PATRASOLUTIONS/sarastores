@@ -761,6 +761,7 @@ export const CheckoutCartSelectionSchema = z.object({
 export const EmployeeCreationResponseSchema = z.object({
   success: z.literal(true),
   employeeId: z.string().min(1),
+  employeeCode: z.string().min(1).optional(),
   userId: z.string().min(1),
   temporaryPassword: z.string().min(16).optional(),
 });
