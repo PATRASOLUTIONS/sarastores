@@ -21,11 +21,11 @@ const employeeFields = z.object({
   storeAccess: z.enum(["none", "selected", "all"]).default("none"),
   storeIds: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
 })
-const validAccess = (value: z.infer<typeof employeeFields>, ctx: z.RefinementCtx) => {
+const validAccess = (value: Pick<z.infer<typeof employeeFields>, "dashboardAccess" | "allowedPages" | "storeAccess" | "storeIds">, ctx: z.RefinementCtx) => {
   if (value.dashboardAccess && !value.allowedPages.length) ctx.addIssue({ code: "custom", path: ["allowedPages"], message: "Select at least one dashboard page, or turn off dashboard access." })
   if (value.storeAccess === "selected" && !value.storeIds.length) ctx.addIssue({ code: "custom", path: ["storeIds"], message: "Select at least one store, or change store access to No stores or All stores." })
 }
-export const CreateEmployeeSchema = employeeFields.extend({ password: passwordSchema.optional() }).strict()
+export const CreateEmployeeSchema = employeeFields.extend({ employeeId: employeeFields.shape.employeeId.optional(), password: passwordSchema.optional() }).strict()
   .superRefine(validAccess)
 export const UpdateEmployeeSchema = employeeFields.strict()
   .superRefine(validAccess)
@@ -65,15 +65,12 @@ function accessFields(input: EmployeeFields) {
 
 async function prepareEmployeeCreationIndexes() {
   const employees = await getCollection<EmployeeDocument>("employees")
-  const users = await getCollection<EmployeeUser>("users")
   try {
     await employees.createIndex({ employeeId: 1 }, { unique: true, name: "employee_id_unique" })
-    await employees.createIndex({ email: 1 }, { unique: true, name: "employee_email_unique" })
-    await users.createIndex({ email: 1 }, { unique: true, name: "email_unique" })
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === 11000) throw new EmployeeError(
-      "Existing staff or login records contain duplicate IDs or emails, so the database uniqueness check could not be prepared.", 409,
-      { code: "EXISTING_STAFF_DUPLICATES", action: "Ask the system administrator to reconcile the existing duplicate records, then retry. A different email in this form will not fix the database setup." })
+      "Existing staff records contain duplicate Employee IDs, so ID uniqueness could not be prepared.", 409,
+      { code: "EXISTING_STAFF_DUPLICATES", action: "Ask the system administrator to reconcile the duplicate Employee IDs before retrying." })
     throw error
   }
 }
@@ -125,12 +122,16 @@ async function revokeEmployeeSessions(userId: string, session: ClientSession) {
 
 export async function createEmployee(input: z.infer<typeof CreateEmployeeSchema>) {
   await prepareEmployeeCreationIndexes()
+  // Older spreadsheet clients may supply an ID. Add Staff leaves it out and
+  // receives a server-generated code protected by the unique employee-ID index.
+  const employeeCode = input.employeeId || `SM${randomBytes(8).toString("hex").toUpperCase()}`
   const password = input.password || randomBytes(24).toString("base64url")
   const hash = await bcrypt.hash(password, 12)
   return employeeTransaction(async session => {
     const employees = await getCollection<EmployeeDocument>("employees")
     const users = await getCollection<EmployeeUser>("users")
-    const { password: suppliedPassword, ...fields } = input
+    const { password: suppliedPassword, ...suppliedFields } = input
+    const fields = { ...suppliedFields, employeeId: employeeCode }
     const conflicts = await employees.find({ $or: [{ employeeId: fields.employeeId }, { email: fields.email }] }, { session }).limit(2).toArray()
     if (conflicts.length) {
       const fieldErrors: Record<string, string[]> = {}
@@ -168,7 +169,7 @@ export async function createEmployee(input: z.infer<typeof CreateEmployeeSchema>
     const created = await employees.insertOne({ ...employee, userId: String(userId) }, { session })
     if (!created.acknowledged) throw new Error("Employee insertion was not acknowledged")
     return {
-      success: true, employeeId: String(created.insertedId), userId: String(userId),
+      success: true, employeeId: String(created.insertedId), employeeCode, userId: String(userId),
       ...(!existing && !suppliedPassword ? { temporaryPassword: password } : {}),
     }
   })

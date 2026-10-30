@@ -170,15 +170,18 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
   const errors: string[] = []
   let success = 0
   let writeFailures = 0
+  let ignoredUnmatched = 0
   const operations: AnyBulkWriteOperation<PriceProduct>[] = []
   const queuedProducts = new Set<string>()
 
   for (const row of rows) {
     const matches = bySku.get(stockCodeKey(row.sku)) ?? []
     const product = matches[0]
+    // Full master sheets may contain item numbers outside our catalogue.
+    // Ignore those rows before price validation, preview and write accounting.
+    if (!product) { ignoredUnmatched++; continue }
     const effectiveMrp = row.mrp ?? product?.mrp
     let error = row.error
-    if (!error && !product) error = "Product not found"
     if (!error && matches.length > 1) error = "Multiple products match this itemno; reconcile before updating"
     if (!error && effectiveMrp != null && (!Number.isFinite(effectiveMrp) || effectiveMrp < 0)) error = "Stored MRP is invalid"
     if (!error && row.price !== null && effectiveMrp != null && row.price > effectiveMrp) error = "Price > MRP"
@@ -210,7 +213,7 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
       error,
     })
   }
-  if (preview) return { preview: true, updates, ignoredDuplicates }
+  if (preview) return { preview: true, updates, ignoredDuplicates, ignoredUnmatched }
   for (let offset = 0; offset < operations.length; offset += PRICE_IMPORT_BATCH_SIZE) {
     const batch = operations.slice(offset, offset + PRICE_IMPORT_BATCH_SIZE)
     try {
@@ -229,7 +232,7 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
     }
   }
   const failed = updates.filter(update => update.status === "error").length + writeFailures
-  return { success, failed, errors, ignoredDuplicates, message: `Updated ${success} products, ${failed} failed` }
+  return { success, failed, errors, ignoredDuplicates, ignoredUnmatched, message: `Updated ${success} products, ${failed} failed, ${ignoredUnmatched} unmatched rows ignored` }
 }
 
 export async function processProductMrps(data: Record<string, unknown>[]) {

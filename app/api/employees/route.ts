@@ -6,11 +6,15 @@ import { CreateEmployeeSchema, createEmployee, type EmployeeDocument } from "@/l
 import { employeeValidationFailure } from "@/lib/employee-failure"
 import { employeeApiError } from "@/lib/employee-api-error"
 import { EmployeeListResponseSchema } from "@/lib/validation"
+import { getEmployeeAccessDirectory } from "@/lib/employee-directory"
 
-export async function GET() {
+export async function GET(request: Request) {
   const guard = await requireFullAdmin()
   if (!guard.ok) return guard.response
   try {
+    if (request && new URL(request.url).searchParams.get("includeAccessAccounts") === "true") {
+      return NextResponse.json(await getEmployeeAccessDirectory(), { headers: { "Cache-Control": "no-store" } })
+    }
     const collection = await getCollection<EmployeeDocument>("employees")
     const employees = await collection.find({}).limit(200).toArray()
     return NextResponse.json(EmployeeListResponseSchema.parse(normalizeId(employees)), { headers: { "Cache-Control": "no-store" } })
