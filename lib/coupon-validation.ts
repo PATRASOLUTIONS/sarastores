@@ -10,6 +10,7 @@ const fields = z.object({
   code: z.string().trim().toUpperCase().min(3).max(50).regex(/^[A-Z0-9_-]+$/),
   name: z.string().trim().min(1).max(100),
   type: z.enum(["fixed", "percentage", "buy_get", "buy_get_product"]),
+  creationMode: z.enum(["single", "bulk"]).optional(),
   value: z.number().finite().nonnegative().default(0),
   maxDiscount: z.number().finite().positive().nullish().transform(value => value ?? null),
   applyScope: z.enum(["all", "products", "categories", "brands", "skus", "divisions"]).default("all"),

@@ -82,11 +82,11 @@ export default function StockCheckPage() {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { "Item No.": "T000946", "Quantity": 5, "Store Code": "BLR001" },
-      { "Item No.": "T000909", "Quantity": 2, "Store Code": "BLR001" },
-      { "Item No.": "T000946", "Quantity": 3, "Store Code": "BLR002" },
+      { CODE: "T000946", WhsCode: "BLR001", Total: 5 },
+      { CODE: "T000909", WhsCode: "BLR001", Total: 2 },
+      { CODE: "T000946", WhsCode: "BLR002", Total: 3 },
     ])
-    ws["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 15 }]
+    ws["!cols"] = [{ wch: 18 }, { wch: 15 }, { wch: 12 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Store Stock")
     XLSX.writeFile(wb, "store_stock_template.xlsx")
@@ -277,9 +277,9 @@ export default function StockCheckPage() {
           </button>
         </form>
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
-          <p className="mb-1 font-medium">Columns: Item No., Store Code, Quantity</p>
-          <p>Item No. (or itemno) matches an existing catalogue item number or SKU. Store Code comes from Store Locations. Column names can use spaces, underscores or uppercase letters. Keep item numbers and store codes as text to preserve leading zeros.</p>
-          <p>Upload the full sheet with up to 50,000 rows (10 MB). Only matching items at known stores are updated; items absent from the sheet keep their stock. No products are created.</p>
+          <p className="mb-1 font-medium">Upload columns: CODE, WhsCode, Total</p>
+          <p>CODE is the product item number. WhsCode is the store code from Store Locations. Total is the stock quantity. Keep CODE and WhsCode as text to preserve leading zeros.</p>
+          <p>There is no fixed row-count limit. The file-size limit is 10 MB. Only CODE values matching existing products at known stores are updated; unmatched codes are skipped and other stock is preserved. Older upload headers are also accepted.</p>
           <p>For Google Sheets, share as &quot;Anyone with the link can view&quot; or publish to the web, then paste the link to the stock tab.</p>
           <p>Unknown item or store codes are skipped and can be downloaded in Excel. Review the previous and new stock quantities before applying valid rows.</p>
           <p className="mt-1 flex items-start gap-1 font-medium text-amber-800">

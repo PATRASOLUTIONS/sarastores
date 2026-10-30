@@ -908,7 +908,7 @@ export default function AdminProducts() {
       const rows = buildActiveProductPriceSheet(await fetchAllAdminProducts())
       const XLSX = await import("xlsx")
       const book = XLSX.utils.book_new()
-      const sheet = XLSX.utils.json_to_sheet(rows)
+      const sheet = XLSX.utils.json_to_sheet(rows, { header: ["itemno", "mrp", "price"] })
       sheet["!cols"] = [22, 16, 16].map(wch => ({ wch }))
       XLSX.utils.book_append_sheet(book, sheet, "Active Products")
       XLSX.writeFile(book, "active-products-price-mrp.xlsx")
@@ -1754,8 +1754,8 @@ export default function AdminProducts() {
                   <p className="font-semibold mb-1">Required Format:</p>
                   <div className="space-y-1 opacity-80">
                     <p>• Col 1: <strong>itemno</strong> (SKU)</p>
-                    <p>• Col 2: <strong>price</strong> (New Price)</p>
-                    <p>• Col 3: <strong>mrp</strong> (optional; blank keeps current MRP)</p>
+                    <p>• Col 2: <strong>mrp</strong> (optional; blank keeps current MRP)</p>
+                    <p>• Col 3: <strong>price</strong> (New Price)</p>
                     <p>Price must not exceed the new/current MRP.</p>
                     <p>Stock quantities come from <Link href="/admin/stock-check" className="font-semibold underline">Stock Check</Link>.</p>
                     <p>Unknown item numbers are reported; no new products are created. Duplicate item numbers use the last row.</p>
@@ -1806,7 +1806,7 @@ export default function AdminProducts() {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 h-10">
-                  Fetch itemno, price and mrp directly from your Google Sheet link.
+                  Fetch itemno, mrp and price directly from your Google Sheet link.
                 </p>
 
                 <div className="bg-white border border-green-200 rounded-lg p-3 mb-4 text-xs text-green-800 shadow-sm">
@@ -1814,7 +1814,7 @@ export default function AdminProducts() {
                   <div className="space-y-1 opacity-80">
                     <p>• File {'>'} Share {'>'} Publish to web</p>
                     <p>• Paste Sheet ID or Published Link</p>
-                    <p>• Use only <strong>itemno</strong>, <strong>price</strong>, <strong>mrp</strong> as column headers.</p>
+                    <p>• Use only <strong>itemno</strong>, <strong>mrp</strong>, <strong>price</strong> as column headers, in that order.</p>
                     <p>• A shared link also works with “Anyone with the link can view”. The tab in your link is used.</p>
                   </div>
                 </div>

@@ -51,6 +51,7 @@ interface Product {
 }
 
 interface Coupon extends Omit<CouponForm, "productIds" | "categoryIds" | "skus" | "brands" | "divisions" | "startDate" | "endDate" | "maxDiscount" | "buyQty" | "getQty"> {
+  creationMode?: "single" | "bulk"
   divisions?: string[]
   id: string
   productIds?: string[]
@@ -185,7 +186,7 @@ export default function PromotionsAdminPage() {
     load()
     loadProducts()
     void apiFetchJson("/api/admin/gifts", {}, value => GiftListSchema.parse(value))
-      .then(data => setGifts(data.gifts.filter(gift => gift.active)))
+      .then(data => setGifts(data.gifts))
       .catch(error => setGiftsError(error instanceof Error ? error.message : "Could not load gifts"))
   }, [])
 
@@ -250,6 +251,7 @@ export default function PromotionsAdminPage() {
       setLoading(true)
       const payload = {
         ...form,
+        creationMode: bulkOpen ? "bulk" : "single",
         giftId: form.type === "buy_get_product" ? form.giftId || null : null,
         divisions: form.applyScope === "divisions" ? (form.divisions || "").split(",").map(value => value.trim()).filter(Boolean) : [],
         ...(form.type === "buy_get_product" ? {
@@ -337,6 +339,15 @@ export default function PromotionsAdminPage() {
   }
 
   const startEdit = (c: Coupon) => {
+    if (loading) return
+    const isBulk = c.creationMode === "bulk" || (c.creationMode === undefined && c.type === "buy_get_product" && c.applyScope === "skus")
+    importAttempt.current++
+    setImporting(false)
+    setImportMessage("")
+    setImportError("")
+    setShowProductSelector(false)
+    if (isBulk) draftBeforeBulk.current = { form, editingId }
+    setBulkOpen(isBulk)
     setEditingId(c.id)
     setForm({
       code: c.code || "",
@@ -347,7 +358,7 @@ export default function PromotionsAdminPage() {
   applyScope: c.applyScope || "all",
   productIds: (c.productIds || []).join(","),
       categoryIds: (c.categoryIds || []).join(","),
-  skus: (c.skus || []).join(","),
+  skus: (c.skus || []).join(isBulk ? "\n" : ","),
       brands: (c.brands || []).join(","),
       divisions: (c.divisions || []).join(","),
       giftId: c.giftId,
@@ -363,7 +374,7 @@ export default function PromotionsAdminPage() {
       getQty: c.getQty ?? undefined,
       active: !!c.active,
     })
-    window.scrollTo({ top: 0, behavior: "smooth" })
+    if (!isBulk) window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const remove = async (id: string) => {
@@ -402,10 +413,14 @@ export default function PromotionsAdminPage() {
   const couponEditor = (
         <div className="lg:col-span-1 bg-white rounded-lg shadow-sm border p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{bulkOpen ? "Create Bulk Coupon" : editingId ? "Edit Coupon" : "Create Coupon"}</h2>
+            <h2 className="text-lg font-semibold">{bulkOpen ? editingId ? "Edit Bulk Coupon" : "Create Bulk Coupon" : editingId ? "Edit Coupon" : "Create Coupon"}</h2>
             {editingId && (
               <button
                 onClick={() => {
+                  if (bulkOpen) {
+                    changeBulkOpen(false)
+                    return
+                  }
                   setEditingId(null)
                   setForm({
                     code: "",
@@ -427,6 +442,7 @@ export default function PromotionsAdminPage() {
                     active: true,
                   })
                 }}
+                disabled={loading}
                 className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
               >
                 Cancel
@@ -500,7 +516,8 @@ export default function PromotionsAdminPage() {
             {form.type === "buy_get_product" && <div className="md:col-span-2">
               <label htmlFor="free-gift-sku" className="text-sm">{bulkOpen ? "Y: Free gift SKU" : "Free gift SKU"}</label>
               <select id="free-gift-sku" className="mt-1 w-full rounded border p-2" value={form.giftId || ""} onChange={event => setForm({ ...form, giftId: event.target.value })}>
-                <option value="">Select a gift</option>{gifts.map(gift => <option key={gift.id} value={gift.id}>{gift.sku} — {gift.name}</option>)}
+                <option value="">Select a gift</option>{gifts.filter(gift => gift.active || gift.id === form.giftId).map(gift => <option key={gift.id} value={gift.id}>{gift.sku} — {gift.name}{gift.active ? "" : " (inactive)"}</option>)}
+                {form.giftId && !gifts.some(gift => gift.id === form.giftId) && <option value={form.giftId}>{form.giftId} (saved gift unavailable)</option>}
               </select>
               {giftsError && <p role="alert" className="mt-1 text-sm text-red-700">{giftsError}</p>}
               <div className="mt-3 space-y-2">
@@ -782,7 +799,7 @@ export default function PromotionsAdminPage() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               )}
-              {loading ? "Saving..." : editingId ? "Update Coupon" : bulkOpen ? "Create Bulk Coupon" : "Create Coupon"}
+              {loading ? "Saving..." : editingId ? bulkOpen ? "Update Bulk Coupon" : "Update Coupon" : bulkOpen ? "Create Bulk Coupon" : "Create Coupon"}
             </button>
           </div>
         </div>
@@ -798,8 +815,8 @@ export default function PromotionsAdminPage() {
           <DialogTrigger asChild><button type="button" disabled={loading} className="ml-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">Bulk</button></DialogTrigger>
           <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto" onEscapeKeyDown={event => { if (loading) event.preventDefault() }} onInteractOutside={event => { if (loading) event.preventDefault() }}>
             <DialogHeader>
-              <DialogTitle>Bulk Buy X Get Y Free</DialogTitle>
-              <DialogDescription>Upload the eligible X product TPINs and select the Y gift SKU. Set quantities, dates and usage limits, then save the coupon.</DialogDescription>
+              <DialogTitle>{editingId ? "Edit Bulk Buy X Get Y Free" : "Bulk Buy X Get Y Free"}</DialogTitle>
+              <DialogDescription>{editingId ? "Edit the saved TPINs, gift SKU, quantities, dates and usage limits. Upload a new sheet only if you want to replace the TPIN list." : "Upload the eligible X product TPINs and select the Y gift SKU. Set quantities, dates and usage limits, then save the coupon."}</DialogDescription>
             </DialogHeader>
             {bulkOpen && couponEditor}
           </DialogContent>
@@ -807,7 +824,7 @@ export default function PromotionsAdminPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {bulkOpen ? <div className="rounded-lg border bg-white p-5 text-sm text-gray-600">Create your bulk gift promotion in the popup.</div> : couponEditor}
+        {bulkOpen ? <div className="rounded-lg border bg-white p-5 text-sm text-gray-600">{editingId ? "Edit your bulk gift promotion in the popup." : "Create your bulk gift promotion in the popup."}</div> : couponEditor}
 
         {/* Right: Coupons table and Usage */}
         <div className="lg:col-span-2 space-y-6">
