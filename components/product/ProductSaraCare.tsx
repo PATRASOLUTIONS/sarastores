@@ -6,9 +6,9 @@ import Link from "next/link"
 import { apiFetchJson } from "@/lib/api-client"
 import { cartLineKey } from "@/lib/cart-line"
 import { useCart } from "@/hooks/useCart"
-import { isSaraCare, saraCareDurationLabel, SaraCareQuoteResponseSchema, type SaraCareOffer, type SaraCareYears } from "@/lib/sara-care-types"
+import { isSaraCare, saraCareDurationLabel, formatSaraCarePrice, SaraCareQuoteResponseSchema, type SaraCareOffer, type SaraCareYears } from "@/lib/sara-care-types"
 
-const money = (amount: number) => `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const money = formatSaraCarePrice
 
 export function useProductSaraCare({ productId, selection, onSelect }: {
   productId: string; selection: SaraCareYears | null | undefined;
@@ -74,13 +74,13 @@ export default function ProductSaraCare({ productName, care, compact = false, di
   const preferred = [1, 2, 3, 0.5]
   const rank = (years: number) => preferred.includes(years) ? preferred.indexOf(years) : preferred.length + years
   const options = [...offer.options].sort((a, b) => rank(a.years) - rank(b.years))
-  const selectedBase = selectedPlan ? selectedPlan.price / (1 + (offer.taxRate || 18) / 100) : 0
+  const selectedBase = selectedPlan ? Math.round(selectedPlan.price / (1 + (offer.taxRate || 18) / 100)) : 0
   const coveredQuantity = parent?.quantity || 1
-  return <section aria-label={`Sara Care for ${productName}`} className={`overflow-hidden rounded-2xl border border-[#dedee3] bg-[#f5f5f7] text-[#1d1d1f] shadow-[0_2px_8px_rgba(0,0,0,0.025)] ${compact ? "p-4" : "p-5 sm:p-6"}`}>
+  return <section aria-label={`Sara Care for ${productName}`} className={`overflow-hidden rounded-2xl border border-[#dedee3] bg-[#f5f5f7] text-[#1d1d1f] shadow-[0_2px_8px_rgba(0,0,0,0.025)] ${compact ? "p-3" : "p-4"}`}>
     <div className="flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
-        <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white bg-gradient-to-b from-white to-[#e8edf5] text-[#0071e3] shadow-sm"><ShieldCheck size={23} strokeWidth={1.7} /></span>
-        <div><h3 className={`${compact ? "text-base" : "text-xl"} font-semibold tracking-tight`}>Sara Care</h3><p className="mt-0.5 text-[11px] leading-4 text-[#6e6e73]">Protection, made simple.</p></div>
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#0071e3]"><ShieldCheck size={19} strokeWidth={1.7} /></span>
+        <div><h3 className="text-base font-semibold tracking-tight">Sara Care</h3><p className="mt-0.5 text-[11px] leading-4 text-[#6e6e73]">Protection, made simple.</p></div>
       </div>
       <label className="relative inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-end gap-2">
         <span className="sr-only">Add Sara Care for {productName}</span>
@@ -88,20 +88,19 @@ export default function ProductSaraCare({ productName, care, compact = false, di
         <span aria-hidden="true" className="relative h-6 w-10 rounded-full bg-[#d2d2d7] transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[#0071e3] peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[#0071e3] peer-disabled:opacity-50" />
       </label>
     </div>
-    <fieldset disabled={locked} className="mt-4 min-w-0">
+    <fieldset disabled={locked} className="mt-3 min-w-0">
       <legend className="mb-2 text-xs font-medium text-[#6e6e73]">Choose your protection plan</legend>
-      <div className={`grid gap-2 ${compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"}`}>
+      <div className="flex flex-wrap gap-1.5">
         {options.map(plan => {
           const checked = selected === plan.years
-          return <label key={plan.years} className={`relative min-w-0 cursor-pointer rounded-xl border p-3 transition-[border-color,box-shadow,background-color] motion-reduce:transition-none ${checked ? "border-[#0071e3] bg-[#f2f7ff] shadow-[inset_0_0_0_1px_#0071e3]" : "border-[#d2d2d7] bg-white hover:border-[#86868b]"} ${locked ? "cursor-not-allowed opacity-60" : ""}`}>
+          return <label key={plan.years} className={`relative min-w-[80px] flex-1 basis-[80px] cursor-pointer rounded-lg border px-2 py-2 transition-[border-color,box-shadow,background-color] motion-reduce:transition-none ${checked ? "border-[#0071e3] bg-[#f2f7ff] shadow-[inset_0_0_0_1px_#0071e3]" : "border-[#d2d2d7] bg-white hover:border-[#86868b]"} ${locked ? "cursor-not-allowed opacity-60" : ""}`}>
             <input type="radio" name={`${pickerId}-duration`} value={plan.years} checked={checked} onChange={() => select(plan.years)} className="peer sr-only" />
             <span aria-hidden="true" className="pointer-events-none absolute -inset-1 rounded-2xl peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[#0071e3]" />
             <span className="flex items-start justify-between gap-1">
-              <span className="text-[13px] font-semibold leading-5 tracking-tight">{saraCareDurationLabel(plan.years)}</span>
-              <span aria-hidden="true" className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${checked ? "border-[#0071e3] bg-[#0071e3] text-white" : "border-[#c7c7cc]"}`}>{checked && <Check size={11} strokeWidth={3} />}</span>
+              <span className="text-xs font-semibold leading-4 tracking-tight">{saraCareDurationLabel(plan.years)}</span>
+              {checked && <Check size={12} aria-hidden="true" className="shrink-0 text-[#0071e3]" />}
             </span>
-            <span className="mt-2 block break-words text-xs font-medium tabular-nums">{money(plan.price)}</span>
-            <span className="mt-1 block text-[10px] leading-4 text-[#6e6e73]">{plan.years === offer.defaultYears ? "Default plan" : "One-time payment"}</span>
+            <span className="mt-1 block break-words text-[11px] font-medium tabular-nums">{money(plan.price)}</span>
           </label>
         })}
       </div>

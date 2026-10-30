@@ -97,6 +97,7 @@ export type SaraCareConfig = z.infer<typeof SaraCareConfigSchema>
 export const emptySaraCareConfig: SaraCareConfig = { enabled: false, terms: "", coverageStarts: "delivery", taxRate: 18, rules: [], importedProducts: 0, importedPlans: 0, importedFile: "", importedSheet: "", pricingMode: "percentage", basis: "price" }
 export const saraCareDurationLabel = (years: number) => years < 1 || !Number.isInteger(years)
   ? `${Math.round(years * 12)} months` : `${years} ${years === 1 ? "year" : "years"}`
+export const formatSaraCarePrice = (amount: number) => `\u20b9${Math.round(amount).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
 export const saraCareProductId = (years: SaraCareYears) => `sara-care-${years}y`
 export const saraCareSku = (years: SaraCareYears) => `SARA-CARE-${years}Y`
 export const isSaraCare = (item: { type?: string | null; saraCare?: unknown; serviceKind?: unknown }) =>

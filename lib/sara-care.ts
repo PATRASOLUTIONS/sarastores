@@ -58,7 +58,7 @@ export function priceSaraCare(config: SaraCarePricingConfig, product: CareProduc
   const basis = config.pricingMode === "value" ? "price" : config.basis
   const basisAmount = Number(basis === "mrp" ? product.mrp : product.price)
   if (!Number.isFinite(basisAmount) || basisAmount <= 0) return null
-  const price = Math.round(((config.pricingMode === "value" ? plan.value || 0 : basisAmount * (plan.percentage || 0) / 100) + Number.EPSILON) * 100) / 100
+  const price = Math.round((config.pricingMode === "value" ? plan.value || 0 : basisAmount * (plan.percentage || 0) / 100) + Number.EPSILON)
   if (!Number.isFinite(price) || price <= 0) return null
   const snapshot: SaraCareSnapshot = { parentLineKey, durationYears: years,
     parentProductId: product.id || String(product._id), parentSku: product.sku || null,

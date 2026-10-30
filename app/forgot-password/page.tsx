@@ -21,14 +21,15 @@ export default function ForgotPasswordPage() {
     setError("")
     setSuccess(false)
 
-    if (!email) {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail) {
       setError("Please enter your email address")
       return
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(normalizedEmail)) {
       setError("Please enter a valid email address")
       return
     }
@@ -42,16 +43,16 @@ export default function ForgotPasswordPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: email.toLowerCase() }),
+        body: JSON.stringify({ email: normalizedEmail }),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => null)
 
       if (response.ok) {
         setSuccess(true)
         setEmail("")
       } else {
-        setError(data.error || "Failed to send reset link. Please try again.")
+        setError(data?.error || "Failed to request a reset link. Please try again.")
       }
     } catch (err) {
       setError("An error occurred. Please try again later.")
@@ -97,7 +98,7 @@ export default function ForgotPasswordPage() {
               <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start">
                 <CheckCircle className="h-5 w-5 text-green-600 mr-3 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-green-800">Email sent successfully!</p>
+                  <p className="text-sm font-medium text-green-800">Reset request received</p>
                   <p className="text-sm text-green-700 mt-1">
                     If an account exists with this email, you will receive password reset instructions shortly.
                     Please check your inbox and spam folder.

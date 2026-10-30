@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { z } from "zod"
 import { toast } from "react-hot-toast"
 import { apiFetch, apiFetchJson } from "@/lib/api-client"
-import { SaraCareConfigSchema, emptySaraCareConfig, saraCareDurationLabel, type SaraCareConfig } from "@/lib/sara-care-types"
+import { SaraCareConfigSchema, emptySaraCareConfig, saraCareDurationLabel, formatSaraCarePrice, type SaraCareConfig } from "@/lib/sara-care-types"
 
 const ResponseSchema = z.object({ config: SaraCareConfigSchema, total: z.number(), rows: z.array(z.object({
   itemno: z.string(), name: z.string(), plans: z.array(z.object({ years: z.number(), code: z.string(), percentage: z.number().optional(), value: z.number().optional() })),
@@ -98,7 +98,7 @@ export default function SaraCareAdminPage() {
     </section>
     <section className="space-y-4 rounded-xl border bg-white p-5"><h2 className="font-semibold">Uploaded product plans</h2>
       <input aria-label="Search uploaded plans" className={inputClass} placeholder="Search item code or description" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} />
-      {loading ? <p role="status" className="text-sm text-gray-500">Loading plans…</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Item code</th><th className="p-2">Description</th><th className="p-2">Available plans</th></tr></thead><tbody>{rows.map(row => <tr key={row.itemno} className="border-b"><td className="p-2 align-top font-medium">{row.itemno}</td><td className="p-2 align-top">{row.name || "—"}</td><td className="p-2">{row.plans.map(plan => <p key={plan.years}>{saraCareDurationLabel(plan.years)} · {plan.percentage !== undefined ? `${plan.percentage}%` : `₹${plan.value?.toLocaleString("en-IN")}`} · {plan.code}</p>)}</td></tr>)}</tbody></table>{!rows.length && <p className="py-5 text-sm text-gray-500">No uploaded plans found.</p>}</div>}
+      {loading ? <p role="status" className="text-sm text-gray-500">Loading plans…</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Item code</th><th className="p-2">Description</th><th className="p-2">Available plans</th></tr></thead><tbody>{rows.map(row => <tr key={row.itemno} className="border-b"><td className="p-2 align-top font-medium">{row.itemno}</td><td className="p-2 align-top">{row.name || "—"}</td><td className="p-2">{row.plans.map(plan => <p key={plan.years}>{saraCareDurationLabel(plan.years)} · {plan.percentage !== undefined ? `${plan.percentage}%` : formatSaraCarePrice(plan.value || 0)} · {plan.code}</p>)}</td></tr>)}</tbody></table>{!rows.length && <p className="py-5 text-sm text-gray-500">No uploaded plans found.</p>}</div>}
       <div className="flex items-center justify-between gap-3 text-sm"><button type="button" disabled={!page || loading} onClick={() => setPage(value => value - 1)} className="disabled:opacity-50">Previous</button><span>{total.toLocaleString()} products · Page {page + 1} of {Math.max(1, Math.ceil(total / 100))}</span><button type="button" disabled={(page + 1) * 100 >= total || loading} onClick={() => setPage(value => value + 1)} className="disabled:opacity-50">Next</button></div>
     </section>
   </div>
