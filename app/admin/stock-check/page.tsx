@@ -52,7 +52,6 @@ export default function StockCheckPage() {
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [replaceStores, setReplaceStores] = useState(false)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
   const [previewStale, setPreviewStale] = useState(false)
@@ -115,7 +114,7 @@ export default function StockCheckPage() {
 
   const importRows = async (sheet: Record<string, unknown>[], toastId: string) => {
     const { rows, blankRows } = parseStoreStockRows(sheet)
-    const pending = { rows, blankRows, replaceStores }
+    const pending = { rows, blankRows, replaceStores: false }
     setPendingUpload(pending)
     const data = await fetchStockPreview(pending)
     setResult({ ...data, blankRows })
@@ -251,7 +250,7 @@ export default function StockCheckPage() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="mb-6">
         <h1 className="mb-2 text-3xl font-bold text-gray-900">Stock Check</h1>
-        <p className="text-gray-600">Upload each store&apos;s stock by item code. A product&apos;s stock on the website is the total across all stores.</p>
+        <p className="text-gray-600">Upload Excel or paste a Google Sheets link to update stock for matching item numbers already on the platform. A product&apos;s website stock is the total across all stores.</p>
       </div>
 
       <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
@@ -277,18 +276,15 @@ export default function StockCheckPage() {
             <RefreshCw className={`h-4 w-4 ${uploading ? "animate-spin" : ""}`} />Import from Google Sheet
           </button>
         </form>
-        <label className="mt-4 flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={replaceStores} disabled={uploading || !!result?.preview} onChange={event => setReplaceStores(event.target.checked)} />
-          Replace the complete inventory of stores listed in this sheet
-        </label>
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
           <p className="mb-1 font-medium">Columns: Item No., Store Code, Quantity</p>
-          <p>Item No. matches the catalogue Item No. or SKU. Store Code comes from Store Locations. Column names can use spaces, underscores or uppercase letters. Keep item numbers and store codes as text to preserve leading zeros.</p>
+          <p>Item No. (or itemno) matches an existing catalogue item number or SKU. Store Code comes from Store Locations. Column names can use spaces, underscores or uppercase letters. Keep item numbers and store codes as text to preserve leading zeros.</p>
+          <p>Upload the full sheet with up to 50,000 rows (10 MB). Only matching items at known stores are updated; items absent from the sheet keep their stock. No products are created.</p>
+          <p>For Google Sheets, share as &quot;Anyone with the link can view&quot; or publish to the web, then paste the link to the stock tab.</p>
           <p>Unknown item or store codes are skipped and can be downloaded in Excel. Review the previous and new stock quantities before applying valid rows.</p>
-          <p>Google Sheets: share the sheet as &quot;Anyone with the link can view&quot;. The first tab is read.</p>
           <p className="mt-1 flex items-start gap-1 font-medium text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            {replaceStores ? "Full replacement is on: items omitted for a listed store are set to 0." : "Only the listed item/store quantities are updated. Other items and stores keep their stock."}
+            Only matching item/store quantities from the sheet are updated. Other items and stores keep their stock.
           </p>
         </div>
 

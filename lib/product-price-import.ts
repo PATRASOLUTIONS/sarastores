@@ -1,10 +1,12 @@
 import * as XLSX from "xlsx"
-import type { ObjectId } from "mongodb"
+import { MongoBulkWriteError, type AnyBulkWriteOperation, type ObjectId } from "mongodb"
 import { getCollection } from "./db-service"
 import { extractCanonicalProductMetadata } from "./product-schema"
 import { priceSchema } from "./validation"
+import { stockCodeKey, stockItemAliases, stockItemFilter } from "./stock-item-code"
 
 export const MAX_PRICE_IMPORT_BYTES = 10 * 1024 * 1024
+export const PRICE_IMPORT_BATCH_SIZE = 500
 
 export function googleSheetExportUrl(sheetId: string): string | null {
   if (/^[a-zA-Z0-9_-]+$/.test(sheetId)) return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`
@@ -13,11 +15,17 @@ export function googleSheetExportUrl(sheetId: string): string | null {
   if (url.protocol !== "https:" || url.hostname !== "docs.google.com" || url.port || url.username || url.password) return null
   if (/^\/spreadsheets\/d\/e\/[a-zA-Z0-9_-]+\/pub$/.test(url.pathname)) {
     url.searchParams.set("output", "csv")
+    const gid = url.searchParams.get("gid") ?? new URLSearchParams(url.hash.slice(1)).get("gid")
+    if (gid !== null && !/^\d+$/.test(gid)) return null
+    if (gid !== null) url.searchParams.set("gid", gid)
     url.hash = ""
     return url.toString()
   }
   const standardId = url.pathname.match(/^\/spreadsheets\/d\/([a-zA-Z0-9_-]+)(?:\/|$)/)?.[1]
-  return standardId && standardId !== "e" ? `https://docs.google.com/spreadsheets/d/${standardId}/export?format=csv` : null
+  if (!standardId || standardId === "e") return null
+  const gid = url.searchParams.get("gid") ?? new URLSearchParams(url.hash.slice(1)).get("gid")
+  if (gid !== null && !/^\d+$/.test(gid)) return null
+  return `https://docs.google.com/spreadsheets/d/${standardId}/export?format=csv${gid !== null ? `&gid=${gid}` : ""}`
 }
 
 function allowedDownloadUrl(url: URL): boolean {
@@ -27,7 +35,7 @@ function allowedDownloadUrl(url: URL): boolean {
 
 export async function fetchGoogleSheet(url: string): Promise<Response> {
   for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "manual" })
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "manual", cache: "no-store" })
     if (response.status < 300 || response.status >= 400) return response
     const location = response.headers.get("location")
     await response.body?.cancel()
@@ -73,11 +81,11 @@ interface PriceProduct {
   _id?: ObjectId | string
   itemno?: string
   sku?: string
+  itemNo?: string | number
+  raw?: Record<string, unknown>
   name?: string
   price?: number
   mrp?: number | null
-  active?: boolean
-  status?: string
   updatedAt?: Date
 }
 interface PriceRow {
@@ -85,7 +93,6 @@ interface PriceRow {
   rowNumber: number
   price: number | null
   mrp?: number
-  active?: boolean
   error: string
 }
 interface PricePreview {
@@ -95,17 +102,15 @@ interface PricePreview {
   oldPrice: number | null
   newPrice: number
   newMrp: number | null
-  oldActive: boolean | null
-  newActive: boolean | null
   status: "valid" | "error"
   error: string
 }
 
 export function readPriceSpreadsheet(buffer: ArrayBuffer): Record<string, unknown>[] {
-  const workbook = XLSX.read(buffer, { type: "buffer" })
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array", raw: true })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   if (!sheet) throw new Error("Spreadsheet has no worksheet")
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { raw: false })
   if (!rows.length) throw new Error("Spreadsheet is empty")
   if (rows.length > 50000) throw new Error("Spreadsheet exceeds 50,000 rows")
   return rows
@@ -122,29 +127,22 @@ function parseRows(data: Record<string, unknown>[]): { rows: PriceRow[]; ignored
     const amount = typeof value === "string" ? Number(value.replace(/[₹,\s]/g, "")) : value
     const price = priceSchema.safeParse(amount)
     const mrpValue = row.mrp ?? row.MRP ?? row.Mrp
-    const activeValue = row.active ?? row.Active ?? row.ACTIVE
     const supplied = (value: unknown) => value != null && String(value).trim() !== ""
     const numeric = (value: unknown) => typeof value === "string" ? Number(value.replace(/[₹,\s]/g, "")) : value
     const mrp = supplied(mrpValue) ? priceSchema.safeParse(numeric(mrpValue)) : undefined
-    const activeText = typeof activeValue === "string" ? activeValue.trim().toLowerCase() : null
-    const hasActive = activeValue != null && (typeof activeValue !== "string" || activeValue.trim() !== "")
-    const active = activeValue === true || activeValue === 1 || ["active", "true", "1"].includes(activeText ?? "")
-      ? true
-      : activeValue === false || activeValue === 0 || ["inactive", "false", "0"].includes(activeText ?? "") ? false : undefined
     const parsed = {
       sku,
       rowNumber: index + 2,
       price: price.success ? price.data : null,
       mrp: mrp?.success ? mrp.data : undefined,
-      active,
       error: !sku ? "Missing itemno" : !supplied(value) ? "Missing price" : !price.success ? "Price must be a positive, finite number no greater than 10,000,000"
         : mrp && !mrp.success ? "MRP must be a positive, finite number no greater than 10,000,000"
-        : hasActive && active === undefined ? "Active must be active/inactive, true/false or 1/0" : "",
+        : "",
     }
     if (!sku) missingSku.push(parsed)
     else {
-      if (bySku.has(sku)) ignoredDuplicates++
-      bySku.set(sku, parsed)
+      if (bySku.has(stockCodeKey(sku))) ignoredDuplicates++
+      bySku.set(stockCodeKey(sku), parsed)
     }
   })
   return { rows: [...bySku.values(), ...missingSku], ignoredDuplicates }
@@ -154,19 +152,29 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
   const { rows, ignoredDuplicates } = parseRows(data)
   const collection = await getCollection<PriceProduct>("products")
   const skus = rows.map(row => row.sku).filter(Boolean)
-  const products = await collection.find({ $or: [{ itemno: { $in: skus } }, { sku: { $in: skus } }] }).toArray()
   const bySku = new Map<string, PriceProduct[]>()
-  for (const product of products) {
-    for (const key of new Set([product.itemno, product.sku].filter((value): value is string => !!value))) {
-      bySku.set(key, [...(bySku.get(key) ?? []), product])
+  for (let offset = 0; offset < skus.length; offset += PRICE_IMPORT_BATCH_SIZE) {
+    const products = await collection.find(stockItemFilter(skus.slice(offset, offset + PRICE_IMPORT_BATCH_SIZE)), {
+      projection: { itemno: 1, sku: 1, itemNo: 1, raw: 1, name: 1, price: 1, mrp: 1 },
+      collation: { locale: "en", strength: 2 },
+    }).toArray()
+    for (const product of products) {
+      for (const key of new Set(stockItemAliases(product).map(stockCodeKey))) {
+        const matches = bySku.get(key) ?? []
+        if (!matches.some(match => String(match._id) === String(product._id))) matches.push(product)
+        bySku.set(key, matches)
+      }
     }
   }
   const updates: PricePreview[] = []
   const errors: string[] = []
   let success = 0
+  let writeFailures = 0
+  const operations: AnyBulkWriteOperation<PriceProduct>[] = []
+  const queuedProducts = new Set<string>()
 
   for (const row of rows) {
-    const matches = bySku.get(row.sku) ?? []
+    const matches = bySku.get(stockCodeKey(row.sku)) ?? []
     const product = matches[0]
     const effectiveMrp = row.mrp ?? product?.mrp
     let error = row.error
@@ -174,30 +182,21 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
     if (!error && matches.length > 1) error = "Multiple products match this itemno; reconcile before updating"
     if (!error && effectiveMrp != null && (!Number.isFinite(effectiveMrp) || effectiveMrp < 0)) error = "Stored MRP is invalid"
     if (!error && row.price !== null && effectiveMrp != null && row.price > effectiveMrp) error = "Price > MRP"
+    if (!error && product && queuedProducts.has(String(product._id))) error = "Another row matches the same product through a different item number"
+    if (!error && product) queuedProducts.add(String(product._id))
     if (!preview && !error && product && row.price !== null) {
-      try {
-        const result = await collection.findOneAndUpdate({
+      operations.push({ updateOne: { filter: {
           _id: product._id,
           price: product.price === undefined ? { $exists: false } : product.price,
           mrp: product.mrp === undefined ? { $exists: false } : product.mrp,
-          ...(row.active !== undefined ? { active: product.active === undefined ? { $exists: false } : product.active } : {}),
-          ...(row.active !== undefined ? { status: product.status === undefined ? { $exists: false } : product.status } : {}),
           ...(row.mrp === undefined ? { $or: [{ mrp: { $exists: false } }, { mrp: null }, { mrp: { $gte: row.price } }] } : {}),
-        }, {
+        }, update: {
           $set: {
             price: row.price,
             ...(row.mrp !== undefined ? { mrp: row.mrp } : {}),
-            ...(row.active !== undefined ? { active: row.active, status: row.active ? "active" : "inactive" } : {}),
             updatedAt: new Date(),
           },
-        }, { returnDocument: "after" })
-        if (!result) error = "Product changed or price exceeds current MRP; preview again"
-        else success++
-      } catch (cause) {
-        console.error("[Price Import] Product update failed", { row: row.rowNumber, cause })
-        error = "Product update failed"
-      }
-
+        }, upsert: false } })
     }
     if (error) errors.push(`Row ${row.rowNumber}: ${error}${row.sku ? ` for itemno ${row.sku}` : ""}`)
     updates.push({
@@ -207,14 +206,30 @@ export async function processProductPrices(data: Record<string, unknown>[], prev
       oldPrice: product?.price ?? null,
       newPrice: row.price ?? 0,
       newMrp: effectiveMrp ?? null,
-      oldActive: product ? product.active === true : null,
-      newActive: product ? (row.active ?? product.active) === true : null,
       status: error ? "error" : "valid",
       error,
     })
   }
   if (preview) return { preview: true, updates, ignoredDuplicates }
-  return { success, failed: errors.length, errors, ignoredDuplicates, message: `Updated ${success} products, ${errors.length} failed` }
+  for (let offset = 0; offset < operations.length; offset += PRICE_IMPORT_BATCH_SIZE) {
+    const batch = operations.slice(offset, offset + PRICE_IMPORT_BATCH_SIZE)
+    try {
+      const result = await collection.bulkWrite(batch, { ordered: false })
+      success += result.matchedCount
+      const conflicts = batch.length - result.matchedCount
+      writeFailures += conflicts
+      if (conflicts) errors.push(`${conflicts} products changed before updating; preview again (batch ${offset / PRICE_IMPORT_BATCH_SIZE + 1})`)
+    } catch (cause) {
+      // Unordered writes may partly succeed; include acknowledged matches only.
+      const matched = cause instanceof MongoBulkWriteError ? cause.result.matchedCount : 0
+      success += matched
+      writeFailures += batch.length - matched
+      errors.push(`Could not confirm ${batch.length - matched} updates in batch ${offset / PRICE_IMPORT_BATCH_SIZE + 1}; preview again`)
+      console.error("[Price Import] Batch update failed", { offset, cause })
+    }
+  }
+  const failed = updates.filter(update => update.status === "error").length + writeFailures
+  return { success, failed, errors, ignoredDuplicates, message: `Updated ${success} products, ${failed} failed` }
 }
 
 export async function processProductMrps(data: Record<string, unknown>[]) {

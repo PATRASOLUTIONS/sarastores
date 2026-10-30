@@ -44,7 +44,7 @@ export function parseStoreStockRows(sheet: Record<string, unknown>[]) {
   return { rows, blankRows }
 }
 export function readStoreStockSpreadsheet(data: ArrayBuffer) {
-  const workbook = XLSX.read(data, { type: "array", raw: true, sheetRows: 50002 })
+  const workbook = XLSX.read(new Uint8Array(data), { type: "array", raw: true, sheetRows: 50002 })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   if (!sheet) throw new Error("Spreadsheet has no worksheet")
   if (sheet["!fullref"] && XLSX.utils.decode_range(sheet["!fullref"]).e.r >= 50001) throw new Error("Upload at most 50,000 rows")

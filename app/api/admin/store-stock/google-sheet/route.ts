@@ -7,6 +7,8 @@ import { readStoreStockSpreadsheet } from "@/lib/store-stock-import"
 
 const requestSchema = z.object({ sheetId: z.string().trim().min(1).max(2048) }).strict()
 
+export const maxDuration = 300
+
 // POST - download a stock sheet from Google Sheets and return its rows; saving goes through /api/admin/store-stock
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin()

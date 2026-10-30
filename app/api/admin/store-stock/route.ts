@@ -6,12 +6,13 @@ import { handleApiError } from "@/lib/api-error"
 import type { StoredStoreLocation } from "@/lib/store-locations"
 import { stockCodeKey, stockItemAliases, stockItemCode, stockItemFilter, type StockCatalogueProduct } from "@/lib/stock-item-code"
 import {
-  recomputeProductStock, STORE_STOCK_COLLECTION, StoreStockUploadSchema, type StoreStockRow,
+  recomputeProductStock, STORE_STOCK_COLLECTION, STOCK_WRITE_BATCH_SIZE, StoreStockUploadSchema, type StoreStockRow,
 } from "@/lib/store-stock"
 
 import { createStockPreview, STOCK_PREVIEW_PAGE_SIZE, type StockPreviewPlan, type SkippedStockRecord } from "@/lib/store-stock-preview"
 
 const LIST_LIMIT = 20
+export const maxDuration = 300
 class StockPreviewChanged extends Error {}
 
 
@@ -164,10 +165,12 @@ export async function POST(request: NextRequest) {
         if (claimed.matchedCount < replacedStores.length) throw new Error("A store changed during upload; retry the sheet")
         const snapshot = await createStockPreview(plan, session)
         if (previewToken && previewToken !== snapshot.previewToken) throw new StockPreviewChanged()
-        await stock.bulkWrite(snapshot.changes.map(row => ({
-          updateOne: { filter: { storeCode: row.storeCode, sku: row.sku },
-            update: { $set: { quantity: row.currentStoreStock, updatedAt: now } }, upsert: row.source === "upload" },
-        })), { session, ordered: true })
+        for (let offset = 0; offset < snapshot.changes.length; offset += STOCK_WRITE_BATCH_SIZE) {
+          await stock.bulkWrite(snapshot.changes.slice(offset, offset + STOCK_WRITE_BATCH_SIZE).map(row => ({
+            updateOne: { filter: { storeCode: row.storeCode, sku: row.sku },
+              update: { $set: { quantity: row.currentStoreStock, updatedAt: now } }, upsert: row.source === "upload" },
+          })), { session, ordered: true })
+        }
         const affected = [...new Set(snapshot.changes.map(row => row.sku))]
         const productsUpdated = await recomputeProductStock(affected, session)
         return { saved: valid.length, validRows: valid.length, stores: replacedStores.length, zeroedItems: snapshot.changes.filter(row => row.source === "omitted").length, productsUpdated, ...responsePreview(snapshot) }

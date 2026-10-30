@@ -1,96 +1,85 @@
-import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import * as XLSX from "xlsx";
-import { normalizeProductForSchema } from "@/lib/product-schema";
-import { requireAdmin } from "@/lib/auth";
-import { handleApiError } from "@/lib/api-error";
+import { NextResponse } from "next/server"
+import * as XLSX from "xlsx"
+import type { Document } from "mongodb"
+import { getCollection, COLLECTIONS } from "@/lib/db-service"
+import { normalizeProductForSchema } from "@/lib/product-schema"
+import { stockCodeKey, stockItemAliases, stockItemCode, type StockCatalogueProduct } from "@/lib/stock-item-code"
+import { STORE_STOCK_COLLECTION, type StoreStockRow } from "@/lib/store-stock"
+import { requireAdmin } from "@/lib/auth"
+import { handleApiError } from "@/lib/api-error"
+
+export const maxDuration = 300
 
 export async function GET() {
-  const guard = await requireAdmin();
-  if (!guard.ok) return guard.response;
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
   try {
-  const { db } = await connectToDatabase();
-  const [products, categories, subCategories] = await Promise.all([
-    db.collection("products").find({}).toArray(),
-    db.collection("categories").find({}).toArray(),
-    db.collection("sub_categories").find({}).toArray()
-  ]);
-
-  // Build lookup maps
-  const categoryMap = new Map();
-  categories.forEach((cat) => {
-    categoryMap.set(String(cat._id), cat.name);
-    categoryMap.set(String(cat.id), cat.name);
-  });
-
-  const subCategoryMap = new Map();
-  subCategories.forEach((sub) => {
-    subCategoryMap.set(String(sub._id), sub.name);
-    subCategoryMap.set(String(sub.id), sub.name);
-  });
-
-  const data: Record<string, unknown>[] = [];
-  const seenSkus = new Set<string>();
-
-  for (const product of products) {
-    const raw = product.raw || {};
-    const canonical = normalizeProductForSchema(product);
-
-    // 1. Resolve canonical itemno
-    let itemno = canonical.itemno || product.sku;
-
-    // Validate SKU
-    if (typeof itemno === 'string') itemno = itemno.trim();
-    if (!itemno) continue; // Skip products without itemno
-
-    const skuKey = String(itemno).toLowerCase();
-
-    // Deduplication check
-    if (seenSkus.has(skuKey)) continue;
-    seenSkus.add(skuKey);
-
-    // 2. Resolve MRP
-    let mrp = product.mrp;
-    if (mrp === undefined || mrp === null) {
-      mrp = raw["MRP"] || raw["M.R.P"] || raw["Mrp"];
-    }
-
-    // 3. Prepare the row with the requested columns including Active/Inactive status
-    const row: Record<string, unknown> = {
-      "itemno": itemno,
-      "Name": canonical.name || product.name || "",
-      "Active/Inactive": product.active === false ? "Inactive" : "Active",
-      "Description": canonical.description || product.description || "",
-      "MRP": mrp ?? 0,
-      "Selling Price/MOP": product.price ?? 0,
-      "Category/Group Name": canonical.categoryGroupName || categoryMap.get(String(product.category)) || product.category || "",
-      "sub-category/PROD DESC": canonical.subCategoryProdDesc || subCategoryMap.get(String(product.subCategory)) || product.subCategory || "",
-      "CHAR DESC": canonical.charDesc || product.char_desc || "",
-      "Manufacturer Name": canonical.manufacturerName || product.manufacturer_name || product.manufacturerName || "",
-      // "Item Description": raw["Item Description"] || ""
-    };
-
-    data.push(row);
-  }
-
-  // Create worksheet and workbook
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Products");
-
-  // Write workbook to buffer
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-
-  // Return as Excel file
-  return new NextResponse(buffer, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="products-export-${new Date().toISOString().slice(0, 19)}.xlsx"`,
-      "Cache-Control": "no-store",
-    }
-  });
+    const [products, stock] = await Promise.all([
+      (await getCollection<StockCatalogueProduct & Document>(COLLECTIONS.PRODUCTS)).find({}, { projection: {
+        sku: 1, itemno: 1, itemNo: 1, name: 1, division: 1, segment: 1, brand: 1,
+        price: 1, mrp: 1, stock: 1, active: 1, raw: 1,
+      } }).toArray(),
+      (await getCollection<StoreStockRow>(STORE_STOCK_COLLECTION)).find({}, {
+        projection: { sku: 1, storeCode: 1, quantity: 1 },
+      }).sort({ sku: 1, storeCode: 1 }).toArray(),
+    ])
+    const itemNumbers = new Map<string, string>()
+    const aliasNumbers = new Map<string, Set<string>>()
+    const data = products.map(product => {
+      const canonical = normalizeProductForSchema(product)
+      const itemno = stockItemAliases({ ...product, sku: undefined })[0] || canonical.itemno
+      const stockCode = stockItemCode(product)
+      if (stockCode && itemno) {
+        const key = stockCodeKey(stockCode)
+        if (itemNumbers.has(key) && itemNumbers.get(key) !== itemno) throw new Error(`Stock SKU ${stockCode} belongs to multiple item numbers; correct the catalogue before exporting`)
+        itemNumbers.set(key, itemno)
+      }
+      if (itemno) for (const alias of stockItemAliases(product)) {
+        const key = stockCodeKey(alias)
+        const numbers = aliasNumbers.get(key) ?? new Set<string>()
+        numbers.add(itemno)
+        aliasNumbers.set(key, numbers)
+      }
+      return {
+        itemno,
+        name: canonical.name,
+        division: canonical.division,
+        segment: canonical.segment,
+        brand: canonical.brandName,
+        price: product.price ?? 0,
+        mrp: product.mrp ?? product.raw?.MRP ?? product.raw?.["M.R.P"] ?? product.raw?.Mrp ?? 0,
+        "overall stock": product.stock ?? 0,
+        status: product.active === false ? "Inactive" : "Active",
+      }
+    })
+    const storeData = stock.flatMap(row => {
+      const key = stockCodeKey(row.sku)
+      const aliases = aliasNumbers.get(key)
+      const itemno = itemNumbers.get(key) ?? (aliases?.size === 1 ? [...aliases][0] : undefined)
+      return itemno ? [{ itemno, stock: row.quantity, storecode: row.storeCode }] : []
+    })
+    const summary = XLSX.utils.json_to_sheet(data, {
+      header: ["itemno", "name", "division", "segment", "brand", "price", "mrp", "overall stock", "status"],
+    })
+    const stores = XLSX.utils.json_to_sheet(storeData, { header: ["itemno", "stock", "storecode"] })
+    summary["!cols"] = [22, 50, 22, 22, 22, 14, 14, 18, 14].map(wch => ({ wch }))
+    stores["!cols"] = [22, 14, 18].map(wch => ({ wch }))
+    summary["!autofilter"] = { ref: summary["!ref"]! }
+    stores["!autofilter"] = { ref: stores["!ref"]! }
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, summary, "Products")
+    XLSX.utils.book_append_sheet(workbook, stores, "Store Stock")
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="products-export-${timestamp}.xlsx"`,
+        "Cache-Control": "no-store",
+      },
+    })
   } catch (error) {
-    return handleApiError(error, "Failed to export products");
+    return handleApiError(error, "Failed to export products")
   }
 }

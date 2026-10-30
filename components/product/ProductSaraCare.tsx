@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { apiFetchJson } from "@/lib/api-client"
@@ -11,38 +11,85 @@ import SaraCarePlanPicker from "@/components/cart/SaraCarePlanPicker"
 
 const money = (amount: number) => `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export default function ProductSaraCare({ productId, productName, selection, onSelect }: {
-  productId: string; productName: string; selection: SaraCareYears | null | undefined;
+export function useProductSaraCare({ productId, selection, onSelect }: {
+  productId: string; selection: SaraCareYears | null | undefined;
   onSelect: (years: SaraCareYears | null) => void;
 }) {
   const [offer, setOffer] = useState<SaraCareOffer | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [attempt, setAttempt] = useState(0)
+  const [quotedProductId, setQuotedProductId] = useState("")
   const { cart, setSaraCareDuration, saraCareLoading } = useCart()
   const parentKey = cartLineKey({ id: productId, color: null, size: null })
   const parent = cart.find(item => !isSaraCare(item) && cartLineKey(item) === parentKey)
   const cartSelection = parent?.saraCareSelection
   useEffect(() => { if (cartSelection !== undefined) onSelect(cartSelection) }, [cartSelection, onSelect])
   useEffect(() => {
+    if (!productId) return
     const controller = new AbortController()
     setLoading(true); setError(""); setOffer(null)
     void apiFetchJson("/api/sara-care/quote", { method: "POST", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(process.env.NODE_ENV === "development" ? 60000 : 30000)]),
       json: { items: [{ id: productId, quantity: 1, color: null, size: null, saraCareSelection: null }] } }, value => SaraCareQuoteResponseSchema.parse(value))
-      .then(value => { if (!controller.signal.aborted) setOffer(value.offers.find(item => item.parentLineKey === parentKey) || null) })
+      .then(value => { if (!controller.signal.aborted) {
+        setOffer(value.offers.find(item => item.parentLineKey === parentKey) || null)
+        setQuotedProductId(productId)
+      } })
       .catch(error => { if (!controller.signal.aborted) setError(error instanceof Error && error.name !== "TimeoutError" ? error.message : "Care plans could not be loaded. Please retry.") })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [productId, parentKey, attempt])
-  const selected = cartSelection !== undefined ? cartSelection : selection !== undefined ? selection : offer?.defaultYears || 1
-  const selectedPlan = offer?.options.find(option => option.years === selected)
+  const currentOffer = quotedProductId === productId ? offer : null
+  const pending = loading || (quotedProductId !== productId && !error)
+  const selected: SaraCareYears | null = !pending && !error && !currentOffer ? null : cartSelection !== undefined ? cartSelection : selection !== undefined ? selection : currentOffer?.defaultYears || 1
+  const selectedPlan = currentOffer?.options.find(option => option.years === selected)
+  useEffect(() => {
+    if (!pending && !error && selection === undefined && cartSelection === undefined) onSelect(currentOffer?.defaultYears ?? null)
+  }, [pending, error, selection, cartSelection, currentOffer, onSelect])
+  const select = useCallback((years: SaraCareYears | null) => {
+    onSelect(years)
+    if (parent) setSaraCareDuration(parentKey, years)
+  }, [onSelect, parent, parentKey, setSaraCareDuration])
+  return { offer: currentOffer, loading: pending, error, retry: () => setAttempt(value => value + 1),
+    selected, selectedPlan, select, saraCareLoading, parent }
+}
+
+export type ProductSaraCareState = ReturnType<typeof useProductSaraCare>
+
+export default function ProductSaraCare({ productName, care, compact = false, disabled = false }: {
+  productName: string; care: ProductSaraCareState; compact?: boolean; disabled?: boolean;
+}) {
+  const { offer, loading, error, retry, selected, selectedPlan, select, saraCareLoading, parent } = care
+  const [lastYears, setLastYears] = useState<SaraCareYears>(selected ?? offer?.defaultYears ?? 1)
+  useEffect(() => { if (selected !== null) setLastYears(selected) }, [selected])
   const selectedBase = selectedPlan ? selectedPlan.price / (1 + (offer?.taxRate || 18) / 100) : 0
   const coveredQuantity = parent?.quantity || 1
+  if (compact) return <section aria-label={`Sara Care for ${productName}`} className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs">
+    <div className="flex items-center justify-between gap-2">
+      <label className="flex cursor-pointer items-center gap-2 font-semibold text-[#0F2557]">
+        <input type="checkbox" checked={selected !== null} disabled={disabled || saraCareLoading || (!loading && !error && !offer)}
+          onChange={event => select(event.target.checked ? lastYears : null)} className="h-4 w-4 rounded accent-[#1560BD]" />
+        <ShieldCheck size={15} />Sara Care
+      </label>
+      {selectedPlan && <span className="font-semibold text-[#0F2557]" aria-live="polite">+{money(selectedPlan.price)}</span>}
+    </div>
+    {loading ? <p role="status" className="mt-2 text-gray-600">Loading plan prices…</p> : error ? <p role="alert" className="mt-2 text-red-700">Plans could not be loaded. <button type="button" onClick={retry} className="font-semibold underline">Retry</button></p> : offer ? <>
+      <select aria-label="Sara Care duration" value={selected ?? lastYears} disabled={disabled || saraCareLoading || selected === null}
+        onChange={event => select(Number(event.target.value) as SaraCareYears)} className="mt-2 w-full rounded-md border border-gray-300 bg-white px-2 py-2 text-xs disabled:opacity-50">
+        {([1, 2, 3] as SaraCareYears[]).map(years => {
+          const plan = offer.options.find(option => option.years === years)
+          return <option key={years} value={years} disabled={!plan}>{years} {years === 1 ? "year" : "years"}{plan ? ` — ${money(plan.price)}` : " — unavailable"}</option>
+        })}
+      </select>
+      <p className="mt-2 text-gray-600">{selected === null ? "Not added" : "Added · price includes GST"}</p>
+    </> : <p className="mt-2 text-gray-600">Unavailable for this product</p>}
+    <Link href="/sara-care#coverage-terms" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-[#1560BD] hover:underline">Coverage terms</Link>
+  </section>
   return <section aria-label={`Sara Care for ${productName}`} className="space-y-4">
     <div className="flex items-start gap-3"><span className="rounded-xl bg-blue-50 p-3 text-[#1560BD]"><ShieldCheck size={26} /></span>
       <div><h3 className="text-lg font-semibold text-[#0F2557]">Sara Care protection</h3><p className="mt-1 text-sm leading-6 text-gray-600">Choose optional protection for {productName}. Sara Care appears as a separate product in your cart and can be removed before payment.</p></div>
     </div>
-    {loading ? <p role="status" className="text-sm text-gray-600">Loading plans for this product…</p> : error ? <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="font-semibold underline" onClick={() => setAttempt(value => value + 1)}>Retry plans</button></p> : offer ? <>
+    {loading ? <p role="status" className="text-sm text-gray-600">Loading plans for this product…</p> : error ? <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="font-semibold underline" onClick={retry}>Retry plans</button></p> : offer ? <>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <h4 className="text-sm font-semibold text-[#0F2557]">Plans and costs for this product</h4>
@@ -59,8 +106,8 @@ export default function ProductSaraCare({ productId, productName, selection, onS
           </table></div>
           <p className="mt-3 text-xs leading-5 text-gray-600">One upfront payment covers the selected duration. Each package rate applies once to the product price basis. All displayed plan costs include {offer.taxRate || 18}% GST.</p>
         </div>
-      <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4"><SaraCarePlanPicker options={offer.options} value={selected} disabled={saraCareLoading}
-        label={`Sara Care duration for ${productName}`} onChange={years => { onSelect(years); if (parent) setSaraCareDuration(parentKey, years) }} />
+      <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4"><SaraCarePlanPicker options={offer.options} value={selected} disabled={disabled || saraCareLoading}
+        label={`Sara Care duration for ${productName}`} onChange={select} />
         <div className="mt-4 border-t border-blue-100 pt-3" aria-live="polite">
           {selectedPlan ? <><h4 className="text-sm font-semibold text-[#0F2557]">Selected: {selectedPlan.years}-year Sara Care</h4>
             <dl className="mt-2 space-y-2 text-xs text-gray-600">

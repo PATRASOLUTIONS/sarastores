@@ -25,7 +25,8 @@ export default function SaraCareOptions({ item, disabled = false, variant = "com
   if (isSaraCare(item)) return <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
     {picker}
     {saraCareLoading && <p role="status" className="mt-1 text-xs text-gray-600">Updating your plan…</p>}
-    <details className="mt-2 text-xs text-gray-600"><summary className="cursor-pointer text-[#1560BD]">Coverage terms</summary><p className="mt-1 whitespace-pre-wrap break-words">{offer.terms}</p></details>
+    {variant === "checkout" ? <a href="/sara-care#coverage-terms" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-xs font-medium text-[#1560BD] hover:underline">Coverage terms</a> :
+      <details className="mt-2 text-xs text-gray-600"><summary className="cursor-pointer text-[#1560BD]">Coverage terms</summary><p className="mt-1 whitespace-pre-wrap break-words">{offer.terms}</p></details>}
   </div>
   if (variant === "checkout") return <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs">
     <div className="mb-2 flex items-center justify-between gap-2">
@@ -35,7 +36,7 @@ export default function SaraCareOptions({ item, disabled = false, variant = "com
     {picker}
     <p className="mt-2 leading-relaxed text-gray-600" aria-live="polite">{saraCareLoading ? "Updating your plan and order total…" : selected === "none" ? "No protection added. Choose a duration to add Sara Care." : selectedPrice === undefined ? "This duration is unavailable. Choose another duration or remove Care." :
       `${item.quantity} ${item.quantity === 1 ? "device" : "devices"} · ₹${(selectedPrice * item.quantity).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total, including GST. Shown as a separate product.`}</p>
-    <details className="mt-2 text-gray-600"><summary className="cursor-pointer font-medium text-[#1560BD]">Coverage terms</summary><p className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{offer.terms}</p></details>
+    <a href="/sara-care#coverage-terms" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium text-[#1560BD] hover:underline">Coverage terms</a>
   </div>
   return <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 p-2 text-xs">
     <p className="mb-2 font-semibold text-maroon-800">Sara Care — optional</p>

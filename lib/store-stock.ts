@@ -10,6 +10,7 @@ import { stockItemCode, stockItemFilter, type StockCatalogueProduct } from "@/li
  * its rows here, recomputed after every upload.
  */
 export const STORE_STOCK_COLLECTION = "store_stock"
+export const STOCK_WRITE_BATCH_SIZE = 500
 
 export interface StoreStockRow {
   storeCode: string
@@ -124,8 +125,13 @@ export async function recomputeProductStock(skus: string[], session?: ClientSess
   const updates = products.filter(product => requested.has(stockItemCode(product)?.toUpperCase() || ""))
   if (!updates.length) return 0
   const now = new Date()
-  const result = await (await getCollection<StockCatalogueProduct & { _id: ObjectId | string; stock?: number; updatedAt?: Date }>(COLLECTIONS.PRODUCTS)).bulkWrite(updates.map(product => ({
-    updateOne: { filter: { _id: product._id }, update: { $set: { stock: bySku.get(stockItemCode(product)!) ?? 0, updatedAt: now } } },
-  })), { session, ordered: false })
-  return result.modifiedCount
+  const collection = await getCollection<StockCatalogueProduct & { _id: ObjectId | string; stock?: number; updatedAt?: Date }>(COLLECTIONS.PRODUCTS)
+  let modifiedCount = 0
+  for (let offset = 0; offset < updates.length; offset += STOCK_WRITE_BATCH_SIZE) {
+    const result = await collection.bulkWrite(updates.slice(offset, offset + STOCK_WRITE_BATCH_SIZE).map(product => ({
+      updateOne: { filter: { _id: product._id }, update: { $set: { stock: bySku.get(stockItemCode(product)!) ?? 0, updatedAt: now } } },
+    })), { session, ordered: false })
+    modifiedCount += result.modifiedCount
+  }
+  return modifiedCount
 }
