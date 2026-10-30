@@ -15,6 +15,7 @@ export interface Store {
   email?: string
   /** Original Google Maps share link, used for the Directions action. */
   mapUrl?: string
+  googlePlaceId?: string
 }
 
 export const regions = ["Bangalore", "Mysore", "Hubballi", "Hospet", "Ballary", "Shivamogga", "Hassan", "Dharwad"]

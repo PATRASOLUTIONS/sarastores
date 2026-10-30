@@ -5,7 +5,8 @@ import Link from "next/link"
 import { Loader2, MapPin, Phone, Star, ArrowUpRight } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { apiFetchJson } from "@/lib/api-client"
-import { StoreBusinessResponseSchema, type StoreBusiness } from "@/lib/store-business-types"
+import type { StoreBusiness } from "@/lib/store-business-types"
+import { getStoreBusiness } from "@/lib/store-business-client"
 import type { Store } from "@/lib/store-data"
 import type { Coordinates } from "@/lib/geo-client"
 import { z } from "zod"
@@ -16,6 +17,7 @@ export function StoreEnquiryDialog({ store, origin, onClose }: { store: Store; o
   const [business, setBusiness] = useState<StoreBusiness | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(true)
   const [detailsError, setDetailsError] = useState("")
+  const [googlePhotoFailed, setGooglePhotoFailed] = useState(false)
   const [retry, setRetry] = useState(0)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
@@ -23,15 +25,17 @@ export function StoreEnquiryDialog({ store, origin, onClose }: { store: Store; o
   const sendingRef = useRef(false)
 
   useEffect(() => {
-    const controller = new AbortController()
+    let cancelled = false
     setDetailsLoading(true)
     setDetailsError("")
-    void apiFetchJson(`/api/stores/${encodeURIComponent(store.id)}/business`, { signal: controller.signal }, value => StoreBusinessResponseSchema.parse(value))
-      .then(data => { if (!controller.signal.aborted) setBusiness(data.business) })
-      .catch(error => { if (!controller.signal.aborted) setDetailsError(error instanceof Error ? error.message : "Could not load Google details") })
-      .finally(() => { if (!controller.signal.aborted) setDetailsLoading(false) })
-    return () => controller.abort()
+    void getStoreBusiness(store.id, retry > 0)
+      .then(data => { if (!cancelled) setBusiness(data) })
+      .catch(error => { if (!cancelled) setDetailsError(error instanceof Error ? error.message : "Could not load Google details") })
+      .finally(() => { if (!cancelled) setDetailsLoading(false) })
+    return () => { cancelled = true }
   }, [store.id, retry])
+
+  useEffect(() => { setGooglePhotoFailed(false) }, [business?.photoUrl])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -58,6 +62,7 @@ export function StoreEnquiryDialog({ store, origin, onClose }: { store: Store; o
   const name = business?.name || store.name
   const address = business?.address || store.address
   const phone = business?.phone || store.phone
+  const googlePhoto = !googlePhotoFailed && business?.photoUrl
   const query = encodeURIComponent(`${store.name}, ${store.address}`)
   const mapsUrl = business?.mapsUrl || store.mapUrl || `https://www.google.com/maps/search/?api=1&query=${query}`
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${name}, ${address}`)}${origin ? `&origin=${origin.lat},${origin.lng}` : ""}`
@@ -93,6 +98,13 @@ export function StoreEnquiryDialog({ store, origin, onClose }: { store: Store; o
         <section className="border-t border-gray-100 bg-gray-50 p-6 md:border-l md:border-t-0" aria-label="Store business details">
           <p className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-500">{business?.status === "connected" ? "From Google Maps" : "Store details"}</p>
           <h2 className="text-xl font-semibold tracking-tight">{name}</h2>
+          {(googlePhoto || store.image) && <figure className="mt-4 overflow-hidden rounded-xl">
+            <img src={googlePhoto || store.image} alt={name} loading="lazy" className="h-44 w-full object-cover" onError={event => {
+              if (googlePhoto) setGooglePhotoFailed(true)
+              else event.currentTarget.style.display = "none"
+            }} />
+            {!!googlePhoto && <figcaption className="mt-1 text-xs text-gray-500">Photo: Google{business?.photoCredits?.map((credit, index) => credit.url ? <a key={index} href={credit.url} target="_blank" rel="noopener noreferrer" className="underline"> / {credit.name}</a> : <span key={index}> / {credit.name}</span>)}</figcaption>}
+          </figure>}
           <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-gray-600"><MapPin size={17} className="mt-0.5 shrink-0" />{address}</p>
           {phone && <p className="mt-3 flex items-center gap-2 text-sm text-gray-600"><Phone size={16} />{phone}</p>}
           <div className="mt-4 space-y-1 text-xs text-gray-500">{(business?.hours.length ? business.hours : [store.hours]).map((hours, index) => <p key={index}>{hours}</p>)}</div>

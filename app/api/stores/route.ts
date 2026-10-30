@@ -29,6 +29,7 @@ export async function GET() {
                 isOpen: store.isActive !== false,
                 image: store.shopImage || "",
                 mapUrl: store.googleMapLocation || "",
+                googlePlaceId: store.googlePlaceId || "",
                 // Coordinates are backfilled by scripts/backfill-store-coordinates.mjs;
                 // stores added since fall back to parsing the map link.
                 ...storeCoordinates(store),

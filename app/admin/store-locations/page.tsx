@@ -2,6 +2,7 @@
 
 
 import { apiFetch } from "@/lib/api-client"
+import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
 import * as XLSX from "xlsx"
 import { toast } from "react-hot-toast"
@@ -277,9 +278,18 @@ export default function StoreLocationsPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingStore, setEditingStore] = useState<StoreLocation | null>(null)
+  const editLinkHandled = useRef(false)
   const [newStore, setNewStore] = useState<Omit<StoreLocation, 'id' | 'createdAt' | 'updatedAt'>>(EMPTY_STORE)
   const [searchQuery, setSearchQuery] = useState("")
   const [deletingStoreId, setDeletingStoreId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (editLinkHandled.current || !stores.length) return
+    const id = new URL(window.location.href).searchParams.get("edit")
+    const store = stores.find(store => store.id === id)
+    if (store) { setEditingStore(store); setShowEditModal(true) }
+    editLinkHandled.current = true
+  }, [stores])
   const deletionInProgress = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -591,9 +601,12 @@ export default function StoreLocationsPage() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Store Locations Management</h1>
         <p className="text-gray-600">Manage all store locations, upload from Excel, and export data</p>
+        </div>
+        <Link href="/admin/store-locations/business-profile" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"><ExternalLink className="h-4 w-4" />View all Google data</Link>
       </div>
 
       {/* Action Bar */}
@@ -798,6 +811,7 @@ export default function StoreLocationsPage() {
 
                 {/* Action Buttons */}
                 <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-2">
+                  <Link href={`/admin/store-locations/${store.id}/google`} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100"><ExternalLink className="h-4 w-4" />Google details</Link>
                   <button
                     disabled={deletingStoreId !== null}
                     onClick={() => {

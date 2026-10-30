@@ -1,4 +1,5 @@
 /** Address helpers shared by the public store lists, for stores not yet geocoded. */
+import { googleMapReference } from "@/lib/store-google-maps"
 
 export function derivePincode(address: string): string {
   const m = (address || "").match(/\b(\d{6})\b/)
@@ -28,6 +29,8 @@ export function deriveCity(address: string): string {
 /** Coordinates from a Google Maps link (?q=lat,lng or @lat,lng). */
 export function extractLatLng(url: string): { latitude?: number; longitude?: number } {
   if (!url) return {}
+  const point = googleMapReference(url).coords
+  if (point) return { latitude: point.lat, longitude: point.lng }
   const match = url.match(/[?&]q=([-0-9.]+),([-0-9.]+)/) || url.match(/@([-0-9.]+),([-0-9.]+)/)
   if (!match) return {}
   const latitude = parseFloat(match[1])
