@@ -3,14 +3,14 @@
 import type { useCartCoupon } from "@/hooks/useCartCoupon"
 
 export default function CartCoupon({ coupon, disabled = false, id = "cart-coupon" }: { coupon: ReturnType<typeof useCartCoupon>; disabled?: boolean; id?: string }) {
-  return <section id={id} className="my-4 scroll-mt-48 rounded-lg border bg-gray-50 p-3" aria-label="Cart coupon">
+  return <section id={id} className="my-4 scroll-mt-48 rounded-2xl border border-[#e5e5ea] bg-white p-4" aria-label="Cart coupon">
     <label htmlFor={`${id}-code`} className="mb-2 block text-sm font-medium text-gray-700">Have a Coupon Code?</label>
     {!coupon.appliedCoupon ? <div className="flex gap-2">
-      <input id={`${id}-code`} className="min-w-0 flex-1 rounded border px-3 py-2 text-sm" value={coupon.couponCode}
+      <input id={`${id}-code`} className="min-w-0 flex-1 rounded-lg border border-[#d2d2d7] px-3 py-2 text-sm" value={coupon.couponCode}
         onChange={event => coupon.setCouponCode(event.target.value.toUpperCase())}
         onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void coupon.apply() } }}
         placeholder="Enter coupon code" disabled={disabled || coupon.applyingCoupon} />
-      <button type="button" className="rounded bg-green-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+      <button type="button" className="rounded-lg bg-[#0071e3] px-4 py-2 text-sm font-medium text-white hover:bg-[#0077ed] disabled:opacity-50"
         disabled={disabled || coupon.applyingCoupon || !coupon.couponCode.trim()} onClick={() => void coupon.apply()}>Apply</button>
     </div> : <div className="rounded border border-green-200 bg-green-50 p-3">
       <div className="flex items-center justify-between gap-2">

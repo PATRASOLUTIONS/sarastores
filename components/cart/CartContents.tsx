@@ -22,7 +22,7 @@ import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import CartGifts from "@/components/cart/CartGifts"
 import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
-import { isSaraCare } from "@/lib/sara-care-types"
+import { isSaraCare, formatSaraCarePrice } from "@/lib/sara-care-types"
 import { useCartGifts } from "@/hooks/useCartGifts"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartCoupon } from "@/hooks/useCartCoupon"
@@ -260,6 +260,15 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
             </div>
             <ul>{cart.map((item) => {
               const lineKey = cartLineKey(item)
+              if (item.saraCare) return <li key={lineKey} className={styles.careItem}>
+                <div className={styles.careItemHeader}>
+                  <input type="checkbox" checked={selectedIds.includes(lineKey)} aria-label={`Select Sara Care for ${item.saraCare.parentName}`} onChange={() => setSelectedIds(previous => previous.includes(lineKey) ? previous.filter(id => id !== lineKey) : [...previous, lineKey])} />
+                  <span className={styles.careIcon} aria-hidden="true"><ShieldCheck size={23} strokeWidth={1.6} /></span>
+                  <div className={styles.careItemCopy}><h2>Sara Care</h2><p>For {cleanProductName(item.saraCare.parentName)}</p></div>
+                  <strong className={styles.carePrice}>{formatSaraCarePrice(item.price * item.quantity)}</strong>
+                </div>
+                <div className={styles.careItemControls}><SaraCareOptions item={item} /></div>
+              </li>
               const otherQuantity = cart.filter(line => line.id === item.id && cartLineKey(line) !== lineKey)
                 .reduce((sum, line) => sum + line.quantity, 0)
               const product = products[item.id]

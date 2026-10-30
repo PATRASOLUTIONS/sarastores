@@ -4,12 +4,27 @@ import crypto from "crypto"
 import { withRateLimit } from "@/lib/rate-limit"
 import { buildPasswordResetEmail, sendEmail, storefrontOrigin } from "@/lib/email"
 import { ForgotPasswordSchema } from "@/lib/validation"
+import { EmailConfigurationError, verifyEmailTransport } from "@/lib/smtp"
+
+export const maxDuration = 60
 
 export const POST = withRateLimit(async (req: Request) => {
   try {
-    const parsed = ForgotPasswordSchema.safeParse(await req.json())
+    const parsed = ForgotPasswordSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     const { email } = parsed.data
+
+    // Report mail-service outages consistently for registered and unknown
+    // addresses. Never reveal account existence through a delivery error.
+    try {
+      await verifyEmailTransport()
+    } catch (error) {
+      console.error("[forgot-password] email service unavailable", error instanceof EmailConfigurationError ? error.message : {
+        type: error instanceof Error ? error.name : "UnknownError",
+        code: error && typeof error === "object" && "code" in error ? error.code : undefined,
+      })
+      return NextResponse.json({ error: "Password-reset email is temporarily unavailable. Please try again later or contact support.", code: "RESET_EMAIL_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    }
 
     const { db } = await connectToDatabase()
     const usersCollection = db.collection("users")

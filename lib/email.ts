@@ -1,5 +1,5 @@
-import nodemailer from "nodemailer"
 import type Mail from "nodemailer/lib/mailer"
+import { getEmailTransport } from "@/lib/smtp"
 import { generateInvoicePDF as renderInvoicePDF } from "@/lib/invoice-pdf"
 import { escapeHtml } from "@/lib/html"
 export { escapeHtml } from "@/lib/html"
@@ -31,16 +31,6 @@ interface InvoiceEmailInput extends OrderEmailInput {
   status: string
   taxAmount: number
 }
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number.parseInt(process.env.SMTP_PORT || "587"),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-})
 
 /** Public storefront origin used in customer emails. */
 export function storefrontOrigin(): string {
@@ -220,7 +210,7 @@ export async function sendEmail({
       }
     }
 
-    const result = await transporter.sendMail(mailOptions)
+    const result = await getEmailTransport().sendMail(mailOptions)
     
     return { success: true, result }
   } catch (error) {

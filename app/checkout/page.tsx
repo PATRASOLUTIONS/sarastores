@@ -25,7 +25,7 @@ import LoyaltyRedeemer from "@/components/LoyaltyRedeemer"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { cartLimitError } from "@/lib/cart-limits"
 import { cartLineKey } from "@/lib/cart-line"
-import { isSaraCare, saraCareDurationLabel, SaraCareSnapshotSchema } from "@/lib/sara-care-types"
+import { isSaraCare, saraCareDurationLabel, formatSaraCarePrice, SaraCareSnapshotSchema } from "@/lib/sara-care-types"
 import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
 import { CHECKOUT_CART_INTENT } from "@/lib/checkout-cart"
 import { EMPTY_CHECKOUT_CUSTOMER as EMPTY_CUSTOMER, readCheckoutDraft, saveCheckoutDraft, clearCheckoutDraft } from "@/lib/checkout-draft"
@@ -1910,10 +1910,10 @@ export default function CheckoutPage() {
                       <div className={styles.careProductHeader}>
                         <span className={styles.careIcon}><Shield size={18} /></span>
                         <div><strong>Sara Care · {saraCareDurationLabel(item.saraCare.durationYears)}</strong><span>Protection product</span></div>
-                        <b>₹{money(item.price * item.quantity)}</b>
+                        <b>{formatSaraCarePrice(item.price * item.quantity)}</b>
                       </div>
                       <p className={styles.careCoveredDevice}>For {cleanProductName(item.saraCare.parentName)}</p>
-                      <p>Qty: {item.quantity} · ₹{money(item.price)} per device · GST included</p>
+                      <p>Qty: {item.quantity} · {formatSaraCarePrice(item.price)} per device · GST included</p>
                       <SaraCareOptions item={item} variant="checkout" disabled={storeRequestLoading || isProcessing || paymentPending || !!paymentRecovery || !!movingWishlistId} />
                       <p>Begins on {item.saraCare.coverageStarts === "delivery" ? "delivery / collection" : "purchase after payment"}, according to the coverage terms.</p>
                       <div className={styles.careProductActions}><Link href="/sara-care" target="_blank" rel="noopener noreferrer">About Sara Care</Link>
