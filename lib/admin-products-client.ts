@@ -14,6 +14,7 @@ export interface AdminProductResponse {
   image?: string
   images?: string[]
   category?: string
+  division?: string
   groupName?: string
   itemCategory?: string
   manufacturerName?: string

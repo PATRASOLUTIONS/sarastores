@@ -9,9 +9,18 @@ import { fetchAllAdminProducts, type AdminProductResponse } from "@/lib/admin-pr
 import { campaignPageListResponseSchema } from "@/lib/campaign-page"
 import { DEFAULT_HEADER_PROMOTIONS, type HeaderPromotion } from "@/lib/header-promotions"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
+import { normalizeProductForSchema } from "@/lib/product-schema"
 
 const CAMPAIGN_NAME = "SARA Super Sunday"
 const CAMPAIGN_SLUG = "super-sunday"
+const MAX_PRODUCTS = 500
+
+const divisionOf = (product: AdminProductResponse) => normalizeProductForSchema(product).division.trim()
+const hasOffer = (product: AdminProductResponse) => {
+  const price = Number(product.price)
+  const mrp = Number(product.mrp)
+  return Number.isFinite(price) && Number.isFinite(mrp) && price > 0 && mrp > price
+}
 
 export default function SuperSundayAdminPage() {
   const lock = useSubmitLock()
@@ -21,6 +30,8 @@ export default function SuperSundayAdminPage() {
   const [products, setProducts] = useState<AdminProductResponse[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [search, setSearch] = useState("")
+  const [division, setDivision] = useState("")
+  const [offersOnly, setOffersOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,21 +77,42 @@ export default function SuperSundayAdminPage() {
     }
   }, [])
 
+  const divisions = useMemo(() => {
+    const values = new Map<string, string>()
+    for (const product of products) {
+      const value = divisionOf(product)
+      if (value && !values.has(value.toLowerCase())) values.set(value.toLowerCase(), value)
+    }
+    return [...values.values()].sort((a, b) => a.localeCompare(b))
+  }, [products])
+
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return products
-    return products.filter(product =>
-      String(product.name || "").toLowerCase().includes(term) ||
-      String(product.sku || product.itemno || "").toLowerCase().includes(term) ||
-      String(product.manufacturerName || product.manufacturer_name || "").toLowerCase().includes(term)
-    )
-  }, [products, search])
+    return products.filter(product => {
+      if (division && divisionOf(product).toLowerCase() !== division.toLowerCase()) return false
+      if (offersOnly && !hasOffer(product)) return false
+      return !term ||
+        String(product.name || "").toLowerCase().includes(term) ||
+        String(product.sku || product.itemno || "").toLowerCase().includes(term) ||
+        String(product.manufacturerName || product.manufacturer_name || "").toLowerCase().includes(term)
+    })
+  }, [products, search, division, offersOnly])
+
+  const offerProducts = filteredProducts.filter(hasOffer)
+  const selectProducts = (matches: AdminProductResponse[]) => {
+    const next = [...new Set([...selectedIds, ...matches.map(product => product.id)])]
+    if (next.length > MAX_PRODUCTS) {
+      toast.error(`This would select ${next.length} products. A campaign can contain up to ${MAX_PRODUCTS}; narrow the filters or clear your selection.`)
+      return
+    }
+    setSelectedIds(next)
+  }
 
   const selected = new Set(selectedIds)
   const toggleProduct = (id: string) => {
     setSelectedIds(previous => {
       if (previous.includes(id)) return previous.filter(productId => productId !== id)
-      if (previous.length >= 500) {
+      if (previous.length >= MAX_PRODUCTS) {
         toast.error("A campaign can contain up to 500 products")
         return previous
       }
@@ -286,14 +318,43 @@ export default function SuperSundayAdminPage() {
       </div>
 
       <div className="rounded-xl border bg-white p-5 shadow-sm">
-        <div className="relative mb-5 max-w-xl">
+        <h2 className="text-lg font-bold text-gray-900">Campaign products</h2>
+        <p className="mt-1 mb-4 text-sm text-gray-600">Filter by division or offers, then select matching products. Bulk selection adds to your current selection. Maximum {MAX_PRODUCTS} products.</p>
+        <div className="mb-4 flex flex-wrap items-end gap-4">
+          <label className="min-w-[200px] text-sm font-medium text-gray-700">
+            Division
+            <select value={division} onChange={event => setDivision(event.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm">
+              <option value="">All divisions</option>
+              {divisions.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 py-2.5 text-sm font-medium text-gray-700">
+            <input type="checkbox" checked={offersOnly} onChange={event => setOffersOnly(event.target.checked)} className="h-4 w-4 rounded border-gray-300 text-red-600" />
+            Only products with offers (price below MRP)
+          </label>
+        </div>
+        <div className="relative mb-4 max-w-xl">
           <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <input
             value={search}
             onChange={event => setSearch(event.target.value)}
             placeholder="Search active products by name, SKU or brand"
+            aria-label="Search active products by name, SKU or brand"
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-3 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100"
           />
+        </div>
+
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => selectProducts(filteredProducts)} disabled={!filteredProducts.length} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+            {division || offersOnly || search.trim() ? "Select all matching" : "Select all products"} ({filteredProducts.length})
+          </button>
+          <button type="button" onClick={() => selectProducts(offerProducts)} disabled={!offerProducts.length} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            Select products with offers ({offerProducts.length})
+          </button>
+          <button type="button" onClick={() => setSelectedIds([])} disabled={!selectedIds.length} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            Clear selection
+          </button>
+          <p aria-live="polite" className="text-sm text-gray-500">Showing {filteredProducts.length} of {products.length} active products</p>
         </div>
 
         {filteredProducts.length > 0 ? (
@@ -306,6 +367,7 @@ export default function SuperSundayAdminPage() {
                   type="button"
                   key={product.id}
                   onClick={() => toggleProduct(product.id)}
+                  aria-pressed={isSelected}
                   className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
                     isSelected ? "border-red-500 bg-red-50 ring-1 ring-red-200" : "border-gray-200 hover:border-gray-400"
                   }`}
@@ -315,6 +377,8 @@ export default function SuperSundayAdminPage() {
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-sm font-semibold text-gray-900">{product.name || "Unnamed product"}</span>
                     <span className="mt-1 block text-xs text-gray-500">{product.sku || product.itemno || "No SKU"} · Stock {Number(product.stock || 0)}</span>
+                    {divisionOf(product) && <span className="mt-1 block text-xs text-gray-500">{divisionOf(product)}</span>}
+                    {hasOffer(product) && <span className="mt-1 block text-xs font-semibold text-red-700">Offer: price below MRP</span>}
                   </span>
                   <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isSelected ? "border-red-600 bg-red-600 text-white" : "border-gray-300 text-transparent"}`}>
                     <Check className="h-4 w-4" />
@@ -324,7 +388,7 @@ export default function SuperSundayAdminPage() {
             })}
           </div>
         ) : (
-          <p className="py-12 text-center text-sm text-gray-500">No active products match this search.</p>
+          <p className="py-12 text-center text-sm text-gray-500">No active products match these filters.</p>
         )}
       </div>
     </div>
