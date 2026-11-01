@@ -11,6 +11,7 @@ import {
   BookOpen,
   Boxes,
   ChevronLeft,
+  ClipboardCheck,
   Contact2,
   CreditCard,
   Database,
@@ -75,6 +76,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Catalogue",
     items: [
       { name: "Products", path: "/admin/products", icon: <ShoppingBag className="h-5 w-5" /> },
+      { name: "Catalogue Quality", path: "/admin/catalogue-quality", icon: <ClipboardCheck className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Stock Check", path: "/admin/stock-check", icon: <Boxes className="h-5 w-5" /> },
       { name: "Categories & Brands", path: "/admin/catalogue", icon: <FolderTree className="h-5 w-5" /> },
       { name: "Specifications", path: "/admin/product-specifications", icon: <FileSpreadsheet className="h-5 w-5" /> },
@@ -148,6 +150,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "System",
     items: [
       { name: "Settings", path: "/admin/settings", icon: <Settings className="h-5 w-5" /> },
+      { name: "Manual Database Clone", path: "/admin/database-clone", icon: <Database className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Documentation", path: "/admin/documentation", icon: <Book className="h-5 w-5" /> },
       {
         name: "OTT Play Dashboard",
