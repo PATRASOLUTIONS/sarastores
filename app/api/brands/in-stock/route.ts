@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
-import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
-import { IN_STOCK_EXPRESSION, PRODUCT_BRAND_PATHS, firstNonBlank } from "@/lib/mongo-expressions"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
+import { IN_STOCK_EXPRESSION, catalogueBrandExpression } from "@/lib/mongo-expressions"
 
 /**
  * Brands that have at least one active, in-stock product, busiest first.
@@ -16,8 +16,8 @@ export async function GET() {
     const collection = await getCollection(COLLECTIONS.PRODUCTS)
     const brands = await collection
       .aggregate<{ name: string; count: number }>([
-        { $match: { ...PUBLIC_PRODUCT_FILTER, $expr: IN_STOCK_EXPRESSION } },
-        { $project: { name: firstNonBlank(PRODUCT_BRAND_PATHS) } },
+        { $match: await publicCatalogueFilter({ $expr: IN_STOCK_EXPRESSION }) },
+        { $project: { name: catalogueBrandExpression() } },
         { $match: { name: { $ne: "" } } },
         { $group: { _id: { $toLower: "$name" }, name: { $first: "$name" }, count: { $sum: 1 } } },
         { $sort: { count: -1, _id: 1 } },

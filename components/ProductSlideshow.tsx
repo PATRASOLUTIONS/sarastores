@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { isProductUnavailable } from "@/lib/product-availability"
@@ -40,6 +42,15 @@ export default function ProductSlideshow() {
   const isMounted = useRef(true)
 
   // Load product slides and categories from API
+
+
+  // Function to move to the next slide
+  const nextSlide = useCallback(() => {
+    if (isMounted.current && productSlides.length > 0) {
+      setActiveCategory((prev) => (prev + 1) % productSlides.length)
+    }
+  }, [productSlides.length])
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
@@ -108,13 +119,6 @@ export default function ProductSlideshow() {
     }
   }, [])
 
-  // Function to move to the next slide
-  const nextSlide = () => {
-    if (isMounted.current && productSlides.length > 0) {
-      setActiveCategory((prev) => (prev + 1) % productSlides.length)
-    }
-  }
-
   // Function to move to the previous slide
   const prevSlide = () => {
     if (isMounted.current && productSlides.length > 0) {
@@ -153,10 +157,10 @@ export default function ProductSlideshow() {
         intervalRef.current = null
       }
     }
-  }, [isPaused, productSlides.length])
+  }, [isPaused, nextSlide, productSlides.length])
 
   // Function to count products per category
-  const getProductCount = (categoryId: string) => {
+  const getProductCount = (_categoryId: string) => {
     // This would ideally be fetched from the API
     // For now, we'll return a random number between 10 and 50
     return Math.floor(Math.random() * 40) + 10
@@ -238,7 +242,7 @@ export default function ProductSlideshow() {
                         <div className="group bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-all duration-300">
                           <div className="relative h-40 overflow-hidden">
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent z-10"></div>
-                            <img
+                            <SiteImage
                               src={category.image || "/placeholder.svg?height=200&width=200"}
                               alt={category.name}
                               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -266,7 +270,7 @@ export default function ProductSlideshow() {
                   {slide.products.map((product) => (
                     <Link href={`/product/${product.slug || product.id}`} key={product.id}>
                       <div className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                        <img
+                        <SiteImage
                           src={product.image || "/placeholder.svg"}
                           alt={product.name}
                           className="w-full h-48 object-cover"

@@ -3,9 +3,9 @@ import { pageMetadata } from "@/lib/seo-page"
 
 export const generateMetadata = pageMetadata({
   path: "/epic-sale",
-  title: (brand) => `Epic Sale — Biggest Electronics Savings Event | ${brand}`,
+  title: (brand) => `Epic Sale — Electronics & Appliance Offers | ${brand}`,
   description:
-    "The Sara Epic Sale is live. Deep discounts on televisions, refrigerators, washing machines, air conditioners and mobiles, with no-cost EMI, bank offers and free installation.",
+    "Browse available electronics and appliances at current catalogue prices. Compare listed savings and check payment, delivery and installation terms before ordering.",
 })
 
 export default function EpicSaleLayout({ children }: { children: React.ReactNode }) {

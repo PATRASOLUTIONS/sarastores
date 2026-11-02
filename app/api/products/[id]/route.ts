@@ -10,6 +10,7 @@ import { withProductDisplay } from "@/lib/product-presenter"
 import { generateProductSlug } from "@/utils/slug"
 import type { ProductDisplayInput } from "@/lib/product-display"
 import { isPublicProduct } from "@/lib/product-visibility"
+import { getPublicCatalogueSelection } from "@/lib/public-catalogue"
 
 interface ProductDocument extends ProductDisplayInput {
   _id: ObjectId | string
@@ -49,6 +50,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!doc && ObjectId.isValid(id)) doc = await collection.findOne({ _id: new ObjectId(id) }, { projection })
     if (!doc) doc = await collection.findOne({ _id: id }, { projection })
     if (!doc) doc = await collection.findOne({ id }, { projection })
+    if (doc && !includeInactive && url.searchParams.get("catalogue") === "true") {
+      const selection = await getPublicCatalogueSelection()
+      const representative = selection.representativeIds.get(String(doc._id))
+      doc = representative ? await collection.findOne({ _id: representative }, { projection }) : null
+    }
     const product = dbService.normalizeId(doc)
 
     if (!product) {

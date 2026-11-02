@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 
@@ -37,17 +39,9 @@ export default function EditVendorProduct({ params: pendingParams }: { params: P
   const lock = useSubmitLock()
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!isLoading) {
-      if (!isVendor) {
-        router.push("/login")
-        return
-      }
-      fetchData()
-    }
-  }, [user, isVendor, isLoading, router, params.id])
 
-  const fetchData = async () => {
+
+  const fetchData = useCallback(async () => {
     try {
       setIsPageLoading(true)
 
@@ -77,7 +71,17 @@ export default function EditVendorProduct({ params: pendingParams }: { params: P
     } finally {
       setIsPageLoading(false)
     }
-  }
+  }, [params.id, user?.id])
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isVendor) {
+        router.push("/login")
+        return
+      }
+      fetchData()
+    }
+  }, [user, isVendor, isLoading, router, params.id, fetchData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -236,7 +240,7 @@ export default function EditVendorProduct({ params: pendingParams }: { params: P
               />
               {product.image && (
                 <div className="mt-2 border rounded p-2">
-                  <img
+                  <SiteImage unoptimized
                     src={product.image || "/placeholder.svg?height=200&width=200"}
                     alt={product.name}
                     className="h-40 object-contain mx-auto"

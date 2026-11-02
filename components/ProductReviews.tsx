@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import { Star, ChevronLeft, ChevronRight, User } from "lucide-react"
 
@@ -256,7 +257,7 @@ export default function ProductReviews({ productId, title = "Customer Reviews" }
                     {/* Product information */}
                     <div className="flex items-center mb-4 pb-4 border-b">
                       <div className="w-16 h-16 rounded-md overflow-hidden mr-4">
-                        <img
+                        <SiteImage
                           src={review.product.image || "/placeholder.svg"}
                           alt={review.product.name}
                           className="w-full h-full object-cover"
@@ -271,7 +272,7 @@ export default function ProductReviews({ productId, title = "Customer Reviews" }
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center">
                         <div className="w-12 h-12 rounded-full overflow-hidden mr-4">
-                          <img
+                          <SiteImage
                             src={review.avatar || "/placeholder.svg"}
                             alt={review.name}
                             className="w-full h-full object-cover"

@@ -1,5 +1,7 @@
 "use client"
 
+import { storeNetworkCount } from "@/lib/store-network"
+
 import { BadgeCheck, Headphones, MapPin, ShoppingBag, Store, Tag, Users } from "lucide-react"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import styles from "./store-locator.module.css"
@@ -19,7 +21,7 @@ export function StoreLocatorHero() {
       <img src={data?.storefrontImage || "/store-locator/hero-store.webp"} alt="SARA electronics storefront" className={styles.heroPhoto} />
       <div className={styles.heroContent}>
         <h1 id="locator-hero" className="font-heading">Find a SARA Store<br />Near You</h1>
-        <p className={styles.heroSubtitle}>{data?.statStores || "85+"} Stores Across Karnataka | Always Close to You</p>
+        <p className={styles.heroSubtitle}>{storeNetworkCount(data?.statStores)} Stores Across Karnataka | Always Close to You</p>
         <ul className={styles.heroPoints}>
           {HERO_POINTS.map(({ icon: Icon, title, detail }) => <li key={title}><Icon strokeWidth={1.7} /><div><p>{title}</p><p>{detail}</p></div></li>)}
         </ul>
@@ -31,7 +33,7 @@ export function StoreLocatorHero() {
 export function StoreLocatorTrust() {
   const { data } = useSettingsData()
   const items = [
-    { icon: Store, title: `${data?.statStores || "85+"} Stores`, detail: "Across Karnataka" },
+    { icon: Store, title: `${storeNetworkCount(data?.statStores)} Stores`, detail: "Across Karnataka" },
     { icon: BadgeCheck, title: "100% Genuine Products", detail: "From Top Brands" },
     { icon: Tag, title: "Exclusive In-Store Offers", detail: "& Store Pickup" },
     { icon: Headphones, title: "Expert Assistance", detail: "From Our Team" },

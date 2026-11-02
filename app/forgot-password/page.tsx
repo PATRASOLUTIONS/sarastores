@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
   const lock = useSubmitLock()
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
-  const router = useRouter()
+  useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,7 +54,7 @@ export default function ForgotPasswordPage() {
       } else {
         setError(data?.error || "Failed to request a reset link. Please try again.")
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again later.")
     } finally {
       lock.release()

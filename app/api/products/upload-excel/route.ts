@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
 import { connectToDatabase } from "@/lib/mongodb"
 import { requireAdmin } from "@/lib/auth"
 import { COLLECTIONS } from "@/lib/db-service"
@@ -208,6 +209,7 @@ export async function POST(request: Request) {
       const raw = buildSchemaSynchronizedRaw(r, normalized)
 
       const productData = {
+        gstRate: DEFAULT_GST_RATE,
         name,
         description: normalized.description || buildDescription(r),
         price: computePrice(manufacturerName, r["Price"]),

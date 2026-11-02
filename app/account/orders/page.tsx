@@ -59,7 +59,7 @@ export default function AccountOrdersPage() {
 //     const fetchOrders = async () => {
 //       try {
 //         const response = await apiFetch("/api/orders")
-import { apiFetch } from "@/lib/api-client"
+
 //         if (response.ok) {
 //           const data = await response.json()
 //           // Filter orders for current user

@@ -3,7 +3,7 @@
  * GET /api/v1/partner/wallet/transactions - Get wallet transactions
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { getWalletByPartnerId, getWalletTransactions } from '@/lib/partner/wallet';
 import { TransactionType, TransactionCategory } from '@/lib/partner/types';

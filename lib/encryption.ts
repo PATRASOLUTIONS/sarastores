@@ -48,4 +48,6 @@ export function decrypt(ciphertext: string, ivB64: string, tagB64: string) {
   }
 }
 
-export default { encrypt, decrypt }
+const encryptionExports = { encrypt, decrypt }
+
+export default encryptionExports

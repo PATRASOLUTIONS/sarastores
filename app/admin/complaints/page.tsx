@@ -1,6 +1,7 @@
 "use client"
 
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import {
@@ -166,7 +167,7 @@ export default function AdminComplaints() {
           <div className="text-sm text-gray-600">All Complaints</div>
         </button>
 
-        {Object.entries(COMPLAINT_STATUS).map(([key, value]) => (
+        {Object.entries(COMPLAINT_STATUS).map(([, value]) => (
           <button
             key={value}
             onClick={() => setStatusFilter(value)}
@@ -357,7 +358,7 @@ export default function AdminComplaints() {
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {selectedComplaint.images.map((image, index) => (
                       <div key={index} className="relative group">
-                        <img
+                        <SiteImage unoptimized
                           src={image}
                           alt={`Complaint image ${index + 1}`}
                           className="w-full h-48 object-cover rounded-lg border-2 border-purple-200 cursor-pointer hover:border-purple-400 transition-all"
@@ -411,7 +412,7 @@ export default function AdminComplaints() {
                       onChange={(e) => setNewStatus(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
-                      {Object.entries(COMPLAINT_STATUS).map(([key, value]) => (
+                      {Object.entries(COMPLAINT_STATUS).map(([, value]) => (
                         <option key={value} value={value}>
                           {COMPLAINT_STATUS_LABELS[value]}
                         </option>

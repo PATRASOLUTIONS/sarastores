@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
@@ -28,31 +30,11 @@ export default function VendorProductsPage() {
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!isLoading) {
-      if (!isVendor) {
-        router.push("/login")
-        return
-      }
-      fetchProducts()
-    }
-  }, [user, isVendor, router, isLoading])
 
-  useEffect(() => {
-    // Filter products based on search term
-    if (searchTerm) {
-      const filtered = products.filter(
-        (product) =>
-          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.description.toLowerCase().includes(searchTerm.toLowerCase()),
-      )
-      setFilteredProducts(filtered)
-    } else {
-      setFilteredProducts(products)
-    }
-  }, [searchTerm, products])
 
-  const fetchProducts = async () => {
+
+
+  const fetchProducts = useCallback(async () => {
     try {
       setIsPageLoading(true)
       const response = await fetch(`/api/vendor/products?vendorId=${user?.id}`)
@@ -70,7 +52,31 @@ export default function VendorProductsPage() {
     } finally {
       setIsPageLoading(false)
     }
-  }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isVendor) {
+        router.push("/login")
+        return
+      }
+      fetchProducts()
+    }
+  }, [user, isVendor, router, isLoading, fetchProducts])
+
+  useEffect(() => {
+    // Filter products based on search term
+    if (searchTerm) {
+      const filtered = products.filter(
+        (product) =>
+          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.description.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+      setFilteredProducts(filtered)
+    } else {
+      setFilteredProducts(products)
+    }
+  }, [searchTerm, products])
 
   const handleDelete = async (productId: string) => {
     if (!confirm("Are you sure you want to delete this product?")) {
@@ -149,7 +155,7 @@ export default function VendorProductsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProducts.map((product) => (
             <Card key={product.id} className="overflow-hidden">
-              <img
+              <SiteImage unoptimized
                 src={product.image || "/placeholder.svg?height=200&width=300"}
                 alt={product.name}
                 className="w-full h-48 object-cover"

@@ -46,12 +46,10 @@ test("display availability hides disabled, discontinued and invalid-price produc
 
 for (const stock of [0, 5]) {
   test(`product page ${stock ? "shows available" : "hides unavailable"} prices in its main section and mobile bar`, () => {
-    let index = 0
     const loader = sourceLoader({
       react: {
         useState: initial => {
-          const current = index++
-          return [current === 0 ? { ...product, stock } : current === 6 ? false : initial, () => {}]
+          return [typeof initial === "function" ? initial() : initial, () => {}]
         },
         useEffect() {}, useMemo: callback => callback(), useCallback: callback => callback,
       },
@@ -64,15 +62,18 @@ for (const stock of [0, 5]) {
       "@/hooks/useCart": { useCart: () => ({ addToCart() {} }) },
       "@/hooks/useWishlist": { useWishlist: () => ({ isInWishlist: () => false, addToWishlist() {}, removeFromWishlist() {} }) },
       "@/contexts/AuthContext": { useAuth: () => ({ isAuthenticated: false, isLoading: false }) },
+      "@/components/product/ProductSaraCare": { __esModule: true, default: () => null,
+        useProductSaraCare: () => ({ offer: null, loading: false, selected: null, selectedPlan: null, parent: undefined }) },
       "@/hooks/useSettingsData": { useSettingsData: () => ({ data: {} }) },
       "@/hooks/useRazorpayOffers": { useRazorpayOffers: () => ({ offers: [], isLoading: false }) },
       "@/hooks/useBanners": { useBanners: () => [] },
       "@/hooks/useMarketingContent": { useMarketingContent: () => ({ text: () => "Fixture", enabled: () => false }) },
     })
-    const tree = loader.load("app/product/[slug]/page.tsx").default()
+    const tree = loader.load("app/product/[slug]/ProductDetailClient.tsx").default({ initialProduct: { ...product, stock } })
     const html = renderToStaticMarkup(tree)
     if (stock) {
-      assert.equal(html.match(/23,456/g)?.length, 2, "Main price and mobile-bar price must both be visible")
+      assert.match(html, /<span class="font-heading text-2xl[^\"]*">₹23,456<\/span>/, "Main price must be visible")
+      assert.match(html, /<p class="text-sm font-bold text-gray-900">₹23,456<\/p>/, "Mobile-bar price must be visible")
       assert.match(html, /34,567/)
     } else {
       assert.doesNotMatch(html, /23,456|34,567|23456|34567|% off|% OFF/)

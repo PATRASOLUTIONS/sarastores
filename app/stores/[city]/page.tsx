@@ -28,7 +28,7 @@ export async function generateMetadata({
   const companyName = getCompanyName(settings)
   return buildPageMetadata({
     title: `Electronics Stores in ${cityName} | ${companyName}`,
-    description: `Find ${stores.length} ${companyName} showrooms in ${cityName}. Get addresses, phone numbers, opening hours and directions.`,
+    description: `Find ${stores.length} ${companyName} showrooms in ${cityName}. Get addresses, phone numbers and directions.${stores.every(store => store.hours) ? " View opening hours." : " Contact the stores for opening hours."}`,
     pageUrl: `${origin}/stores/${encodeURIComponent(citySlug)}`,
     origin, companyName, imageUrl: stores[0].image,
   })
@@ -93,7 +93,7 @@ export default async function CityStoresPage({
 
               <p className="mt-1.5 flex items-center gap-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4 shrink-0 text-brand-primary" />
-                {store.hours}
+                {store.hours || "Contact the store for opening hours"}
               </p>
 
               {store.phone && (
@@ -120,8 +120,8 @@ export default async function CityStoresPage({
             Shop online, pick up in {cityName}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Order on saraelectronics.com and collect from your nearest {cityName} store, or get free
-            delivery and installation at home.
+            Order online and check collection availability at your nearest {cityName} store.
+            Confirm delivery and installation options for your location before purchasing.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link

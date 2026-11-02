@@ -5,7 +5,7 @@
  * POST /api/v1/partner/wallet/bank-accounts - Add bank account
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { getWalletByPartnerId, addBankAccount } from '@/lib/partner/wallet';
 

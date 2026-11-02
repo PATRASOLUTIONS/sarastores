@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { rateLimitHit, rateLimitReset, rateLimitResetSeconds } from '@/lib/rate-limit-store'
 import { z } from 'zod'
 import { getRecaptchaConfiguration, isRecaptchaEnabled } from '@/lib/recaptcha-config'

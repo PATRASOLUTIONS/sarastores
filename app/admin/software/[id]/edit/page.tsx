@@ -1,6 +1,7 @@
 'use client'
 
 
+import { useCallback } from "react"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from 'react'
 import { useSubmitLock } from '@/hooks/useSubmitLock'
@@ -79,15 +80,13 @@ export default function EditSoftwarePage() {
     status: 'active',
   })
 
-  useEffect(() => {
-    fetchProduct()
-  }, [id])
 
-  const fetchProduct = async () => {
+
+  const fetchProduct = useCallback(async () => {
     try {
       const response = await apiFetch(`/api/software/${id}`)
       const data = await response.json()
-      
+
       if (data.success) {
         setFormData(data.product)
       } else {
@@ -101,7 +100,11 @@ export default function EditSoftwarePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id, router])
+
+  useEffect(() => {
+    fetchProduct()
+  }, [fetchProduct, id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -212,7 +215,7 @@ export default function EditSoftwarePage() {
         {/* Basic Information */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -336,7 +339,7 @@ export default function EditSoftwarePage() {
         {/* System Requirements */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">System Requirements</h2>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

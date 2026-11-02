@@ -17,7 +17,7 @@ const API_KEYS_COLLECTION = 'partner_api_keys';
  */
 async function handleGet(request: PartnerAuthRequest) {
   const origin = request.headers.get('origin');
-  const corsHeaders = getCorsHeaders(origin);
+  getCorsHeaders(origin);
 
   try {
     const context = {

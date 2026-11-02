@@ -3,7 +3,7 @@ import { getCollection, normalizeId } from "@/lib/db-service"
 import { getRazorpayClient } from "@/lib/razorpay"
 import { checkAdminAuthorization } from "@/lib/auth"
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const auth = await checkAdminAuthorization()
     if (!auth.authorized) {

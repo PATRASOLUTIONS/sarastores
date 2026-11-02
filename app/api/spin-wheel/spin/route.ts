@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { db } = await connectToDatabase()
+    await connectToDatabase();
     const participantsCol = await getCampaignCollection(campaignSlug, "participants")
     const inventoryCol = await getCampaignCollection<Prize>(campaignSlug, "inventory")
     const couponCodesCol = await getCampaignCollection(campaignSlug, "couponCodes")

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAll, create, update, deleteById, COLLECTIONS } from "@/lib/db-service"
+import { getAll, create, update, deleteById } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { requireAdmin } from "@/lib/auth"
 
@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/auth"
 // Assuming COLLECTIONS.FEATURES might effectively be "features"
 const FEATURE_COLLECTION = "site_features"
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
         await connectToDatabase()
         const features = await getAll(FEATURE_COLLECTION, {}, { sort: { createdAt: -1 } })
         return NextResponse.json(features)
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: "Failed to fetch features" }, { status: 500 })
     }
 }
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json(newFeature)
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: "Failed to create feature" }, { status: 500 })
     }
 }
@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest) {
         await connectToDatabase()
         const updated = await update(FEATURE_COLLECTION, id, updateData)
         return NextResponse.json(updated)
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: "Failed to update feature" }, { status: 500 })
     }
 }
@@ -83,7 +83,7 @@ export async function DELETE(request: NextRequest) {
         await connectToDatabase()
         await deleteById(FEATURE_COLLECTION, id)
         return NextResponse.json({ success: true })
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: "Failed to delete feature" }, { status: 500 })
     }
 }

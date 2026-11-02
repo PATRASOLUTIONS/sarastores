@@ -1,14 +1,6 @@
 "use client"
 
-import {
-    Book, CheckCircle, Code, Cpu, Database, Globe, Layers, Layout, Lock,
-    Server, Settings, ShoppingBag, ShoppingCart, Smartphone, Star, Zap,
-    Truck, ShieldCheck, Mail, FileText, Users, CreditCard, MapPin,
-    Monitor, Package, Bell, Key, RefreshCw, Wrench, Search, AlertTriangle,
-    Gift, Heart, Menu, Home, Box, BarChart, UserCheck, HelpCircle, Briefcase,
-    KeyRound, Tv, MessageSquare, BadgePercent, FileSpreadsheet, Contact2, FolderTree,
-    Info, ExternalLink, ArrowRight, LayoutTemplate, Download, Clock, Palette, Store, UserPlus
-} from "lucide-react"
+import { Book, CheckCircle, Code, Cpu, Database, Layers, Layout, Lock, Settings, ShoppingBag, ShoppingCart, Smartphone, Star, Truck, ShieldCheck, Mail, FileText, Users, CreditCard, MapPin, Monitor, Package, Bell, Key, RefreshCw, Search, AlertTriangle, Gift, Heart, Home, Box, BarChart, UserCheck, Briefcase, Tv, MessageSquare, BadgePercent, FileSpreadsheet, Contact2, FolderTree, Info, ExternalLink, ArrowRight, LayoutTemplate, Download, Clock, Palette } from "lucide-react"
 import Link from "next/link"
 import type { SVGProps } from "react"
 

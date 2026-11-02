@@ -1,9 +1,10 @@
 "use client"
 
+import { useCallback } from "react"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, use } from "react"
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   Key,
   Plus,
   Copy,
@@ -45,11 +46,9 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
   const [newKeyData, setNewKeyData] = useState<{ key: string; environment: string } | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [partnerId])
 
-  const fetchData = async () => {
+
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
       // Fetch partner details
@@ -71,7 +70,11 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [partnerId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData, partnerId])
 
   const handleGenerateKey = async (environment: 'live' | 'test') => {
     setIsGenerating(true)
@@ -81,7 +84,7 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ environment }),
       })
-      
+
       const data = await response.json()
       if (data.success) {
         setNewKeyData({ key: data.data.apiKey.key, environment })
@@ -90,7 +93,7 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
       } else {
         toast.error(data.error?.message || 'Failed to generate API key')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to generate API key')
     } finally {
       setIsGenerating(false)
@@ -101,12 +104,12 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
     if (!confirm('Are you sure you want to revoke this API key? This action cannot be undone. Any applications using this key will stop working.')) {
       return
     }
-    
+
     try {
       const response = await apiFetch(`/api/admin/partners/${partnerId}/api-keys?keyId=${keyId}`, {
         method: 'DELETE',
       })
-      
+
       const data = await response.json()
       if (data.success) {
         toast.success('API key revoked successfully')
@@ -114,7 +117,7 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
       } else {
         toast.error(data.error?.message || 'Failed to revoke API key')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to revoke API key')
     }
   }
@@ -221,7 +224,7 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
         <div className="px-6 py-4 border-b">
           <h3 className="text-lg font-semibold text-gray-900">Existing API Keys</h3>
         </div>
-        
+
         {apiKeys.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-500">
             <Key className="h-16 w-16 mb-4 text-gray-300" />
@@ -275,8 +278,8 @@ export default function PartnerAPIKeysPage({ params }: { params: Promise<{ partn
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                        key.environment === 'live' 
-                          ? 'bg-green-100 text-green-800' 
+                        key.environment === 'live'
+                          ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
                         {key.environment === 'live' ? (

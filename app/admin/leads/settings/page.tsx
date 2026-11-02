@@ -3,21 +3,7 @@
 
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
-import {
-    Settings,
-    Save,
-    Plus,
-    Trash2,
-    ToggleLeft,
-    ToggleRight,
-    MessageSquare,
-    FileText,
-    Loader2,
-    AlertCircle,
-    CheckCircle2,
-    ArrowLeft,
-    Phone,
-} from "lucide-react"
+import { Settings, Save, Plus, Trash2, ToggleLeft, ToggleRight, MessageSquare, FileText, Loader2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import toast from "react-hot-toast"
 

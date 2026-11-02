@@ -3,34 +3,7 @@ import { getErrorMessage } from "@/lib/utils"
 
 
 import { useState, useEffect, useCallback } from "react"
-import { 
-  Key, 
-  Eye, 
-  EyeOff, 
-  Play, 
-  Copy, 
-  Check, 
-  ChevronDown,
-  Loader2,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Code,
-  Zap,
-  Package,
-  ShoppingCart,
-  Wallet,
-  CreditCard,
-  RefreshCw,
-  Send,
-  FileJson,
-  Terminal,
-  XCircle,
-  Info,
-  Settings,
-  Globe,
-  Shield
-} from "lucide-react"
+import { Key, Eye, EyeOff, Copy, Check, Loader2, AlertCircle, CheckCircle, Clock, Code, Zap, Package, ShoppingCart, Wallet, CreditCard, RefreshCw, Send, FileJson, Terminal, XCircle, Info, Settings, Globe, Shield } from "lucide-react"
 import Link from "next/link"
 import { toast, Toaster } from "react-hot-toast"
 
@@ -570,7 +543,7 @@ export default function PartnerAPITestPage() {
           try {
             JSON.parse(requestBody)
             fetchOptions.body = requestBody
-          } catch (e) {
+          } catch {
             toast.error('Invalid JSON in request body')
             setIsLoading(false)
             return

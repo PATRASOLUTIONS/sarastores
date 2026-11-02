@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetchJson } from "@/lib/api-client"
 import { CreateCouponSchema, CouponListSchema, CouponMutationSchema, CouponDeleteSchema } from "@/lib/coupon-validation"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
@@ -655,7 +656,7 @@ export default function PromotionsAdminPage() {
                                 className="w-4 h-4 text-blue-600 rounded"
                               />
                               {product.image && (
-                                <img
+                                <SiteImage unoptimized
                                   src={product.image}
                                   alt={product.name}
                                   className="w-10 h-10 object-cover rounded"

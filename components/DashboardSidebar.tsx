@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { User, ShoppingCart, Package, Heart, Tag, Settings, ChevronRight, Menu, X, Store, type LucideIcon } from "lucide-react"
+import { User, ShoppingCart, Package, Heart, Settings, ChevronRight, Menu, X, Store, type LucideIcon } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useState, useEffect } from "react"
 import { apiFetch } from "@/lib/api-client"
@@ -22,7 +22,7 @@ export default function DashboardSidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [hasInstoreOrders, setHasInstoreOrders] = useState(false)
-  const [isCheckingInstoreOrders, setIsCheckingInstoreOrders] = useState(true)
+  const [, setIsCheckingInstoreOrders] = useState(true)
 
   useEffect(() => {
     const checkScreenSize = () => {

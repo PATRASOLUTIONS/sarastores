@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -102,7 +103,7 @@ export default function AccountSidebar({ initialUser }: {
     <aside className={styles.overview}>
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex items-center gap-3">
-          <img src={user.avatar || defaultProfileAvatar(user.id)} alt={`${firstName}'s profile`} className={styles.avatar}
+          <SiteImage unoptimized loading="eager" sizes="128px" src={user.avatar || defaultProfileAvatar(user.id)} alt={`${firstName}'s profile`} className={styles.avatar}
             onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = defaultProfileAvatar(user.id) }} />
           <div className="min-w-0">
             <p className="text-[13px] leading-tight text-gray-500">Hello,</p>

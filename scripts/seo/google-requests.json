@@ -1,0 +1,28 @@
+{
+  "description": "Read-only request templates. Replace placeholders locally after authorization; this file executes nothing.",
+  "gsc": {
+    "scope": "https://www.googleapis.com/auth/webmasters.readonly",
+    "performance": { "method": "POST", "url": "https://www.googleapis.com/webmasters/v3/sites/{urlEncodedProperty}/searchAnalytics/query", "body": { "startDate": "{YYYY-MM-DD}", "endDate": "{YYYY-MM-DD}", "type": "web", "dimensions": ["page"], "rowLimit": 1000, "startRow": 0 } },
+    "totals": { "method": "POST", "url": "https://www.googleapis.com/webmasters/v3/sites/{urlEncodedProperty}/searchAnalytics/query", "body": { "startDate": "{YYYY-MM-DD}", "endDate": "{YYYY-MM-DD}", "type": "web" } },
+    "inspect": { "method": "POST", "url": "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", "body": { "inspectionUrl": "{publicProductUrl}", "siteUrl": "{verifiedProperty}" } },
+    "sitemaps": { "method": "GET", "url": "https://www.googleapis.com/webmasters/v3/sites/{urlEncodedProperty}/sitemaps" }
+  },
+  "ga4": {
+    "scope": "https://www.googleapis.com/auth/analytics.readonly",
+    "report": { "method": "POST", "url": "https://analyticsdata.googleapis.com/v1beta/properties/{numericPropertyId}:runReport", "body": { "dateRanges": [{ "startDate": "28daysAgo", "endDate": "yesterday" }], "dimensions": [{ "name": "landingPagePlusQueryString" }], "metrics": [{ "name": "sessions" }, { "name": "activeUsers" }], "dimensionFilter": { "filter": { "fieldName": "sessionDefaultChannelGroup", "stringFilter": { "matchType": "EXACT", "value": "Organic Search" } } }, "limit": "1000", "returnPropertyQuota": true } }
+  },
+  "merchant": {
+    "scope": "https://www.googleapis.com/auth/content",
+    "products": { "method": "GET", "url": "https://merchantapi.googleapis.com/products/v1/accounts/{numericAccountId}/products?pageSize=100" },
+    "note": "Verify current v1 discovery and account/data-source permissions before use; no productInputs writes are included."
+  },
+  "gbp": {
+    "scope": "https://www.googleapis.com/auth/business.manage",
+    "accounts": { "method": "GET", "url": "https://mybusinessaccountmanagement.googleapis.com/v1/accounts" },
+    "locations": { "method": "GET", "url": "https://mybusinessbusinessinformation.googleapis.com/v1/accounts/{numericAccountId}/locations?readMask=name,title,storeCode,storefrontAddress,phoneNumbers,websiteUri,regularHours&pageSize=100" }
+  },
+  "psi": {
+    "request": { "method": "GET", "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https%3A%2F%2Fsarastores.com&strategy=mobile&category=performance&category=seo" },
+    "note": "Anonymous trial may be rejected or quota-limited. For automated access use an enabled API and restricted API key through a reviewed client that redacts it."
+  }
+}

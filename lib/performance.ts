@@ -370,7 +370,7 @@ export function monitorLongTasks(callback?: (task: LongTask) => void): void {
     });
     
     observer.observe({ entryTypes: ['longtask'] });
-  } catch (error) {
+  } catch {
     // Long task monitoring not supported
   }
 }
@@ -469,7 +469,7 @@ export async function sendPerformanceReport(
   }
 }
 
-export default {
+const performanceExports = {
   initWebVitals,
   getCollectedMetrics,
   startMeasure,
@@ -483,4 +483,6 @@ export default {
   getMemoryUsage,
   generatePerformanceReport,
   sendPerformanceReport,
-};
+}
+
+export default performanceExports

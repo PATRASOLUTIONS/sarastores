@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -356,7 +357,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               </li>)}</ul> : <p>No additional recommendations are available right now. <Link href="/products">Browse products</Link></p>}
           </div>
           {promotion && (bannerIsPhotoOnly(promotion) ? <aside className={styles.shopCard}>
-            {promotion.ctaLink ? <Link href={promotion.ctaLink}><img src={promotion.image} alt="" className="block h-auto w-full" /></Link> : <img src={promotion.image} alt="" className="block h-auto w-full" />}
+            {promotion.ctaLink ? <Link href={promotion.ctaLink}><SiteImage src={promotion.image} alt="" className="block h-auto w-full" /></Link> : <SiteImage src={promotion.image} alt="" className="block h-auto w-full" />}
           </aside> : <aside className={styles.shopCard} style={{ ...bannerGradient(promotion), color: promotion.dark ? "#071331" : "#fff" }}>
             {promotion.image && <CartProductImage src={promotion.image} name={promotion.title} />}
             <h3>{promotion.title}</h3>{promotion.subtitle && <p>{promotion.subtitle}</p>}

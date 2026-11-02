@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from "react"
 import { ApiError, apiFetchJson } from "@/lib/api-client"
 import { licenseKeyListResponseSchema, licenseKeyMutationResponseSchema, type LicenseKeyResponse } from "@/lib/license-key-response"
 import { useState, useEffect } from 'react'
@@ -10,14 +11,14 @@ import Link from 'next/link'
 
 export default function LicenseKeysPage() {
   const params = useParams()
-  const router = useRouter()
+  useRouter();
   const [keys, setKeys] = useState<LicenseKeyResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deletingKey, setDeletingKey] = useState<{id: string, isAssigned: boolean} | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+
+
+
   const [editingKey, setEditingKey] = useState<LicenseKeyResponse | null>(null)
   const [newValidity, setNewValidity] = useState(1)
   const [newMaxDevices, setNewMaxDevices] = useState(1)
@@ -31,11 +32,9 @@ export default function LicenseKeysPage() {
   const [revokePassword, setRevokePassword] = useState<string>('')
   const [isRevoking, setIsRevoking] = useState(false)
 
-  useEffect(() => {
-    fetchKeys()
-  }, [])
 
-  const fetchKeys = async () => {
+
+  const fetchKeys = useCallback(async () => {
     try {
       const data = await apiFetchJson(`/api/software/license-keys?softwareId=${params.id}`, {}, value => licenseKeyListResponseSchema.parse(value))
       setKeys(data.keys)
@@ -45,11 +44,15 @@ export default function LicenseKeysPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    fetchKeys()
+  }, [fetchKeys])
 
   const addKeys = async () => {
     const keyLines = bulkKeys.trim().split('\n').filter(line => line.trim())
-    
+
     if (keyLines.length === 0) {
       toast.error('Please enter at least one license key')
       return
@@ -118,59 +121,11 @@ export default function LicenseKeysPage() {
     setShowRevokeModal(true)
   }
 
-  const openDeleteModal = (keyId: string, isAssigned: boolean) => {
-    console.log('Opening delete modal for key:', { keyId, isAssigned });
 
-    console.log('Current keys:', keys.find(k => k.id === keyId));
-    setDeletingKey({ id: keyId, isAssigned });
-    setShowDeleteModal(true);
-  }
 
-  const closeDeleteModal = () => {
-    setShowDeleteModal(false)
-    setDeletingKey(null)
-    setIsDeleting(false)
-  }
 
-  const deleteKey = async () => {
-    if (!deletingKey) {
-      console.error('No key selected for deletion');
-      return;
-    }
-    
-    const { id, isAssigned } = deletingKey;
-    console.log('Deleting key:', { id, isAssigned });
-    
-    if (isAssigned) {
-      const errorMsg = 'Cannot delete an assigned license key';
-      console.error(errorMsg);
-      toast.error(errorMsg);
-      closeDeleteModal();
-      return;
-    }
 
-    setIsDeleting(true);
-    console.log('Sending delete request for key ID:', id);
 
-    try {
-      await apiFetchJson(`/api/software/license-keys/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-      }, value => licenseKeyMutationResponseSchema.parse(value));
-      console.log('Key deleted successfully, refreshing list...');
-      toast.success('License key deleted successfully');
-      await fetchKeys();
-      closeDeleteModal();
-    } catch (error) {
-      console.error('Error in deleteKey:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to delete key. Check console for details.');
-    } finally {
-      setIsDeleting(false);
-    }
-  }
 
   const openUpdateModal = (key: LicenseKeyResponse) => {
     setEditingKey(key)
@@ -469,7 +424,7 @@ export default function LicenseKeysPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <h2 className="text-2xl font-bold mb-4">Update License Key</h2>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 License Key
@@ -603,7 +558,7 @@ export default function LicenseKeysPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6">
             <h2 className="text-2xl font-bold mb-4">Add License Keys</h2>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">Validity Period</label>
               <select

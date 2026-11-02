@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import type React from "react"
 import { apiFetch } from "@/lib/api-client"
 
@@ -59,7 +60,7 @@ export default function NewProduct() {
   })
   const [categories, setCategories] = useState<Category[]>([])
   const [successMessage, setSuccessMessage] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
+  const [, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const lock = useSubmitLock()
   const [error, setError] = useState<string | null>(null)
@@ -296,7 +297,7 @@ export default function NewProduct() {
               />
               {product.image && (
                 <div className="mt-2 border rounded p-2">
-                  <img
+                  <SiteImage unoptimized
                     src={product.image || "/placeholder.svg?height=200&width=200"}
                     alt={product.name}
                     className="h-40 object-contain mx-auto"
@@ -429,7 +430,7 @@ export default function NewProduct() {
                     className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm"
                   />
                   <div className="mt-2 border rounded p-2 h-28 flex items-center justify-center bg-gray-50">
-                    <img
+                    <SiteImage unoptimized
                       src={(product.images && product.images[i]) || "/placeholder.svg?height=100&width=100"}
                       alt={`Preview ${i + 1}`}
                       className="h-24 object-contain"

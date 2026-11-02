@@ -1,11 +1,12 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import React from "react"
 import { cleanProductName, toastProductName } from "@/utils/cleanProductName"
 import { useState } from "react"
 import Link from "next/link"
-import Image from "next/image"
-import { Heart, Star, Shield } from "lucide-react"
+
+import { Heart, Shield } from "lucide-react"
 import CompareProductButton from "@/components/CompareProductButton"
 import { useRouter } from "next/navigation"
 import { useWishlist } from "@/hooks/useWishlist"
@@ -17,7 +18,7 @@ import { isProductUnavailable } from "@/lib/product-availability"
 import { productImageUrls } from "@/lib/product-images"
 import type { ProductCardResponse } from "@/lib/product-card-response"
 import { EmiFromBadge } from "@/components/EmiCalculator"
-import { motion } from 'framer-motion'
+
 
 function extractUrlsFromTechnicalDetailsObj(technicalDetails?: Record<string, unknown> | null): string[] {
   if (!technicalDetails) return []
@@ -119,7 +120,6 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
 
   // Use product.technical_details directly — no per-card API fetch needed
   let firstSpecImage: string | undefined
-  let specImages: string[] = []
 
   const technicalDetails = product.technical_details
 
@@ -131,18 +131,15 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
   const urlsFromTD = extractUrlsFromTechnicalDetailsObj(technicalDetails)
   if (urlsFromTD.length > 0) {
     firstSpecImage = urlsFromTD[0]
-    specImages = urlsFromTD.slice(0, 5)
   } else {
     const firstImageFromTD =
       typeof technicalDetails?.["First Image"] === "string" ? technicalDetails["First Image"] : null
     if (firstImageFromTD) {
       firstSpecImage = firstImageFromTD
-      specImages = [firstImageFromTD]
     } else {
       const specImgs = productImageUrls(product.specification_images)
       if (specImgs.length > 0) {
         firstSpecImage = specImgs[0]
-        specImages = specImgs.slice(0, 5)
       }
     }
   }
@@ -184,7 +181,7 @@ export default function CategoryProductCard({ product }: CategoryProductCardProp
           </div>
 
           <div className="absolute inset-2 sm:inset-3 md:inset-4 rounded-xl bg-white overflow-hidden shadow-inner flex items-center justify-center">
-            <img
+            <SiteImage
               src={displayImage || "/placeholder.svg"}
               alt={displayTitle}
               className="w-full h-full object-contain p-2 transition-transform duration-500 group-hover:scale-105"

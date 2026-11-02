@@ -1,12 +1,26 @@
 import type { ReactNode } from "react"
-import { pageMetadata } from "@/lib/seo-page"
+import { cache } from "react"
+import { notFound } from "next/navigation"
+import { getCollection } from "@/lib/db-service"
+import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
 
-export const generateMetadata = pageMetadata({
-  path: "/super-sunday",
-  title: brand => `Super Sunday Deals | ${brand}`,
-  description: "Shop the products selected for the SARA Super Sunday sale.",
+const getCampaign = cache(async () => {
+  return (await getCollection("campaign_pages")).findOne({ slug: "super-sunday", isActive: true })
 })
 
-export default function SuperSundayLayout({ children }: { children: ReactNode }) {
+export async function generateMetadata() {
+  const [campaign, origin, settings] = await Promise.all([getCampaign(), getOriginFromHeaders(), getSiteSettings()])
+  if (!campaign) notFound()
+  const companyName = getCompanyName(settings)
+  const name = campaign.name || "Super Sunday"
+  return buildPageMetadata({
+    title: `${name} | ${companyName}`,
+    description: campaign.description || `Explore ${name} at ${companyName}. Browse the products selected for this campaign and check current prices and availability.`,
+    pageUrl: `${origin}/campaign/super-sunday`, origin, companyName, imageUrl: campaign.banner,
+  })
+}
+
+export default async function SuperSundayLayout({ children }: { children: ReactNode }) {
+  if (!await getCampaign()) notFound()
   return children
 }

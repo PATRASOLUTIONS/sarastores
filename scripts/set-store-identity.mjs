@@ -18,7 +18,7 @@ const IDENTITY = {
   storeName: "SARA Mobiles & Electronics",
   legalName: "SARA Mobiles Pvt. Ltd.",
   statYears: "25+",
-  statStores: "85+",
+  statStores: "90+",
   statCustomers: "2,00,000+",
 }
 

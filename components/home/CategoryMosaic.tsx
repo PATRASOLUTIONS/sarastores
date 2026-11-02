@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import type { CategoryTile } from "@/utils/catalog"
@@ -32,7 +33,7 @@ export default function CategoryMosaic({ tiles }: { tiles: CategoryTile[] }) {
             className="group overflow-hidden rounded-xl border border-gray-100 bg-white transition-all duration-300 hover:-translate-y-0.5 hover:border-brand-primary/30 hover:shadow-lg"
           >
             <div className="flex aspect-[4/3] items-center justify-center bg-gradient-to-b from-gray-50 to-white p-4">
-              <img
+              <SiteImage
                 src={tile.image}
                 alt={tile.label}
                 loading="lazy"

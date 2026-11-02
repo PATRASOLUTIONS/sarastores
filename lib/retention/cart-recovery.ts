@@ -12,7 +12,7 @@
  * through the same consent gate as every other retention message.
  */
 
-import { getCollection, COLLECTIONS } from "@/lib/db-service"
+import { getCollection } from "@/lib/db-service"
 import { sendEmail } from "@/lib/email"
 import {
   COLLECTION_CUSTOMER_PROFILES,

@@ -1,5 +1,7 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import Header from "@/components/Header"
@@ -26,7 +28,6 @@ import {
     Loader2,
     type LucideIcon,
 } from "lucide-react"
-import { normalizeProductForSchema } from "@/lib/product-schema"
 import { brandLandingEnvelopeSchema, brandProductListResponseSchema, type BrandLanding, type BrandProduct } from "@/lib/brand-landing-response"
 
 // Icon mapping for dynamic rendering
@@ -52,17 +53,17 @@ function IconComponent({ name, className }: { name: string; className?: string }
     return <Icon className={className} />
 }
 
-export default function DynamicBrandPage() {
+export default function DynamicBrandPage({ initialBrand, initialProducts }: { initialBrand?: BrandLanding; initialProducts?: BrandProduct[] } = {}) {
     const params = useParams<{ slug: string }>()
     const slug = params.slug
 
-    const [brand, setBrand] = useState<BrandLanding | null>(null)
-    const [products, setProducts] = useState<BrandProduct[]>([])
-    const [loading, setLoading] = useState(true)
-    const [productsLoading, setProductsLoading] = useState(true)
+    const [brand, setBrand] = useState<BrandLanding | null>(initialBrand || null)
+    const [products, setProducts] = useState<BrandProduct[]>(initialProducts || [])
+    const [loading, setLoading] = useState(!initialBrand)
+    const [productsLoading, setProductsLoading] = useState(!initialProducts)
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isVisible, setIsVisible] = useState(false)
-    const [availableCategories, setAvailableCategories] = useState<BrandLanding["categories"]>([])
+    const [availableCategories, setAvailableCategories] = useState<BrandLanding["categories"]>(initialBrand?.categories || [])
     const [notFound, setNotFound] = useState(false)
 
     const heroRef = useRef<HTMLDivElement>(null)
@@ -70,6 +71,7 @@ export default function DynamicBrandPage() {
 
     // Fetch brand data
     useEffect(() => {
+        if (initialBrand) return
         const fetchBrand = async () => {
             try {
                 const res = await fetch(`/api/brands?slug=${encodeURIComponent(slug)}`)
@@ -99,7 +101,7 @@ export default function DynamicBrandPage() {
             }
         }
         if (slug) fetchBrand()
-    }, [slug])
+    }, [slug, initialBrand])
 
     // Auto-rotate banner
     useEffect(() => {
@@ -129,6 +131,7 @@ export default function DynamicBrandPage() {
     // Fetch products filtered by manufacturer
     useEffect(() => {
         if (!brand) return
+        if (initialProducts) return
         const fetchProducts = async () => {
             try {
                 const response = await fetch("/api/products")
@@ -136,7 +139,7 @@ export default function DynamicBrandPage() {
                     const data = brandProductListResponseSchema.parse(await response.json())
                     const filterStr = brand.productsSection?.manufacturerFilter || brand.name
                     const brandProducts = data.filter((p) => {
-                        const manufacturer = normalizeProductForSchema(p).manufacturerName || p.manufacturer || ""
+                        const manufacturer = catalogueBrand(p)
                         return manufacturer.toLowerCase().includes(filterStr.toLowerCase())
                     })
                     const maxProducts = brand.productsSection?.maxProducts || 12
@@ -171,7 +174,7 @@ export default function DynamicBrandPage() {
             }
         }
         fetchProducts()
-    }, [brand])
+    }, [brand, initialProducts])
 
     const nextBanner = () => {
         if (!brand) return
@@ -246,7 +249,7 @@ export default function DynamicBrandPage() {
                             <>
                                 {/* A white chip keeps dark brand marks legible on the navy hero. */}
                                 <span className="inline-flex h-[72px] items-center justify-center rounded-xl bg-white px-6 shadow-sm">
-                                    <img
+                                    <SiteImage loading="eager"
                                         src={brand.logo}
                                         alt={`${brand.name} logo`}
                                         className="max-h-11 w-auto max-w-[220px] object-contain"
@@ -293,7 +296,7 @@ export default function DynamicBrandPage() {
                                         : "opacity-0 scale-105"
                                 }`}
                             >
-                                <img
+                                <SiteImage loading="eager"
                                     src={banner.url}
                                     alt={banner.alt}
                                     className="w-full h-full object-cover"
@@ -317,7 +320,7 @@ export default function DynamicBrandPage() {
                                     {brand.logo ? (
                                         <>
                                             <span className="mb-4 inline-flex h-[72px] items-center justify-center rounded-xl bg-white px-6 shadow-sm">
-                                                <img
+                                                <SiteImage
                                                     src={brand.logo}
                                                     alt={`${brand.name} logo`}
                                                     className="max-h-11 w-auto max-w-[220px] object-contain"
@@ -472,7 +475,7 @@ export default function DynamicBrandPage() {
                                     className="group relative bg-gray-50 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2"
                                 >
                                     <div className="aspect-square overflow-hidden">
-                                        <img
+                                        <SiteImage
                                             src={category.url}
                                             alt={category.title}
                                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"

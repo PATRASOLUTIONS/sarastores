@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { Search, Package, Truck, MapPin, CheckCircle2, Clock, Loader2, ArrowRight, Box, Warehouse, Home, CircleDot } from "lucide-react"
+import { Search, Package, Truck, MapPin, CheckCircle2, Clock, Loader2, ArrowRight, Box, Warehouse, Home } from "lucide-react"
 
 interface TrackingEvent {
   status: string

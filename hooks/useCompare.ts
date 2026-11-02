@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import { useEffect, useState, useRef } from "react"
 
 const STORAGE_KEY = "compare_products"
@@ -28,16 +29,14 @@ export function useCompare() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const instanceId = useRef<string>(`${Date.now()}-${Math.random().toString(36).slice(2)}`)
   const compareRef = useRef<string[]>(compareIds)
-  useEffect(() => {
-    compareRef.current = compareIds
-  }, [compareIds])
+
 
   const [initialLoaded, setInitialLoaded] = useState(false)
 
-  const normalizeIds = normalizeCompareIds
+
 
   // Clean up old/corrupted localStorage data
-  const cleanupOldData = () => {
+  const cleanupOldData = useCallback(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
@@ -53,14 +52,14 @@ export function useCompare() {
               : (parsed && Array.isArray(parsed.items))
               ? parsed.items
               : parsed
-            const salvaged = normalizeIds(candidate)
+            const salvaged = normalizeCompareIds(candidate)
             if (salvaged && salvaged.length > 0) {
               // store minimal normalized IDs back to localStorage
               localStorage.setItem(STORAGE_KEY, JSON.stringify(salvaged))
               console.warn("[useCompare] Salvaged compare IDs from oversized storage and compacted them")
               return
             }
-          } catch (e) {
+          } catch {
             // fallthrough to remove
           }
 
@@ -68,10 +67,14 @@ export function useCompare() {
           console.warn("[useCompare] Cleared oversized compare data to fix 431 error")
         }
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    compareRef.current = compareIds
+  }, [compareIds])
 
   useEffect(() => {
     try {
@@ -80,7 +83,7 @@ export function useCompare() {
       if (process.env.NODE_ENV !== "production") {
         try {
           console.debug("[useCompare] raw localStorage value:", raw)
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
@@ -96,18 +99,18 @@ export function useCompare() {
             ? parsed.items
             : parsed
 
-          const normalized = normalizeIds(candidate)
+          const normalized = normalizeCompareIds(candidate)
           if (normalized.length) setCompareIds(normalized)
-        } catch (e) {
+        } catch {
           // ignore malformed localStorage
           localStorage.removeItem(STORAGE_KEY)
         }
       }
-    } catch (e) {
+    } catch {
       setCompareIds([])
     }
     setInitialLoaded(true)
-  }, [])
+  }, [cleanupOldData])
 
   useEffect(() => {
     if (!initialLoaded) return
@@ -115,7 +118,7 @@ export function useCompare() {
       // Store ONLY the IDs array - minimal footprint
       const rawToStore = JSON.stringify(compareIds)
       const size = new Blob([rawToStore]).size
-      
+
       // Safety check: don't store if it exceeds size limit
       if (size > MAX_STORAGE_SIZE) {
         console.warn("[useCompare] Compare data exceeds size limit, clearing", { size, ids: compareIds })
@@ -123,17 +126,17 @@ export function useCompare() {
         setCompareIds((prev) => prev.slice(0, MAX_COMPARE_ITEMS))
         return
       }
-      
+
       localStorage.setItem(STORAGE_KEY, rawToStore)
       if (process.env.NODE_ENV !== "production") console.debug("[useCompare] writing to localStorage:", rawToStore)
-    } catch (e) {
+    } catch {
       // ignore
     }
     try {
       const detail = { ids: compareIds, source: instanceId.current }
       window.dispatchEvent(new CustomEvent("compare_products_updated", { detail }))
       if (process.env.NODE_ENV !== "production") console.debug("[useCompare] dispatched compare_products_updated", detail)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [compareIds, initialLoaded])
@@ -147,11 +150,11 @@ export function useCompare() {
         const source = detail && detail.source
         const incoming = Array.isArray(detail.ids) ? detail.ids : Array.isArray(detail) ? detail : []
         if (source && source === instanceId.current) return
-        const normalized = normalizeIds(incoming)
+        const normalized = normalizeCompareIds(incoming)
         if (JSON.stringify(normalized) !== JSON.stringify(compareRef.current)) {
           setCompareIds(normalized)
         }
-      } catch (err) {
+      } catch {
         // ignore
       }
     }
@@ -168,13 +171,13 @@ export function useCompare() {
             : (parsed && Array.isArray(parsed.items))
             ? parsed.items
             : parsed
-          const normalized = normalizeIds(candidate)
+          const normalized = normalizeCompareIds(candidate)
           if (normalized.length) {
             if (JSON.stringify(normalized) !== JSON.stringify(compareRef.current)) setCompareIds(normalized)
           } else if (compareRef.current.length !== 0) {
             setCompareIds([])
           }
-        } catch (err) {
+        } catch {
           // ignore
         }
       }
@@ -190,7 +193,7 @@ export function useCompare() {
 
   const addToCompare = (idOrItem: unknown) => {
     // Accept string ids, numbers, or product-like objects and normalize to an ID
-    const ids = normalizeIds(idOrItem)
+    const ids = normalizeCompareIds(idOrItem)
     if (!ids || ids.length === 0) {
       if (process.env.NODE_ENV !== "production") console.debug("[useCompare] addToCompare rejected input", idOrItem)
       return
@@ -207,7 +210,7 @@ export function useCompare() {
   }
 
   const removeFromCompare = (idOrItem: unknown) => {
-    const ids = normalizeIds(idOrItem)
+    const ids = normalizeCompareIds(idOrItem)
     const sid = ids && ids.length ? String(ids[0]).trim() : String(idOrItem || "").trim()
     if (!sid) return
     if (process.env.NODE_ENV !== "production") console.debug("[useCompare] removeFromCompare called with:", idOrItem)
@@ -218,7 +221,7 @@ export function useCompare() {
 
   const isInCompare = (idOrItem: unknown) => {
     if (!idOrItem) return false
-    const ids = normalizeIds(idOrItem)
+    const ids = normalizeCompareIds(idOrItem)
     const sid = ids && ids.length ? String(ids[0]).trim() : String(idOrItem).trim()
     return compareIds.includes(sid)
   }

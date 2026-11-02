@@ -1,6 +1,7 @@
 "use client"
 
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
@@ -287,7 +288,7 @@ export default function OrderDetailsPage() {
             {order.items.map((item, index) => (
               <div key={`${item.id}-${index}`} className="flex items-center space-x-4 p-4 border rounded-lg">
                 <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                  <img
+                  <SiteImage unoptimized
                     src={item.image || "/placeholder.svg?height=80&width=80&query=product"}
                     alt={item.name}
                     className="w-full h-full object-cover"

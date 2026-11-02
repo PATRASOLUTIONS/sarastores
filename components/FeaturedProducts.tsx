@@ -1,8 +1,10 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { isProductUnavailable } from "@/lib/product-availability"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 import { ArrowRight, ShoppingCart } from "lucide-react"
 
 // Default featured products if none are found in the database
@@ -135,7 +137,7 @@ export default function FeaturedProducts({ products: propProducts }: FeaturedPro
   }, [propProducts])
 
   // Update the product images if needed
-  const enhancedProducts = featuredProducts.map((product, index) => ({
+  const enhancedProducts = uniquePublicProductNames(featuredProducts).map((product, index) => ({
     ...product,
     image:
       product.image ||
@@ -200,7 +202,7 @@ export default function FeaturedProducts({ products: propProducts }: FeaturedPro
                 style={{ transitionDelay: `${index * 150}ms` }}
               >
                 <div className="relative overflow-hidden group">
-                  <img
+                  <SiteImage
                     src={product.image || "/placeholder.svg"}
                     alt={product.name}
                     className="w-full h-64 object-cover transition-transform duration-700 group-hover:scale-110"

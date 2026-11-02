@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { type CampaignPageDocument, campaignPageResponseSchema } from "@/lib/campaign-page";
 import { productCardResponseSchema, type ProductCardResponse } from "@/lib/product-card-response";
 import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility";
+import { getPublicCatalogueSelection } from "@/lib/public-catalogue";
 
 interface CampaignProductDocument {
   _id: ObjectId | string;
@@ -29,10 +30,11 @@ export async function GET(req: Request, context: { params: Promise<{ slug: strin
     if (normalized.productIds.length) {
       if (normalized.productIds.length > 500) throw new Error("Stored campaign exceeds product limit");
       const collection = await getCollection<CampaignProductDocument>("products");
-      const nativeIds = normalized.productIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+      const selection = await getPublicCatalogueSelection();
+      const nativeIds = normalized.productIds.flatMap(id => selection.representativeIds.get(id) ?? []);
       const documents = await collection.find({
         ...PUBLIC_PRODUCT_FILTER,
-        $or: [{ _id: { $in: nativeIds } }, { _id: { $in: normalized.productIds } }, { id: { $in: normalized.productIds } }],
+        _id: { $in: nativeIds },
       }).toArray();
       products = documents.map(product => productCardResponseSchema.parse(normalizeId(product)));
     }

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
 import { requireVendor } from "@/lib/auth"
 import { getAll, create, COLLECTIONS } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
     const { name, description, price, image, stock, category } = parsed.data
 
     const newProduct = {
+      gstRate: DEFAULT_GST_RATE,
       name,
       description,
       price,

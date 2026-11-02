@@ -2,8 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { fetchWithCache, revalidateCache } from '@/utils/cache'
-import { catalogProductResponseSchema, catalogProductListResponseSchema, type CatalogProduct } from '@/utils/catalog'
-import { z } from 'zod'
+import { catalogProductListResponseSchema, type CatalogProduct } from '@/utils/catalog'
 import type { HomeSection as HomeComponent } from '@/lib/home-components-client'
 
 export { homeSectionResponseSchema as homeComponentResponseSchema } from '@/lib/home-components-client'
@@ -48,7 +47,7 @@ export function usePrefetchHomeProducts(
           const fetcher = () =>
             fetch(`/api/products?category=${catId}&limit=10`).then(async r => {
               if (!r.ok) throw new Error('Failed')
-              return z.array(catalogProductResponseSchema).parse(await r.json())
+              return catalogProductListResponseSchema.parse(await r.json())
             })
 
           try {
@@ -74,36 +73,17 @@ export function usePrefetchHomeProducts(
         manualBlocks.map(async (block) => {
           const ids = block.config.productIds
           try {
-            const products = await Promise.all(
-              ids.map(id =>
-                fetchWithCache(
-                  `product-${id}`,
-                  () =>
-                    fetch(`/api/products/${encodeURIComponent(id)}`).then(async r => {
-                      if (!r.ok) throw new Error('Failed')
-                      return catalogProductResponseSchema.parse(await r.json())
-                    }),
-                  catalogProductResponseSchema,
-                  PRODUCTS_TTL
-                ).catch(error => {
-                  console.error('Failed to load homepage manual product', error)
-                  return null
-                })
-              )
-            )
-            manualMap[block.id] = products.filter((product): product is CatalogProduct => product !== null)
-            // Revalidate in background
-            ids.forEach(id =>
-              revalidateCache(
-                `product-${id}`,
-                () =>
-                  fetch(`/api/products/${encodeURIComponent(id)}`).then(async r => {
-                    if (!r.ok) throw new Error('Failed')
-                    return catalogProductResponseSchema.parse(await r.json())
-                  }),
-                catalogProductResponseSchema
-              )
-            )
+            const cacheKey = `manual-catalogue-v1-${block.id}-${ids.join(',')}`
+            const fetcher = async () => {
+              const response = await fetch('/api/products/bulk', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids, catalogue: true }),
+              })
+              if (!response.ok) throw new Error('Manual products could not be loaded')
+              return catalogProductListResponseSchema.parse(await response.json())
+            }
+            manualMap[block.id] = await fetchWithCache(cacheKey, fetcher, catalogProductListResponseSchema, PRODUCTS_TTL)
+            revalidateCache(cacheKey, fetcher, catalogProductListResponseSchema)
           } catch (error) {
             console.error('Failed to load homepage manual products', error)
             manualMap[block.id] = []

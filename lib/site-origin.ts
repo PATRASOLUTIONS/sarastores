@@ -21,7 +21,14 @@ export function getConfiguredSiteOrigin(): string | undefined {
     process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL,
   ]) {
     const origin = parseSiteOrigin(value)
-    if (origin) return origin
+    if (origin) return canonicalSiteOrigin(origin)
   }
   return undefined
+}
+
+/** Match Sara's deployed redirect destination without changing preview/local origins. */
+export function canonicalSiteOrigin(origin: string): string {
+  const url = new URL(origin)
+  if (url.hostname === "sarastores.com" || url.hostname === "www.sarastores.com") return "https://www.sarastores.com"
+  return url.origin
 }

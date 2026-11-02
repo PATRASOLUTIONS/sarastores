@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
@@ -117,7 +118,7 @@ export default function AnimatedBanner({ isLoading = false }: AnimatedBannerProp
           <div className="md:w-1/3 p-6">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/30 to-transparent rounded-lg"></div>
-              <img
+              <SiteImage loading="eager"
                 src={banner.image || "/placeholder.svg?height=400&width=400&query=special+offers"}
                 alt="Special Offers"
                 className="rounded-lg shadow-xl w-full h-auto"

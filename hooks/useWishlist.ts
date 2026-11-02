@@ -102,6 +102,8 @@ export function useWishlist() {
   useEffect(() => {
     fetchWishlist()
   }, [fetchWishlist])
+
+  const invalidateFetch = useCallback(() => { fetchVersion.current++ }, [])
   useEffect(() => {
     const refresh = () => { void fetchWishlist(true) }
     const onStorage = (event: StorageEvent) => {
@@ -112,9 +114,9 @@ export function useWishlist() {
     return () => {
       window.removeEventListener("wishlist-updated", refresh)
       window.removeEventListener("storage", onStorage)
-      fetchVersion.current++
+      invalidateFetch()
     }
-  }, [fetchWishlist])
+  }, [fetchWishlist, invalidateFetch])
 
   const addToWishlist = async (productId: string, product?: WishlistItem) => {
     if (authLoading) return false

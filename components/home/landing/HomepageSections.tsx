@@ -1,5 +1,10 @@
 "use client"
 
+import { storeNetworkCount } from "@/lib/store-network"
+
+import SiteImage from "@/components/SiteImage"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
+
 import Link from "next/link"
 import type { SyntheticEvent } from "react"
 import { ArrowRight, BadgeCheck, CreditCard, Headphones, MapPin, RefreshCw, ShieldCheck, Star, Store, Truck, Users } from "lucide-react"
@@ -108,7 +113,7 @@ export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
       {benefits.map(({ icon: Icon, title, detail, href }, index) => (
         <Link href={href} key={title}>
           <Icon size={26} strokeWidth={1.5} aria-hidden />
-          <span><strong>{index === 0 && storeCount ? `${storeCount}+ ${marketing.text("benefits", "item1Title", "Stores")}` : title}</strong><small>{detail}</small></span>
+          <span><strong>{index === 0 && storeCount ? `${storeNetworkCount(storeCount)} ${marketing.text("benefits", "item1Title", "Stores")}` : title}</strong><small>{detail}</small></span>
         </Link>
       ))}
     </section>
@@ -188,7 +193,7 @@ export function HomepageDeals({ products, loading, error, retry }: {
         <div className={styles.catalogueMessage}><p>New deals are on their way.</p><Link href="/products">Explore all products <ArrowRight size={14} /></Link></div>
       ) : (
         <div className={styles.productGrid}>
-          {products.map((product) => <HomeProductCard key={product.id} product={product} warrantyLabel={marketing.text("deals", "warrantyLabel")} />)}
+          {uniquePublicProductNames(products).map((product) => <HomeProductCard key={product.id} product={product} warrantyLabel={marketing.text("deals", "warrantyLabel")} />)}
         </div>
       )}
     </section>
@@ -236,7 +241,7 @@ export function HomepageProductRail({ title, href, ctaText = "View All", product
     <section className={styles.deals} aria-label={label}>
       <HomepageHeading title={title} href={href} ctaText={ctaText} />
       <div className={styles.productGrid}>
-        {products.map((product) => <HomeProductCard key={product.id} product={product} />)}
+        {uniquePublicProductNames(products).map((product) => <HomeProductCard key={product.id} product={product} />)}
       </div>
     </section>
   )
@@ -249,7 +254,7 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
     <section className={styles.promotions} style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }} aria-label="Exchange, EMI and special offers">
       {cards.map((card) => bannerIsPhotoOnly(card) ? (
         <article key={card.id} className={`${styles.promoCard} ${styles.promoPhotoCard}`}>
-          {card.ctaLink ? <Link href={card.ctaLink}><img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
+          {card.ctaLink ? <Link href={card.ctaLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
         </article>
       ) : (
         <article key={card.id} className={`${styles.promoCard} ${!card.image ? styles.emiCard : ""}`} style={bannerGradient(card)}>
@@ -258,7 +263,7 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
             <p>{card.subtitle}</p>
             {card.ctaText && <Link href={card.ctaLink || "/offers"} className={styles.shopButton}>{card.ctaText} <ArrowRight size={14} aria-hidden /></Link>}
           </div>
-          {card.image && <img src={card.image} alt="" className={styles.promoImage} loading="lazy" />}
+          {card.image && <SiteImage sizes="(min-width: 1024px) 200px, 40vw" src={card.image} alt="" className={styles.promoImage} loading="lazy" />}
         </article>
       ))}
     </section>
@@ -276,7 +281,7 @@ export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
         {brands.map(({ name, logo, href }) => (
           <Link key={name} href={href} className={styles.circleItem}>
             <span className={styles.brandCircle}>
-              {logo ? <img src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, HOME_BRANDS.find((item) => item.name === name)?.logo)} /> : <strong>{name}</strong>}
+              {logo ? <SiteImage sizes="65px" src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, HOME_BRANDS.find((item) => item.name === name)?.logo)} /> : <strong>{name}</strong>}
             </span>
             <span>{name}</span>
           </Link>
@@ -290,21 +295,22 @@ export function HomepageStores({ storeCount }: { storeCount?: number }) {
   const marketing = useMarketingContent("home")
   const { storefront } = useBrandImages()
   const reasons = marketing.items("stores", [
-    { icon: MapPin, title: storeCount ? `${storeCount}+ Stores` : "Local Stores", subtitle: "Across Karnataka" },
+    { icon: MapPin, title: `${storeNetworkCount(storeCount)} Stores`, subtitle: "Across Karnataka" },
     { icon: Users, title: "Happy Customers", subtitle: "Our SARA Family" },
     { icon: BadgeCheck, title: "Trusted Brands", subtitle: "100% Genuine" },
     { icon: CreditCard, title: "Easy EMI", subtitle: "All Major Banks" },
     { icon: Headphones, title: "Expert Support", subtitle: "Always Here" },
-  ].map(item => ({ ...item, detail: item.subtitle })))
+  ].map(item => ({ ...item, detail: item.subtitle }))).map((item, index) =>
+    index === 0 ? { ...item, title: `${storeNetworkCount(storeCount)} Stores` } : item)
   return (
     <section className={styles.stores} aria-label="Find a store and why choose SARA">
       <div className={styles.storeCard}>
         <div>
           <h2>{marketing.text("stores", "title")}</h2>
-          <p>{storeCount ? `${storeCount}+ Stores Across Karnataka` : "Your neighbourhood electronics store"}<br />{marketing.text("stores", "description")}</p>
+          <p>{`${storeNetworkCount(storeCount)} Stores Across Karnataka`}<br />{marketing.text("stores", "description")}</p>
           <Link href={marketing.text("stores", "ctaLink")} className={styles.shopButton}>{marketing.text("stores", "ctaText")} <ArrowRight size={14} aria-hidden /></Link>
         </div>
-        <img src={marketing.image("stores", "image", storefront)} alt="SARA electronics store" loading="lazy" />
+        <SiteImage sizes="(min-width: 1280px) 480px, 40vw" src={marketing.image("stores", "image", storefront)} alt="SARA electronics store" loading="lazy" />
       </div>
       <div className={styles.whyCard}>
         <h2>{marketing.text("stores", "whyTitle")}</h2>

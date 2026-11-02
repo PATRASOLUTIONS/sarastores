@@ -267,7 +267,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     // Refresh offers in the background so protection can be added back later.
     // Explicit opt-outs never wait for this optional service before checkout.
     setCareQuotedKey("")
-  }, [safeSetCart, persistLocal, userId])
+  }, [safeSetCart, persistLocal])
   useEffect(() => {
     if (isLoading || careQuotedKey === careInputKey) return
     const controller = new AbortController()
@@ -565,7 +565,7 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
     } finally {
       loadPromiseRef.current = null
     }
-  }, [persistLocal, safeSetCart, userId])
+  }, [persistLocal, safeSetCart, user?.id, userId])
 
   const prepareCheckoutSignIn = useCallback(() => {
     try {

@@ -37,7 +37,7 @@ for (const path of PAGES) {
     const ms = Date.now() - started
     const ok = res.status === 200
     console.log(`  ${ok ? "PASS" : "FAIL"}  ${path.padEnd(26)} ${res.status}  ${ms}ms`)
-    ok ? pass++ : fail++
+    if (ok) { pass++; } else { fail++; }
     if (!ok) failures.push(`${path} -> ${res.status}`)
   } catch (e) {
     console.log(`  FAIL  ${path.padEnd(26)} ${e.message}`)

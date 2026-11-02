@@ -15,7 +15,7 @@ import { Award, BadgeCheck, Building2, MapPin, ShieldCheck, Truck, Users, Wrench
 const MILESTONES = [
   {
     icon: Building2,
-    value: "85+",
+    value: "90+",
     label: "Retail stores",
     detail: "Showrooms across Karnataka, each stocked, staffed and serviced by our own teams.",
   },

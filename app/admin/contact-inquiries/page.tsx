@@ -4,18 +4,7 @@
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { toast } from "react-hot-toast"
-import {
-    Phone,
-    Mail,
-    User,
-    Trash2,
-    Clock,
-    CheckCircle,
-    Archive,
-    MessageSquare,
-    RefreshCw,
-    Search,
-} from "lucide-react"
+import { Phone, Mail, Trash2, MessageSquare, RefreshCw, Search } from "lucide-react"
 
 interface ContactInquiry {
     id: string

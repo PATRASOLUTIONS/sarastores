@@ -1,3 +1,5 @@
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
+
 // Admin Settings helpers
 export async function getSettingsData() {
   const collection = await getCollection("settings")
@@ -201,6 +203,7 @@ export async function create(collectionName: string, data: Document) {
     const collection = await getCollection(collectionName)
     const result = await collection.insertOne({
       ...data,
+      ...(collectionName === COLLECTIONS.PRODUCTS ? { gstRate: DEFAULT_GST_RATE } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -265,7 +268,7 @@ export async function remove(collectionName: string, id: string) {
 
 export const deleteById = remove
 
-export async function migrateFromLocalStorage(collectionName: string, localStorageKey: string) {
+export async function migrateFromLocalStorage(collectionName: string, _localStorageKey: string) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Migration from localStorage not applicable on server side for ${collectionName}`)
     return { success: true, message: "Migration not applicable on server side" }
@@ -326,6 +329,7 @@ export async function insertMany(collectionName: string, documents: Document[]) 
     const collection = await getCollection(collectionName)
     const documentsWithTimestamps = documents.map((doc) => ({
       ...doc,
+      ...(collectionName === COLLECTIONS.PRODUCTS ? { gstRate: DEFAULT_GST_RATE } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     }))

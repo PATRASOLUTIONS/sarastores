@@ -1,8 +1,10 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { IntegrationError, readErrorMessage } from "../integration-error"
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import type { IntegrationProduct as Prod } from "@/types/integration"
 
 export default function KGenProductsPage() {
@@ -14,7 +16,7 @@ export default function KGenProductsPage() {
   const [limit, setLimit] = useState<number>(15)
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const fetchProducts = async (opts: { append?: boolean;
+  const fetchProducts = useCallback(async (opts: { append?: boolean;
  cursor?: string } = {}) => {
     const { append = false, cursor } = opts
     setLoading(true)
@@ -43,9 +45,9 @@ export default function KGenProductsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [limit])
 
-  useEffect(() => { fetchProducts({ append: false }) }, [limit])
+  useEffect(() => { fetchProducts({ append: false }) }, [fetchProducts, limit])
 
   const loadMore = () => { if (!nextCursor) return; fetchProducts({ append: true, cursor: nextCursor }) }
   const refresh = () => { setNextCursor(null); setHasMore(false); fetchProducts({ append: false }) }
@@ -111,7 +113,7 @@ export default function KGenProductsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             {p.attachments && p.attachments[0] ? (
-                              <img src={p.attachments[0]} alt={p.productDisplayName} className="w-full h-36 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                              <SiteImage unoptimized src={p.attachments[0]} alt={p.productDisplayName || "Product"} className="w-full h-36 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                             ) : (
                               <div className="w-full h-36 bg-gray-100 rounded flex items-center justify-center text-gray-400">No image</div>
                             )}

@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import { productCardResponseSchema, recentlyViewedResponseSchema, type ProductCardResponse } from "@/lib/product-card-response"
 import { z } from "zod"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 
 interface RecentlyViewedProps {
     /** Hide the current product (so it doesn't appear in its own list). */
@@ -39,7 +40,7 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
                                 uniqueProducts.push(p)
                             }
                         })
-                        setProducts(uniqueProducts.slice(0, 8))
+                        setProducts(uniquePublicProductNames(uniqueProducts).slice(0, 8))
                     }
                 } else {
                     // Fetch from LocalStorage — batch into parallel fetches (max 8)
@@ -54,7 +55,7 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
                     }
 
                     const promises = recentIds.slice(0, 12).map(async (id) => {
-                        const response = await fetch(`/api/products/${encodeURIComponent(id)}`)
+                        const response = await fetch(`/api/products/${encodeURIComponent(id)}?catalogue=true`)
                         if (response.status === 404) return null
                         if (!response.ok) throw new Error("Recently viewed product could not be loaded")
                         return productCardResponseSchema.parse(await response.json())
@@ -74,14 +75,10 @@ export default function RecentlyViewed({ excludeId, title = "Recently Viewed" }:
                             }
                         })
 
-                        setProducts(uniqueProducts)
+                        setProducts(uniquePublicProductNames(uniqueProducts))
 
                         // Clean up stale IDs (404/deleted products) from localStorage
-                        const validIds = new Set(uniqueProducts.map(p => p.id))
-                        const cleanedIds = recentIds.filter(id => validIds.has(id))
-                        if (cleanedIds.length !== recentIds.length) {
-                            localStorage.setItem("recently_viewed_ids", JSON.stringify(cleanedIds))
-                        }
+                        // Keep original history IDs when a same-name representative changes.
                     }
                 }
             } catch (err) {

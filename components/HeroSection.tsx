@@ -1,10 +1,11 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react"
 import { motion, AnimatePresence } from 'framer-motion'
-import { durations, easings } from '@/lib/animations'
+
 import { useReducedMotion } from '@/hooks/useAnimations'
 import CategoryGlyph from '@/components/CategoryGlyph'
 import { heroSlideListSchema } from "@/lib/hero-slides"
@@ -67,7 +68,6 @@ const getCachedSlides = (): HeroSlide[] | null => {
     const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY)
 
     if (cached && timestamp) {
-      const cacheAge = Date.now() - parseInt(timestamp, 10)
       // Return cached data even if stale (we'll refresh in background)
       const parsedData = heroSlideListSchema.parse(JSON.parse(cached))
       if (Array.isArray(parsedData) && parsedData.length > 0) {
@@ -88,7 +88,7 @@ const isCacheFresh = (): boolean => {
       const cacheAge = Date.now() - parseInt(timestamp, 10)
       return cacheAge < CACHE_DURATION
     }
-  } catch (error) {
+  } catch {
     // Ignore errors
   }
   return false
@@ -270,7 +270,7 @@ export default function HeroSection() {
               transition={{ duration: prefersReduced ? 0 : 0.6, ease: [0.16, 1, 0.3, 1] }}
             >
               <Link href={currentSlide?.link || '/products'} className="block h-full w-full">
-                <img
+                <SiteImage unoptimized
                   src={currentSlide?.image || '/placeholder.svg'}
                   alt={currentSlide?.title || `Featured offer ${activeSlide + 1}`}
                   className="h-full w-full object-cover"
@@ -287,7 +287,7 @@ export default function HeroSection() {
                     <div className="w-[268px] rounded-3xl bg-white/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur-sm lg:w-[320px] lg:p-5">
                       <div className="relative h-[132px] w-full lg:h-[168px]">
                         {isImageUrl(currentSlide.feature.image) ? (
-                          <img
+                          <SiteImage unoptimized
                             src={currentSlide.feature.image!}
                             alt=""
                             className="h-full w-full object-contain"

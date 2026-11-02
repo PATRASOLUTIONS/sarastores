@@ -6,7 +6,7 @@ import { getErrorMessage } from "@/lib/utils"
  * POST /api/v1/partner/wallet/payout - Request a payout
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { createPayoutRequest, getWalletByPartnerId } from '@/lib/partner/wallet';
 

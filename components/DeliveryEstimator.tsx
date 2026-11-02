@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import { useState, useEffect } from "react"
 import { stores } from "@/lib/store-data"
 import { analytics } from "@/lib/analytics"
@@ -15,16 +16,10 @@ export default function DeliveryEstimator() {
         dateRange?: string
         message: string
     } | null>(null)
-    const [touched, setTouched] = useState(false)
+
 
     // Load from localStorage on mount
-    useEffect(() => {
-        const stored = localStorage.getItem("user_pincode")
-        if (stored && stored.length === 6) {
-            setPincode(stored)
-            checkDelivery(stored)
-        }
-    }, [])
+
 
     const formatDate = (daysToAdd: number) => {
         const date = new Date()
@@ -32,16 +27,15 @@ export default function DeliveryEstimator() {
         return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
     }
 
-    const checkDelivery = async (pinOverride?: string) => {
-        const pinToCheck = pinOverride || pincode
+    const checkDelivery = useCallback(async (pinToCheck: string) => {
         if (!/^\d{6}$/.test(pinToCheck)) {
-            if (touched) setResult({ deliverable: false, message: "Please enter a valid 6-digit pincode." })
+            setResult({ deliverable: false, message: "Please enter a valid 6-digit pincode." })
             return
         }
 
         setLoading(true)
         setResult(null)
-        setTouched(true)
+
 
         // Persist
         localStorage.setItem("user_pincode", pinToCheck)
@@ -101,7 +95,15 @@ export default function DeliveryEstimator() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
+
+  useEffect(() => {
+        const stored = localStorage.getItem("user_pincode")
+        if (stored && stored.length === 6) {
+            setPincode(stored)
+            checkDelivery(stored)
+        }
+    }, [checkDelivery])
 
     return (
         <div className="mb-6 p-5 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -121,13 +123,13 @@ export default function DeliveryEstimator() {
                         type="text"
                         value={pincode}
                         onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        onKeyDown={(e) => e.key === 'Enter' && checkDelivery()}
+                        onKeyDown={(e) => e.key === 'Enter' && checkDelivery(pincode)}
                         placeholder="Enter Pincode"
                         className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-transparent focus:bg-white focus:border-blue-500 rounded-lg text-sm transition-all outline-none font-medium placeholder:text-gray-400"
                     />
                 </div>
                 <button
-                    onClick={() => checkDelivery()}
+                    onClick={() => checkDelivery(pincode)}
                     disabled={loading || pincode.length !== 6}
                     className="px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-sm"
                 >

@@ -35,7 +35,7 @@ const ROOTS = [
 ]
 
 const IMPORT_LINE = 'import { apiFetch } from "@/lib/api-client"'
-const IMPORT_ALREADY = 'from "@/lib/api-client"'
+
 
 const SKIP_DIRS = new Set(["node_modules", ".next", "dist", "build", "out", "scripts"])
 

@@ -161,11 +161,7 @@ export async function handleOptionsRequest(request: NextRequest): Promise<NextRe
  * Create a CORS-enabled OPTIONS handler for partner routes
  */
 export const OPTIONS = handleOptionsRequest;
-import { 
-  checkPartnerRateLimit, 
-  createRateLimitHeaders, 
-  rateLimitExceededResponse 
-} from './rate-limit';
+import { checkPartnerRateLimit, rateLimitExceededResponse } from './rate-limit';
 import { PartnerAPIKey, Partner, PARTNER_ERROR_CODES } from './types';
 import { getCollection } from '@/lib/db-service';
 
@@ -250,7 +246,7 @@ export async function authenticatePartnerRequest(
   request: NextRequest
 ): Promise<{ context: PartnerAuthContext } | { error: NextResponse }> {
   const requestId = randomUUID();
-  const startTime = Date.now();
+  (Date.now());
   
   try {
     // Extract API key from Authorization header
@@ -528,7 +524,7 @@ export function withPartnerAuth<Args extends unknown[]>(
 ) {
   return async (request: NextRequest, ...args: Args): Promise<NextResponse> => {
     const origin = request.headers.get('origin');
-    const corsHeaders = getCorsHeaders(origin);
+    getCorsHeaders(origin);
     
     // Handle OPTIONS preflight requests
     if (request.method === 'OPTIONS') {
@@ -611,7 +607,7 @@ async function getPartnerById(partnerId: string): Promise<Partner | null> {
     // Try ObjectId lookup first
     try {
       partner = await collection.findOne({ _id: new ObjectId(partnerId) });
-    } catch (e) {
+    } catch {
       // Try string id
       partner = await collection.findOne({ id: partnerId });
     }

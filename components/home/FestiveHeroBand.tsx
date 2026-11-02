@@ -14,7 +14,7 @@ import { ArrowRight, BadgeCheck, CreditCard, MapPin, RefreshCw, Truck } from "lu
 const PROPOSITIONS = [
   { icon: CreditCard, title: "No-cost EMI", detail: "On cards, debit cards & cardless" },
   { icon: RefreshCw, title: "Free installation", detail: "By our own certified engineers" },
-  { icon: MapPin, title: "Pick up in store", detail: "85+ stores across Karnataka" },
+  { icon: MapPin, title: "Pick up in store", detail: "90+ stores across Karnataka" },
   { icon: Truck, title: "Free delivery", detail: "With installation by our engineers" },
   { icon: BadgeCheck, title: "100% genuine", detail: "Brand-authorised, full warranty" },
 ]

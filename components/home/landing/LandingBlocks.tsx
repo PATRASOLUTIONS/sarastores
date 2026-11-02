@@ -1,4 +1,6 @@
 "use client"
+
+import { storeNetworkCount } from "@/lib/store-network"
 import { getErrorMessage } from "@/lib/utils"
 
 
@@ -215,7 +217,7 @@ export function StoresBand({ storeCount }: { storeCount: number }) {
 
         <div className="px-6 py-8">
           <h2 className="font-heading text-2xl font-bold leading-tight text-[#0F2557] sm:text-[30px]">
-            {storeCount}+ Stores
+            {storeNetworkCount(storeCount)} Stores
             <br />
             Across Karnataka
           </h2>

@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { COMPLAINT_TYPES, COMPLAINT_TYPE_LABELS, DPDP_COMPLAINT_TYPES, isDpdpComplaint } from "@/lib/complaintTypes"
@@ -124,7 +125,7 @@ export default function ComplaintForm() {
       } else {
         setMessage({ type: "error", text: data.error || "Failed to submit complaint" })
       }
-    } catch (error) {
+    } catch {
       setMessage({ type: "error", text: "An error occurred. Please try again." })
     } finally {
       lock.release()
@@ -359,7 +360,7 @@ export default function ComplaintForm() {
                     <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
                       {images.map((image, index) => (
                         <div key={index} className="relative group">
-                          <img
+                          <SiteImage
                             src={image}
                             alt={`Upload ${index + 1}`}
                             className="w-full h-32 object-cover rounded-lg border-2 border-gray-300"

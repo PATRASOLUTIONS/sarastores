@@ -1,11 +1,13 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import type React from "react"
 import { apiFetch } from "@/lib/api-client"
-import { SpecsAmazonFetcher } from "../../../components/admin/specs-amazon-fetcher"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Eye, ChevronLeft, ChevronRight, Lock, Unlock, RefreshCw, Plus, Download, Search, Loader2 } from "lucide-react"
+import { FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Eye, ChevronLeft, ChevronRight, Lock, Unlock, RefreshCw, Plus, Download, Search, Loader2 } from "lucide-react"
 import * as XLSX from "xlsx"
 import { toast } from "react-hot-toast"
 import { normalizeProductForSchema } from "@/lib/product-schema"
@@ -74,10 +76,10 @@ interface ProductLookup {
 }
 
 export default function ProductSpecificationsPage() {
-  const [file, setFile] = useState<File | null>(null)
+
   const [isUploading, setIsUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
-  const [previewData, setPreviewData] = useState<ExcelRow[]>([])
+  const [previewData] = useState<ExcelRow[]>([])
   const [specifications, setSpecifications] = useState<ProductSpecification[]>([]) // This will now hold SYNCED specs
   const [pendingSpecs, setPendingSpecs] = useState<ProductSpecification[]>([]) // New state for PENDING SYNC specs
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 })
@@ -94,7 +96,7 @@ export default function ProductSpecificationsPage() {
   const [contentFilter, setContentFilter] = useState("")
   const [categoryOptions, setCategoryOptions] = useState<string[]>([])
   const [isExporting, setIsExporting] = useState(false)
-  const [syncProgress, setSyncProgress] = useState<{ current: number;
+  const [, setSyncProgress] = useState<{ current: number;
  total: number } | null>(null)
   const [pendingProductCreation, setPendingProductCreation] = useState<{
     spec: SpecificationInput;
@@ -233,39 +235,16 @@ export default function ProductSpecificationsPage() {
     router.refresh()
   }
 
-  useEffect(() => {
-    fetchSpecifications(currentPage, specSearch)
-    fetchClassifications()
-  }, [])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
 
-    const refreshMessage = window.sessionStorage.getItem(refreshMessageStorageKey)
-    if (!refreshMessage) return
 
-    window.sessionStorage.removeItem(refreshMessageStorageKey)
-    window.alert(refreshMessage)
-  }, [])
 
   /* New state for manual technical details input */
   const [manualSpecText, setManualSpecText] = useState('')
 
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      fetchSpecifications(currentPage, specSearch)
-    }, 300)
-    return () => clearTimeout(debounceTimer)
-  }, [currentPage, specSearch, itemsPerPage, categoryFilter, contentFilter, lockedPage, lockedPerPage])
 
-  useEffect(() => {
-    apiFetch("/api/admin/taxonomy")
-      .then((r) => r.json())
-      .then((d) => d?.success && setCategoryOptions(d.categories ?? []))
-      .catch(() => {
-        /* the filter just stays empty */
-      })
-  }, [])
+
+
 
   /** Exports every row matching the current search and filters, not just this page. */
   const handleExportFiltered = async () => {
@@ -317,7 +296,7 @@ export default function ProductSpecificationsPage() {
   }
 
   /* Fetch both pending (unsynced) and synced specifications */
-  const fetchSpecifications = async (page = 1, search = '') => {
+  const fetchSpecifications = useCallback(async (page = 1, search = '') => {
     try {
       setIsLoadingSpecs(true)
       const cacheBust = Date.now().toString()
@@ -402,7 +381,37 @@ export default function ProductSpecificationsPage() {
     } finally {
       setIsLoadingSpecs(false)
     }
-  }
+  }, [categoryFilter, contentFilter, itemsPerPage, lockedPage, lockedPerPage])
+
+  useEffect(() => {
+    fetchClassifications()
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const refreshMessage = window.sessionStorage.getItem(refreshMessageStorageKey)
+    if (!refreshMessage) return
+
+    window.sessionStorage.removeItem(refreshMessageStorageKey)
+    window.alert(refreshMessage)
+  }, [])
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      fetchSpecifications(currentPage, specSearch)
+    }, 300)
+    return () => clearTimeout(debounceTimer)
+  }, [currentPage, specSearch, fetchSpecifications])
+
+  useEffect(() => {
+    apiFetch("/api/admin/taxonomy")
+      .then((r) => r.json())
+      .then((d) => d?.success && setCategoryOptions(d.categories ?? []))
+      .catch(() => {
+        /* the filter just stays empty */
+      })
+  }, [])
 
   const openEditModal = async (spec: ProductSpecification) => {
     if (spec.locked) {
@@ -646,7 +655,7 @@ Please go to the Products page and create this product manually first, then come
         return
       }
 
-      const result = await res.json()
+      await res.json();
 
       // If category, subcategory, or classification fields changed, also update the product
       {
@@ -792,14 +801,7 @@ Please go to the Products page and create this product manually first, then come
   }
 
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      setFile(selectedFile)
-      setUploadResult(null)
-      previewExcelFile(selectedFile)
-    }
-  }
+
 
   // Parse pasted multi-line text like "Key: Value" or "Key\nValue" into key/value objects
   const parseKeyValuePairs = (text: string) => {
@@ -815,7 +817,7 @@ Please go to the Products page and create this product manually first, then come
       // Prioritize : = and tab as separators so that keys can contain hyphens (e.g. "Wi-Fi: 5G")
       let sepIndex = line.search(/[:=\t]/)
 
-      // Fallback to hyphen if no other separator found, but maybe be stricter? 
+      // Fallback to hyphen if no other separator found, but maybe be stricter?
       // Current behavior allows any hyphen to split.
       if (sepIndex === -1) {
         sepIndex = line.indexOf('-')
@@ -845,7 +847,7 @@ Please go to the Products page and create this product manually first, then come
   }
 
   /* Removed normalizeTechnicalDetails to prevent auto-adding/removing rows which caused issues with "extra record space" and editing flow */
-  // const normalizeTechnicalDetails = ... 
+  // const normalizeTechnicalDetails = ...
 
   const updateTechnicalDetail = (idx: number, field: 'key' | 'value', newValue: string) => {
     setEditForm((f) => {
@@ -887,124 +889,12 @@ Please go to the Products page and create this product manually first, then come
   }
 
 
-  const previewExcelFile = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result
-        const workbook = XLSX.read(data, { type: "binary" })
-        const sheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[sheetName]
-        const jsonData = XLSX.utils.sheet_to_json<ExcelRow>(worksheet)
-        if (process.env.NODE_ENV === "development") console.log("ByteWise Testing Point Preview data:", jsonData.slice(0, 5))
-        setPreviewData(jsonData.slice(0, 5))
-      } catch (error) {
-        console.error("ByteWise Testing Point Error reading Excel file:", error)
-      }
-    }
-    reader.readAsBinaryString(file)
-  }
 
-  const handleUpload = async () => {
-    if (!file) return
 
-    setIsUploading(true)
-    setUploadResult(null)
 
-    try {
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        try {
-          const data = e.target?.result
-          const workbook = XLSX.read(data, { type: "binary" })
-          const sheetName = workbook.SheetNames[0]
-          const worksheet = workbook.Sheets[sheetName]
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[]
-
-          // Validate columns
-          const missing = []
-          if (!jsonData[0]?.sku) missing.push("sku")
-          if (!jsonData[0]?.amazon_link) missing.push("amazon_link")
-          if (missing.length) {
-            setUploadResult({
-              success: 0,
-              failed: jsonData.length,
-              skipped: 0,
-              errors: [`Missing columns: ${missing.join(", ")}`],
-            })
-            setIsUploading(false)
-            return
-          }
-
-          // Bulk fetch from /api/scrape-amazon
-          let success = 0, failed = 0
-          const errors: string[] = []
-          // Optionally: throttle requests if you expect a lot of rows
-          await Promise.all(
-            jsonData.map(async (row) => {
-              try {
-                const res = await apiFetch("/api/scrape-amazon", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    itemno: row.sku, // API expects itemno
-                    url: row.amazon_link,
-                    saveToDatabase: true
-                  }),
-                })
-                if (!res.ok) {
-                  failed++
-                  const err = await res.json().catch(() => ({}))
-                  errors.push(`SKU ${row.sku}: ${err.error || "Failed"}`)
-                } else {
-                  success++
-                }
-              } catch (err) {
-                failed++
-                errors.push(`SKU ${row.sku}: ${err instanceof Error ? err.message : "Unknown error"}`)
-              }
-            })
-          )
-
-          setUploadResult({
-            success,
-            failed,
-            skipped: 0,
-            errors,
-            message: `Processed ${jsonData.length} rows.`,
-          })
-
-          // Refresh the specifications list
-          if (success > 0) await fetchSpecifications()
-        } catch (error) {
-          setUploadResult({
-            success: 0,
-            failed: 0,
-            skipped: 0,
-            errors: [error instanceof Error ? error.message : "Unknown error occurred"],
-          })
-        } finally {
-          setIsUploading(false)
-        }
-      }
-      reader.readAsBinaryString(file)
-    } catch (error) {
-      setUploadResult({
-        success: 0,
-        failed: 0,
-        skipped: 0,
-        errors: [error instanceof Error ? error.message : "Unknown error occurred"],
-      })
-      setIsUploading(false)
-    }
-  }
 
   // Helper function to prompt user for product creation
-  const promptProductCreation = (spec: SpecificationInput, progress: string): Promise<'create' | 'skip'> => {
-    return new Promise((resolve) => {
-      setPendingProductCreation({ spec, progress, resolve });
-    });
-  };
+
 
   // Helper function to create a new product
   const createProduct = async (spec: SpecificationInput): Promise<{ ok: boolean; errorMessage?: string }> => {
@@ -1083,7 +973,7 @@ Please go to the Products page and create this product manually first, then come
     try {
 
       // Filter only those that are NOT synced (pending specs)
-      // Since we fetch explicitly `synced=false` specs now, we can iterate over that provided list 
+      // Since we fetch explicitly `synced=false` specs now, we can iterate over that provided list
       // OR we can fetch fresh from backend like before but filter
 
       // Let's rely on fetching `synced=false` from API to be sure we get the latest
@@ -1222,7 +1112,7 @@ Please go to the Products page and create this product manually first, then come
           let result;
           try {
             result = await updateRes.json();
-          } catch (parseError) {
+          } catch {
             throw new Error(`Invalid response from server for itemNo/SKU ${productId}`);
           }
 
@@ -1338,60 +1228,10 @@ Please go to the Products page and create this product manually first, then come
   };
 
   // Download mandatory specification columns as an Excel file
-  const handleExportRequiredData = async () => {
-    try {
-      setIsUploading(true);
-      const res = await apiFetch('/api/products/specifications/export');
-      if (!res.ok) throw new Error('Export failed');
 
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `product_specifications_mandatory_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Export error', err);
-      alert('Failed to export specifications');
-    } finally {
-      setIsUploading(false);
-    }
-  }
 
   // Download all specifications as an Excel file
-  const handleDownloadExcel = async () => {
-    try {
-      if (process.env.NODE_ENV === "development") console.log("[Product Specs] 📡 Downloading specifications for Excel export")
-      const res = await apiFetch('/api/products/specifications')
-      if (!res.ok) {
-        throw new Error('Failed to fetch specifications')
-      }
-      const specs = await res.json()
 
-      const rows = (specs || []).map((s: ProductSpecification) => ({
-        sku: s.sku || '',
-        name: s.name || '',
-        mrp: s.mrp ?? '',
-        from_manufacturer: s.from_manufacturer || '',
-        technical_details: s.technical_details ? JSON.stringify(s.technical_details) : '',
-        specification_images: Array.isArray(s.specification_images) ? s.specification_images.join(',') : (s.specification_images || ''),
-        product_id: s.product_id || '',
-        locked: s.locked ? 'true' : 'false',
-        updatedAt: s.updatedAt || '',
-      }))
-
-      const ws = XLSX.utils.json_to_sheet(rows)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'product_specifications')
-      const filename = `product_specifications_${new Date().toISOString().slice(0, 10)}.xlsx`
-      XLSX.writeFile(wb, filename)
-    } catch (err) {
-      console.error('Download error', err)
-      alert('Failed to download specifications')
-    }
-  }
 
   // Pagination logic - data is now filtered and paginated on server
   const currentItems = specifications
@@ -1407,7 +1247,7 @@ Please go to the Products page and create this product manually first, then come
   }
 
   // Sorting logic for lock column
-  const sortedSpecifications = [...specifications].sort((a, b) => {
+  ([...specifications].sort((a, b) => {
     if (a.locked === b.locked) return 0;
     if (lockSortAsc) {
       // unlocked first
@@ -1416,7 +1256,7 @@ Please go to the Products page and create this product manually first, then come
       // locked first
       return a.locked ? -1 : 1;
     }
-  })
+  }));
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -2679,7 +2519,7 @@ Please go to the Products page and create this product manually first, then come
                     <div className="flex flex-wrap gap-3">
                       {(editForm.images || []).map((img: string, idx) => (
                         <div key={idx} className="relative">
-                          <img src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
+                          <SiteImage unoptimized src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
                           <button
                             onClick={() => setEditForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
                             className="absolute -top-2 -right-2 bg-white rounded-full shadow text-red-600 p-1"
@@ -2975,7 +2815,7 @@ Please go to the Products page and create this product manually first, then come
                       <div className="flex flex-wrap gap-3">
                         {(createForm.images || []).map((img: string, idx) => (
                           <div key={idx} className="relative">
-                            <img src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
+                            <SiteImage unoptimized src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
                             <button
                               onClick={() => setCreateForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
                               className="absolute -top-2 -right-2 bg-white rounded-full shadow text-red-600 p-1"

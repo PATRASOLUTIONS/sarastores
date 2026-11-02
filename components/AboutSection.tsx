@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 
 export default function AboutSection() {
@@ -53,7 +54,7 @@ export default function AboutSection() {
             </div>
           </div>
           <div className="order-1 md:order-2">
-            <img
+            <SiteImage
               src="https://placehold.co/600x400/003087/FFFFFF?text=Our+Story"
               alt="About Sara Mobiles and Electronics "
               className="rounded-lg shadow-lg w-full h-auto"

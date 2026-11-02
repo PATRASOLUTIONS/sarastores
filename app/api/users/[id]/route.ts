@@ -37,7 +37,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     let objectId: ObjectId
     try {
       objectId = new ObjectId(id)
-    } catch (err) {
+    } catch {
       return NextResponse.json({ message: "Invalid user id" }, { status: 400 })
     }
 
@@ -74,7 +74,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     let objectId: ObjectId
     try {
       objectId = new ObjectId(id)
-    } catch (err) {
+    } catch {
       return NextResponse.json({ message: "Invalid user id" }, { status: 400 })
     }
     const data = await request.json()

@@ -5,12 +5,7 @@ import { useState, useEffect, useCallback } from "react"
 import PROMO_TEMPLATES, { PromoTemplate } from "@/lib/promoTemplates"
 import * as XLSX from "xlsx"
 import toast from "react-hot-toast"
-import {
-  Mail, Eye, Send, Users, FileText, CheckCircle, Clock,
-  Upload, ChevronDown, ChevronRight, ArrowLeft, ArrowRight,
-  Trash2, Plus, RefreshCw, Search, Download, X, Loader2,
-  BarChart3, Calendar, AlertCircle, Image as ImageIcon, Code
-} from "lucide-react"
+import { Mail, Eye, Send, Users, FileText, CheckCircle, Clock, Upload, ArrowLeft, ArrowRight, Trash2, Plus, RefreshCw, Search, Download, X, Loader2, BarChart3, AlertCircle, Image as ImageIcon, Code } from "lucide-react"
 import dynamic from "next/dynamic"
 import { z } from "zod"
 import {
@@ -95,7 +90,7 @@ export default function CustomerCentricIndex() {
   const [html, setHtml] = useState("")
   const [attachImage, setAttachImage] = useState(true)
   const [templateName, setTemplateName] = useState("")
-  const [showImageInput, setShowImageInput] = useState(false)
+
   const [imageUrl, setImageUrl] = useState("")
   const [showRawHtml, setShowRawHtml] = useState(false)
 
@@ -115,7 +110,7 @@ export default function CustomerCentricIndex() {
   // Campaign state
   const [sending, setSending] = useState(false)
   const [campaignHistory, setCampaignHistory] = useState<CampaignHistory[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [, setLoadingHistory] = useState(false)
 
   // Batch sending progress
   const [sendProgress, setSendProgress] = useState<{
@@ -581,7 +576,7 @@ export default function CustomerCentricIndex() {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             {STEPS.map((step, idx) => {
-              const StepIcon = step.icon
+
               const isActive = currentStep === step.id
               const isCompleted = currentStep > step.id
               return (

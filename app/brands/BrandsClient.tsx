@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, ChevronRight, CreditCard, Search, ShieldCheck, Star, Tag, Truck, Wrench } from "lucide-react"
@@ -89,7 +90,7 @@ function buildBrands(adminBrands: CatalogRecord[], products: CatalogRecord[]): B
   }))
   const stats = new Map<string, Brand>()
   for (const product of products) {
-    const manufacturer = text(product.manufacturerName) || text(product.manufacturer_name) || text(product.brand)
+    const manufacturer = catalogueBrand(product)
     const name = brandOf({ manufacturerName: manufacturer })
       ? manufacturer
       : nameMatchers.find(({ pattern }) => pattern.test(text(product.name)))?.name
@@ -124,19 +125,20 @@ function BrandLogo({ name, src }: { name: string; src?: string }) {
   </span>
 }
 
-export default function BrandsPage() {
+export default function BrandsPage({ initialBrands, initialProducts = [] }: { initialBrands?: CatalogRecord[]; initialProducts?: CatalogRecord[] } = {}) {
   const marketing = useMarketingContent("brands")
-  const [brands, setBrands] = useState<Brand[]>([])
+  const [brands, setBrands] = useState<Brand[]>(() => initialBrands ? buildBrands(initialBrands, initialProducts) : [])
   const [logoManifest, setLogoManifest] = useState<Record<string, string>>({})
   const [query, setQuery] = useState("")
   const [letter, setLetter] = useState("All")
   const [category, setCategory] = useState("")
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialBrands)
   const [error, setError] = useState("")
   const [attempt, setAttempt] = useState(0)
   const hero = useBanners("brands-hero")[0]
 
   useEffect(() => {
+    if (initialBrands && attempt === 0) return
     const controller = new AbortController()
     const load = async () => {
       setLoading(true)
@@ -166,7 +168,7 @@ export default function BrandsPage() {
     }
     void load()
     return () => controller.abort()
-  }, [attempt])
+  }, [attempt, initialBrands])
 
   const categories = useMemo(() => [...new Set(brands.flatMap((brand) => brand.categories))].sort(), [brands])
   const visible = useMemo(() => brands.filter((brand) => {

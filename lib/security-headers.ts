@@ -292,7 +292,7 @@ export function applyApiSecurityHeaders(response: Response): Response {
   });
 }
 
-export default {
+const securityHeadersExports = {
   securityHeaders,
   getSecurityHeadersObject,
   applySecurityHeaders,
@@ -301,4 +301,6 @@ export default {
   getReportOnlyCSP,
   apiSecurityHeaders,
   applyApiSecurityHeaders,
-};
+}
+
+export default securityHeadersExports

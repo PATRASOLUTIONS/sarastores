@@ -361,7 +361,7 @@ export const getBadgeClasses = (type: "sale" | "success" | "info" | "warning") =
 }
 
 // ==================== EXPORT ALL ====================
-export default {
+const brandGuidelinesExports = {
   BRAND,
   COLORS,
   TYPOGRAPHY,
@@ -389,3 +389,5 @@ export default {
   getHeadingClasses,
   getBadgeClasses,
 }
+
+export default brandGuidelinesExports

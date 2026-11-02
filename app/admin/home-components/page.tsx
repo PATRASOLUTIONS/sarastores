@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useState } from "react"
 import {
   ArrowDown,
@@ -193,8 +194,9 @@ export default function HomeComponentsPage() {
     )
   }
 
+  const editorType = editor?.type
   useEffect(() => {
-    if (!editor || editor.type !== "manual" || query.trim().length < 2) {
+    if (editorType !== "manual" || query.trim().length < 2) {
       setResults([])
       return
     }
@@ -218,7 +220,7 @@ export default function HomeComponentsPage() {
       }
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [editor?.type, query])
+  }, [editorType, query])
 
   function moveProduct(index: number, direction: -1 | 1) {
     if (!editor) return
@@ -375,7 +377,7 @@ export default function HomeComponentsPage() {
                           {productIds.slice(0, 5).map((id) => {
                             const product = productMap[id]
                             return productImage(product || { id, name: "" }) ? (
-                              <img key={id} src={productImage(product)} alt="" className="h-9 w-9 border-2 border-white bg-slate-100 object-cover" />
+                              <SiteImage unoptimized key={id} src={productImage(product)} alt="" className="h-9 w-9 border-2 border-white bg-slate-100 object-cover" />
                             ) : (
                               <span key={id} className="flex h-9 w-9 items-center justify-center border-2 border-white bg-slate-100"><ImageIcon className="h-4 w-4 text-slate-400" /></span>
                             )
@@ -482,7 +484,7 @@ export default function HomeComponentsPage() {
                         const selected = editor.productIds.includes(product.id)
                         return (
                           <button key={product.id} type="button" disabled={selected} onClick={() => setEditor({ ...editor, productIds: [...editor.productIds, product.id] })} className="flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-slate-50 disabled:bg-emerald-50">
-                            {productImage(product) ? <img src={productImage(product)} alt="" className="h-10 w-10 bg-white object-contain" /> : <span className="flex h-10 w-10 items-center justify-center bg-slate-100"><ImageIcon className="h-4 w-4 text-slate-400" /></span>}
+                            {productImage(product) ? <SiteImage unoptimized src={productImage(product)} alt="" className="h-10 w-10 bg-white object-contain" /> : <span className="flex h-10 w-10 items-center justify-center bg-slate-100"><ImageIcon className="h-4 w-4 text-slate-400" /></span>}
                             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{product.name}</span><span className="text-xs text-slate-500">{product.sku || "No SKU"}</span></span>
                             {selected ? <Check className="h-4 w-4 text-emerald-600" /> : <Plus className="h-4 w-4 text-[#0f2557]" />}
                           </button>
@@ -504,7 +506,7 @@ export default function HomeComponentsPage() {
                         return (
                           <div key={id} className="flex items-center gap-2 border-b border-slate-100 p-2 last:border-b-0">
                             <span className="w-5 text-center text-xs font-bold text-slate-400">{index + 1}</span>
-                            {product && productImage(product) ? <img src={productImage(product)} alt="" className="h-9 w-9 bg-white object-contain" /> : <span className="flex h-9 w-9 items-center justify-center bg-slate-100"><ImageIcon className="h-4 w-4 text-slate-400" /></span>}
+                            {product && productImage(product) ? <SiteImage unoptimized src={productImage(product)} alt="" className="h-9 w-9 bg-white object-contain" /> : <span className="flex h-9 w-9 items-center justify-center bg-slate-100"><ImageIcon className="h-4 w-4 text-slate-400" /></span>}
                             <span className="min-w-0 flex-1 truncate text-sm font-semibold">{product?.name || "Product unavailable"}</span>
                             <button type="button" title="Move up" disabled={index === 0} onClick={() => moveProduct(index, -1)} className="p-1.5 text-slate-500 disabled:opacity-25"><ArrowUp className="h-4 w-4" /></button>
                             <button type="button" title="Move down" disabled={index === editor.productIds.length - 1} onClick={() => moveProduct(index, 1)} className="p-1.5 text-slate-500 disabled:opacity-25"><ArrowDown className="h-4 w-4" /></button>

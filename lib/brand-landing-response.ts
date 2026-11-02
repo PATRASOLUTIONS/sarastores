@@ -1,3 +1,4 @@
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 import { z } from "zod"
 import { catalogProductResponseSchema } from "@/utils/catalog"
 
@@ -108,5 +109,5 @@ export const brandEditorResponseSchema = brandLandingResponseSchema.innerType().
 export const brandEditorListSchema = z.object({ success: z.literal(true), brands: z.array(brandEditorResponseSchema) })
 export const brandLandingEnvelopeSchema = z.object({ success: z.literal(true), brand: brandLandingResponseSchema })
 export const brandProductResponseSchema = catalogProductResponseSchema.extend({ manufacturer: text })
-export const brandProductListResponseSchema = z.array(brandProductResponseSchema)
+export const brandProductListResponseSchema = z.array(brandProductResponseSchema).transform(uniquePublicProductNames)
 export type BrandProduct = z.infer<typeof brandProductResponseSchema>

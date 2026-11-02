@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import { ArrowRight, CreditCard, Headphones, ShieldCheck, Truck } from "lucide-react"
 import { bannerGradient, type SiteBanner } from "@/hooks/useBanners"
@@ -31,7 +32,7 @@ export function OffersHero({ banner }: { banner?: SiteBanner }) {
             {banner?.ctaText || "Explore Products"} <ArrowRight size={14} />
           </Link>
         </div>
-        <img src={banner?.image || "/brand-page/hero-products.webp"} alt="" aria-hidden
+        <SiteImage loading="eager" src={banner?.image || "/brand-page/hero-products.webp"} alt="" aria-hidden
           className="pointer-events-none absolute bottom-0 right-0 h-36 w-36 object-contain opacity-20 sm:static sm:h-[170px] sm:w-full sm:opacity-100" />
       </div>
     </section>
@@ -69,7 +70,7 @@ export function OffersPromotions({ banners, onBank, onExchange }: {
               {banner.subtitle && <p className="mt-1 text-[11px] font-medium leading-tight">{banner.subtitle}</p>}
               {banner.ctaText && <Link href={banner.ctaLink || "/products"} className="mt-2 inline-flex items-center gap-1 rounded px-2 py-1.5 text-[10px] font-bold text-white" style={{ backgroundColor: banner.accent || "#1560bd" }}>{banner.ctaText}<ArrowRight size={12} /></Link>}
             </div>
-            {banner.image && <img src={banner.image} alt="" aria-hidden className="absolute bottom-0 right-0 h-24 w-[40%] object-contain" />}
+            {banner.image && <SiteImage src={banner.image} alt="" aria-hidden className="absolute bottom-0 right-0 h-24 w-[40%] object-contain" />}
           </article>
         ) : (
           <article key={index} className={`relative flex min-h-[108px] items-center overflow-hidden rounded-md p-3 ${index === 0 ? "bg-rose-50" : "bg-blue-50"}`}>
@@ -79,7 +80,7 @@ export function OffersPromotions({ banners, onBank, onExchange }: {
               {marketing.text("promotions", `item${index + 1}Href`) ? <Link href={marketing.text("promotions", `item${index + 1}Href`)} className="mt-2 inline-flex rounded bg-[#1560bd] px-2 py-1.5 text-[10px] font-bold text-white">{marketing.text("promotions", `item${index + 1}CtaText`)} &rarr;</Link> :
                 <button type="button" onClick={index === 1 ? onBank : onExchange} className="mt-2 rounded bg-[#1560bd] px-2 py-1.5 text-[10px] font-bold text-white">{marketing.text("promotions", `item${index + 1}CtaText`)} &rarr;</button>}
             </div>
-            <img src={marketing.text("promotions", `item${index + 1}Image`)} alt="" aria-hidden className="absolute bottom-0 right-0 h-24 w-[37%] object-contain" />
+            <SiteImage src={marketing.text("promotions", `item${index + 1}Image`)} alt="" aria-hidden className="absolute bottom-0 right-0 h-24 w-[37%] object-contain" />
           </article>
         )
       })}

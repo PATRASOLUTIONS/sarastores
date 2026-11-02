@@ -1,4 +1,5 @@
 "use client"
+import { useCallback } from "react"
 import { getErrorMessage } from "@/lib/utils"
 
 
@@ -43,14 +44,14 @@ export default function KGenOrdersPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState<boolean>(false)
 
-  const buildUrl = (cursor?: string) => {
+  const buildUrl = useCallback((cursor?: string) => {
     const params = new URLSearchParams()
     if (limit) params.set('limit', String(limit))
     if (cursor) params.set('nextCursor', cursor)
     return `/api/integrations/exlr8/orders?${params.toString()}`
-  }
+  }, [limit])
 
-  const fetchOrders = async (opts: { append?: boolean;
+  const fetchOrders = useCallback(async (opts: { append?: boolean;
  cursor?: string } = {}) => {
     const { append = false, cursor } = opts
     setLoading(true)
@@ -76,9 +77,9 @@ export default function KGenOrdersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildUrl])
 
-  useEffect(() => { fetchOrders({ append: false }) }, [limit])
+  useEffect(() => { fetchOrders({ append: false }) }, [fetchOrders, limit])
 
   const loadMore = () => { if (!nextCursor) return; fetchOrders({ append: true, cursor: nextCursor }) }
   const refresh = () => { setNextCursor(null); setHasMore(false); fetchOrders({ append: false }) }

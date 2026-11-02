@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, ChevronRight, Loader2, RefreshCw, Search, Menu, X } from "lucide-react"
@@ -176,7 +177,7 @@ export function AdminHeader({ toggleSidebar, isSidebarOpen }: { toggleSidebar: (
           </div>
 
           <div className="flex items-center">
-            <img
+            <SiteImage unoptimized loading="eager"
               className="h-8 w-8 rounded-full"
               src="https://placehold.co/32x32/222222/FFFFFF?text=A"
               alt="User avatar"

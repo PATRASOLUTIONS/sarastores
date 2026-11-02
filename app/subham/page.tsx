@@ -2,31 +2,9 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import Image from "next/image"
+
 import { motion } from "framer-motion"
-import {
-    Handshake,
-    Building2,
-    Tv,
-    Smartphone,
-    Laptop,
-    Home,
-    Zap,
-    Shield,
-    MapPin,
-    Phone,
-    Mail,
-    ExternalLink,
-    ChevronRight,
-    Star,
-    Users,
-    Award,
-    TrendingUp,
-    CheckCircle2,
-    ArrowRight,
-    Sparkles,
-    Send
-} from "lucide-react"
+import { Handshake, Building2, Tv, Smartphone, Laptop, Home, Shield, MapPin, Phone, Mail, ExternalLink, ChevronRight, Star, Users, Award, TrendingUp, CheckCircle2, ArrowRight, Sparkles, Send } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 
@@ -153,7 +131,7 @@ const electronicCategories = [
 ]
 
 export default function ShubhamCollaborationPage() {
-    const [isVisible, setIsVisible] = useState(false)
+    const [, setIsVisible] = useState(false)
     const [formData, setFormData] = useState({
         name: "",
         email: "",
@@ -192,7 +170,7 @@ export default function ShubhamCollaborationPage() {
                 category: "",
                 message: ""
             })
-        } catch (error) {
+        } catch {
             alert("Something went wrong. Please try again.")
         } finally {
             setIsSubmitting(false)

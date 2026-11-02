@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { 
-  bulkAddLicenses, 
-  getAvailableLicenseCount,
-  getLicensesByEmail,
-  revokeLicense,
-  type SoftwareLicense,
-} from '@/lib/license-service'
+import { bulkAddLicenses, revokeLicense, type SoftwareLicense } from '@/lib/license-service'
 import { getCollection, normalizeId } from '@/lib/db-service'
 import { ObjectId, type Filter } from 'mongodb'
 import { z } from 'zod'

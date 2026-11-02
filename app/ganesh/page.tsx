@@ -15,38 +15,19 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import { COLLECTIONS, findMany } from "@/lib/db-service"
+import { getPublicPageProducts } from "@/lib/public-page-data"
 import { pageMetadata } from "@/lib/seo-page"
-import { productCardResponseSchema } from "@/lib/product-card-response"
 import { catalogCategoryListResponseSchema } from "@/lib/catalog-list-response"
-import { z } from "zod"
 
 /** Catalogue prices and stock move during a sale; five minutes is a fair trade. */
 export const revalidate = 300
 
 export const generateMetadata = pageMetadata({
   path: "/ganesh",
-  title: (brand) => `Ganesh Chaturthi Offers 2026 — Appliance & Electronics Sale | ${brand}`,
+  title: (brand) => `Ganesh Chaturthi - Appliance & Electronics Picks | ${brand}`,
   description:
-    "Ganpati Bappa Morya. Ganesh Chaturthi offers on televisions, refrigerators, washing machines, air conditioners and kitchen appliances — no-cost EMI, bank cashback, free delivery and expert installation.",
+    "Explore Ganesh Chaturthi appliance and electronics picks. Browse current product prices, availability, payment options and delivery policies at SARA.",
 })
-
-const CARD_PROJECTION = {
-  slug: 1,
-  name: 1,
-  price: 1,
-  mrp: 1,
-  image: 1,
-  stock: 1,
-  category: 1,
-  subCategory: 1,
-  brand: 1,
-  rating: 1,
-  reviews: 1,
-  discount: 1,
-  originalPrice: 1,
-  sku: 1,
-  trusted: 1,
-} as const
 
 /** Auspicious amounts people actually budget in shagun, not round marketing numbers. */
 const SHAGUN_BANDS = [
@@ -59,54 +40,44 @@ const SHAGUN_BANDS = [
 ]
 
 const FESTIVE_BENEFITS = [
-  { icon: CreditCard, title: "No-cost EMI", text: "Up to 24 months on leading bank cards" },
-  { icon: Repeat, title: "Bank cashback", text: "Instant discounts on leading credit and debit cards" },
-  { icon: Truck, title: "Free delivery", text: "On orders above the free-delivery threshold" },
-  { icon: Wrench, title: "Expert installation", text: "Certified technicians, scheduled to suit you" },
-  { icon: ShieldCheck, title: "Genuine warranty", text: "Authorised dealer, full manufacturer cover" },
-  { icon: Store, title: "Buy online, pick up in store", text: "Reserve today, collect from your nearest store" },
+  { icon: CreditCard, title: "Payment options", text: "Check eligible options before payment", href: "/emi" },
+  { icon: Repeat, title: "Current offers", text: "See applicable terms and availability", href: "/offers" },
+  { icon: Truck, title: "Delivery options", text: "Charges and service depend on your order", href: "/shipping-policy" },
+  { icon: Wrench, title: "Installation", text: "Check product-specific arrangements", href: "/installation" },
+  { icon: ShieldCheck, title: "Warranty information", text: "Review the cover for your chosen product", href: "/warranty" },
+  { icon: Store, title: "Visit a store", text: "Check local stock with our team", href: "/store-locator" },
 ]
 
 /** One source of truth: the accordion below and the FAQPage schema both read this. */
 const FAQ = [
   {
-    q: "When is Ganesh Chaturthi 2026?",
-    a: "Ganesh Chaturthi falls on Monday, 14 September 2026. The festival runs for ten days and concludes with Anant Chaturdashi and Ganpati visarjan on 23–24 September 2026.",
+    q: "Are Ganesh Chaturthi offers currently available?",
+    a: "Festival promotions vary by campaign, product and date. Browse current catalogue prices and check the applicable offer terms before ordering.",
   },
   {
     q: "What are the Ganesh Chaturthi offers on appliances?",
-    a: "Our festival offers combine no-cost EMI of up to 24 months, bank cashback on leading credit and debit cards, free delivery and complimentary standard installation on eligible products.",
+    a: "Available promotions are shown with their applicable product and payment terms. Prices and stock can change; confirm the final order details before paying.",
   },
   {
     q: "Is buying appliances during Ganesh Chaturthi auspicious?",
     a: "Ganesh Chaturthi celebrates the remover of obstacles and the lord of new beginnings, so many families treat it as an auspicious time to bring home something new. Kitchen appliances, televisions and refrigerators are the most popular festival purchases.",
   },
   {
-    q: "Can I get no-cost EMI on Ganesh Chaturthi purchases?",
-    a: "Yes. No-cost EMI is available on most large appliances and electronics with credit cards, debit-card EMI and cardless options from leading banks. The exact tenure and eligibility are shown on each product page before you pay.",
+    q: "How do I check EMI eligibility?",
+    a: "Payment options depend on the product, lender and your eligibility. Review the EMI information and any charges shown at checkout before selecting a payment option.",
   },
   {
     q: "Do you deliver and install during the festival period?",
-    a: "Yes. Enter your pincode on any product page to see the delivery estimate for your area. Installation is scheduled by certified technicians, and you can also choose store pickup at checkout if you would rather collect in person.",
+    a: "Enter your pincode to check service for your area. Read the shipping and installation policies for charges, scheduling and product-specific arrangements; ask the store about collection availability.",
   },
 ]
 
 async function getFestivalPicks() {
-  const base = { active: true, image: { $exists: true, $nin: [null, ""] } }
-
-  const discounted = z.array(productCardResponseSchema).parse(await findMany(
-    COLLECTIONS.PRODUCTS,
-    { ...base, discount: { $gte: 10 } },
-    { projection: CARD_PROJECTION, sort: { discount: -1 }, limit: 12 },
-  ))
-
-  if (discounted.length >= 8) return discounted
-
-  // A thin or freshly-seeded catalogue must still render a full shelf.
-  return z.array(productCardResponseSchema).parse(await findMany(COLLECTIONS.PRODUCTS, base, {
-    projection: CARD_PROJECTION,
-    limit: 12,
-  }))
+  // This loader applies the shared publicCatalogueFilter and normalizes legacy money/stock.
+  const catalogue = (await getPublicPageProducts()).filter(product => product.price > 0 && product.stock > 0)
+  const discounted = catalogue.filter(product => Number(product.mrp) >= product.price / 0.9)
+    .sort((left, right) => (1 - right.price / Number(right.mrp)) - (1 - left.price / Number(left.mrp)))
+  return (discounted.length >= 8 ? discounted : catalogue).slice(0, 12)
 }
 
 async function getCategories() {
@@ -145,15 +116,15 @@ export default async function GaneshPage() {
           <div className="relative mx-auto max-w-7xl px-4 py-14 text-center md:py-20">
             <p className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] backdrop-blur-sm">
               <Sparkles className="h-3.5 w-3.5" />
-              14 – 24 September 2026
+              Browse current availability
             </p>
             <h1 className="mt-5 font-heading text-3xl font-extrabold leading-tight md:text-5xl lg:text-6xl">
-              Ganpati Bappa Morya
+              Ganesh Chaturthi Appliance &amp; Electronics Picks
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/90 md:text-lg">
-              Welcome Bappa home with something new. Festival offers across televisions,
-              refrigerators, washing machines, air conditioners and kitchen appliances — with
-              no-cost EMI, bank cashback and free installation.
+              Welcome Bappa home with something new. Browse current televisions, refrigerators,
+              washing machines, air conditioners and kitchen appliances. Check product prices,
+              stock and applicable terms before ordering.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link
@@ -178,12 +149,12 @@ export default async function GaneshPage() {
         <section className="border-b border-brand-border bg-brand-surface py-10">
           <div className="mx-auto max-w-7xl px-4">
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-              {FESTIVE_BENEFITS.map(({ icon: Icon, title, text }) => (
-                <div key={title} className="rounded-xl bg-white p-4 shadow-sm">
+              {FESTIVE_BENEFITS.map(({ icon: Icon, title, text, href }) => (
+                <Link key={title} href={href} className="rounded-xl bg-white p-4 shadow-sm">
                   <Icon className="h-6 w-6 text-brand-accent" aria-hidden="true" />
                   <p className="mt-3 text-sm font-bold text-brand-text-primary">{title}</p>
                   <p className="mt-1 text-xs leading-relaxed text-brand-text-secondary">{text}</p>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -262,7 +233,7 @@ export default async function GaneshPage() {
               Ganesh Chaturthi picks
             </h2>
             <p className="mt-2 text-sm text-brand-text-secondary">
-              Hand-picked deals for the festival, with EMI shown on every product.
+              Browse current product prices and availability. Applicable payment terms are shown before payment.
             </p>
             {picks.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -297,7 +268,7 @@ export default async function GaneshPage() {
             <h2 className="text-2xl font-extrabold md:text-3xl">Prefer to see it in person?</h2>
             <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/85">
               Ganesh Chaturthi is a family occasion. Walk into your nearest store, see the product,
-              talk to our team and take the festival offer home the same day.
+              talk to our team and check local product availability and collection arrangements.
             </p>
             <Link
               href="/stores"
@@ -348,14 +319,14 @@ export default async function GaneshPage() {
                 electronics shopping peaks across the ten days from Chaturthi to Anant Chaturdashi.
               </p>
               <p>
-                Our Ganesh Chaturthi sale covers the full range:{" "}
+                Browse our current catalogue of{" "}
                 <Link href="/products" className="font-medium text-brand-primary underline">
                   televisions, refrigerators, washing machines, air conditioners and kitchen
                   appliances
                 </Link>
-                . Every product page shows the MRP, our price, the saving and the monthly EMI, so
-                you can see the real cost before you commit. Enter your pincode to confirm delivery
-                timelines in your area, or choose store pickup and collect the same day.
+                . Product pages show available pricing and specifications. Check the final order
+                price and payment terms before committing. Enter your pincode to check service
+                in your area, or contact a store about collection availability.
               </p>
               <h3 className="pt-2 text-base font-bold text-brand-text-primary">
                 What to buy this Ganesh Chaturthi
@@ -371,9 +342,10 @@ export default async function GaneshPage() {
                 Festival payment options
               </h3>
               <p>
-                No-cost EMI runs up to 24 months on leading bank credit and debit cards, with
-                cardless EMI available for customers without a card. Bank cashback offers stack on
-                top. All prices are GST-inclusive with a proper invoice.
+                Payment eligibility, charges and promotions depend on the product and provider. Review our{" "}
+                <Link href="/emi" className="font-medium text-brand-primary underline">EMI information</Link>{" "}
+                and the applicable checkout terms before paying. Current promotions are listed on the{" "}
+                <Link href="/offers" className="font-medium text-brand-primary underline">offers page</Link>.
               </p>
               <h3 className="pt-2 text-base font-bold text-brand-text-primary">
                 Buy online or in store
@@ -383,9 +355,11 @@ export default async function GaneshPage() {
                 <Link href="/store-locator" className="font-medium text-brand-primary underline">
                   collect from your nearest store
                 </Link>
-                . Delivery is free above the qualifying order value, installation is handled by
-                certified technicians, and every product carries the full manufacturer warranty
-                because we are an authorised dealer. Read our{" "}
+                . Check our{" "}
+                <Link href="/shipping-policy" className="font-medium text-brand-primary underline">shipping policy</Link>,{" "}
+                <Link href="/installation" className="font-medium text-brand-primary underline">installation information</Link>{" "}
+                and <Link href="/warranty" className="font-medium text-brand-primary underline">warranty information</Link>{" "}
+                for applicable arrangements. Read our{" "}
                 <Link href="/blog" className="font-medium text-brand-primary underline">
                   buying guides
                 </Link>{" "}

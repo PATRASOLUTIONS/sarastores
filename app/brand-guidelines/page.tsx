@@ -1,17 +1,6 @@
 "use client"
 
-import BrandGuidelines, {
-  COLORS,
-  TYPOGRAPHY,
-  SPACING,
-  getPrimaryButtonClasses,
-  getSecondaryButtonClasses,
-  getCardClasses,
-  getInputClasses,
-  getHeadingClasses,
-  getBadgeClasses,
-  GRADIENTS,
-} from "@/lib/brandGuidelines"
+import { COLORS, SPACING, getPrimaryButtonClasses, getSecondaryButtonClasses, getCardClasses, getInputClasses, getHeadingClasses, getBadgeClasses, GRADIENTS } from "@/lib/brandGuidelines"
 
 export default function BrandGuidelinesPage() {
   return (
@@ -113,7 +102,7 @@ export default function BrandGuidelinesPage() {
           <div className={getCardClasses()}>
             <div className="space-y-6">
               <div>
-                <h1 className={getHeadingClasses(1)}>H1 Hero - 48px Poppins Bold</h1>
+                <div className={getHeadingClasses(1)}>H1 Hero - 48px Poppins Bold</div>
                 <p className="text-gray-500 text-sm mt-2">Used for main hero sections</p>
               </div>
               <div>

@@ -10,7 +10,7 @@ import { CreateComplaintSchema, emailSchema } from "@/lib/validation"
 import { handleApiError } from "@/lib/api-error"
 
 // GET all complaints (for admin)
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
   try {

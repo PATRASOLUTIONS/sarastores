@@ -4,6 +4,7 @@ import { MapPin, Store as StoreIcon } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { getStoreCities } from "@/lib/store-locations"
+import { storeNetworkCount } from "@/lib/store-network"
 
 export const revalidate = 3600
 
@@ -33,9 +34,7 @@ export default async function StoresIndexPage() {
 
         <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">Sara Electronics stores</h1>
         <p className="mt-2 max-w-2xl text-gray-600">
-          {totalStores > 0
-            ? `${totalStores} stores across ${cities.length} ${cities.length === 1 ? "city" : "cities"}. `
-            : ""}
+          {storeNetworkCount(totalStores)} stores across Karnataka.{" "}
           Pick your city to see addresses, opening hours, phone numbers and directions.
         </p>
 

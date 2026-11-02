@@ -18,7 +18,7 @@ type WishlistDocument = {
   updatedAt?: Date
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     // Authoritative user id from the signed session — never trust client input.
     const userId = await getCurrentUserId()
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
       const productIds = wishlist.items.map((id: string) => {
         try {
           return new ObjectId(id)
-        } catch (e) {
+        } catch {
           return id // If it's not a valid ObjectId, use the string
         }
       })

@@ -1,33 +1,10 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetchJson } from "@/lib/api-client"
 import { StoreSettingsSchema, type StoreSettings, type StoreSettingsFields } from "@/lib/validation"
 import { useState, useRef, useEffect } from "react"
-import {
-  Save,
-  Store,
-  Mail,
-  Phone,
-  MapPin,
-  Image as ImageIcon,
-  Receipt,
-  Truck,
-  Globe,
-  CreditCard,
-  Percent,
-  Tag,
-  Palette,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Eye,
-  EyeOff,
-  Link,
-  FileText,
-  Shield,
-} from "lucide-react"
+import { Save, Store, Mail, Phone, MapPin, Image as ImageIcon, Receipt, Truck, Globe, CreditCard, Percent, Tag, Palette, ChevronDown, ChevronUp, CheckCircle, XCircle, Loader2, Link, FileText, Shield } from "lucide-react"
 import { useSettingsData } from "@/hooks/useSettingsData"
 
 type SectionKey = "store" | "branding" | "business" | "shipping" | "social"
@@ -205,7 +182,7 @@ function ImageUpload({
       </div>
       {preview && (
         <div className="relative w-20 h-20 border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-          <img src={preview} alt={label} className="w-full h-full object-contain" />
+          <SiteImage unoptimized src={preview} alt={label} className="w-full h-full object-contain" />
         </div>
       )}
     </div>
@@ -351,7 +328,7 @@ export default function AdminSettings() {
                 id="statStores"
                 value={settings.statStores || ""}
                 onChange={(v) => updateField("statStores", v)}
-                placeholder="e.g. 85+"
+                placeholder="e.g. 90+"
               />
             </FieldGroup>
 

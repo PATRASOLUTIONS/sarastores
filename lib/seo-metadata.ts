@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import { cache } from 'react'
 import { getSettingsData } from '@/lib/db-service'
 import { headers } from 'next/headers'
-import { getConfiguredSiteOrigin, parseSiteOrigin } from '@/lib/site-origin'
+import { getConfiguredSiteOrigin, parseSiteOrigin, canonicalSiteOrigin } from '@/lib/site-origin'
 
 /**
  * Gets the site origin from env vars or request headers.
@@ -21,9 +21,9 @@ export const getOriginFromHeaders = cache(async (): Promise<string> => {
   const proto = hdrs.get('x-forwarded-proto')?.split(',')[0].trim() ||
     (host && /^(localhost|127\.0\.0\.1|\[::1\])(?::|$)/.test(host) ? 'http' : 'https')
   const requestOrigin = host ? parseSiteOrigin(`${proto === 'http' ? 'http' : 'https'}://${host}`) : undefined
-  if (requestOrigin) return requestOrigin
+  if (requestOrigin) return canonicalSiteOrigin(requestOrigin)
 
-  return process.env.NODE_ENV === 'production' ? 'https://sarastores.com' : 'http://localhost:3000'
+  return process.env.NODE_ENV === 'production' ? 'https://www.sarastores.com' : 'http://localhost:3000'
 })
 
 /**

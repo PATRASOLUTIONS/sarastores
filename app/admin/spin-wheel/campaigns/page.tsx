@@ -56,7 +56,7 @@ export default function CampaignsPage() {
         const data = await res.json()
         setCampaigns(data.campaigns || [])
       }
-    } catch (err) {
+    } catch {
       toast.error("Failed to load campaigns")
     } finally {
       setLoading(false)
@@ -147,10 +147,7 @@ export default function CampaignsPage() {
     toast.success("URL copied!")
   }
 
-  const getOrigin = () => {
-    if (typeof window !== "undefined") return window.location.origin
-    return ""
-  }
+
 
   return (
     <div className="min-h-screen bg-gray-50">

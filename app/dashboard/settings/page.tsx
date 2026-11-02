@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 import { Camera, UserRound } from "lucide-react"
 import { toast } from "react-hot-toast"
@@ -16,9 +17,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const lock = useSubmitLock()
+  const userId = user?.id
+  const userName = user?.name || ""
+  const userPhone = user?.phone || ""
+  const userAvatar = user?.avatar || (userId ? defaultProfileAvatar(userId) : "")
   useEffect(() => {
-    if (user) setDraft({ name: user.name || "", phone: user.phone || "", avatar: user.avatar || defaultProfileAvatar(user.id) })
-  }, [user?.id, user?.name, user?.phone, user?.avatar])
+    if (userId) setDraft({ name: userName, phone: userPhone, avatar: userAvatar })
+  }, [userId, userName, userPhone, userAvatar])
 
   const upload = async (file?: File) => {
     if (!file || !lock.acquire()) return
@@ -51,7 +56,7 @@ export default function SettingsPage() {
     <form onSubmit={save}>
       <fieldset disabled={saving || uploading}>
         <div className={styles.photo}>
-          <img src={draft.avatar || defaultProfileAvatar(user.id)} alt="Your profile photo" />
+          <SiteImage unoptimized src={draft.avatar || defaultProfileAvatar(user.id)} alt="Your profile photo" />
           <div><label className={styles.upload}><Camera size={17} />{uploading ? "Processing photo..." : "Upload Photo"}
             <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload profile photo"
               onChange={event => { void upload(event.target.files?.[0]); event.target.value = "" }} /></label>
@@ -60,7 +65,7 @@ export default function SettingsPage() {
         <div role="group" aria-labelledby="avatar-label"><h2 id="avatar-label">Or choose an avatar</h2>
           <div className={styles.avatars}>{PROFILE_AVATARS.map((avatar, index) => <button type="button" key={avatar}
             aria-label={`Choose avatar ${index + 1}`} aria-pressed={draft.avatar === avatar}
-            onClick={() => setDraft(current => ({ ...current, avatar }))}><img src={avatar} alt="" /></button>)}</div>
+            onClick={() => setDraft(current => ({ ...current, avatar }))}><SiteImage unoptimized src={avatar} alt="" /></button>)}</div>
         </div>
         <div className={styles.fields}>
           <label>Full name<input name="name" required minLength={2} maxLength={100} autoComplete="name" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>

@@ -17,13 +17,12 @@ li a{min-width:0;overflow-wrap:anywhere}li span{flex-shrink:0;color:#475569;font
 code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;font-size:13px}
 @media(max-width:700px){.folders{grid-template-columns:1fr}main{padding:18px 12px}header{padding:28px 20px}}
 </style></head><body>
-<header><h1>SARA internal documents</h1><p>Folder-by-folder catalogue of guides, reports, proposals and design references. 217 files in 27 groups, plus this index.</p></header>
+<header><h1>SARA internal documents</h1><p>Folder-by-folder catalogue of guides, reports, proposals and design references. 361 files in 31 groups, plus this index.</p></header>
 <main>
 <div class="notice"><strong>Offline/internal catalogue, not a public application page.</strong> Open this HTML file locally. Next.js does not serve the <code>documents\</code> directory, and it is excluded from Vercel uploads. Private logs/dumps under <code>private-artifacts\</code> are deliberately omitted. Historical documents may contain superseded claims; use the current source and dated audit evidence. Do not copy internal material into <code>public\</code>.</div>
 <nav aria-label="Highlighted documents">
 <a href="marketing-poster-guide.html">Poster creation &amp; display</a><a href="marketing-campaign-guide.html">Customer campaigns</a>
 <a href="customer-journey.html">Customer journey</a><a href="production-readiness-audit.md">Readiness audit</a>
-<a href="payment-ui-journeys/index.html">Payment UI journeys (simulated)</a>
 <a href="operations/WORKSPACE_ORGANIZATION.md">Public-access notes</a><a href="../README.md">Project folder map</a>
 </nav>
 <div class="folders"><section aria-labelledby="folder-0">
@@ -56,8 +55,9 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="analysis/index.md">index.md</a><span>MD</span></li></ul>
 </section>
 <section aria-labelledby="folder-2">
-<h2 id="folder-2">architecture <small>1 files</small></h2>
-<ul><li><a href="architecture/05-architecture-diagrams.md">05-architecture-diagrams.md</a><span>MD</span></li></ul>
+<h2 id="folder-2">architecture <small>2 files</small></h2>
+<ul><li><a href="architecture/05-architecture-diagrams.md">05-architecture-diagrams.md</a><span>MD</span></li>
+<li><a href="architecture/application-architecture-review.md">application-architecture-review.md</a><span>MD</span></li></ul>
 </section>
 <section aria-labelledby="folder-3">
 <h2 id="folder-3">archive/branding <small>3 files</small></h2>
@@ -66,13 +66,15 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="archive/branding/Sara_Electronics_logo.png">Sara_Electronics_logo.png</a><span>PNG</span></li></ul>
 </section>
 <section aria-labelledby="folder-4">
-<h2 id="folder-4">archive/tools/diagnostics <small>7 files</small></h2>
+<h2 id="folder-4">archive/tools/diagnostics <small>9 files</small></h2>
 <ul><li><a href="archive/tools/diagnostics/audit-ids.mjs">audit-ids.mjs</a><span>MJS</span></li>
 <li><a href="archive/tools/diagnostics/check-assignments.mjs">check-assignments.mjs</a><span>MJS</span></li>
 <li><a href="archive/tools/diagnostics/exhaustive-audit.mjs">exhaustive-audit.mjs</a><span>MJS</span></li>
+<li><a href="archive/tools/diagnostics/fix-nested-interactive.mjs">fix-nested-interactive.mjs</a><span>MJS</span></li>
 <li><a href="archive/tools/diagnostics/inspect_order.mjs">inspect_order.mjs</a><span>MJS</span></li>
 <li><a href="archive/tools/diagnostics/inspect-api.mjs">inspect-api.mjs</a><span>MJS</span></li>
 <li><a href="archive/tools/diagnostics/inspect-sample.mjs">inspect-sample.mjs</a><span>MJS</span></li>
+<li><a href="archive/tools/diagnostics/tidy-collapsed-links.mjs">tidy-collapsed-links.mjs</a><span>MJS</span></li>
 <li><a href="archive/tools/diagnostics/tmp-phase2-check.ts">tmp-phase2-check.ts</a><span>TS</span></li></ul>
 </section>
 <section aria-labelledby="folder-5">
@@ -114,7 +116,7 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="archive/ui/thank-you-page.previous.tsx">thank-you-page.previous.tsx</a><span>TSX</span></li></ul>
 </section>
 <section aria-labelledby="folder-8">
-<h2 id="folder-8">Guides &amp; overview <small>14 files</small></h2>
+<h2 id="folder-8">Guides &amp; overview <small>15 files</small></h2>
 <ul><li><a href="audit-report.html">audit-report.html</a><span>HTML</span></li>
 <li><a href="compatibility-report.html">compatibility-report.html</a><span>HTML</span></li>
 <li><a href="CUSTOMER_RETENTION_PLAN.md">CUSTOMER_RETENTION_PLAN.md</a><span>MD</span></li>
@@ -123,6 +125,7 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="FEATURES.md">FEATURES.md</a><span>MD</span></li>
 <li><a href="GAPS.md">GAPS.md</a><span>MD</span></li>
 <li><a href="launch-readiness-report.html">launch-readiness-report.html</a><span>HTML</span></li>
+<li><a href="lint-and-build-check.md">lint-and-build-check.md</a><span>MD</span></li>
 <li><a href="marketing-campaign-guide.html">marketing-campaign-guide.html</a><span>HTML</span></li>
 <li><a href="marketing-poster-guide.html">marketing-poster-guide.html</a><span>HTML</span></li>
 <li><a href="PLATFORM_COMPARISON.md">PLATFORM_COMPARISON.md</a><span>MD</span></li>
@@ -163,10 +166,8 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="design/app-layout/1D9DD377-C799-40C2-9AA4-2BAE95AB0CC4.PNG">1D9DD377-C799-40C2-9AA4-2BAE95AB0CC4.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/42EB79C9-C8FB-4DEE-BC06-36423FDF9686%20(1).PNG">42EB79C9-C8FB-4DEE-BC06-36423FDF9686 (1).PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/42EB79C9-C8FB-4DEE-BC06-36423FDF9686%203.PNG">42EB79C9-C8FB-4DEE-BC06-36423FDF9686 3.PNG</a><span>PNG</span></li>
-<li><a href="design/app-layout/4E1A4083-3D2C-41C6-914C-ED4AE8829C51.PNG">4E1A4083-3D2C-41C6-914C-ED4AE8829C51.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/7B4B2972-B347-40C4-BCA9-6D7BBD425D07.PNG">7B4B2972-B347-40C4-BCA9-6D7BBD425D07.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/861C509D-42DD-490C-8599-04E33C8F3397.PNG">861C509D-42DD-490C-8599-04E33C8F3397.PNG</a><span>PNG</span></li>
-<li><a href="design/app-layout/91867B82-84BE-47D6-A5DE-FACD8558386E.PNG">91867B82-84BE-47D6-A5DE-FACD8558386E.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/about%20page.PNG">about page.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/brand.PNG">brand.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/cart%20page%20.PNG">cart page .PNG</a><span>PNG</span></li>
@@ -175,7 +176,9 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="design/app-layout/dashbaord.PNG">dashbaord.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/enquiry%20page.PNG">enquiry page.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/FC5BAAC6-E168-4000-8DCB-A68FFD35C93C.PNG">FC5BAAC6-E168-4000-8DCB-A68FFD35C93C.PNG</a><span>PNG</span></li>
+<li><a href="design/app-layout/header%2C%20subheading.PNG">header, subheading.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/homepage.PNG">homepage.PNG</a><span>PNG</span></li>
+<li><a href="design/app-layout/mobiles.PNG">mobiles.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/my%20orders.PNG">my orders.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/product%20page.PNG">product page.PNG</a><span>PNG</span></li>
 <li><a href="design/app-layout/products%20page.PNG">products page.PNG</a><span>PNG</span></li>
@@ -207,23 +210,37 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <ul><li><a href="design/wireframes/Sara-Electronics-Wireframes.pdf">Sara-Electronics-Wireframes.pdf</a><span>PDF</span></li></ul>
 </section>
 <section aria-labelledby="folder-16">
-<h2 id="folder-16">features <small>9 files</small></h2>
+<h2 id="folder-16">features <small>19 files</small></h2>
 <ul><li><a href="features/BULK_ORDER_UPDATE_GUIDE.md">BULK_ORDER_UPDATE_GUIDE.md</a><span>MD</span></li>
 <li><a href="features/CART_TO_REVIEW_FLOW_ANALYSIS.md">CART_TO_REVIEW_FLOW_ANALYSIS.md</a><span>MD</span></li>
+<li><a href="features/cart-purchase-validation.md">cart-purchase-validation.md</a><span>MD</span></li>
+<li><a href="features/checkout-account-choice.md">checkout-account-choice.md</a><span>MD</span></li>
+<li><a href="features/checkout-idempotency.md">checkout-idempotency.md</a><span>MD</span></li>
+<li><a href="features/checkout-recovery-and-validation.md">checkout-recovery-and-validation.md</a><span>MD</span></li>
+<li><a href="features/guest-wishlist.md">guest-wishlist.md</a><span>MD</span></li>
+<li><a href="features/order-confirmation-whatsapp.md">order-confirmation-whatsapp.md</a><span>MD</span></li>
 <li><a href="features/PINCODE_MANAGEMENT_GUIDE.md">PINCODE_MANAGEMENT_GUIDE.md</a><span>MD</span></li>
 <li><a href="features/product-data-entry-flow.md">product-data-entry-flow.md</a><span>MD</span></li>
+<li><a href="features/product-inventory-flow-review.md">product-inventory-flow-review.md</a><span>MD</span></li>
+<li><a href="features/public-product-name-display.md">public-product-name-display.md</a><span>MD</span></li>
 <li><a href="features/PURCHASE_FLOW_DOCUMENTATION.md">PURCHASE_FLOW_DOCUMENTATION.md</a><span>MD</span></li>
+<li><a href="features/sara-care-plan.md">sara-care-plan.md</a><span>MD</span></li>
 <li><a href="features/SOFTWARE_SALES_GUIDE.md">SOFTWARE_SALES_GUIDE.md</a><span>MD</span></li>
+<li><a href="features/store-pickup-availability.md">store-pickup-availability.md</a><span>MD</span></li>
 <li><a href="features/SYNC_TO_PRODUCTS_DOCUMENTATION.md">SYNC_TO_PRODUCTS_DOCUMENTATION.md</a><span>MD</span></li>
 <li><a href="features/TESTING_GUIDE.md">TESTING_GUIDE.md</a><span>MD</span></li>
 <li><a href="features/VERCEL_BYPASS_GUIDE.md">VERCEL_BYPASS_GUIDE.md</a><span>MD</span></li></ul>
 </section>
 <section aria-labelledby="folder-17">
-<h2 id="folder-17">legacy <small>1 files</small></h2>
-<ul><li><a href="legacy/CLAUDE.legacy.md">CLAUDE.legacy.md</a><span>MD</span></li></ul>
+<h2 id="folder-17">integrations <small>1 files</small></h2>
+<ul><li><a href="integrations/google-business-profile.md">google-business-profile.md</a><span>MD</span></li></ul>
 </section>
 <section aria-labelledby="folder-18">
-<h2 id="folder-18">marketing-campaign-assets <small>7 files</small></h2>
+<h2 id="folder-18">legacy <small>1 files</small></h2>
+<ul><li><a href="legacy/CLAUDE.legacy.md">CLAUDE.legacy.md</a><span>MD</span></li></ul>
+</section>
+<section aria-labelledby="folder-19">
+<h2 id="folder-19">marketing-campaign-assets <small>7 files</small></h2>
 <ul><li><a href="marketing-campaign-assets/01-library-desktop.png">01-library-desktop.png</a><span>PNG</span></li>
 <li><a href="marketing-campaign-assets/02-editor-desktop.png">02-editor-desktop.png</a><span>PNG</span></li>
 <li><a href="marketing-campaign-assets/03-recipients-desktop.png">03-recipients-desktop.png</a><span>PNG</span></li>
@@ -232,8 +249,8 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="marketing-campaign-assets/06-diwali-creative.png">06-diwali-creative.png</a><span>PNG</span></li>
 <li><a href="marketing-campaign-assets/07-cart-creative.png">07-cart-creative.png</a><span>PNG</span></li></ul>
 </section>
-<section aria-labelledby="folder-19">
-<h2 id="folder-19">marketing-poster-assets <small>13 files</small></h2>
+<section aria-labelledby="folder-20">
+<h2 id="folder-20">marketing-poster-assets <small>13 files</small></h2>
 <ul><li><a href="marketing-poster-assets/01-marketing-controls.png">01-marketing-controls.png</a><span>PNG</span></li>
 <li><a href="marketing-poster-assets/02-banner-manager.png">02-banner-manager.png</a><span>PNG</span></li>
 <li><a href="marketing-poster-assets/03-poster-library.png">03-poster-library.png</a><span>PNG</span></li>
@@ -248,16 +265,18 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="marketing-poster-assets/12-whatsapp-preview.png">12-whatsapp-preview.png</a><span>PNG</span></li>
 <li><a href="marketing-poster-assets/13-diwali-email.png">13-diwali-email.png</a><span>PNG</span></li></ul>
 </section>
-<section aria-labelledby="folder-20">
-<h2 id="folder-20">operations <small>5 files</small></h2>
+<section aria-labelledby="folder-21">
+<h2 id="folder-21">operations <small>7 files</small></h2>
 <ul><li><a href="operations/ADMIN_AND_FRONTEND_DOCUMENTATION.md">ADMIN_AND_FRONTEND_DOCUMENTATION.md</a><span>MD</span></li>
-<li><a href="operations/website-payment-gateways.md">website-payment-gateways.md</a><span>MD</span></li>
-<li><a href="operations/pincode-management.md">pincode-management.md</a><span>MD</span></li>
 <li><a href="operations/bulk-catalog-imports.md">bulk-catalog-imports.md</a><span>MD</span></li>
+<li><a href="operations/catalogue-quality-and-backup-plan.md">catalogue-quality-and-backup-plan.md</a><span>MD</span></li>
+<li><a href="operations/manual-database-clone.md">manual-database-clone.md</a><span>MD</span></li>
+<li><a href="operations/pincode-management.md">pincode-management.md</a><span>MD</span></li>
+<li><a href="operations/website-payment-gateways.md">website-payment-gateways.md</a><span>MD</span></li>
 <li><a href="operations/WORKSPACE_ORGANIZATION.md">WORKSPACE_ORGANIZATION.md</a><span>MD</span></li></ul>
 </section>
-<section aria-labelledby="folder-21">
-<h2 id="folder-21">partner-api <small>13 files</small></h2>
+<section aria-labelledby="folder-22">
+<h2 id="folder-22">partner-api <small>13 files</small></h2>
 <ul><li><a href="partner-api/Document_API_Docs.md">Document_API_Docs.md</a><span>MD</span></li>
 <li><a href="partner-api/Document.md">Document.md</a><span>MD</span></li>
 <li><a href="partner-api/Document.pdf">Document.pdf</a><span>PDF</span></li>
@@ -272,8 +291,130 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="partner-api/PARTNER_IMPLEMENTATION_SUMMARY.md">PARTNER_IMPLEMENTATION_SUMMARY.md</a><span>MD</span></li>
 <li><a href="partner-api/PARTNER_SELLING_SYSTEM.md">PARTNER_SELLING_SYSTEM.md</a><span>MD</span></li></ul>
 </section>
-<section aria-labelledby="folder-22">
-<h2 id="folder-22">proposals <small>15 files</small></h2>
+<section aria-labelledby="folder-23">
+<h2 id="folder-23">payment-ui-journeys <small>2 files</small></h2>
+<ul><li><a href="payment-ui-journeys/index.html">index.html</a><span>HTML</span></li>
+<li><a href="payment-ui-journeys/results.json">results.json</a><span>JSON</span></li></ul>
+</section>
+<section aria-labelledby="folder-24">
+<h2 id="folder-24">payment-ui-journeys/screenshots <small>114 files</small></h2>
+<ul><li><a href="payment-ui-journeys/screenshots/desktop-paytm-01.png">desktop-paytm-01.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-02.png">desktop-paytm-02.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-03.png">desktop-paytm-03.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-04.png">desktop-paytm-04.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-05.png">desktop-paytm-05.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-06.png">desktop-paytm-06.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-07.png">desktop-paytm-07.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-08.png">desktop-paytm-08.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-09.png">desktop-paytm-09.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-10.png">desktop-paytm-10.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-11.png">desktop-paytm-11.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-12.png">desktop-paytm-12.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-13.png">desktop-paytm-13.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-14.png">desktop-paytm-14.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-15.png">desktop-paytm-15.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-16.png">desktop-paytm-16.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-17.png">desktop-paytm-17.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-18.png">desktop-paytm-18.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-paytm-19.png">desktop-paytm-19.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-01.png">desktop-pinelabs-01.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-02.png">desktop-pinelabs-02.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-03.png">desktop-pinelabs-03.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-04.png">desktop-pinelabs-04.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-05.png">desktop-pinelabs-05.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-06.png">desktop-pinelabs-06.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-07.png">desktop-pinelabs-07.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-08.png">desktop-pinelabs-08.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-09.png">desktop-pinelabs-09.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-10.png">desktop-pinelabs-10.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-11.png">desktop-pinelabs-11.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-12.png">desktop-pinelabs-12.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-13.png">desktop-pinelabs-13.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-14.png">desktop-pinelabs-14.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-15.png">desktop-pinelabs-15.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-16.png">desktop-pinelabs-16.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-17.png">desktop-pinelabs-17.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-18.png">desktop-pinelabs-18.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-pinelabs-19.png">desktop-pinelabs-19.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-01.png">desktop-razorpay-01.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-02.png">desktop-razorpay-02.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-03.png">desktop-razorpay-03.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-04.png">desktop-razorpay-04.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-05.png">desktop-razorpay-05.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-06.png">desktop-razorpay-06.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-07.png">desktop-razorpay-07.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-08.png">desktop-razorpay-08.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-09.png">desktop-razorpay-09.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-10.png">desktop-razorpay-10.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-11.png">desktop-razorpay-11.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-12.png">desktop-razorpay-12.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-13.png">desktop-razorpay-13.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-14.png">desktop-razorpay-14.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-15.png">desktop-razorpay-15.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-16.png">desktop-razorpay-16.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-17.png">desktop-razorpay-17.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-18.png">desktop-razorpay-18.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/desktop-razorpay-19.png">desktop-razorpay-19.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-01.png">mobile-paytm-01.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-02.png">mobile-paytm-02.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-03.png">mobile-paytm-03.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-04.png">mobile-paytm-04.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-05.png">mobile-paytm-05.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-06.png">mobile-paytm-06.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-07.png">mobile-paytm-07.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-08.png">mobile-paytm-08.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-09.png">mobile-paytm-09.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-10.png">mobile-paytm-10.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-11.png">mobile-paytm-11.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-12.png">mobile-paytm-12.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-13.png">mobile-paytm-13.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-14.png">mobile-paytm-14.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-15.png">mobile-paytm-15.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-16.png">mobile-paytm-16.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-17.png">mobile-paytm-17.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-18.png">mobile-paytm-18.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-paytm-19.png">mobile-paytm-19.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-01.png">mobile-pinelabs-01.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-02.png">mobile-pinelabs-02.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-03.png">mobile-pinelabs-03.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-04.png">mobile-pinelabs-04.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-05.png">mobile-pinelabs-05.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-06.png">mobile-pinelabs-06.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-07.png">mobile-pinelabs-07.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-08.png">mobile-pinelabs-08.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-09.png">mobile-pinelabs-09.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-10.png">mobile-pinelabs-10.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-11.png">mobile-pinelabs-11.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-12.png">mobile-pinelabs-12.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-13.png">mobile-pinelabs-13.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-14.png">mobile-pinelabs-14.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-15.png">mobile-pinelabs-15.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-16.png">mobile-pinelabs-16.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-17.png">mobile-pinelabs-17.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-18.png">mobile-pinelabs-18.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-pinelabs-19.png">mobile-pinelabs-19.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-01.png">mobile-razorpay-01.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-02.png">mobile-razorpay-02.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-03.png">mobile-razorpay-03.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-04.png">mobile-razorpay-04.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-05.png">mobile-razorpay-05.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-06.png">mobile-razorpay-06.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-07.png">mobile-razorpay-07.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-08.png">mobile-razorpay-08.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-09.png">mobile-razorpay-09.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-10.png">mobile-razorpay-10.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-11.png">mobile-razorpay-11.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-12.png">mobile-razorpay-12.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-13.png">mobile-razorpay-13.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-14.png">mobile-razorpay-14.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-15.png">mobile-razorpay-15.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-16.png">mobile-razorpay-16.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-17.png">mobile-razorpay-17.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-18.png">mobile-razorpay-18.png</a><span>PNG</span></li>
+<li><a href="payment-ui-journeys/screenshots/mobile-razorpay-19.png">mobile-razorpay-19.png</a><span>PNG</span></li></ul>
+</section>
+<section aria-labelledby="folder-25">
+<h2 id="folder-25">proposals <small>15 files</small></h2>
 <ul><li><a href="proposals/bytewiselogo.png">bytewiselogo.png</a><span>PNG</span></li>
 <li><a href="proposals/feature-comparison-amazon.html">feature-comparison-amazon.html</a><span>HTML</span></li>
 <li><a href="proposals/gap-analysis-future-roadmap.html">gap-analysis-future-roadmap.html</a><span>HTML</span></li>
@@ -290,26 +431,39 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="proposals/sara-user-journey-experience-marketing.pdf">sara-user-journey-experience-marketing.pdf</a><span>PDF</span></li>
 <li><a href="proposals/systechlogo.png">systechlogo.png</a><span>PNG</span></li></ul>
 </section>
-<section aria-labelledby="folder-23">
-<h2 id="folder-23">reports <small>5 files</small></h2>
+<section aria-labelledby="folder-26">
+<h2 id="folder-26">reports <small>5 files</small></h2>
 <ul><li><a href="reports/APP-STORE-REPORT.md">APP-STORE-REPORT.md</a><span>MD</span></li>
 <li><a href="reports/BUG-REPORT.md">BUG-REPORT.md</a><span>MD</span></li>
 <li><a href="reports/PLAY-STORE-REPORT.md">PLAY-STORE-REPORT.md</a><span>MD</span></li>
 <li><a href="reports/SECURITY-REPORT.md">SECURITY-REPORT.md</a><span>MD</span></li>
 <li><a href="reports/VULNERABILITY-REPORT.md">VULNERABILITY-REPORT.md</a><span>MD</span></li></ul>
 </section>
-<section aria-labelledby="folder-24">
-<h2 id="folder-24">security <small>7 files</small></h2>
+<section aria-labelledby="folder-27">
+<h2 id="folder-27">security <small>10 files</small></h2>
 <ul><li><a href="security/API_PROTECTION_QUICK_REF.md">API_PROTECTION_QUICK_REF.md</a><span>MD</span></li>
 <li><a href="security/AUTH_SECURITY_GUIDE.md">AUTH_SECURITY_GUIDE.md</a><span>MD</span></li>
+<li><a href="security/authentication-test-report.md">authentication-test-report.md</a><span>MD</span></li>
 <li><a href="security/BOT_DETECTION_GUIDE.md">BOT_DETECTION_GUIDE.md</a><span>MD</span></li>
+<li><a href="security/customer-data-code-review-2026-10-28.md">customer-data-code-review-2026-10-28.md</a><span>MD</span></li>
+<li><a href="security/order-payment-security.html">order-payment-security.html</a><span>HTML</span></li>
+<li><a href="security/registration-validation.md">registration-validation.md</a><span>MD</span></li>
 <li><a href="security/SECURITY_IMPLEMENTATION.md">SECURITY_IMPLEMENTATION.md</a><span>MD</span></li>
 <li><a href="security/SECURITY_QUICK_REFERENCE.md">SECURITY_QUICK_REFERENCE.md</a><span>MD</span></li>
-<li><a href="security/SECURITY_UI_PREVIEW.md">SECURITY_UI_PREVIEW.md</a><span>MD</span></li>
-<li><a href="security/order-payment-security.html">Order and payment security verification</a><span>HTML</span></li></ul>
+<li><a href="security/SECURITY_UI_PREVIEW.md">SECURITY_UI_PREVIEW.md</a><span>MD</span></li></ul>
 </section>
-<section aria-labelledby="folder-25">
-<h2 id="folder-25">spin-wheel <small>6 files</small></h2>
+<section aria-labelledby="folder-28">
+<h2 id="folder-28">seo <small>7 files</small></h2>
+<ul><li><a href="seo/CLAUDE-SEO-INTEGRATION.md">CLAUDE-SEO-INTEGRATION.md</a><span>MD</span></li>
+<li><a href="seo/FULL-PUBLIC-SEO-AUDIT.md">FULL-PUBLIC-SEO-AUDIT.md</a><span>MD</span></li>
+<li><a href="seo/GOOGLE-API-SETUP.md">GOOGLE-API-SETUP.md</a><span>MD</span></li>
+<li><a href="seo/public-content-findings.md">public-content-findings.md</a><span>MD</span></li>
+<li><a href="seo/public-metadata-findings.md">public-metadata-findings.md</a><span>MD</span></li>
+<li><a href="seo/SARA-SEO-GAPS.md">SARA-SEO-GAPS.md</a><span>MD</span></li>
+<li><a href="seo/SEO-TESTING-REPORT.md">SEO-TESTING-REPORT.md</a><span>MD</span></li></ul>
+</section>
+<section aria-labelledby="folder-29">
+<h2 id="folder-29">spin-wheel <small>6 files</small></h2>
 <ul><li><a href="spin-wheel/SPIN_RESPONSE_DATA_DEBUG.md">SPIN_RESPONSE_DATA_DEBUG.md</a><span>MD</span></li>
 <li><a href="spin-wheel/SPIN_WHEEL_DEBUG_INDEX.md">SPIN_WHEEL_DEBUG_INDEX.md</a><span>MD</span></li>
 <li><a href="spin-wheel/SPIN_WHEEL_DEBUG_MASTER.md">SPIN_WHEEL_DEBUG_MASTER.md</a><span>MD</span></li>
@@ -317,8 +471,8 @@ code{font-size:.87em;overflow-wrap:anywhere}footer{padding:20px 0;color:#475569;
 <li><a href="spin-wheel/SPIN_WHEEL_LOGGING_GUIDE.md">SPIN_WHEEL_LOGGING_GUIDE.md</a><span>MD</span></li>
 <li><a href="spin-wheel/SPIN_WHEEL_QUICK_REFERENCE.md">SPIN_WHEEL_QUICK_REFERENCE.md</a><span>MD</span></li></ul>
 </section>
-<section aria-labelledby="folder-26">
-<h2 id="folder-26">whatsapp <small>5 files</small></h2>
+<section aria-labelledby="folder-30">
+<h2 id="folder-30">whatsapp <small>5 files</small></h2>
 <ul><li><a href="whatsapp/OTP_WHATSAPP_DEBUG.md">OTP_WHATSAPP_DEBUG.md</a><span>MD</span></li>
 <li><a href="whatsapp/TEMPLATE_VERIFICATION_CHECKLIST.md">TEMPLATE_VERIFICATION_CHECKLIST.md</a><span>MD</span></li>
 <li><a href="whatsapp/WHATSAPP_FIX_APPLIED.md">WHATSAPP_FIX_APPLIED.md</a><span>MD</span></li>

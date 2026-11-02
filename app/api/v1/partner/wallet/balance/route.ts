@@ -3,7 +3,7 @@
  * GET /api/v1/partner/wallet/balance - Get wallet balance
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { getWalletByPartnerId } from '@/lib/partner/wallet';
 

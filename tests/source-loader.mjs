@@ -20,7 +20,7 @@ export function sourceLoader(overrides = {}, globals = {}) {
   }
   const context = vm.createContext({
     console, Buffer, Error, SyntaxError, TypeError, RangeError, TextEncoder, TextDecoder, URL, URLSearchParams, Headers, Request, Response, ReadableStream, AbortSignal, AbortController,
-    crypto: crypto.webcrypto, btoa, atob, setTimeout, clearTimeout,
+    crypto: crypto.webcrypto, btoa, atob, setTimeout, clearTimeout, structuredClone,
     process: { env, cwd: () => root },
     fetch: globals.fetch || (() => { throw new Error("Unexpected external network request in isolated test") }),
     ...globals.context,
@@ -37,7 +37,8 @@ export function sourceLoader(overrides = {}, globals = {}) {
     const source = fs.readFileSync(absolute, "utf8")
     const javascript = ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX },
-      fileName: absolute,
+      // Local ES modules also need CommonJS for this isolated VM loader.
+      fileName: absolute.replace(/\.mjs$/, ".js"),
     }).outputText
     const localRequire = (specifier) => {
       if (Object.hasOwn(overrides, specifier)) return overrides[specifier]

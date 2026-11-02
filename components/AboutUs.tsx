@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 
 export default function AboutUs() {
@@ -14,7 +15,7 @@ export default function AboutUs() {
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="md:order-2">
-            <img
+            <SiteImage loading="eager"
               src="https://placehold.co/600x400/003087/FFFFFF?text=About+Us"
               alt="About Sara Mobiles and Electronics "
               className="rounded-lg shadow-lg"

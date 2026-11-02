@@ -246,6 +246,7 @@ test("development catalogue seed defaults to preview and atomically rolls back a
   assert.equal((await response.json()).products.inserted, 1)
   assert.equal(products.length, 2)
   assert.ok(products.some(doc => doc.source === "manual"))
+  assert.equal(products.find(doc => doc.source === "excel").gstRate, 18)
   assert.ok(products.some(doc => doc.source === "excel" && doc.stock === 2))
   loader.env.NODE_ENV = "production"
   assert.equal((await route.POST(req({ apply: true }))).status, 404)
@@ -2179,7 +2180,7 @@ test("delivery estimator handles both legacy string and object restrictions with
     const effects = []
     const states = []
     const loader = sourceLoader({
-      react: { useState: initial => [initial, value => states.push(value)], useEffect: effect => effects.push(effect) },
+      react: { useState: initial => [initial, value => states.push(value)], useCallback: callback => callback, useEffect: effect => effects.push(effect) },
       "@/lib/store-data": { stores: [] },
       "@/lib/analytics": { analytics: { checkPincode: () => {} } },
     }, { fetch: async () => Response.json(rules),
@@ -2817,6 +2818,7 @@ test("Amazon create saves product and canonical specifications in one transactio
   assert.ok(Array.isArray(fixture.spec().reviews))
   assert.equal(fixture.product().price, 0)
   assert.equal(fixture.product().mrp, 0)
+  assert.equal(fixture.product().gstRate, 18)
   assert.equal(fixture.sessionsEnded(), 1)
 })
 
@@ -4911,27 +4913,25 @@ test("category list contracts preserve IDs/slugs and tolerate nullable legacy pr
   assert.equal(catalogCategoryListResponseSchema.safeParse([{ name: "Fixture" }]).success, false)
 })
 
-test("festival shelves render typed projected cards and preserve discounted-versus-full-shelf thresholds", async () => {
+test("festival shelves render public cards and preserve discounted-versus-full-shelf thresholds", async () => {
   const { createElement } = await import("react")
   const { renderToStaticMarkup } = await import("react-dom/server")
-  for (const [discountedCount, expectedCount, expectedQueries] of [[7, 12, 3], [8, 8, 2]]) {
-    const products = Array.from({ length: 12 }, (_, index) => ({ id: `fixture-${index}`, name: `Fixture product ${index}`, price: 100, image: "/fixture.png" }))
-    const queries = []
+  for (const [discountedCount, expectedCount] of [[7, 12], [8, 8]]) {
+    const products = Array.from({ length: 12 }, (_, index) => ({ id: `fixture-${index}`, name: `Fixture product ${index}`,
+      price: 100, mrp: index < discountedCount ? 150 : 100, stock: 5, image: "/fixture.png" }))
     const loader = sourceLoader({
       "@/components/Header": () => null,
       "@/components/Footer": () => null,
       "@/components/CategoryProductCard": ({ product }) => createElement("div", { "data-product-id": product.id }, product.name),
       "@/lib/seo-page": { pageMetadata: () => () => ({}) },
-      "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products", CATEGORIES: "categories" }, findMany: async (collection, filter, options) => {
-        queries.push({ collection, filter, options })
-        if (collection === "categories") return [{ id: "fixture-category", name: "Fixture category", slug: "fixture-category", image: null }]
-        assert.equal(options.projection.price, 1)
-        return filter.discount ? products.slice(0, discountedCount) : products
+      "@/lib/public-page-data": { getPublicPageProducts: async () => products },
+      "@/lib/db-service": { COLLECTIONS: { CATEGORIES: "categories" }, findMany: async collection => {
+        assert.equal(collection, "categories")
+        return [{ id: "fixture-category", name: "Fixture category", slug: "fixture-category", image: null }]
       } },
     })
     const html = renderToStaticMarkup(await loader.load("app/ganesh/page.tsx").default())
     assert.equal(Array.from(html.matchAll(/data-product-id=/g)).length, expectedCount)
-    assert.equal(queries.length, expectedQueries)
     assert.ok(html.includes('href="/category/fixture-category"'))
   }
 })
@@ -5919,7 +5919,7 @@ test("campaign progress rejects truncation, malformed events and inconsistent co
     assert.equal(events.some(event => event.type === "complete"), false)
     assert.equal(stream.locked, false)
   }
-  await assert.rejects(async () => { for await (const _event of readCampaignProgress(null)) {} }, /no progress stream/)
+  await assert.rejects(async () => { for await (const event of readCampaignProgress(null)) { assert.fail(`Unexpected event: ${event.type}`) } }, /no progress stream/)
 })
 
 test("order sequence initializes its documented starting number and increments existing counters atomically", async () => {

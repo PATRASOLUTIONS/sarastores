@@ -93,17 +93,7 @@ export default function ExcelUpload({
     }
   }
 
-  const addMissingFields = (rows: Record<string, unknown>[]) => {
-    return rows.map(row => {
-      const newRow = { ...row }
-      REQUIRED_COLUMNS.forEach(col => {
-        if (!(col in newRow)) {
-          newRow[col] = ""
-        }
-      })
-      return newRow
-    })
-  }
+
 
   const handleUpload = async (overwriteDuplicates = false) => {
     if (!file) return

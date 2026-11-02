@@ -23,7 +23,7 @@ interface Advertisement {
 export default function AdvertisementCarousel() {
   const [advertisements, setAdvertisements] = useState<Advertisement[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [, setError] = useState<string | null>(null)
 
   // Fetch advertisements
   useEffect(() => {

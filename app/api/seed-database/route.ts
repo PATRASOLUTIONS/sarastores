@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
 import { connectToDatabase } from "@/lib/mongodb"
 import { COLLECTIONS } from "@/lib/db-service"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
       const raw = buildSchemaSynchronizedRaw(r, normalized)
 
       return {
+        gstRate: DEFAULT_GST_RATE,
         // base fields used by UI
         name,
         description: normalized.description || buildDescription(r),

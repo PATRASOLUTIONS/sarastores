@@ -9,7 +9,7 @@ export async function OPTIONS() {
   return NextResponse.json({}, { status: 200 });
 }
 
-export async function POST(req: Request) {
+export async function POST(_req: Request) {
   if (process.env.NODE_ENV !== "development") {
     return NextResponse.json({ error: "Not available in production" }, { status: 404 });
   }

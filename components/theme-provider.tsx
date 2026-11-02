@@ -20,7 +20,7 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
 
   // Filter out any undefined or invalid props
   const safeProps = Object.fromEntries(
-    Object.entries(props).filter(([_, value]) => value !== undefined && value !== null)
+    Object.entries(props).filter(([, value]) => value !== undefined && value !== null)
   )
 
   return (

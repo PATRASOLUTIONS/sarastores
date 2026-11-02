@@ -31,17 +31,10 @@ export async function ProductJsonLdServer({ slug, origin }: { slug: string; orig
         "@type": "OfferShippingDetails",
         shippingRate: { "@type": "MonetaryAmount", value: product.price < shipping.freeShippingThreshold ? shipping.shippingFee : 0, currency: "INR" },
         shippingDestination: { "@type": "DefinedRegion", addressCountry: "IN" },
-        deliveryTime: {
-          "@type": "ShippingDeliveryTime",
-          handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 1, unitCode: "DAY" },
-          transitTime: { "@type": "QuantitativeValue", minValue: 1, maxValue: 7, unitCode: "DAY" },
-        },
       },
       hasMerchantReturnPolicy: {
         "@type": "MerchantReturnPolicy", applicableCountry: "IN",
-        returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
-        merchantReturnDays: 2, merchantReturnLink: `${origin}/returns`,
-        returnMethod: "https://schema.org/ReturnByMail",
+        merchantReturnLink: `${origin}/returns`,
       },
     } }),
     ...(product.rating && { aggregateRating: {

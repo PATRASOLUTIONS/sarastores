@@ -1,36 +1,20 @@
-"use client"
+import SiteImage from "@/components/SiteImage"
+import Link from "next/link"
+import { MapPin, Clock, Gift, Handshake } from "lucide-react"
+import { getPublicPageProducts } from "@/lib/public-page-data"
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 
-import { Phone, MapPin, Clock, Percent, CreditCard, Gift, Zap, Star, ShieldCheck, Truck } from "lucide-react"
-import Image from "next/image"
-import { motion } from "framer-motion"
-import {
-    Handshake,
-    Building2,
-    Tv,
-    Smartphone,
-    Laptop,
-    Home,
-    Mail,
-    ExternalLink,
-    ChevronRight,
-    Users,
-    Award,
-    TrendingUp,
-    CheckCircle2,
-    ArrowRight,
-    Sparkles,
-    Send
-} from "lucide-react"
+export const dynamic = "force-dynamic"
 
 /* ============================
    EDITABLE DATA — Change anything below
    ============================ */
 
 const SALE_CONFIG = {
-    title: "EPIC FULL MOON SALE",
-    subtitle: "UNLOCK THE POWER OF THE FULL MOON",
-    timing: { from: "9 AM", to: "12 MIDNIGHT", label: "ONLY" },
-    acBanner: "BUY ANY AC & GET A FREE SAFARI TROLLEY BAG WORTH ₹9,999",
+    title: "Epic Electronics & Appliance Picks",
+    subtitle: "EXPLORE CURRENT PRODUCT PRICES AND AVAILABILITY",
+    availability: "CHECK CURRENT STOCK AND OFFER TERMS",
+    acBanner: "See current offers and product-specific eligibility",
     shubhamStore: {
         name: "SHUBHAM",
         tagline: "The Electronic Shopee",
@@ -42,150 +26,16 @@ const SALE_CONFIG = {
     }
 }
 
-const PROMO_BADGES = [
-    { icon: "0%", title: "PROCESSING FEE", subtitle: "ZERO INTEREST! HIDDEN COSTS" },
-    { icon: "₹26K", title: "CASHBACK UP TO", subtitle: "On Credit & Debit Cards" },
-    { icon: "EMI", title: "EMI CARD", subtitle: "CREDIT / DEBIT CARD EMI" },
-    { icon: "24", title: "MONTHS", subtitle: "NO COST EMI" },
-]
-
-const PRODUCTS = [
-    {
-        name: "1.0 TON 3 STAR\nSPLIT AIR CONDITIONER",
-        image: "/products/ac.png",
-        discount: 49,
-        emiPerDay: 77,
-        offerPrice: "22,990",
-        mrp: "44,990",
-        offer: "Stabilizer & Standard Installation Worth ₹3,990",
-        brand: "SHARP",
-    },
-    {
-        name: "1.5 TON 3 STAR\nSPLIT AIR CONDITIONER",
-        image: "/products/ac.png",
-        discount: 54,
-        emiPerDay: 84,
-        offerPrice: "24,990",
-        mrp: "54,990",
-        offer: "TROLLEY BAG WORTH ₹9999 FOR ₹149",
-        brand: "SHARP",
-    },
-    {
-        name: '55" SMART 4K\nUHD LED TV',
-        image: "/products/tv.png",
-        discount: 65,
-        emiPerDay: 93,
-        offerPrice: "27,990",
-        mrp: "79,990",
-        offer: "AIWA AW-SS8120 Worth ₹13,990",
-        brand: "TCL",
-    },
-    {
-        name: "55 UHD SMART\nGOOGLE TV",
-        image: "/products/tv.png",
-        discount: 39,
-        emiPerDay: 119,
-        offerPrice: "42,990",
-        mrp: "69,990",
-        offer: null,
-        brand: "Haier",
-    },
-    {
-        name: "233 LITERS\nFROST FREE\nREFRIGERATOR",
-        image: "/products/fridge.png",
-        discount: 42,
-        emiPerDay: 51,
-        offerPrice: "18,499",
-        mrp: "31,990",
-        offer: "10% CASH BACK",
-        brand: "Samsung",
-    },
-    {
-        name: "563 LITERS\nSIDE BY SIDE",
-        image: "/products/sidebyside.png",
-        discount: 62,
-        emiPerDay: 133,
-        offerPrice: "39,900",
-        mrp: "99,990",
-        offer: null,
-        brand: "Haier",
-    },
-    {
-        name: "600 LITERS\nSIDE BY SIDE",
-        image: "/products/sidebyside.png",
-        discount: 62,
-        emiPerDay: 170,
-        offerPrice: "51,000",
-        mrp: "1,25,990",
-        offer: "MICROWAVE OVEN Worth ₹4,990",
-        brand: "LG",
-    },
-    {
-        name: "DISHWASHER",
-        image: "/products/dishwasher.png",
-        discount: 44,
-        emiPerDay: 67,
-        offerPrice: "19,990",
-        mrp: "35,890",
-        offer: "TROLLEY BAG WORTH ₹9999",
-        brand: "Bosch",
-    },
-    {
-        name: "SIEMENS 10 KG\nFRONT LOAD",
-        image: "/products/washer.png",
-        discount: 52,
-        emiPerDay: 130,
-        offerPrice: "39,000",
-        mrp: "79,990",
-        offer: "With ₹4000 CASH BACK",
-        brand: "Siemens",
-    },
-    {
-        name: "9 KG FRONT LOAD",
-        image: "/products/washer.png",
-        discount: 52,
-        emiPerDay: 94,
-        offerPrice: "28,000",
-        mrp: "58,990",
-        offer: "10% CASH BACK",
-        brand: "Samsung",
-    },
-    {
-        name: "iPhone 17\n(256GB)",
-        image: "/products/iphone.png",
-        discount: null,
-        emiPerDay: 115,
-        offerPrice: null,
-        mrp: null,
-        offer: "SAFARI TROLLEY BAG WORTH ₹9999 + ADOPTER ₹1899 + SCREEN GUARD",
-        brand: "Apple",
-    },
-    {
-        name: "SAMSUNG\nS26 ULTRA",
-        image: "/products/samsung-phone.png",
-        discount: null,
-        emiPerDay: 194,
-        offerPrice: null,
-        mrp: null,
-        offer: "₹19000 CASH BACK\nSAFARI TROLLEY BAG WORTH ₹9999",
-        brand: "Samsung",
-    },
-    {
-        name: "NOTE 15 PRO 5G\n(8GB+128GB)",
-        image: "/products/redmi.png",
-        discount: null,
-        emiPerDay: 48,
-        offerPrice: null,
-        mrp: null,
-        offer: "SAFARI TROLLEY BAG ₹9999",
-        brand: "Redmi",
-    },
-]
-
-const BRAND_LOGOS = [
-    "LG", "SAMSUNG", "Haier", "SHARP", "BOSCH", "Godrej",
-    "TCL", "Midea", "TOSHIBA", "vivo", "Xiaomi", "OPPO"
-]
+type SaleProduct = {
+    id: string
+    slug?: string
+    name: string
+    image: string
+    brand: string
+    discount: number
+    offerPrice: string
+    mrp: string | null
+}
 
 const STORE_LOCATIONS = [
     { area: "DEVARAJA URS ROAD", phone: "9620203966" },
@@ -199,7 +49,16 @@ const STORE_LOCATIONS = [
    PAGE COMPONENT
    ============================ */
 
-export default function EpicSalePage() {
+export default async function EpicSalePage() {
+    const catalogue = await getPublicPageProducts()
+    const products: SaleProduct[] = catalogue.filter(product => product.price > 0 && product.stock > 0)
+        .map(product => {
+            const mrp = Number(product.mrp) > product.price ? Number(product.mrp) : null
+            return { id: product.id, slug: product.slug, name: product.name, image: product.image || "/placeholder.svg",
+                brand: catalogueBrand(product), discount: mrp ? Math.floor((1 - product.price / mrp) * 100) : 0,
+                offerPrice: product.price.toLocaleString("en-IN"), mrp: mrp ? mrp.toLocaleString("en-IN") : null }
+        }).sort((left, right) => right.discount - left.discount).slice(0, 15)
+    const brands = [...new Set(products.map(product => product.brand).filter(Boolean))]
     return (
         <div className="min-h-screen bg-[#0a1628] text-white overflow-x-hidden">
             
@@ -215,7 +74,7 @@ export default function EpicSalePage() {
 
     {/* Optional Hero Image */}
     <div className="absolute right-0 bottom-0 w-[200px] h-[200px] md:w-[350px] md:h-[350px] opacity-80 pointer-events-none hidden md:block">
-        <img
+        <SiteImage loading="eager"
             src="/epic-sale-hero.png"
             alt="Shopping"
             className="w-full h-full object-contain object-bottom"
@@ -230,15 +89,9 @@ export default function EpicSalePage() {
                 <div className="inline-block border-2 border-amber-400/60 rounded-xl px-6 py-4 md:px-10 md:py-6 backdrop-blur-sm bg-black/20">
                     <h1 className="text-4xl md:text-6xl lg:text-7xl font-black leading-none">
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400">
-                            EPIC
+                            {SALE_CONFIG.title}
                         </span>
                     </h1>
-                    <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-white mt-1 leading-none">
-                        FULL MOON
-                    </h2>
-                    <h2 className="text-5xl md:text-7xl lg:text-8xl font-black leading-none text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-500 mt-1">
-                        SALE
-                    </h2>
                     <p className="text-xs text-amber-200/70 tracking-[0.3em] uppercase mt-2">
                         {SALE_CONFIG.subtitle}
                     </p>
@@ -247,16 +100,9 @@ export default function EpicSalePage() {
                 {/* Timing Badge */}
                 <div className="mt-6 inline-flex items-center gap-3 md:gap-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white px-5 py-3 rounded-full shadow-lg shadow-amber-500/30">
                     <Clock className="w-5 h-5" />
-                    <span className="font-black text-lg md:text-xl">
-                        {SALE_CONFIG.timing.from}
-                    </span>
-                    <span className="opacity-70 text-sm">to</span>
-                    <span className="font-black text-lg md:text-xl">
-                        {SALE_CONFIG.timing.to}
-                    </span>
-                    <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded-full">
-                        {SALE_CONFIG.timing.label}
-                    </span>
+                    <Link href="/products" className="font-bold text-sm md:text-base">
+                        {SALE_CONFIG.availability}
+                    </Link>
                 </div>
             </div>
 
@@ -319,16 +165,18 @@ export default function EpicSalePage() {
             <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 py-3 px-4">
                 <p className="text-center font-black text-base md:text-xl tracking-wide text-white">
                     <Gift className="w-5 h-5 inline mr-2 -mt-0.5" />
-                    {SALE_CONFIG.acBanner}
+                    <Link href="/offers" className="underline underline-offset-4">{SALE_CONFIG.acBanner}</Link>
                     <Gift className="w-5 h-5 inline ml-2 -mt-0.5" />
                 </p>
             </div>
 
             {/* ===== PRODUCT GRID ===== */}
             <section className="max-w-7xl mx-auto px-3 md:px-4 py-8 md:py-12">
+                <h2 className="mb-4 text-xl font-bold">Current catalogue picks</h2>
+                {products.length === 0 && <p className="mb-4">No available products are listed here right now. <Link href="/products" className="underline">Browse the catalogue</Link> or contact a store.</p>}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
-                    {PRODUCTS.map((product, i) => (
-                        <ProductCard key={i} product={product} />
+                    {products.map((product) => (
+                        <ProductCard key={product.id} product={product} />
                     ))}
                 </div>
             </section>
@@ -336,7 +184,7 @@ export default function EpicSalePage() {
             {/* ===== BRAND LOGOS ===== */}
             <div className="bg-white py-4 px-4">
                 <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-4 md:gap-8">
-                    {BRAND_LOGOS.map((brand, i) => (
+                    {brands.map((brand, i) => (
                         <span key={i} className="text-gray-800 font-black text-sm md:text-lg tracking-wider opacity-70 hover:opacity-100 transition-opacity">
                             {brand}
                         </span>
@@ -365,7 +213,12 @@ export default function EpicSalePage() {
                             ))}
                         </div>
                     </div>
-                    <p className="text-center text-[10px] text-blue-300/60 mt-6">* T&C apply. Offers valid till stocks last. Images are for representation purposes only.</p>
+                    <p className="text-center text-xs text-blue-100 mt-6">
+                        Product prices and stock can change. Review applicable <Link href="/offers" className="underline">offer terms</Link>,{" "}
+                        <Link href="/emi" className="underline">payment options</Link>,{" "}
+                        <Link href="/shipping-policy" className="underline">shipping policy</Link> and{" "}
+                        <Link href="/installation" className="underline">installation information</Link> before ordering.
+                    </p>
                 </div>
             </footer>
         </div>
@@ -376,9 +229,9 @@ export default function EpicSalePage() {
    PRODUCT CARD COMPONENT
    ============================ */
 
-function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
+function ProductCard({ product }: { product: SaleProduct }) {
     return (
-        <div className="group relative bg-white rounded-2xl overflow-hidden shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-black/30 transition-all duration-300 hover:-translate-y-1">
+        <Link href={`/product/${encodeURIComponent(product.slug || product.id)}`} className="group relative block bg-white rounded-2xl overflow-hidden shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-black/30 transition-all duration-300 hover:-translate-y-1">
             {/* Discount Badge */}
             {product.discount && (
                 <div className="absolute top-2 right-2 z-10">
@@ -397,7 +250,7 @@ function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
 
             {/* Image */}
             <div className="bg-gradient-to-b from-gray-50 to-white p-4 pt-8 pb-3 flex items-center justify-center h-36 md:h-44">
-                <img
+                <SiteImage
                     src={product.image}
                     alt={product.name.replace(/\n/g, " ")}
                     className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300"
@@ -412,18 +265,12 @@ function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
                     {product.name.replace(/\n/g, " ")}
                 </h3>
 
-                {/* EMI Badge */}
-                <div className="mt-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-[10px] md:text-xs font-bold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5">
-                    <Zap className="w-3 h-3" />
-                    EMI DAY <span className="text-amber-300 text-sm md:text-base font-black">₹{product.emiPerDay}</span>
-                </div>
-
                 {/* Prices */}
                 {product.offerPrice && (
                     <div className="mt-2">
                         <div className="flex items-baseline gap-2">
                             <span className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-[10px] md:text-xs font-bold px-2 py-1 rounded-md">
-                                Offer Price
+                                Current Price
                             </span>
                             <span className="text-green-700 font-black text-base md:text-lg">₹{product.offerPrice}</span>
                         </div>
@@ -436,18 +283,7 @@ function ProductCard({ product }: { product: typeof PRODUCTS[0] }) {
                     </div>
                 )}
 
-                {/* Free Offer */}
-                {product.offer && (
-                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                        <p className="text-[9px] md:text-[10px] font-bold text-amber-800 leading-tight">
-                            <Gift className="w-3 h-3 inline mr-1 -mt-0.5 text-amber-600" />
-                            {product.offer.split("\n").map((line, i) => (
-                                <span key={i}>{line}{i < product.offer!.split("\n").length - 1 && <br />}</span>
-                            ))}
-                        </p>
-                    </div>
-                )}
             </div>
-        </div>
+        </Link>
     )
 }

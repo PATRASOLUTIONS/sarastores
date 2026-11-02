@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -62,14 +63,14 @@ function parseProducts(data: unknown): HomeProduct[] {
   })
 }
 
-export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunch | null }) {
+export default function SaraLanding({ launch = null, initialProducts }: { launch?: HandshakeLaunch | null; initialProducts?: HomeProduct[] }) {
   const marketing = useMarketingContent("home")
-  const [products, setProducts] = useState<HomeProduct[]>([])
+  const [products, setProducts] = useState<HomeProduct[]>(initialProducts || [])
   const [stockedBrands, setStockedBrands] = useState<{ name: string; count: number }[]>([])
   const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
   const [brandImages, setBrandImages] = useState<Record<string, string>>({})
   const [storeCount, setStoreCount] = useState<number>()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialProducts)
   const [catalogueError, setCatalogueError] = useState<string>()
   const stripBanners = useBanners("home-strip")
   const duoBanners = useBanners("home-duo")
@@ -99,7 +100,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
   }, [])
 
   useEffect(() => {
-    void loadProducts()
+    if (!initialProducts) void loadProducts()
     // Fetched live, not from the client cache, so a brand that sells out
     // leaves the Top Brands rail on the next visit.
     fetchJson("/api/brands/in-stock")
@@ -122,7 +123,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
         if (data.length) setStoreCount(data.length)
       })
       .catch((error: unknown) => console.error("[Homepage] Could not load stores:", error))
-  }, [loadProducts])
+  }, [initialProducts, loadProducts])
 
   const brands = useMemo<HomeBrand[]>(() => {
     return stockedBrands
@@ -181,7 +182,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
     slug: item.slug,
     category: item.category,
     subCategory: item.subCategory ?? undefined,
-    brand: item.manufacturerName || item.brand || undefined,
+    brand: catalogueBrand(item) || undefined,
   })), [viewed])
 
   const similarToViewed = useMemo(() => {

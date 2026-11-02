@@ -2,8 +2,8 @@
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import BrandMarquee from "@/components/BrandMarquee";
-import HeroSection from "@/components/HeroSection";
+
+
 import Link from "next/link";
 
 const TermsAndConditionsPage = () => (

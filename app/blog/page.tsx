@@ -44,7 +44,7 @@ export default async function BlogIndexPage({
         <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">Buying guides &amp; advice</h1>
         <p className="mt-2 max-w-2xl text-gray-600">
           Honest, practical guidance on choosing electronics and home appliances — written by the
-          team that sells and services them across 85+ stores.
+          store and service teams.
         </p>
 
         {categories.length > 0 && (
@@ -87,7 +87,7 @@ export default async function BlogIndexPage({
           <>
             {featured && (
               <Link
-                href={`/blog/${featured.slug}`}
+                href={`/blog/${encodeURIComponent(featured.slug)}`}
                 className="mt-8 block overflow-hidden rounded-2xl border border-gray-200 bg-white transition-shadow hover:shadow-md md:flex"
               >
                 {featured.coverImage && (
@@ -121,7 +121,7 @@ export default async function BlogIndexPage({
                 {rest.map((article) => (
                   <li key={article.slug}>
                     <Link
-                      href={`/blog/${article.slug}`}
+                      href={`/blog/${encodeURIComponent(article.slug)}`}
                       className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
                     >
                       {article.coverImage && (

@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { ExternalLink, Loader2, Megaphone, Save, Upload } from "lucide-react"
@@ -139,7 +140,7 @@ export default function MarketingAdminPage() {
                     <textarea id={`marketing-${field.key}`} value={value} onChange={event => setValue(field.key, event.target.value)} rows={3} maxLength={6000} className={inputClass} /> :
                     <input id={`marketing-${field.key}`} value={value} onChange={event => setValue(field.key, event.target.value)} maxLength={field.type === "image" ? 600 : 6000} className={inputClass} />}
                   {field.type === "image" && <div className="mt-2 flex flex-wrap items-center gap-3">
-                    {value && <img src={value} alt={`${field.label} preview`} className="h-20 max-w-full rounded border bg-slate-50 object-contain" />}
+                    {value && <SiteImage unoptimized src={value} alt={`${field.label} preview`} className="h-20 max-w-full rounded border bg-slate-50 object-contain" />}
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-xs">{uploading === field.key ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}Upload image
                       <input type="file" accept="image/*" disabled={Boolean(uploading)} className="sr-only" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(field.key, file); event.target.value = "" }} />
                     </label>

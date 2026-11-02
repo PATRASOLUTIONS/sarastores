@@ -18,7 +18,7 @@ let pass = 0
 let fail = 0
 const report = (ok, label, detail = "") => {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label.padEnd(52)} ${detail}`)
-  ok ? pass++ : fail++
+  if (ok) { pass++; } else { fail++; }
 }
 
 console.log(`\n  SHEETJS VERIFICATION  (version ${XLSX.version})\n`)

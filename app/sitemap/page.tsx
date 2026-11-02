@@ -36,6 +36,7 @@ const GROUPS: { title: string; links: { href: string; label: string }[] }[] = [
       { href: "/shipping-policy", label: "Shipping Policy" },
       { href: "/warranty", label: "Warranty" },
       { href: "/installation", label: "Installation Support" },
+      { href: "/sara-care", label: "SARA Care" },
       { href: "/faq", label: "Help & FAQs" },
       { href: "/complaints", label: "Raise a Complaint" },
       { href: "/contact", label: "Contact Us" },

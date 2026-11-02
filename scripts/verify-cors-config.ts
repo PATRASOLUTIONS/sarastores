@@ -1,9 +1,9 @@
 
-import { createHash } from 'crypto';
+
 
 /**
  * Verification Script for CORS Configuration (allowedMethods)
- * 
+ *
  * Run this with: npx tsx scripts/verify-cors-config.ts
  */
 
@@ -13,12 +13,12 @@ async function verify() {
   // Since we can't easily run the actual server and DB in this environment easily,
   // we will perform a mock check of the logic we implemented.
 
-  const validMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'];
-  
+
+
   // 1. Check getCorsHeaders logic
   const mockAllowedMethods = ['GET', 'OPTIONS'];
   const methodsHeader = mockAllowedMethods.join(', ');
-  
+
   if (methodsHeader === 'GET, OPTIONS') {
     console.log('✅ getCorsHeaders correctly joins methods');
   } else {
@@ -40,7 +40,7 @@ async function verify() {
   console.log('3. app/api/v1/partner/api-keys/domains: Added management of allowedMethods');
   console.log('4. middleware.ts: Removed hardcoded CORS, now handled by specific route handlers');
   console.log('5. Documentation updated in app/partner-api-docs and app/partner-api-test');
-  
+
   console.log('\nVerification complete.');
 }
 

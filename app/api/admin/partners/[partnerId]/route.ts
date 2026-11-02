@@ -16,7 +16,7 @@ import {
 } from '@/lib/partner/service';
 import { getWalletByPartnerId } from '@/lib/partner/wallet';
 import { listPartnerAPIKeys } from '@/lib/partner/api-keys';
-import { getCollection } from '@/lib/db-service';
+
 import { publicRazorpayIntegration } from '@/lib/partner/razorpay-integration';
 import { UpdateAdminPartnerSchema, RegisterPartnerSchema } from '@/lib/validation';
 

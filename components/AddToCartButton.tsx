@@ -41,10 +41,10 @@ export default function AddToCartButton({
 }: AddToCartButtonProps) {
   const [quantity, setQuantity] = useState(initialQuantity)
   const [isAdding, setIsAdding] = useState(false)
-  const { cart, addToCart, updateQuantity } = useCart()
-  const { isAuthenticated } = useAuth()
+  const { cart, addToCart } = useCart()
+  useAuth();
   const { openCart, setLastAddedId } = useCartUI()
-  const router = useRouter()
+  useRouter();
 
   const cartItem = cart.find(
     (item) => 

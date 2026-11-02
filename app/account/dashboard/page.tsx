@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -164,7 +165,7 @@ export default function UserDashboard() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                             {order.items.slice(0, 3).map((item, index) => (
                               <div key={`${item.id}-${index}`} className="flex items-center space-x-4">
-                                <img
+                                <SiteImage unoptimized
                                   src={item.image || "/placeholder.svg"}
                                   alt={item.name}
                                   className="w-16 h-16 object-cover rounded"

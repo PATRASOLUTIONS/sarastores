@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, useRef } from "react"
 import { use } from "react" // Add this import
@@ -152,7 +153,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
   const [isCancelling, setIsCancelling] = useState(false)
   const [isAssigningLicense, setIsAssigningLicense] = useState(false)
   const [isRetryingExternal, setIsRetryingExternal] = useState(false)
-  const [retryResult, setRetryResult] = useState<Record<string, unknown> | null>(null)
+  const [, setRetryResult] = useState<Record<string, unknown> | null>(null)
   const [externalDetails, setExternalDetails] = useState<ExternalDetail[]>([])
   const [placedVouchers, setPlacedVouchers] = useState<Voucher[] | null>(null)
   const [showPlacedModal, setShowPlacedModal] = useState(false)
@@ -509,7 +510,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
       // Immediately update order state with returned license key so UI reflects assignment without waiting
       // support multiple assigned keys
       const assignedKeys: string[] = data?.data?.licenseKeys || data?.licenseKeys || (data?.data?.licenseKey ? [data.data.licenseKey] : (data?.licenseKey ? [data.licenseKey] : []))
-      const emailResults = data?.data?.results || data?.results || null
+
 
       if (assignedKeys && assignedKeys.length > 0) {
         setOrder((prev) => {
@@ -654,14 +655,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
     )
   }
 
-  const LicenseAssignmentModal = ({
-    isOpen,
-    onClose,
-    onSubmit,
-    isProcessing,
-    softwareItems,
-    orderId
-  }: {
+  const LicenseAssignmentModal = ({ isOpen, onClose, onSubmit, isProcessing, softwareItems }: {
     isOpen: boolean
     onClose: () => void
     onSubmit: (softwareId: string, validity: number, maxDevices: number, orderId?: string, quantity?: number) => void
@@ -711,7 +705,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                       try {
                         navigator.clipboard?.writeText(order?.orderId || id || '')
                         toast.success('Order ID copied to clipboard')
-                      } catch (e) {
+                      } catch {
                         // fallback: prompt copy
                         prompt('Order ID', order?.orderId || id || '')
                       }
@@ -946,7 +940,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                       <div key={index} className="flex items-center justify-between">
                         <div className="flex items-center">
                           <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border border-gray-200">
-                            <img
+                            <SiteImage unoptimized
                               src={item.image || "/placeholder.svg?height=80&width=80"}
                               alt={item.name}
                               className="h-full w-full object-cover object-center"
@@ -1342,7 +1336,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                       const text = vouchers.map((v, idx) => `${idx + 1}. ${v.voucherCode || v.code || v.voucher || ''}${v.voucherPin ? ' | PIN: ' + v.voucherPin : ''}`).join('\n')
                                       await navigator.clipboard?.writeText(text)
                                       toast.success('Vouchers copied to clipboard')
-                                    } catch (e) {
+                                    } catch {
                                       // ignore clipboard errors
                                     }
                                   }
@@ -1426,7 +1420,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                 const qids = (((order as unknown as Record<string, unknown>).externalQueue as ExternalQueueEntry[]) || []).filter((q) => q.provider === 'exlr8').map((q) => q.queueId || q.id).filter(Boolean).join('\n')
                                 navigator.clipboard?.writeText(qids || '')
                                 toast.success('Copied external queue IDs to clipboard')
-                              } catch (e) {
+                              } catch {
                                 prompt('Queue IDs', (((order as unknown as Record<string, unknown>).externalQueue as ExternalQueueEntry[]) || []).map((q) => q.queueId || q.id).join('\n'))
                               }
                             }}
@@ -1460,7 +1454,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                   try {
                                     navigator.clipboard?.writeText(JSON.stringify(ed.data?.response || ed.data || ed, null, 2))
                                     toast.success('Copied external response')
-                                  } catch (e) {
+                                  } catch {
                                     prompt('External response', JSON.stringify(ed.data?.response || ed.data || ed, null, 2))
                                   }
                                 }}
@@ -1481,7 +1475,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                   }
                                   const text = vouchers.map((v, idx) => `${idx + 1}. ${v.voucherCode || v.code || v.voucher || ''} ${v.voucherPin ? ' | PIN: ' + v.voucherPin : ''} ${v.expirationDate ? ' | exp: ' + v.expirationDate : ''}`).join('\n')
                                   // try clipboard first
-                                  try { navigator.clipboard?.writeText(text); toast.success('Vouchers copied to clipboard') } catch (e) { prompt('Vouchers', text) }
+                                  try { navigator.clipboard?.writeText(text); toast.success('Vouchers copied to clipboard') } catch { prompt('Vouchers', text) }
                                 }}
                                 className="px-2 py-1 bg-blue-600 text-white rounded text-sm"
                               >
@@ -1546,7 +1540,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                             const text = order.licenseKeys && order.licenseKeys.length > 0 ? order.licenseKeys.join('\n') : (order.licenseKey || '')
                             navigator.clipboard?.writeText(text)
                             toast.success('License key(s) copied to clipboard')
-                          } catch (e) {
+                          } catch {
                             // fallback for older browsers
                             prompt('License Key(s)', order.licenseKeys && order.licenseKeys.length > 0 ? order.licenseKeys.join('\n') : (order.licenseKey || ''))
                           }
@@ -1782,7 +1776,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
               </ul>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => { try { navigator.clipboard?.writeText(placedVouchers.map((v, i) => `${i + 1}. ${v.voucherCode || v.code || v.voucher || ''}${v.voucherPin ? ' | PIN: ' + v.voucherPin : ''}`).join('\n')); toast.success('Copied'); } catch (e) { } }} className="px-3 py-2 bg-white border rounded">Copy</button>
+              <button onClick={() => { try { navigator.clipboard?.writeText(placedVouchers.map((v, i) => `${i + 1}. ${v.voucherCode || v.code || v.voucher || ''}${v.voucherPin ? ' | PIN: ' + v.voucherPin : ''}`).join('\n')); toast.success('Copied'); } catch { } }} className="px-3 py-2 bg-white border rounded">Copy</button>
               <button onClick={() => setShowPlacedModal(false)} className="px-3 py-2 bg-blue-600 text-white rounded">Close</button>
             </div>
           </div>

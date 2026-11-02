@@ -17,7 +17,6 @@ import {
   buildPriceRails,
   buildCategoryTiles,
   buildBrandList,
-  pickSpotlights,
   isInStock,
   type Rail,
   type CatalogProduct,
@@ -139,7 +138,7 @@ export default function HomeExperience() {
 
   const categoryTiles = buildCategoryTiles(catalogProducts)
   const brands = buildBrandList(catalogProducts)
-  const spotlights = pickSpotlights(catalogProducts, 3)
+
   const memberDeals = buildMemberDeals(catalogProducts)
   const railsFirst = extraRails.slice(0, 2)
   const railsRest = extraRails.slice(2)

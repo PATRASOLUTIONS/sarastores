@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import type { CountdownParts, HandshakeLaunch } from "@/lib/handshake"
@@ -272,7 +273,7 @@ function LaunchLogos({ celebrate = false }: { celebrate?: boolean }) {
       transition={{ duration: 0.6 }}
     >
       <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-white p-1.5 shadow-lg sm:h-20 sm:w-20">
-        <img src="/bytewise-logo.png" alt="Bytewise Consulting" className="h-full w-full object-contain" />
+        <SiteImage loading="eager" src="/bytewise-logo.png" alt="Bytewise Consulting" className="h-full w-full object-contain" />
       </span>
       <motion.span
         className="shrink-0 text-lg font-semibold text-[#FF6A2C]"
@@ -283,7 +284,7 @@ function LaunchLogos({ celebrate = false }: { celebrate?: boolean }) {
         ×
       </motion.span>
       <span className="flex h-16 w-40 shrink-0 items-center justify-center rounded-2xl bg-white px-3 shadow-lg sm:h-20 sm:w-52">
-        <img src="/sara-logo.png" alt="Sara Stores" width={4422} height={1182} className="h-9 w-full object-contain sm:h-11" />
+        <SiteImage loading="eager" src="/sara-logo.png" alt="Sara Stores" width={4422} height={1182} className="h-9 w-full object-contain sm:h-11" />
       </span>
     </motion.div>
   )

@@ -1,42 +1,15 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import QRCode from "qrcode"
 import { generateA5Pamphlet, generateSinglePamphlet } from "@/lib/qr-pamphlet"
 import type { QRType } from "@/lib/qr-pamphlet"
 import type { LucideIcon } from "lucide-react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "react-hot-toast"
 import Link from "next/link"
-import {
-  QrCode,
-  Plus,
-  Trash2,
-  Edit,
-  X,
-  Save,
-  Download,
-  MapPin,
-  MessageCircle,
-  Instagram,
-  BarChart3,
-  Eye,
-  Clock,
-  Search,
-  RefreshCw,
-  ExternalLink,
-  Copy,
-  Check,
-  ToggleLeft,
-  ToggleRight,
-  Store,
-  Smartphone,
-  TrendingUp,
-  Activity,
-  Layers,
-  FileDown,
-  Loader2,
-} from "lucide-react"
+import { QrCode, Plus, Trash2, X, Download, MapPin, MessageCircle, Instagram, BarChart3, Clock, Search, RefreshCw, Copy, Check, ToggleLeft, ToggleRight, Store, Smartphone, TrendingUp, Activity, Layers, FileDown, Loader2 } from "lucide-react"
 
 interface StoreLocation {
   id: string
@@ -587,7 +560,7 @@ export default function StoreQRPage() {
                 <div className="p-4">
                   {qr.qrDataUrl ? (
                     <div className="flex justify-center mb-3">
-                      <img
+                      <SiteImage unoptimized
                         src={qr.qrDataUrl}
                         alt={`QR - ${config.label}`}
                         className="w-36 h-36 border border-gray-100 rounded-lg"
@@ -848,7 +821,7 @@ export default function StoreQRPage() {
                     />
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
-                    This may take a few minutes for 70+ stores
+                    This may take a few minutes for 90+ stores
                   </p>
                 </div>
               ) : (

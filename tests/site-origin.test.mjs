@@ -36,7 +36,7 @@ function metadataFixture(env = {}, requestHeaders = {}, throwHeaders = false) {
 test("a scheme-less site URL generates metadata for the static 404 without request headers", async () => {
   const f = metadataFixture({ NEXT_PUBLIC_SITE_URL: "sarastores.com", NODE_ENV: "production" }, {}, true)
   const origin = await f.metadata.getOriginFromHeaders()
-  assert.equal(origin, "https://sarastores.com")
+  assert.equal(origin, "https://www.sarastores.com")
   assert.equal(f.reads(), 0)
   const result = f.metadata.buildPageMetadata({ title: "Page Not Found", description: "404", pageUrl: origin, origin, companyName: "Sara" })
   assert.equal(result.metadataBase.origin, origin)
@@ -57,12 +57,23 @@ test("request origins and safe defaults handle missing or invalid configuration"
   const local = metadataFixture({}, { host: "localhost:3005" })
   assert.equal(await local.metadata.getOriginFromHeaders(), "http://localhost:3005")
   const invalid = metadataFixture({ NODE_ENV: "production" }, { host: "[invalid]" })
-  assert.equal(await invalid.metadata.getOriginFromHeaders(), "https://sarastores.com")
+  assert.equal(await invalid.metadata.getOriginFromHeaders(), "https://www.sarastores.com")
   assert.equal(await metadataFixture().metadata.getOriginFromHeaders(), "http://localhost:3000")
 })
 
 test("the other metadata generator uses the same validated configuration", () => {
   const { loader } = metadataFixture({ NEXT_PUBLIC_SITE_URL: "sarastores.com" })
   const seo = loader.load("lib/seo.tsx")
-  assert.equal(seo.generateMetadata({ title: "Sara", description: "Shop" }).metadataBase.origin, "https://sarastores.com")
+  assert.equal(seo.generateMetadata({ title: "Sara", description: "Shop" }).metadataBase.origin, "https://www.sarastores.com")
+})
+
+test("both Sara hosts share the deployed canonical and the apex redirect preserves paths", async () => {
+  for (const origin of ["https://sarastores.com", "https://www.sarastores.com"]) {
+    assert.equal(await metadataFixture({ NEXT_PUBLIC_SITE_URL: origin }).metadata.getOriginFromHeaders(), "https://www.sarastores.com")
+  }
+  const { default: config } = await import("../next.config.mjs")
+  const [redirect] = await config.redirects()
+  assert.equal(redirect.has[0].value, "sarastores.com")
+  assert.equal(redirect.destination, "https://www.sarastores.com/:path*")
+  assert.equal(redirect.permanent, true)
 })

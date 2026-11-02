@@ -8,7 +8,7 @@ import { useState, useEffect } from "react"
 
 export default function VendorSidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (open: boolean) => void }) {
   const pathname = usePathname()
-  const { logout, user } = useAuth()
+  const { logout } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
   const [isLaptopCollapsed, setIsLaptopCollapsed] = useState(false)
 

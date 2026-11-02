@@ -29,7 +29,7 @@ export async function generateMetadata({
   const companyName = getCompanyName(settings)
   return buildPageMetadata({
     title: `${store.name}, ${store.city} | ${companyName}`,
-    description: `Visit ${store.name} in ${store.city}. ${store.address} Opening hours: ${store.hours}. Get directions and contact the showroom.`,
+    description: `Visit ${store.name} in ${store.city}.${store.address ? ` ${store.address}` : ""} ${store.hours ? `Opening hours: ${store.hours}.` : "Contact the store for opening hours."} Get directions and contact the showroom.`,
     pageUrl: `${origin}/stores/${store.citySlug}/${store.slug}`,
     origin, companyName, imageUrl: store.image,
   })
@@ -94,7 +94,7 @@ export default async function StoreDetailPage({
 
               <p className="flex items-center gap-3 text-gray-700">
                 <Clock className="h-5 w-5 shrink-0 text-brand-primary" />
-                {store.hours}
+                {store.hours || "Contact the store for opening hours"}
               </p>
 
               {store.phone && (

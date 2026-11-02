@@ -112,7 +112,7 @@ async function scrapeAmazon(url) {
 }
 
 // Vercel API handler
-export default async (req, res) => {
+const amazonScraperExports = async (req, res) => {
     const { url } = req.query;
     if (!url) {
         res.status(400).json({ error: "Missing url parameter" });
@@ -124,4 +124,6 @@ export default async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message || "Scraping failed" });
     }
-};
+}
+
+export default amazonScraperExports

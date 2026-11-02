@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { CreditCard, AlertCircle, Check, ArrowLeft, ArrowRight } from "lucide-react"
+import { CreditCard, AlertCircle, Check, ArrowRight } from "lucide-react"
 import type { IncomingItem } from "@/lib/order-pricing"
 import { RazorpayOrderResponseSchema, RazorpayVerificationResponseSchema, type RazorpayCheckoutOptions } from "@/types/razorpay"
 import { HostedCheckoutResponseSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"

@@ -17,7 +17,7 @@
  */
 
 import { mkdir, writeFile, readdir } from "node:fs/promises"
-import { existsSync } from "node:fs"
+
 import path from "node:path"
 
 const args = process.argv.slice(2)

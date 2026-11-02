@@ -85,6 +85,7 @@ test("order tracking never matches on a customer email or phone number", async (
   const queries = []
   const order = {
     _id: "fixture-order",
+    userId: "fixture-owner",
     orderId: "SARAECOM-00100001",
     status: "shipped",
     createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -97,6 +98,8 @@ test("order tracking never matches on a customer email or phone number", async (
     },
   }
   const route = sourceLoader({
+    "@/lib/auth": { requireUser: async () => ({ ok: true, user: { id: "fixture-owner", role: "user" } }) },
+    "@/lib/guest-order-linking": { linkGuestOrdersToAccount: async () => {} },
     "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: () => collection } }) },
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }) },
   }).load("app/api/orders/track/route.ts")
@@ -106,6 +109,13 @@ test("order tracking never matches on a customer email or phone number", async (
 
   // A real order ID still resolves.
   assert.equal((await track(order.orderId)).status, 200)
+
+  // A valid identifier still cannot expose another account's order.
+  order.userId = "another-fixture-owner"
+  const forbidden = await track(order.orderId)
+  assert.equal(forbidden.status, 404)
+  assert.equal(forbidden.headers.get("cache-control"), "private, no-store")
+  order.userId = "fixture-owner"
 
   // Knowing the shopper's email address or mobile number must not.
   assert.equal((await track(order.customer.email)).status, 404)
@@ -118,6 +128,7 @@ test("order tracking never matches on a customer email or phone number", async (
 
 test("order tracking refuses to answer once the caller exceeds its budget", async () => {
   const route = sourceLoader({
+    "@/lib/auth": { requireUser: async () => ({ ok: true, user: { id: "fixture-owner", role: "user" } }) },
     "@/lib/mongodb": { connectToDatabase: async () => { throw new Error("must not reach the database") } },
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: false, retryAfter: 42 }) },
   }).load("app/api/orders/track/route.ts")
@@ -125,6 +136,17 @@ test("order tracking refuses to answer once the caller exceeds its budget", asyn
   const response = await route.GET(new Request("https://fixture.invalid/api/orders/track?orderId=SARAECOM-1"))
   assert.equal(response.status, 429)
   assert.equal(response.headers.get("retry-after"), "42")
+})
+
+test("unauthenticated tracking cannot reach the rate limiter or database", async () => {
+  const deny = () => { throw new Error("unauthenticated request reached infrastructure") }
+  const route = sourceLoader({
+    "@/lib/auth": { requireUser: async () => ({ ok: false, response: new Response(null, { status: 401 }) }) },
+    "@/lib/mongodb": { connectToDatabase: deny },
+    "@/lib/rate-limit": { checkRateLimit: deny },
+    "@/lib/guest-order-linking": { linkGuestOrdersToAccount: deny },
+  }).load("app/api/orders/track/route.ts")
+  assert.equal((await route.GET(new Request("https://fixture.invalid/api/orders/track?orderId=SARAECOM-1"))).status, 401)
 })
 
 test("the contact endpoint will not relay mail to a malformed recipient", async () => {

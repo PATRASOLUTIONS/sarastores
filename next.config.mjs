@@ -1,7 +1,10 @@
+import { remoteImagePatterns } from "./lib/image-sources.mjs"
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || "tsconfig.json" },
   // Next spawns one static-generation worker per CPU by default, which exhausts
   // memory on smaller build machines. Override with NEXT_BUILD_CPUS if needed.
   experimental: {
@@ -16,37 +19,16 @@ const nextConfig = {
     // A trailing `hostname: "**"` used to sit at the end of remotePatterns,
     // which let any host through the optimizer and turned it into an open
     // image proxy. Add real hosts here instead of restoring the wildcard.
-    remotePatterns: [
-      { protocol: "https", hostname: "firebasestorage.googleapis.com" },
-      { protocol: "https", hostname: "**.googleusercontent.com" },
-      { protocol: "https", hostname: "**.gstatic.com" },
-      { protocol: "https", hostname: "placehold.co" },
-      { protocol: "https", hostname: "via.placeholder.com" },
-      { protocol: "https", hostname: "images.unsplash.com" },
-      { protocol: "https", hostname: "m.media-amazon.com" },
-      { protocol: "https", hostname: "**.media-amazon.com" },
-      { protocol: "https", hostname: "images-na.ssl-images-amazon.com" },
-      { protocol: "https", hostname: "static.wixstatic.com" },
-      { protocol: "https", hostname: "**.cloudfront.net" },
-      { protocol: "https", hostname: "**.blob.core.windows.net" },
-      { protocol: "https", hostname: "res.cloudinary.com" },
-      { protocol: "https", hostname: "**.vercel-storage.com" },
-      // Product-source CDNs the scrapers return URLs from. Without these,
-      // next/image rejects every scraped image with a 400.
-      { protocol: "https", hostname: "**.flixcart.com" },
-      { protocol: "https", hostname: "**.jiostore.online" },
-      { protocol: "https", hostname: "**.fynd.com" },
-      { protocol: "https", hostname: "**.bsh-group.com" },
-      { protocol: "https", hostname: "**.bosch-home.com" },
-      { protocol: "https", hostname: "**.paiinternational.in" },
-      { protocol: "https", hostname: "**.vijaysales.com" },
-      { protocol: "https", hostname: "www.lg.com" },
-      { protocol: "https", hostname: "electronicparadise.in", pathname: "/cdn/shop/**" },
-    ],
+    remotePatterns: remoteImagePatterns,
     minimumCacheTTL: 60 * 60 * 24 * 30,
   },
 
   compress: true,
+
+  async redirects() {
+    return [{ source: '/:path*', has: [{ type: 'host', value: 'sarastores.com' }],
+      destination: 'https://www.sarastores.com/:path*', permanent: true }]
+  },
 
   // Security Headers
   async headers() {

@@ -33,7 +33,7 @@ export default function SiteFeatures() {
                     const data = await res.json()
                     setFeatures(data)
                 }
-            } catch (err) {
+            } catch {
                 console.error("Failed to load site features")
             } finally {
                 setLoading(false)

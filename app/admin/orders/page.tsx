@@ -2,12 +2,12 @@
 
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
-import { Search, ArrowUpDown, Eye, Edit, Mail, MessageCircle, Store, X } from "lucide-react"
+import { Search, ArrowUpDown, Eye, Mail, MessageCircle, Store, X } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import * as XLSX from "xlsx"
-import { products } from "@/lib/mock-data"
+
 import BulkStatusUpload from "@/components/admin/BulkStatusUpload"
 import PaymentBadge from "@/app/components/PaymentBadge"
 import OrderNotificationEmails from "@/components/admin/OrderNotificationEmails"
@@ -563,17 +563,7 @@ export default function AdminOrders() {
   }
 
   // Download an Excel template for bulk status upload
-  const handleDownloadTemplate = () => {
-    console.log("[Admin Orders] 📥 Template download requested")
-    const columns = ["Order ID", "Status", "Tracking Number"]
-    const example = [
-      { "Order ID": "order_12345", Status: "shipped", "Tracking Number": "TRACK123456" },
-    ]
-    const ws = XLSX.utils.json_to_sheet(example, { header: columns })
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Template")
-    XLSX.writeFile(wb, "bulk_status_template.xlsx")
-  }
+
 
   if (authLoading) return null
 

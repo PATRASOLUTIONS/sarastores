@@ -48,16 +48,7 @@ interface CategorySEO {
   productCount?: number;
 }
 
-interface ArticleSEO {
-  title: string;
-  description: string;
-  image?: string;
-  url: string;
-  author?: string;
-  publishedTime?: string;
-  modifiedTime?: string;
-  tags?: string[];
-}
+
 
 interface BreadcrumbItem {
   name: string;
@@ -88,7 +79,7 @@ interface OrganizationSEO {
 export const siteConfig: SiteConfig = {
   name: 'Sara Electronics',
   description: 'Your one-stop shop for electronics, appliances, and more. Quality products at competitive prices with fast delivery across India.',
-  url: getConfiguredSiteOrigin() || 'https://sarastores.com',
+  url: getConfiguredSiteOrigin() || 'https://www.sarastores.com',
   ogImage: '/og',
   twitter: '@saraelectronics',
   locale: 'en_IN',
@@ -498,7 +489,7 @@ export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export default {
+const seoExports = {
   siteConfig,
   generateMetadata,
   generateProductMetadata,
@@ -521,4 +512,6 @@ export default {
   getCategoryUrl,
   truncateForMeta,
   stripHtml,
-};
+}
+
+export default seoExports

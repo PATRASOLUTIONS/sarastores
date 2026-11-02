@@ -72,7 +72,7 @@ async function runFixed(paths, concurrency, durationMs) {
       const r = await request(paths[i++ % paths.length])
       lat.push(r.ms)
       bytes += r.bytes
-      r.ok ? done++ : failed++
+      if (r.ok) { done++; } else { failed++; }
     }
   }
   const t0 = performance.now()

@@ -667,6 +667,14 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked", 
         return [states[current], value => { states[current] = typeof value === "function" ? value(states[current]) : value }]
       },
       useRef: initial => states[slot({ current: initial })],
+      useCallback: (callback, dependencies) => {
+        const current = slot({ callback, dependencies })
+        const previous = states[current]
+        if (dependencies.some((value, i) => !Object.is(value, previous.dependencies[i]))) {
+          states[current] = { callback, dependencies }
+        }
+        return states[current].callback
+      },
       useEffect: effect => { if (!mounted) effects.push(effect) },
     },
     "./checkout.module.css": {},

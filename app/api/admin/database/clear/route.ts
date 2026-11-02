@@ -5,7 +5,7 @@ import { checkAdminAuthorization } from "@/lib/auth";
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function POST(request: Request) {
+export async function POST(_request: Request) {
   try {
     const auth = await checkAdminAuthorization();
     if (!auth.authorized) {

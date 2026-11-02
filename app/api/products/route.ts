@@ -1,11 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getAll, create, COLLECTIONS, findOne, update, count, getCollection, normalizeId } from "@/lib/db-service"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
+import { create, COLLECTIONS, findOne, update, count, getCollection, normalizeId } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
 import { generateProductSlug } from "@/utils/slug"
 import { withProductDisplay } from "@/lib/product-presenter"
 import { isAdmin, requireAdmin } from "@/lib/auth"
 import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 
 interface ProductFilter {
   category?: string
@@ -153,12 +155,13 @@ export async function GET(request: NextRequest) {
         slug: 1, name: 1, price: 1, mrp: 1, image: 1, stock: 1,
         category: 1, subCategory: 1, brand: 1,
         // The merchandising hierarchy the menu and storefront filters use.
-        division: 1, segment: 1,
+        division: 1, segment: 1, taxonomySource: 1,
         manufacturerName: 1, manufacturer_name: 1,
         rating: 1, reviews: 1, discount: 1, originalPrice: 1,
         sku: 1, active: 1, featured: 1, trusted: 1, specification_images: 1,
         // Nested keys keep the MRP fallback below working without the whole blob.
         "raw.MRP": 1, "raw.mrp": 1, "raw.M.R.P": 1,
+        "raw.Brand": 1, "raw.Division": 1, "raw.Manufacturer Name": 1, "raw.Manufacturer": 1,
       }
     }
     if (adminListing) {
@@ -185,8 +188,14 @@ export async function GET(request: NextRequest) {
       products = normalizeId(documents)
       total = matchedCount
     } else {
-      products = await getAll(COLLECTIONS.PRODUCTS, filter, options)
-      total = await count(COLLECTIONS.PRODUCTS, filter)
+      const listingFilter = includeInactive ? filter : await publicCatalogueFilter(filter)
+      const [documents, matchedCount] = await Promise.all([
+        (await getCollection(COLLECTIONS.PRODUCTS)).find(listingFilter, { projection: options.projection })
+          .sort({ _id: 1 }).skip(skip).limit(effectiveLimit).toArray(),
+        count(COLLECTIONS.PRODUCTS, listingFilter),
+      ])
+      products = normalizeId(documents)
+      total = matchedCount
     }
 
     // Native clients cannot run the React helpers the web uses to derive MRP,
@@ -310,6 +319,7 @@ export async function POST(request: NextRequest) {
     const syncedRaw = buildSchemaSynchronizedRaw(raw || {}, canonicalFromBody)
 
     const newProduct = {
+      gstRate: DEFAULT_GST_RATE,
       name,
       slug: generateProductSlug(name),
       description,

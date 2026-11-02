@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useRef, useState } from "react"
 import { getStoreBusiness } from "@/lib/store-business-client"
 import type { Store } from "@/lib/store-data"
@@ -27,7 +28,7 @@ export function StoreGooglePhoto({ store, fallback }: { store: Store; fallback: 
   }, [store.id, visible])
   const googlePhoto = !failed && business?.photoUrl
   return <figure ref={target} className={styles.storePhotoWrap}>
-    <img src={googlePhoto || store.image || fallback} alt={googlePhoto || store.image ? store.name : "SARA storefront illustration"}
+    <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={googlePhoto || store.image || fallback} alt={googlePhoto || store.image ? store.name : "SARA storefront illustration"}
       className={styles.storePhoto} loading="lazy" onError={event => {
         if (googlePhoto) { setFailed(true); return }
         if (!event.currentTarget.dataset.fallback) { event.currentTarget.dataset.fallback = "true"; event.currentTarget.src = "/store-locator/storefront.webp" }

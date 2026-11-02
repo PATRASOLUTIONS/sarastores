@@ -11,6 +11,7 @@ import {
   BookOpen,
   Boxes,
   ChevronLeft,
+  ClipboardCheck,
   Contact2,
   CreditCard,
   Database,
@@ -75,6 +76,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Catalogue",
     items: [
       { name: "Products", path: "/admin/products", icon: <ShoppingBag className="h-5 w-5" /> },
+      { name: "Catalogue Quality", path: "/admin/catalogue-quality", icon: <ClipboardCheck className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Stock Check", path: "/admin/stock-check", icon: <Boxes className="h-5 w-5" /> },
       { name: "Categories & Brands", path: "/admin/catalogue", icon: <FolderTree className="h-5 w-5" /> },
       { name: "Specifications", path: "/admin/product-specifications", icon: <FileSpreadsheet className="h-5 w-5" /> },
@@ -148,6 +150,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "System",
     items: [
       { name: "Settings", path: "/admin/settings", icon: <Settings className="h-5 w-5" /> },
+      { name: "Manual Database Clone", path: "/admin/database-clone", icon: <Database className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Documentation", path: "/admin/documentation", icon: <Book className="h-5 w-5" /> },
       {
         name: "OTT Play Dashboard",
@@ -203,7 +206,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }: AdminSidebarProps) {
     return candidates.sort((a, b) => b.length - a.length)[0] ?? null
   }, [pathname])
 
-  const allowedPages: string[] | null = user?.allowedPages ?? null
+
 
   const sections = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -220,7 +223,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }: AdminSidebarProps) {
       if (term) items = items.filter((i) => i.name.toLowerCase().includes(term))
       return { ...section, items }
     }).filter((section) => section.items.length > 0)
-  }, [allowedPages, user, isLoading, query])
+  }, [user, isLoading, query])
 
   const showText = (isMobile && isOpen) || (!isMobile && !isLaptopCollapsed)
   const handleLinkClick = () => {

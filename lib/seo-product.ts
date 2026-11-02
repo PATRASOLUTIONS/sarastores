@@ -1,3 +1,4 @@
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { cache } from "react"
 import { getCollection } from "@/lib/db-service"
 import { getReviewProduct, publishedReviewFilter } from "@/lib/reviews"
@@ -8,6 +9,7 @@ import { cleanProductDescription, cleanProductName } from "@/utils/cleanProductN
 import { seoText } from "@/lib/seo-metadata"
 import type { ObjectId } from "mongodb"
 import { isPublicProduct } from "@/lib/product-visibility"
+import { isProductUnavailable } from "@/lib/product-availability"
 
 export interface ProductFeedDocument extends Record<string, unknown> {
   _id: ObjectId | string
@@ -52,8 +54,8 @@ export const getSeoProduct = cache(async (identifier: string) => {
     ]),
     price: Number.isFinite(price) && price > 0 ? price : null,
     mrp: getCatalogMRP({ ...product, mrp: product.mrp || specs?.mrp }),
-    inStock: typeof product.stock === "number" ? product.stock > 0 : product.inStock !== false,
-    brand: String(product.manufacturerName || product.manufacturer_name || product.brand || ""),
+    inStock: !isProductUnavailable(product),
+    brand: catalogueBrand(product),
     category: String(product.category || product.groupName || ""),
     sku: typeof product.sku === "string" ? product.sku : undefined,
     attributes,

@@ -1,14 +1,12 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useRef, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import confetti from "canvas-confetti"
-import {
-  Sparkles, PartyPopper, Gift, Trophy, X, AlertCircle, CheckCircle2,
-  ChevronDown, ChevronUp, FileText, Loader2, Phone, Mail, User, ShieldCheck, KeyRound
-} from "lucide-react"
-import Header from "@/components/Header"
+import { Sparkles, X, AlertCircle, CheckCircle2, Loader2, Phone, Mail, User, ShieldCheck, KeyRound } from "lucide-react"
+
 import Footer from "@/components/Footer"
 import { SpinOtpDeliveryResponseSchema, SpinPrizeListResponseSchema } from "@/lib/validation"
 
@@ -25,15 +23,7 @@ const DEFAULT_SEGMENTS: { name: string, color: string, textColor: string, icon: 
   { name: "BETTER LUCK\nNEXT TIME", color: "#ffffff", textColor: "#000000", icon: "🍀" },
 ]
 
-const TERMS = [
-  "One user = one spin. No re-spins allowed.",
-  "Campaign valid only for April 2026.",
-  "Applicable for selected offline stores only.",
-  "Coupon must be shown at billing counter to claim the prize.",
-  "Prizes are subject to availability and cannot be exchanged for cash.",
-  "The decision of the management is final and binding.",
-  "Valid government ID is required for prize collection.",
-]
+
 
 function createSpinAudioContext(): AudioContext | null {
   const legacyWindow: Window & { webkitAudioContext?: typeof AudioContext } = window
@@ -143,7 +133,7 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
     return new Promise<void>((resolve, reject) => {
       const now = Date.now()
       const cacheTime = 5 * 60 * 1000 // 5 minutes
-      
+
       // Skip fetch if data is fresh and not force refreshing
       if (!forceRefresh && inventoryCampaignRef.current === activeCampaign && isInventoryFresh && (now - lastInventoryFetch) < cacheTime) {
         console.log(`[INVENTORY_FETCH_SKIPPED] Using cached inventory (${Math.round((now - lastInventoryFetch) / 1000)}s old)`)
@@ -244,7 +234,7 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
   const [showOtpStep, setShowOtpStep] = useState(false)
   const [otpDeliveryMessage, setOtpDeliveryMessage] = useState("")
   const [otpCode, setOtpCode] = useState("")
-  const [verificationToken, setVerificationToken] = useState<string | null>(null)
+  const [, setVerificationToken] = useState<string | null>(null)
 
   // Loading states
   const [isSendingOtp, setIsSendingOtp] = useState(false)
@@ -264,9 +254,9 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
   const [spinResult, setSpinResult] = useState<{ prize: string; couponCode: string | null; image?: string | null; icon?: string } | null>(null)
   const [showResultModal, setShowResultModal] = useState(false)
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
-  const [showTerms, setShowTerms] = useState(false)
+
   const [currentRotation, setCurrentRotation] = useState(0)
-  const [wheelReady, setWheelReady] = useState(false)
+  const [, setWheelReady] = useState(false)
 
   // Track visit on load
   useEffect(() => {
@@ -275,7 +265,7 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ store, campaignId: activeCampaign })
     }).catch(() => { })
-  }, [store])
+  }, [activeCampaign, store])
 
   // Fire confetti
   const triggerConfetti = useCallback(() => {
@@ -1079,7 +1069,7 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
                       className="text-7xl mb-4 drop-shadow-[0_0_15px_rgba(251,191,36,0.6)] flex justify-center items-center"
                     >
                       {spinResult.image ? (
-                        <img src={spinResult.image} alt={spinResult.prize} className="w-32 h-32 object-contain" />
+                        <SiteImage unoptimized src={spinResult.image} alt={spinResult.prize} className="w-32 h-32 object-contain" />
                       ) : (
                         spinResult.icon || "🏆"
                       )}
@@ -1175,13 +1165,4 @@ function SpinWheelPage({ campaignId }: { campaignId?: string }) {
       <Footer />
     </div>
   )
-}
-
-function lightenColor(hex: string, percent: number): string {
-  const num = parseInt(hex.replace("#", ""), 16)
-  const amt = Math.round(2.55 * percent)
-  const R = Math.min(255, (num >> 16) + amt)
-  const G = Math.min(255, ((num >> 8) & 0x00ff) + amt)
-  const B = Math.min(255, (num & 0x0000ff) + amt)
-  return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`
 }

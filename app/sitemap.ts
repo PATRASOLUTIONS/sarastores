@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 import { getCollection } from "@/lib/db-service"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 import { getAllStoreLocations } from "@/lib/store-locations"
 import { listArticles } from "@/lib/articles"
 import { absoluteSeoImage, getOriginFromHeaders } from "@/lib/seo-metadata"
@@ -9,10 +10,10 @@ export const revalidate = 3600
 
 const STATIC_PATHS = [
   "/", "/products", "/brands", "/about", "/contact", "/careers", "/press",
-  "/returns", "/shipping-policy", "/warranty", "/installation", "/emi",
+  "/returns", "/shipping-policy", "/warranty", "/installation", "/emi", "/sara-care",
   "/business-enquiries", "/corporate-information", "/disclaimer", "/sitemap",
   "/privacy-policy", "/terms-and-conditions", "/cancellation-policy", "/complaints",
-  "/store-locator", "/stores", "/offers", "/ganesh", "/blog", "/faq", "/rewards", "/lucky-draw",
+  "/store-locator", "/stores", "/offers", "/ganesh", "/blog", "/faq", "/rewards",
   "/software", "/brand-guidelines", "/bosch", "/haier", "/lg", "/tcl", "/epic-sale",
 ]
 
@@ -31,11 +32,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }))
   const appendCollection = async (name: string, operation: () => Promise<MetadataRoute.Sitemap>) => {
     try { entries.push(...await operation()) }
-    catch (error) { console.error(`[SEO] Sitemap ${name} entries could not be loaded:`, error) }
+    catch (error) {
+      console.error(`[SEO] Sitemap ${name} entries could not be loaded:`, error)
+      throw new Error(`Sitemap ${name} source unavailable`)
+    }
   }
 
   await appendCollection("products", async () => {
-    const products = await (await getCollection("products")).find({ active: true }, {
+    const products = await (await getCollection("products")).find(await publicCatalogueFilter(), {
       projection: { slug: 1, updatedAt: 1, createdAt: 1, image: 1, images: 1 },
     }).toArray()
     return products.map(product => {
@@ -82,7 +86,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }))
   })
   await appendCollection("stores", async () => {
-    const stores = await getAllStoreLocations()
+    const stores = await getAllStoreLocations({ strict: true })
     return [
       ...Array.from(new Set(stores.map(store => store.citySlug)), city => ({
         url: `${origin}/stores/${city}`, changeFrequency: "monthly" as const, priority: 0.7,
@@ -103,7 +107,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily", priority: 0.6,
     }))
   })
-  await appendCollection("articles", async () => (await listArticles()).filter(article => article.slug).map(article => ({
+  await appendCollection("articles", async () => (await listArticles({ strict: true })).filter(article => article.slug).map(article => ({
     url: `${origin}/blog/${encodeURIComponent(article.slug)}`,
     lastModified: modifiedAt(article.updatedAt || article.publishedAt || article.createdAt),
     changeFrequency: "monthly", priority: 0.6,

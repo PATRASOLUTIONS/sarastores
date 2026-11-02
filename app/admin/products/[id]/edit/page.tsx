@@ -1,12 +1,13 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { apiFetch } from "@/lib/api-client"
 
 import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Save, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Save, ChevronDown, ChevronUp } from "lucide-react"
 import Link from "next/link"
 import { normalizeProductForSchema } from "@/lib/product-schema"
 
@@ -116,7 +117,7 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showRawData, setShowRawData] = useState(false)
-  const [showAmazonData, setShowAmazonData] = useState(false)
+
   const router = useRouter()
 
   useEffect(() => {
@@ -822,7 +823,7 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
               {product.images && product.images.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
                   {product.images.slice(0, 5).map((u, i) => (
-                    <img
+                    <SiteImage unoptimized
                       key={i}
                       src={u || "/placeholder.svg?height=120&width=120"}
                       alt={`Preview ${i + 1}`}
@@ -855,7 +856,7 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
               />
               {product.image && (
                 <div className="mt-2 border rounded p-2">
-                  <img
+                  <SiteImage unoptimized
                     src={product.image || "/placeholder.svg?height=200&width=200"}
                     alt={product.name}
                     className="h-40 object-contain mx-auto"

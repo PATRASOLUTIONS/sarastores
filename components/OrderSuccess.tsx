@@ -74,7 +74,7 @@ export default function OrderSuccess({ order, guestToken }: { order: OrderConfir
     }
     void load()
     return () => controller.abort()
-  }, [order.orderId, suggestionAttempt])
+  }, [order.items, order.orderId, suggestionAttempt])
 
   const addRecommendation = async (product: Recommendation) => {
     if (adding) return

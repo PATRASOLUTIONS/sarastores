@@ -5,8 +5,8 @@ import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
-import AdminHeader from "@/components/AdminHeader"
-import { CreditCard, Search, DollarSign, CheckCircle, XCircle, ChevronLeft, ChevronRight } from "lucide-react"
+
+import { CreditCard, Search, DollarSign, CheckCircle, XCircle } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 interface Payment {
@@ -26,7 +26,7 @@ interface Payment {
 export default function PaymentsPage() {
   const { user } = useAuth()
   const router = useRouter()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")

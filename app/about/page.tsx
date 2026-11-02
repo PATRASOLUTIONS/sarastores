@@ -1,5 +1,7 @@
 "use client"
 
+import { storeNetworkCount } from "@/lib/store-network"
+
 import Link from "next/link"
 import { ArrowRight, Award, CheckCircle2, ChevronRight, CreditCard, Diamond, Eye, Handshake, Headphones, Heart, MapPin, Settings, ShieldCheck, Store, Target, Users } from "lucide-react"
 import Header from "@/components/Header"
@@ -40,7 +42,7 @@ export default function AboutPage() {
   const marketing = useMarketingContent("about")
   const { data, error, isLoading } = useSettingsData()
   const years = configuredText(data?.statYears)
-  const stores = configuredText(data?.statStores)
+  const stores = storeNetworkCount(data?.statStores)
   const customers = configuredText(data?.statCustomers)
   const displayStat = (value: string | undefined) => value || (isLoading ? "..." : "Not specified")
   const stats = marketing.items("stats", [
@@ -54,8 +56,8 @@ export default function AboutPage() {
     { icon: CreditCard, title: "Easy EMI Options", detail: "Available at Checkout", href: "/emi" },
     { icon: ShieldCheck, title: "Warranty Support", detail: "& After-Sales Assistance", href: "/warranty" },
     { icon: Headphones, title: "Expert Assistance", detail: "In-Store & Online", href: "/contact" },
-    { icon: MapPin, title: `${stores ? `${stores} ` : ""}Stores`, detail: "Across Karnataka", href: "/store-locator" },
-  ])
+    { icon: MapPin, title: `${stores} Stores`, detail: "Across Karnataka", href: "/store-locator" },
+  ]).map((item, index) => index === 3 ? { ...item, title: `${stores} Stores` } : item)
   const promises = marketing.items("story", PROMISES)
 
   return (
