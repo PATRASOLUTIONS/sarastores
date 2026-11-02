@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 import { getCollection } from "@/lib/db-service"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 import { getAllStoreLocations } from "@/lib/store-locations"
 import { listArticles } from "@/lib/articles"
 import { absoluteSeoImage, getOriginFromHeaders } from "@/lib/seo-metadata"
@@ -35,7 +36,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   await appendCollection("products", async () => {
-    const products = await (await getCollection("products")).find({ active: true }, {
+    const products = await (await getCollection("products")).find(await publicCatalogueFilter(), {
       projection: { slug: 1, updatedAt: 1, createdAt: 1, image: 1, images: 1 },
     }).toArray()
     return products.map(product => {

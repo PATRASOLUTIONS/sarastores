@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api-client"
 import { buildActiveProductPriceSheet, fetchAllAdminProducts, type AdminProductResponse } from "@/lib/admin-products-client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import {
   Plus,
@@ -27,6 +27,8 @@ import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import ExcelUpload from "@/components/ExcelUpload"
 import { normalizeProductForSchema } from "@/lib/product-schema"
+import { adminProductNameKey, groupAdminProductNames, selectAdminNameRows } from "@/lib/admin-product-name-groups"
+import { stockItemAliases } from "@/lib/stock-item-code"
 import {
   METADATA_SHEET_COLUMNS,
   METADATA_SHEET_FIELDS,
@@ -37,6 +39,7 @@ import {
 
 interface Product {
   id: string
+  groupingName?: string
   slug?: string
   name: string
   price: number
@@ -106,6 +109,7 @@ function normalizeAdminProduct(product: ProductApiResponse): Product {
     ...product,
     id: product.id,
     name: canonical.name || "Unnamed Product",
+    groupingName: canonical.name,
     price: Number(product?.price ?? 0),
     mrp: product?.mrp,
     stock: Number(product?.stock ?? 0),
@@ -274,6 +278,7 @@ export default function AdminProducts() {
   const [selectedSegment, setSelectedSegment] = useState<string>("all")
   const [selectedBrand, setSelectedBrand] = useState<string>("all")
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all")
+  const [onePerName, setOnePerName] = useState(false)
   const [filterActiveStatus, setFilterActiveStatus] = useState<"all" | "active" | "inactive">("all")
   const [isLoading, setIsLoading] = useState(true)
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(true)
@@ -1065,13 +1070,15 @@ export default function AdminProducts() {
     }
   }
 
-  const filteredProducts = products.filter((product) => {
+  const nameGroups = useMemo(() => groupAdminProductNames(products), [products])
+  const matchingProducts = products.filter((product) => {
     const term = searchTerm.trim().toLowerCase()
 
     // 1. Search Filter
     const matchesSearch = !term || (
       (product.name || "").toString().toLowerCase().includes(term) ||
       (normalizeProductForSchema(product).itemno || "").toString().toLowerCase().includes(term) ||
+      stockItemAliases(product).some(code => code.toLowerCase().includes(term)) ||
       (product.ean || "").toString().toLowerCase().includes(term) ||
       (product.raw?.["EAN Number"] || "").toString().toLowerCase().includes(term)
     )
@@ -1105,11 +1112,6 @@ export default function AdminProducts() {
     const matchesSegment = matchesLabel(selectedSegment, product.segment || "")
     const matchesBrand = matchesLabel(selectedBrand, product.brand || "")
 
-    // 5. Stock
-    const stock = Number(product.stock ?? 0)
-    const matchesStock =
-      stockFilter === "all" || (stockFilter === "in" ? stock > 0 : stock <= 0)
-
     return (
       matchesSearch &&
       matchesCategory &&
@@ -1117,9 +1119,11 @@ export default function AdminProducts() {
       matchesActive &&
       matchesDivision &&
       matchesSegment &&
-      matchesBrand &&
-      matchesStock
+      matchesBrand
     )
+  })
+  const { rows: filteredProducts, exactItemSearch, hiddenAlternatives } = selectAdminNameRows(matchingProducts, {
+    enabled: onePerName, search: searchTerm, stock: stockFilter,
   })
 
   /*
@@ -1175,6 +1179,7 @@ export default function AdminProducts() {
     selectedBrand,
     filterActiveStatus,
     stockFilter,
+    onePerName,
     products.length,
   ])
 
@@ -1455,6 +1460,17 @@ export default function AdminProducts() {
             )}
 
             {/* Stock Filter Dropdown */}
+            <div>
+              <select
+                value={onePerName ? "one" : "all"}
+                onChange={(e) => setOnePerName(e.target.value === "one")}
+                className="bg-white border border-gray-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Product name display"
+              >
+                <option value="all">Show all records</option>
+                <option value="one">One product per name</option>
+              </select>
+            </div>
             <div className="relative">
               <select
                 value={stockFilter}
@@ -1494,9 +1510,19 @@ export default function AdminProducts() {
             <div className="text-xs sm:text-sm text-gray-500">
               <div>{activeProductsCount} {activeProductsCount === 1 ? "active product" : "active products"} in MongoDB</div>
               <div className="text-gray-400">{filteredProducts.length} shown (after filters)</div>
+              {onePerName && <div className="text-blue-600">{hiddenAlternatives} {hiddenAlternatives === 1 ? "alternative" : "alternatives"} hidden</div>}
             </div>
           </div>
         </div>
+
+        {onePerName && (
+          <p className="border-t border-gray-100 px-4 py-3 text-xs text-gray-600">
+            {exactItemSearch
+              ? "Exact item-number search: showing the matching record."
+              : "One record per matching name, choosing the highest stock. Equal stock: active first, then latest update. View alternatives to compare item numbers and prices."}
+            {" "}This changes the admin display only; stock is not combined.
+          </p>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
@@ -1586,6 +1612,26 @@ export default function AdminProducts() {
                               <p className="mt-0.5 font-mono text-xs text-gray-500">
                                 {normalizeProductForSchema(product).itemno || "—"}
                               </p>
+                              {(nameGroups.get(adminProductNameKey(product))?.length ?? 0) > 1 && (
+                                <details className="mt-2 text-xs">
+                                  <summary className="cursor-pointer font-medium text-blue-700">
+                                    {nameGroups.get(adminProductNameKey(product))!.length} records — view alternatives
+                                  </summary>
+                                  <ul className="mt-2 space-y-2 rounded-md border border-blue-100 bg-blue-50 p-2">
+                                    {nameGroups.get(adminProductNameKey(product))!.map(alternative => (
+                                      <li key={alternative.id} className="min-w-[180px]">
+                                        <Link href={`/admin/products/${alternative.id}/edit`} className="font-mono text-blue-700 underline">
+                                          {normalizeProductForSchema(alternative).itemno || alternative.id}
+                                        </Link>
+                                        {alternative.id === product.id && <span className="ml-1 text-gray-600">(this row)</span>}
+                                        <p className="mt-0.5 text-gray-700">
+                                          Stock: {alternative.stock} · ₹{alternative.price} · {alternative.active ?? true ? "Active" : "Inactive"}
+                                        </p>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              )}
                             </div>
                           </div>
                         </td>

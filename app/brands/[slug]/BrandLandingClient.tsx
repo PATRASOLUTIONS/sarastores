@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import Header from "@/components/Header"
@@ -26,7 +27,6 @@ import {
     Loader2,
     type LucideIcon,
 } from "lucide-react"
-import { normalizeProductForSchema } from "@/lib/product-schema"
 import { brandLandingEnvelopeSchema, brandProductListResponseSchema, type BrandLanding, type BrandProduct } from "@/lib/brand-landing-response"
 
 // Icon mapping for dynamic rendering
@@ -136,7 +136,7 @@ export default function DynamicBrandPage() {
                     const data = brandProductListResponseSchema.parse(await response.json())
                     const filterStr = brand.productsSection?.manufacturerFilter || brand.name
                     const brandProducts = data.filter((p) => {
-                        const manufacturer = normalizeProductForSchema(p).manufacturerName || p.manufacturer || ""
+                        const manufacturer = catalogueBrand(p)
                         return manufacturer.toLowerCase().includes(filterStr.toLowerCase())
                     })
                     const maxProducts = brand.productsSection?.maxProducts || 12

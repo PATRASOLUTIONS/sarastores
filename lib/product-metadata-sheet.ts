@@ -282,3 +282,8 @@ export function metadataDocumentUpdates(row: MetadataSheetRow): Record<string, s
 export function metadataRowHasUpdates(row: MetadataSheetRow): boolean {
   return METADATA_SHEET_EDITABLE_FIELDS.some((field) => row[field])
 }
+
+/** Public brand follows the uploaded metadata; legacy warehouse rows keep their existing mapping. */
+export function catalogueBrand(product: unknown): string {
+  return metadataSheetRowFromProduct(product).brand
+}

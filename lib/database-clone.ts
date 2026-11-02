@@ -1,5 +1,6 @@
 import { BSON, MongoClient, type Db, type Document, type CreateCollectionOptions, type IndexDescription } from "mongodb"
 import { createHash, randomUUID } from "node:crypto"
+import { databaseSizeFromStats } from "@/lib/database-size"
 import {
   CLONE_CONTROL, CLONE_OWNER, CLONE_SOURCE_DB, CLONE_TARGET_DB, CLONE_SOURCE_HOST, CLONE_TARGET_HOST,
   CloneSafetyError, assertCloneRoles, cloneConfiguration, cloneFingerprint, signCloneApproval, verifyCloneApproval,
@@ -71,6 +72,22 @@ export function publicCloneState(manifest: Manifest) {
   }
 }
 export type CloneState = ReturnType<typeof publicCloneState>
+
+export async function cloneDatabaseSizes() {
+  try { cloneConfiguration() } catch (error) {
+    return { configured: false, measuredAt: null as string | null, source: null, target: null,
+      message: error instanceof CloneSafetyError ? error.message : "Clone is not configured" }
+  }
+  return withCloneConnections(async (source, target) => {
+    // Metadata only: no collection scan or database write, and no dependence on an empty target.
+    const sourceStats = await source.command({ dbStats: 1, scale: 1, maxTimeMS: 8000 })
+    const targetStats = await target.command({ dbStats: 1, scale: 1, maxTimeMS: 8000 })
+    return { configured: true, measuredAt: new Date().toISOString(),
+      source: databaseSizeFromStats(CLONE_SOURCE_DB, sourceStats), target: databaseSizeFromStats(CLONE_TARGET_DB, targetStats),
+      message: "Read-only database statistics; allocated storage includes indexes, not cluster capacity or billing." }
+  })
+}
+export type CloneDatabaseSizes = Awaited<ReturnType<typeof cloneDatabaseSizes>>
 
 export async function cloneStatus() {
   let writesEnabled = false

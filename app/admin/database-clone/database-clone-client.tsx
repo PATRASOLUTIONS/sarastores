@@ -5,6 +5,7 @@ import Link from "next/link"
 import { AlertTriangle, CheckCircle2, Database, Eye, Loader2, Pause, Play, RefreshCw, ShieldCheck } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
 import type { ClonePreview, CloneState } from "@/lib/database-clone"
+import DatabaseSizePanel from "./database-size-panel"
 
 type Status = { configured: boolean; writesEnabled: boolean; message: string; state: CloneState | null }
 const confirmationText = "CLONE e-commerce-bytewise TO sara_clone"
@@ -99,11 +100,12 @@ export default function DatabaseCloneClient() {
   return <div className="mx-auto max-w-6xl space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Database protection</p><h1 className="mt-1 text-3xl font-bold text-gray-900">Manual database clone</h1><p className="mt-2 text-sm text-gray-600">Preview, approve and verify an independent copy. Runs only when an administrator requests it.</p></div>
-      <button type="button" onClick={() => void loadStatus()} disabled={busy || running} className={button}><RefreshCw className="h-4 w-4" />Refresh status</button>
+      <div className="flex flex-wrap gap-2">{!status?.state && <button type="button" onClick={requestPreview} disabled={loading || !status?.configured || busy || running} title="Review the read-only preview, then explicitly approve the database copy" className={primary}><Database className="h-4 w-4" />Create clone</button>}<button type="button" onClick={() => void loadStatus()} disabled={busy || running} className={button}><RefreshCw className="h-4 w-4" />Refresh status</button></div>
     </div>
     <div className="grid gap-4 md:grid-cols-3">
       {[{ title: "Production source", value: "e-commerce-bytewise", detail: "Read-only dedicated account", icon: ShieldCheck }, { title: "Independent destination", value: "sara_clone", detail: "Existing data is never overwritten", icon: Database }, { title: "Execution", value: "Manual only", detail: "No schedule or automatic deletion", icon: Play }].map(item => <div key={item.title} className="rounded-xl border bg-white p-5"><item.icon className="mb-3 h-5 w-5 text-blue-700" /><p className="text-xs font-medium text-gray-500">{item.title}</p><p className="mt-1 break-words text-lg font-bold text-gray-900">{item.value}</p><p className="mt-2 text-xs text-gray-600">{item.detail}</p></div>)}
     </div>
+    <DatabaseSizePanel />
     <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><p>Cloning uses existing Vercel execution and MongoDB storage/traffic. No paid service is added, but usage can exceed your included allowances. Check the preview and destination capacity before approving.</p></div>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
     {loading && <div role="status" className="flex items-center gap-2 rounded-xl border bg-white p-6 text-sm"><Loader2 className="h-5 w-5 animate-spin" />Loading configuration…</div>}
@@ -120,15 +122,15 @@ export default function DatabaseCloneClient() {
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={acceptLogical} onChange={event => setAcceptLogical(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I approve a live logical copy, with its consistency limitations, into the empty sara_clone destination.</label>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={acceptCapacity} onChange={event => setAcceptCapacity(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I have checked destination space and usage allowances. I understand this consumes storage and execution.</label>
           <label className="block text-sm font-medium">Type <span className="font-mono text-xs">{confirmationText}</span><input value={confirmation} onChange={event => setConfirmation(event.target.value)} autoComplete="off" className="mt-2 block w-full rounded-lg border bg-white px-3 py-2 text-sm" /></label>
-          <button type="button" onClick={() => void run(true)} disabled={!canStart} className={primary}><Database className="h-4 w-4" />Approve and create clone</button>
+          <button type="button" onClick={() => void run(true)} disabled={!canStart} className={primary}><Database className="h-4 w-4" />Clone database</button>
         </div>
       </section>}
       {state && <section className="rounded-xl border bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-lg font-bold">{state.status === "verified" && <CheckCircle2 className="h-5 w-5 text-green-700" />}{state.status === "verified" ? "Clone verified" : state.status === "failed" ? "Clone stopped — verification required" : running ? "Copying and verifying" : "Clone ready to resume"}</h2><p className="mt-2 text-sm text-gray-600">Started {date(state.createdAt)} IST. Last checkpoint {date(state.updatedAt)} IST.</p></div>{state.status === "running" && (running ? <button type="button" onClick={() => { pause.current = true }} className={button}><Pause className="h-4 w-4" />Pause after this batch</button> : <button type="button" disabled={!status.writesEnabled} onClick={() => void run(false)} className={primary}><Play className="h-4 w-4" />Resume clone</button>)}</div>
         <div className="mt-5 h-2 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-label="Clone copy and verification progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><div style={{ width: `${percent}%` }} className="h-full bg-blue-700" /></div><p aria-live="polite" className="mt-2 text-sm text-gray-600">{state.copied.toLocaleString("en-IN")} copied · {state.verified.toLocaleString("en-IN")} verified · {state.total.toLocaleString("en-IN")} expected</p>
         {state.error && <p role="alert" className="mt-3 text-sm text-red-700">{state.error}</p>}<p className="mt-3 text-xs text-gray-500">{state.consistency}. Original TTL definitions are retained in the manifest; expiration is disabled on the clone. No application connections are switched.</p>
         <div className="mt-4 max-h-80 overflow-auto rounded-lg border"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-gray-50"><tr><th className="p-3">Collection</th><th className="p-3">Phase</th><th className="p-3 text-right">Copied</th><th className="p-3 text-right">Verified</th></tr></thead><tbody>{state.collections.map(item => <tr key={item.name} className="border-t"><td className="p-3">{item.name}</td><td className="p-3 capitalize">{item.phase}</td><td className="p-3 text-right">{item.copied} / {item.count}</td><td className="p-3 text-right">{item.verified}</td></tr>)}</tbody></table></div>
-        {state.status === "verified" && <Link href="/admin/catalogue-quality" className="mt-5 inline-flex rounded-lg bg-green-800 px-4 py-2 text-sm font-semibold text-white">Open catalogue quality dashboard</Link>}
       </section>}
+      {state?.status === "verified" && <Link href="/admin/catalogue-quality" className="inline-flex rounded-lg border bg-white px-4 py-2 text-sm font-semibold text-blue-900">View catalogue quality</Link>}
     </>}
   </div>
 }

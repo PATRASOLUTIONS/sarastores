@@ -8,10 +8,12 @@
  */
 
 import { productCardResponseSchema } from "@/lib/product-card-response"
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { z } from "zod"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 
 export const catalogProductResponseSchema = productCardResponseSchema.passthrough()
-export const catalogProductListResponseSchema = z.array(catalogProductResponseSchema)
+export const catalogProductListResponseSchema = z.array(catalogProductResponseSchema).transform(uniquePublicProductNames)
 
 export type CatalogProduct = z.infer<typeof catalogProductResponseSchema>
 
@@ -38,11 +40,10 @@ export function categoryOf(product: Partial<Pick<CatalogProduct, "name" | "categ
   return null
 }
 
-/** `manufacturerName` is the most reliable brand source; fall back to the title's first word. */
-export function brandOf(product: Partial<Pick<CatalogProduct, "name" | "manufacturerName" | "manufacturer_name">>): string | null {
+/** Use the uploaded brand or legacy warehouse mapping, then the title's first word. */
+export function brandOf(product: Partial<Pick<CatalogProduct, "name" | "manufacturerName" | "manufacturer_name" | "brand" | "division" | "taxonomySource" | "raw">>): string | null {
   const raw =
-    product?.manufacturerName ||
-    product?.manufacturer_name ||
+    catalogueBrand(product) ||
     (product?.name || "").trim().split(/\s+/)[0]
   if (!raw || String(raw).length < 2) return null
   const value = String(raw).trim()
@@ -61,6 +62,7 @@ export function productSuggestions(product: Partial<Pick<CatalogProduct, "id" | 
   const category = categoryOf(product)
   const available = catalog.filter(candidate =>
     String(candidate.id) !== String(product.id) &&
+    normalize(candidate.name).replace(/\s+/g, " ") !== normalize(product.name).replace(/\s+/g, " ") &&
     candidate.image && Number(candidate.price) > 0 &&
     candidate.active !== false && isInStock(candidate),
   )
@@ -77,10 +79,11 @@ export function similarProducts(product: SimilarSeed, catalog: CatalogProduct[],
   const skip = new Set([String(product.id), ...exclude])
   const subcategory = normalize(product.subCategory)
   const category = categoryOf(product)
-  const brand = normalize(product.manufacturerName || product.brand)
+  const brand = normalize(catalogueBrand(product))
   const price = Number(product.price) || 0
   const sameKind = catalog.filter(candidate =>
     !skip.has(String(candidate.id)) &&
+    normalize(candidate.name).replace(/\s+/g, " ") !== normalize(product.name).replace(/\s+/g, " ") &&
     candidate.image && Number(candidate.price) > 0 &&
     candidate.active !== false && isInStock(candidate) &&
     ((subcategory && normalize(candidate.subCategory) === subcategory) || (category && categoryOf(candidate) === category)),
@@ -89,7 +92,7 @@ export function similarProducts(product: SimilarSeed, catalog: CatalogProduct[],
     ? sameKind.filter(candidate => Number(candidate.price) >= price * 0.6 && Number(candidate.price) <= price * 1.6)
     : sameKind
   const score = (candidate: CatalogProduct) =>
-    (brand && normalize(candidate.manufacturerName || candidate.brand) === brand ? 0 : 1) * 10 +
+    (brand && normalize(catalogueBrand(candidate)) === brand ? 0 : 1) * 10 +
     (price > 0 ? Math.abs(Number(candidate.price) - price) / price : 0)
   return [...new Map((inBand.length ? inBand : sameKind).map(candidate => [String(candidate.id), candidate])).values()]
     .sort((a, b) => score(a) - score(b))

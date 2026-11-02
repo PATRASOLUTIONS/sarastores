@@ -4,11 +4,13 @@ import { isAdmin } from "@/lib/auth"
 import { z } from "zod"
 import { ObjectId, type Filter } from "mongodb"
 import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
+import { getPublicCatalogueSelection } from "@/lib/public-catalogue"
 
 const bulkRequestSchema = z.object({
   ids: z.array(z.union([z.string().min(1), z.number().finite()])).default([]),
   include_inactive: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
   compare: z.boolean().optional(),
+  catalogue: z.boolean().optional(),
 })
 
 interface BulkProductDocument {
@@ -84,7 +86,13 @@ export async function POST(request: NextRequest) {
     }
 
     const orQuery = orFilters.length === 1 ? orFilters[0] : { $or: orFilters }
-    const finalQuery = includeInactive ? orQuery : { $and: [orQuery, PUBLIC_PRODUCT_FILTER] }
+    const catalogueIds = body.catalogue && !includeInactive
+      ? [...new Set(ids.map(String).map(id => id.trim()))] : null
+    const selection = catalogueIds ? await getPublicCatalogueSelection() : null
+    const selectedIds = catalogueIds?.flatMap(id => selection?.representativeIds.get(id) ?? [])
+    const finalQuery = selectedIds
+      ? { $and: [PUBLIC_PRODUCT_FILTER, { _id: { $in: selectedIds } }] }
+      : includeInactive ? orQuery : { $and: [orQuery, PUBLIC_PRODUCT_FILTER] }
     
     // For compare mode, project only essential fields to minimize response size and avoid 431 errors
     if (compareMode) {
@@ -114,7 +122,10 @@ export async function POST(request: NextRequest) {
     }
 
     const docs = await withTimeout(collection.find(finalQuery).toArray(), 10000)
-    const normalized = normalizeId(docs)
+    const ordered = selectedIds
+      ? [...new Set(selectedIds.map(String))].flatMap(id => docs.find(doc => String(doc._id) === id) ?? [])
+      : docs
+    const normalized = normalizeId(ordered)
     return NextResponse.json(normalized, { status: 200, headers: getCorsHeaders(request) })
   } catch (err) {
     console.error("/api/products/bulk error", err)

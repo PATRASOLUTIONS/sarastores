@@ -1,4 +1,6 @@
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { connectToDatabase } from "@/lib/mongodb"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 import { getProductCommerceAttributes } from "@/lib/product-attributes"
 import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName"
 import type { ProductFeedDocument } from "@/lib/seo-product"
@@ -55,7 +57,7 @@ export async function GET() {
     products = await db
       .collection<ProductFeedDocument>("products")
       .find(
-        { active: true },
+        await publicCatalogueFilter(),
         {
           projection: {
             name: 1,
@@ -66,6 +68,15 @@ export async function GET() {
             image: 1,
             images: 1,
             brand: 1,
+            taxonomySource: 1,
+            division: 1,
+            manufacturerName: 1,
+            manufacturer_name: 1,
+            manufacturer: 1,
+            "raw.Brand": 1,
+            "raw.Division": 1,
+            "raw.Manufacturer Name": 1,
+            "raw.Manufacturer": 1,
             category: 1,
             stock: 1,
             sku: 1,
@@ -119,7 +130,8 @@ export async function GET() {
         .filter((image: string | null): image is string => !!image && image !== imageUrl)
         .slice(0, 10)
 
-      const hasIdentifier = !!(attributes.gtin || (product.brand && attributes.mpn))
+      const brand = catalogueBrand(product)
+      const hasIdentifier = !!(attributes.gtin || (brand && attributes.mpn))
 
       return (
         `    <item>\n` +
@@ -135,7 +147,7 @@ export async function GET() {
         // `sale_price` is present, so only send both when there is a real MRP.
         tag("g:price", `${(hasSalePrice ? mrp : price).toFixed(2)} INR`) +
         (hasSalePrice ? tag("g:sale_price", `${price.toFixed(2)} INR`) : "") +
-        tag("g:brand", product.brand) +
+        tag("g:brand", brand) +
         tag("g:gtin", attributes.gtin) +
         tag("g:mpn", attributes.mpn || product.sku) +
         tag("g:identifier_exists", hasIdentifier ? "yes" : "no") +

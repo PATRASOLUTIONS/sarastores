@@ -7,6 +7,7 @@ import CategoryProductCard from "./CategoryProductCard"
 import { Reveal } from '@/components/motion/AnimationComponents'
 import { fetchWithCache, revalidateCache, getCached } from '@/utils/cache'
 import { catalogProductListResponseSchema } from '@/utils/catalog'
+import { uniquePublicProductNames } from '@/lib/public-product-names'
 
 interface Product {
   id: string
@@ -235,7 +236,7 @@ export default function CategoryProductsSection({
             className="flex gap-6 overflow-x-auto scrollbar-hide scroll-smooth pb-4 snap-x snap-mandatory"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {products.map((product) => (
+            {uniquePublicProductNames(products).map((product) => (
               <div key={product.id} className="flex-shrink-0 w-[260px] sm:w-[280px] lg:w-[300px] snap-start">
                 <CategoryProductCard product={product} />
               </div>

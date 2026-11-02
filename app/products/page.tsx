@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -78,7 +79,7 @@ const titleCase = titleCaseLabel
 const getCanonicalMeta = (product: ProductSchemaInput) => normalizeProductForSchema(product)
 const getProductSubCategory = (product: ProductSchemaInput) =>
   String(product?.subCategory || getCanonicalMeta(product).subCategoryProdDesc || "")
-const getProductBrand = (product: ProductSchemaInput) => String(getCanonicalMeta(product).manufacturerName || "")
+const getProductBrand = catalogueBrand
 const getProductCategoryGroupName = (product: ProductSchemaInput): string =>
   String(product?.groupName || product?.category || getCanonicalMeta(product).categoryGroupName || "")
 

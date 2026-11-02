@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, ChevronRight, CreditCard, Search, ShieldCheck, Star, Tag, Truck, Wrench } from "lucide-react"
@@ -89,7 +90,7 @@ function buildBrands(adminBrands: CatalogRecord[], products: CatalogRecord[]): B
   }))
   const stats = new Map<string, Brand>()
   for (const product of products) {
-    const manufacturer = text(product.manufacturerName) || text(product.manufacturer_name) || text(product.brand)
+    const manufacturer = catalogueBrand(product)
     const name = brandOf({ manufacturerName: manufacturer })
       ? manufacturer
       : nameMatchers.find(({ pattern }) => pattern.test(text(product.name)))?.name

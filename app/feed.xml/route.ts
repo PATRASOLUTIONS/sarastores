@@ -1,4 +1,5 @@
 import { connectToDatabase } from "@/lib/mongodb"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 import { getCompanyName, getOriginFromHeaders, getSiteSettings, seoText } from "@/lib/seo-metadata"
 import type { ProductFeedDocument } from "@/lib/seo-product"
 
@@ -18,7 +19,7 @@ export async function GET() {
     const { db } = await connectToDatabase()
     products = await db
       .collection<ProductFeedDocument>("products")
-      .find({ active: true }, { projection: { name: 1, slug: 1, description: 1, price: 1, image: 1, createdAt: 1, updatedAt: 1 } })
+      .find(await publicCatalogueFilter(), { projection: { name: 1, slug: 1, description: 1, price: 1, image: 1, createdAt: 1, updatedAt: 1 } })
       .sort({ updatedAt: -1 })
       .limit(50)
       .toArray()

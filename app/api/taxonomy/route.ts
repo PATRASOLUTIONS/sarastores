@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { COLLECTIONS, getCollection } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
 import { buildTaxonomyTree, type TaxonomyRow } from "@/lib/product-taxonomy"
-import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
-import { IN_STOCK_EXPRESSION, PRODUCT_BRAND_PATHS, firstNonBlank } from "@/lib/mongo-expressions"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
+import { IN_STOCK_EXPRESSION, catalogueBrandExpression, firstNonBlank } from "@/lib/mongo-expressions"
 
 /**
  * The Division → Sub-Category → Segment tree, derived from the live catalogue.
@@ -32,7 +32,7 @@ export async function GET() {
     // stock must not create an aisle that leads to an empty listing.
     const rows = (await collection
       .aggregate([
-        { $match: PUBLIC_PRODUCT_FILTER },
+        { $match: await publicCatalogueFilter() },
         {
           $group: {
             _id: {
@@ -50,7 +50,7 @@ export async function GET() {
               segment: firstNonBlank(["$segment", "$characteristics", "$char_desc", "$raw.CHAR DESC"]),
               // Only in-stock products contribute to Top Brands. The division
               // hierarchy itself still includes every active product.
-              brand: { $cond: [IN_STOCK_EXPRESSION, firstNonBlank(PRODUCT_BRAND_PATHS), ""] },
+              brand: { $cond: [IN_STOCK_EXPRESSION, catalogueBrandExpression(), ""] },
             },
             count: { $sum: 1 },
           },

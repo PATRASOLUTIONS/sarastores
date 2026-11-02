@@ -18,7 +18,7 @@ export default function ArticleProductRail({ productIds }: { productIds: string[
         const res = await fetch("/api/products/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: productIds }),
+          body: JSON.stringify({ ids: productIds, catalogue: true }),
         })
         if (!res.ok) throw new Error("Article products could not be loaded")
         const data = catalogProductListResponseSchema.parse(await res.json())

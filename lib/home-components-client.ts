@@ -1,3 +1,4 @@
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 import { z } from "zod"
 import { apiFetchJson } from "./api-client"
 import { productCardResponseSchema } from "./product-card-response"
@@ -27,7 +28,7 @@ export const homeCategoryListResponseSchema = z.array(z.object({ id: z.string().
 export const homeProductListResponseSchema = z.array(productCardResponseSchema.extend({
   image: z.string().nullish().transform(value => value ?? undefined),
   images: z.array(z.string()).nullish().transform(value => value ?? undefined),
-}))
+})).transform(uniquePublicProductNames)
 export type HomeProduct = z.infer<typeof homeProductListResponseSchema>[number]
 
 export async function updateHomeSection(id: string, updates: Partial<Omit<HomeSection, "id">>): Promise<HomeSection> {

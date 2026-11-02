@@ -111,7 +111,7 @@ async function seedDatabase() {
 
     // Insert sample products
     if (process.env.NODE_ENV === "development") console.log("Inserting sample products...")
-    const productResult = await db.collection("products").insertMany(sampleProducts)
+    const productResult = await db.collection("products").insertMany(sampleProducts.map(product => ({ ...product, gstRate: 18 })))
     if (process.env.NODE_ENV === "development") console.log(`Inserted ${productResult.insertedCount} products`)
 
     // Insert sample categories

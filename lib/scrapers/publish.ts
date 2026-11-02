@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
 import { getCollection, normalizeId } from "@/lib/db-service"
 import { connectToDatabase } from "@/lib/mongodb"
 import { buildSchemaSynchronizedRaw, extractCanonicalProductMetadata } from "@/lib/product-schema"
@@ -44,6 +45,7 @@ export async function publishScrapedProduct(row: ScraperImportRow, scraped: Scra
         "CHAR DESC": charDesc, "Manufacturer Name": brand,
       })
       const fields = {
+        gstRate: DEFAULT_GST_RATE,
         sku: row.itemno, itemno: row.itemno, name,
         category, groupName: category, group_name: category,
         subCategory, prod_desc: subCategory,

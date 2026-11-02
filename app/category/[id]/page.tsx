@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
@@ -38,7 +39,7 @@ const capitalizeFirstLetter = (string: string) => {
 
 const getCanonicalMeta = (product: SubCategoryProductResponse) => normalizeProductForSchema(product)
 const getProductType = (product: SubCategoryProductResponse) => String(product?.type || getCanonicalMeta(product).subCategoryProdDesc || "")
-const getProductBrand = (product: SubCategoryProductResponse) => String(getCanonicalMeta(product).manufacturerName || "")
+const getProductBrand = catalogueBrand
 const getProductCharDesc = (product: SubCategoryProductResponse) => String(getCanonicalMeta(product).charDesc || "")
 
 export default function CategoryPage() {

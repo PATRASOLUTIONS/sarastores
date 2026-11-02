@@ -26,6 +26,7 @@ function matches(document, filter) {
 }
 function fixture(documents = [{ _id: "a", name: "A" }, { _id: "b", name: "B" }], sourceRoles) {
   const events = []
+  const statsReads = []
   const source = new Map([["products", { documents: documents.map(document => copy(document)), options: {}, indexes: [{ v: 2, name: "_id_", key: { _id: 1 } }] }]])
   const target = new Map()
   let failCheckpoint = false
@@ -50,7 +51,9 @@ function fixture(documents = [{ _id: "a", name: "A" }, { _id: "b", name: "B" }],
       },
       async command(command) {
         assert.equal(command.dbStats, 1)
-        return { dataSize: 1024, storageSize: 2048, indexSize: 1024 }
+        statsReads.push({ side, command })
+        return { dataSize: side === "source" ? 1024 : 512, storageSize: side === "source" ? 2048 : 1024, indexSize: side === "source" ? 1024 : 512,
+          collections: map.size, objects: [...map.values()].reduce((sum, entry) => sum + entry.documents.length, 0) }
       },
       collection(name) {
         return {
@@ -124,7 +127,7 @@ function fixture(documents = [{ _id: "a", name: "A" }, { _id: "b", name: "B" }],
     DATABASE_CLONE_TARGET_URI: `mongodb+srv://writer:${crypto.randomUUID()}@${targetHost}/`,
     DATABASE_CLONE_APPROVAL_SECRET: crypto.randomBytes(32).toString("hex"), DATABASE_CLONE_WRITES_ENABLED: "true",
   } })
-  return { service: loader.load("lib/database-clone.ts"), policy: loader.load("lib/database-clone-policy.ts"), loader, source, target, events,
+  return { service: loader.load("lib/database-clone.ts"), policy: loader.load("lib/database-clone-policy.ts"), loader, source, target, events, statsReads,
     connects: () => connects, failNextCheckpoint: () => { failCheckpoint = true } }
 }
 async function start(fx) {
@@ -142,8 +145,48 @@ test("missing clone configuration fails closed without opening any database", as
   const fx = fixture()
   delete fx.loader.env.DATABASE_CLONE_SOURCE_URI
   assert.equal((await fx.service.cloneStatus()).configured, false)
+  assert.equal((await fx.service.cloneDatabaseSizes()).configured, false)
   assert.equal(fx.connects(), 0)
   assert.equal(fx.events.length, 0)
+})
+
+test("database sizes read bounded metadata for the named databases without writes or requiring an empty destination", async () => {
+  const fx = fixture()
+  fx.target.set("existing", { documents: [{ _id: "target" }], options: {}, indexes: [] })
+  fx.loader.env.DATABASE_CLONE_WRITES_ENABLED = "false"
+  const sizes = await fx.service.cloneDatabaseSizes()
+  assert.equal(sizes.configured, true)
+  assert.ok(Number.isFinite(Date.parse(sizes.measuredAt)))
+  assert.equal(sizes.source.database, sourceName)
+  assert.equal(sizes.source.dataBytes, 1024)
+  assert.equal(sizes.source.allocatedBytes, 3072)
+  assert.equal(sizes.source.documents, 2)
+  assert.equal(sizes.target.database, targetName)
+  assert.equal(sizes.target.allocatedBytes, 1536)
+  assert.equal(sizes.target.documents, 1)
+  assert.equal(fx.statsReads.length, 2)
+  assert.ok(fx.statsReads.every(({ command }) => command.scale === 1 && command.maxTimeMS === 8000))
+  assert.equal(fx.events.length, 0)
+  assert.equal(fx.target.size, 1)
+  const admin = fixture(undefined, [{ role: "readWriteAnyDatabase", db: "admin" }])
+  await assert.rejects(admin.service.cloneDatabaseSizes(), /source account must have only the read role/)
+  assert.equal(admin.statsReads.length, 0)
+})
+
+test("database size reporting distinguishes absent metrics from empty data and formats binary units", () => {
+  const { databaseSizeFromStats, formatDatabaseBytes } = sourceLoader().load("lib/database-size.ts")
+  const incomplete = databaseSizeFromStats("example", { dataSize: 0, indexSize: -1, objects: 0 })
+  assert.equal(incomplete.dataBytes, 0)
+  assert.equal(incomplete.documents, 0)
+  assert.equal(incomplete.storageBytes, null)
+  assert.equal(incomplete.indexBytes, null)
+  assert.equal(incomplete.allocatedBytes, null)
+  assert.equal(formatDatabaseBytes(incomplete.allocatedBytes), "Unavailable")
+  assert.equal(formatDatabaseBytes(0), "0 B")
+  assert.equal(formatDatabaseBytes(512), "512 B")
+  assert.equal(formatDatabaseBytes(1024), "1.00 KiB")
+  assert.equal(formatDatabaseBytes(1024 ** 2), "1.00 MiB")
+  assert.equal(formatDatabaseBytes(1024 ** 3), "1.00 GiB")
 })
 
 test("preview is read-only and rejects administrator privileges on the source", async () => {
@@ -255,10 +298,12 @@ test("content tampering fails verification and blocks catalogue reads", async ()
 
 test("all new API handlers guard infrastructure access and reject unapproved actions", async () => {
   let calls = 0
-  const service = { cloneStatus: async () => { calls++; return {} }, startClone: async () => { calls++; return {} }, advanceClone: async () => { calls++; return {} }, previewClone: async () => { calls++; return {} }, withVerifiedClone: async () => { calls++; return {} } }
-  const overrides = { "@/lib/auth": { requireFullAdmin: async () => ({ ok: false, response: new Response("Forbidden", { status: 403 }) }) }, "@/lib/database-clone": service }
+  const service = { cloneDatabaseSizes: async () => { calls++; return {} }, cloneStatus: async () => { calls++; return {} }, startClone: async () => { calls++; return {} }, advanceClone: async () => { calls++; return {} }, previewClone: async () => { calls++; return {} }, withVerifiedClone: async () => { calls++; return {} } }
+  const overrides = { "@/lib/auth": { requireFullAdmin: async () => ({ ok: false, response: new Response("Forbidden", { status: 403 }) }) }, "@/lib/database-clone": service,
+    "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products" }, getCollection: async () => { calls++; throw new Error("Unauthorized catalogue read") }, normalizeId: value => value } }
   const loader = sourceLoader(overrides)
   assert.equal((await loader.load("app/api/admin/database-clone/route.ts").GET()).status, 403)
+  assert.equal((await loader.load("app/api/admin/database-clone/size/route.ts").GET()).status, 403)
   assert.equal((await loader.load("app/api/admin/database-clone/route.ts").POST(new Request("http://fixture", { method: "POST", body: "{}" }))).status, 403)
   assert.equal((await loader.load("app/api/admin/database-clone/preview/route.ts").POST()).status, 403)
   assert.equal((await loader.load("app/api/admin/catalogue-quality/route.ts").GET()).status, 403)

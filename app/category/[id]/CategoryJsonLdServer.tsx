@@ -8,7 +8,7 @@ import { safeJsonLd } from "@/lib/jsonld-safe"
 import { getSeoCategory } from "@/lib/seo-category"
 import { titleCaseLabel } from "@/lib/product-display"
 import { cleanProductName } from "@/utils/cleanProductName"
-import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 
 async function getCategoryProducts(categoryName: string) {
   try {
@@ -21,10 +21,9 @@ async function getCategoryProducts(categoryName: string) {
     // Products store the category as a name; older rows may still hold an id.
     const products = await db
       .collection('products')
-      .find({
-        ...PUBLIC_PRODUCT_FILTER,
+      .find(await publicCatalogueFilter({
         $or: [{ category: category.name }, { groupName: category.name }, { category: category.id }],
-      })
+      }))
       .project({ _id: 1, id: 1, slug: 1, name: 1 })
       .limit(50)
       .toArray()

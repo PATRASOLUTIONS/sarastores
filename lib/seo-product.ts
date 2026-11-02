@@ -1,3 +1,4 @@
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { cache } from "react"
 import { getCollection } from "@/lib/db-service"
 import { getReviewProduct, publishedReviewFilter } from "@/lib/reviews"
@@ -53,7 +54,7 @@ export const getSeoProduct = cache(async (identifier: string) => {
     price: Number.isFinite(price) && price > 0 ? price : null,
     mrp: getCatalogMRP({ ...product, mrp: product.mrp || specs?.mrp }),
     inStock: typeof product.stock === "number" ? product.stock > 0 : product.inStock !== false,
-    brand: String(product.manufacturerName || product.manufacturer_name || product.brand || ""),
+    brand: catalogueBrand(product),
     category: String(product.category || product.groupName || ""),
     sku: typeof product.sku === "string" ? product.sku : undefined,
     attributes,

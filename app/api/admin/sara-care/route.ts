@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
 import { z } from "zod"
 import * as XLSX from "xlsx"
 import { requireFullAdmin } from "@/lib/auth"
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
         for (const years of durations) {
           await products.updateOne({ _id: saraCareProductId(years) }, { $set: { id: saraCareProductId(years), sku: saraCareSku(years),
             name: `Sara Care — ${saraCareDurationLabel(years)}`, type: "service", serviceKind: "sara-care", linkedPurchaseOnly: true,
-            active: false, price: 0, image: "/images/sara-care.svg", updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } }, { upsert: true, session })
+            active: false, price: 0, image: "/images/sara-care.svg", updatedAt: new Date() }, $setOnInsert: { createdAt: new Date(), gstRate: DEFAULT_GST_RATE } }, { upsert: true, session })
         }
         await settings.updateOne({ _id: "settings" }, { $set: data }, { upsert: true, session })
       })

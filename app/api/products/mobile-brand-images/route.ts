@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
-import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 
 const MOBILE_BRANDS = [
   "Apple", "Benco", "Cellcor", "Giva", "Google", "Infinix", "Itel", "Karbonn",
@@ -66,9 +66,7 @@ export async function GET() {
 
     const [result] = await products.aggregate([
       {
-        $match: {
-          ...PUBLIC_PRODUCT_FILTER,
-        },
+        $match: await publicCatalogueFilter(),
       },
       { $facet: facets },
     ]).toArray()

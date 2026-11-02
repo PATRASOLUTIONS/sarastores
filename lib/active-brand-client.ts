@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { z } from "zod"
 import { activeBrandListResponseSchema } from "@/lib/catalog-list-response"
 
@@ -19,6 +20,9 @@ const productBrandsSchema = z.array(z.object({
   manufacturerName: z.string().nullish(),
   manufacturer_name: z.string().nullish(),
   brand: z.string().nullish(),
+  taxonomySource: z.string().nullish(),
+  division: z.string().nullish(),
+  raw: z.record(z.unknown()).nullish(),
 }))
 const TTL = 2 * 60 * 1000
 let cached: { brands: ActiveProductBrand[]; expiresAt: number } | null = null
@@ -36,8 +40,7 @@ async function catalogueBrands(): Promise<ActiveProductBrand[]> {
     for (const product of products) {
       const stock = Number(product.stock)
       if (product.active !== true || !Number.isFinite(stock) || stock <= 0) continue
-      const name = [product.manufacturerName, product.manufacturer_name, product.brand]
-        .map(value => value?.trim() || "").find(Boolean)
+      const name = catalogueBrand(product)
       if (!name) continue
       const key = name.toLowerCase()
       const existing = brands.get(key)

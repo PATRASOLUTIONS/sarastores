@@ -17,7 +17,7 @@ import {
   toMongoFilter,
   toProductSearchParams,
 } from '@/lib/search-query';
-import { PUBLIC_PRODUCT_FILTER } from '@/lib/product-visibility';
+import { publicCatalogueFilter } from '@/lib/public-catalogue';
 
 interface SearchSuggestion {
   id: string;
@@ -117,7 +117,7 @@ async function fetchSuggestions(query: string, limit: number): Promise<SearchSug
     // Fetch products matching the query across name/brand/category
     const products = await db
       .collection("products")
-      .find({ $and: [PUBLIC_PRODUCT_FILTER, productFilter] })
+      .find(await publicCatalogueFilter(productFilter))
       .limit(Math.max(Math.ceil(limit * 0.6), 1))
       .toArray();
 

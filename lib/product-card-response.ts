@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 import { productSpecificationResponseSchema } from "./product-specification-response"
 
 /**
@@ -34,6 +35,7 @@ export const productCardResponseSchema = z.object({
   division: z.string().nullish().transform(value => value ?? undefined),
   segment: z.string().nullish().transform(value => value ?? undefined),
   brand: z.string().nullish().transform(value => value ?? undefined),
+  taxonomySource: z.string().nullish().transform(value => value ?? undefined),
   originalPrice: z.number().nullish().transform(value => value ?? undefined),
   specification_images: z.union([z.string(), z.array(z.string())]).nullish().transform(value => value ?? undefined),
   sku: z.string().optional(),
@@ -78,7 +80,7 @@ export const productDetailResponseSchema = productCardResponseSchema.extend({
 export type ProductDetailResponse = z.infer<typeof productDetailResponseSchema>
 
 export const recentlyViewedResponseSchema = z.object({
-  products: z.array(productCardResponseSchema),
+  products: z.array(productCardResponseSchema).transform(uniquePublicProductNames),
 })
 
 export const productListingResponseSchema = productCardResponseSchema.extend({
@@ -100,7 +102,7 @@ export const productListingResponseSchema = productCardResponseSchema.extend({
   createdAt: z.union([z.string(), z.number()]).nullish().transform(value => value ?? undefined),
   updatedAt: z.union([z.string(), z.number()]).nullish().transform(value => value ?? undefined),
 }).passthrough()
-export const productListingListResponseSchema = z.array(productListingResponseSchema)
+export const productListingListResponseSchema = z.array(productListingResponseSchema).transform(uniquePublicProductNames)
 export type ProductListingResponse = z.infer<typeof productListingResponseSchema>
 
 export const partnerAssignmentProductResponseSchema = productListingResponseSchema.extend({

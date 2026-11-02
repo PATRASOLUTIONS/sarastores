@@ -246,6 +246,7 @@ test("development catalogue seed defaults to preview and atomically rolls back a
   assert.equal((await response.json()).products.inserted, 1)
   assert.equal(products.length, 2)
   assert.ok(products.some(doc => doc.source === "manual"))
+  assert.equal(products.find(doc => doc.source === "excel").gstRate, 18)
   assert.ok(products.some(doc => doc.source === "excel" && doc.stock === 2))
   loader.env.NODE_ENV = "production"
   assert.equal((await route.POST(req({ apply: true }))).status, 404)
@@ -2817,6 +2818,7 @@ test("Amazon create saves product and canonical specifications in one transactio
   assert.ok(Array.isArray(fixture.spec().reviews))
   assert.equal(fixture.product().price, 0)
   assert.equal(fixture.product().mrp, 0)
+  assert.equal(fixture.product().gstRate, 18)
   assert.equal(fixture.sessionsEnded(), 1)
 })
 

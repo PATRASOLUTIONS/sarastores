@@ -6,12 +6,16 @@ An administrator-operated clone of `e-commerce-bytewise` into a new `sara_clone`
 
 Pages:
 
-- `/admin/database-clone`: status, read-only preview, explicit approval, bounded copying, manual pause/resume, and verification.
-- `/admin/catalogue-quality`: on-demand read-only audit of a verified clone, issue filters, reasons, suggested actions, and CSV export.
+- `/admin/database-clone`: **Create clone**, read-only preview, explicit **Clone database** approval, bounded copying, manual pause/resume, verification and database sizes.
+- `/admin/catalogue-quality`: **Scan catalogue**, read-only audit results, issue filters, reasons, suggested actions, and CSV export.
 
 Both pages have server-side full-administrator gates and noindex metadata. Every API independently requires a full administrator. Staff page access is insufficient.
 
-## Configuration before any real database operation
+The clone page displays a **Database size** panel for production `e-commerce-bytewise` and destination `sara_clone`. It reads `dbStats` once on page open, then only when **Refresh sizes** is clicked; it has no polling or scheduled execution. This independent read-only request works before a clone, during copying and after verification, without requiring the destination to be empty. It still requires the dedicated connections and exact database roles below.
+
+Size metrics include logical document data, allocated document storage, index storage, allocated total (document storage plus indexes), collection count and document count, with the measurement time in IST. Sizes use binary KiB/MiB/GiB units. Unavailable metrics are explicitly labelled rather than presented as zero. Logical data may exceed compressed storage. These database-specific figures do not show cluster free capacity, other databases, provider backups or billing; destination figures include the clone control collection. Refresh after copying to see the completed destination size.
+
+## Configuration before any real clone operation
 
 Configure these server-only Vercel environment variables. Do not replace the app's production `MONGODB_URI`, publish credentials, or put connections in browser code.
 
@@ -41,7 +45,7 @@ Only the approved start action creates destination data. Exclusive creation of `
 - Each browser-requested batch is sequential and bounded by document count, data size and read time. Vercel routes declare a 60-second maximum. A 120-second destination lease prevents concurrent or resumed requests from overlapping an invocation that was killed at the function limit.
 - The browser must remain open to advance the job. Pause stops after the current request. Closing the page launches no further work; refresh status and resume manually later. A timed-out request can leave a lease until it expires.
 - MongoDB BSON values, `_id`, original document fields, supported collection settings and ordinary indexes are preserved. Content is verified using a chained SHA-256 digest of the BSON documents actually read/copied, plus counts, collection settings and index definitions. Verification compares the target with that recorded logical-copy stream, not with a later changing source count.
-- Batches use idempotent destination upserts and persisted cursors. Transient failures preserve the checkpoint for manual resume. Structural/content verification failures mark the clone failed and prevent auditing.
+- Batches use idempotent destination upserts and persisted cursors. Transient failures preserve the checkpoint for manual resume. Structural/content verification failures mark the clone failed; they do not block the separate store catalogue report.
 - Destination document validation is enforced. A source record that is incompatible with the copied validator stops the clone; the service never bypasses validation or requests broader privileges. Such legacy data needs a separately reviewed restore plan.
 - There are no database/collection deletion methods in the implementation. An occupied unrelated destination is refused. An owned failed clone is not overwritten or automatically cleaned up; recovery requires a separately reviewed operator plan.
 - TTL index expiry is deliberately disabled on copied indexes so the clone cannot expire its own copied records. The exact original definitions, including expiry, are retained in the control manifest. This deviation is disclosed in the preview and status.
@@ -52,9 +56,15 @@ Only the approved start action creates destination data. Exclusive creation of `
 
 ## Catalogue report
 
-The report opens only the destination connection and requires an owned verified manifest. It never connects to the source, writes corrections, persists a scan, checks arbitrary image URLs, or calls external providers. It reflects the clone at scan time, not later production updates.
+Cloning controls stay on the database clone page. **Create clone** opens the read-only preview; **Clone database** starts copying only after the existing explicit approval checks pass. Independently, open `/admin/catalogue-quality` and choose **Scan catalogue** to review the store's current products and specifications. The scan uses the existing application connection and configured application database through `lib/db-service.ts`; no clone credentials, clone verification or approval secret are required. Scans are started only by the catalogue page's button; refreshing does not automatically rescan. Reports stay in page memory only, and no report storage or database corrections were added.
+
+The report performs only bounded `countDocuments` and projected `find` reads on application products and specifications. It does not write corrections, create indexes, persist a scan, fetch arbitrary image URLs or call external providers. The actual application database name is shown in the report and exports. Production reads consume existing database resources; the report is not a transactionally consistent snapshot, and later updates require another scan. Proposed metadata corrections still need separate approval and implementation based on verified evidence.
 
 Checks include missing/duplicate item numbers and slugs, weak/duplicate titles, missing hierarchy/brand, label variations, brand/SEO/feed conflicts, missing model/manufacturer identifiers, GTIN checksum errors, legacy identifiers excluded by the feed projection, descriptions, images, actual MRP versus selling price, invalid stock, warranty/tax review, basic specifications, and invalid shipping weight.
+
+The scanner treats `itemno` as SKU and accepts legacy item-number spellings without removing leading zeros. Specifications are matched by SKU/itemno or an explicit product ID; a SKU record pointing to another product is not borrowed. The latest matching record is used deterministically. Checks inspect product/raw fields, descriptions, overview, features, manufacturer content, specification images, nested/JSON technical details and additional information before reporting missing data. Empty product arrays/objects do not override populated linked fields. Existing specification MRP is also recognised, as on the product page.
+
+Each product includes **What the scan found**: SKU, model, distinct image count, meaningful technical field count, matched specification status, warranty source, HSN and explicit GST. Specification-only images are recognised as existing images; any shopping-feed mapping issue is a separate review item. The store's published default manufacturer-warranty policy is accepted without fabricating a fixed duration. HSN/GST are still read separately, including percentages in technical details. Missing online HSN is accepted because HSN is supplied on the printed delivery invoice; recorded HSN values are still checked for format. One usable image is sufficient, and low photo counts are not flagged. GST range checks remain active; format/range checks cannot establish legal tax correctness. An internal SKU is not a missing SKU merely because a separate manufacturer GTIN/MPN has not been supplied.
 
 Results distinguish blocking issues, improvements, and human verification. Automated readiness does not prove manufacturer facts, photos, tax classification, warranty, category-specific completeness, Google approval, or delivery-policy correctness. No AI-generated facts or corrections are applied.
 
@@ -75,3 +85,5 @@ The queue filters also support readiness and review area, and can sort by priori
 No extra paid service or scheduled execution is introduced. Manual clones still use Vercel function execution, network traffic and MongoDB destination storage/indexes. Current included allowances and cluster capacity must be checked before each real clone. This implementation does not guarantee zero additional charges or automatically purchase a larger tier.
 
 Development verification uses synthetic fixtures and isolated build configuration. No real clone has been initiated, no production metadata has been corrected, and no credentials have been configured by this implementation. Real connection inspection, destination writes, deployment and configuration activation remain operator actions subject to the preview/approval process above.
+
+Catalogue scans request 100 products at a time and only their matching specifications. The page shows progress and combines every page before showing or exporting a report, including item-number, URL and label checks across pages. Keep the page open until completion. A scan that detects a changed product count, repeated IDs or an incomplete page stops instead of presenting a partial report. These are read-only, on-demand requests; no background job or saved scan collection is created.

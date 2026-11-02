@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { productCardResponseSchema, type ProductCardResponse } from "@/lib/product-card-response"
-import { readRecentlyViewedIds, writeRecentlyViewedIds } from "@/lib/recently-viewed-client"
+import { readRecentlyViewedIds } from "@/lib/recently-viewed-client"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 
 const LIMIT = 12
 
 function unique(products: ProductCardResponse[]): ProductCardResponse[] {
-  return [...new Map(products.map((product) => [product.id, product])).values()]
+  return uniquePublicProductNames([...new Map(products.map((product) => [product.id, product])).values()])
 }
 
 async function loadFromDevice(): Promise<ProductCardResponse[]> {
@@ -18,7 +19,7 @@ async function loadFromDevice(): Promise<ProductCardResponse[]> {
   const response = await fetch("/api/products/bulk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids: requested }),
+    body: JSON.stringify({ ids: requested, catalogue: true }),
   })
   if (!response.ok) throw new Error("Recently viewed products could not be loaded")
   const body: unknown = await response.json()
@@ -27,11 +28,9 @@ async function loadFromDevice(): Promise<ProductCardResponse[]> {
     const parsed = productCardResponseSchema.safeParse(row)
     if (parsed.success && parsed.data.active !== false) found.set(parsed.data.id, parsed.data)
   }
-  const products = unique(requested.flatMap((id) => found.get(id) ?? []))
-  const valid = new Set(products.map((product) => product.id))
-  const cleaned = ids.filter((id) => valid.has(id) || !ids.slice(0, LIMIT).includes(id))
-  if (cleaned.length !== ids.length) writeRecentlyViewedIds(cleaned)
-  return products
+  // The catalogue may replace a viewed item with its stocked same-name record.
+  // Do not remove the original history IDs when that representative changes.
+  return unique([...found.values()])
 }
 
 /** Products the shopper opened most recently, newest first. */

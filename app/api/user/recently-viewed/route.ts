@@ -3,6 +3,7 @@ import { getCollection, normalizeId } from "@/lib/db-service";
 import { ObjectId } from "mongodb";
 import { getCurrentUserId } from "@/lib/auth";
 import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility";
+import { getPublicCatalogueSelection } from "@/lib/public-catalogue";
 
 const COLLECTION = "users";
 
@@ -84,7 +85,8 @@ export async function GET(req: Request) {
 
         // Convert string IDs to ObjectIds if your product IDs are ObjectIds
         // Assuming product IDs are strings based on project context, but handling both
-        const productIds = user.recentlyViewed;
+        const selection = await getPublicCatalogueSelection();
+        const productIds = [...new Set(user.recentlyViewed.flatMap(id => selection.representativeIds.get(id) ?? []).map(String))];
 
         let products = [];
 

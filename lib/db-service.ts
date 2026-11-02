@@ -1,3 +1,5 @@
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
+
 // Admin Settings helpers
 export async function getSettingsData() {
   const collection = await getCollection("settings")
@@ -201,6 +203,7 @@ export async function create(collectionName: string, data: Document) {
     const collection = await getCollection(collectionName)
     const result = await collection.insertOne({
       ...data,
+      ...(collectionName === COLLECTIONS.PRODUCTS ? { gstRate: DEFAULT_GST_RATE } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -326,6 +329,7 @@ export async function insertMany(collectionName: string, documents: Document[]) 
     const collection = await getCollection(collectionName)
     const documentsWithTimestamps = documents.map((doc) => ({
       ...doc,
+      ...(collectionName === COLLECTIONS.PRODUCTS ? { gstRate: DEFAULT_GST_RATE } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     }))

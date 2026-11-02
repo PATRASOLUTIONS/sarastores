@@ -48,7 +48,7 @@ export interface ProductCommerceAttributes {
   priceValidTo: Date | null
 }
 
-/** Platform-wide GST fallback used when a product has no explicit rate. */
+/** Owner-approved GST default stored on new products and used by display fallbacks. */
 export const DEFAULT_GST_RATE = 18
 
 function isRecord(value: unknown): value is Record<string, unknown> {

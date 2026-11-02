@@ -6,11 +6,11 @@
 import { connectToDatabase } from "@/lib/mongodb"
 import { safeJsonLd } from "@/lib/jsonld-safe"
 import { absoluteSeoImage } from "@/lib/seo-metadata"
-import { normalizeProductForSchema } from "@/lib/product-schema"
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { cleanProductName } from "@/utils/cleanProductName"
 import { getSeoBrand as getBrand } from "@/lib/seo-brand"
 import type { ObjectId } from "mongodb"
-import { PUBLIC_PRODUCT_FILTER } from "@/lib/product-visibility"
+import { publicCatalogueFilter } from "@/lib/public-catalogue"
 
 interface BrandProductDocument {
   _id: ObjectId | string
@@ -29,13 +29,13 @@ async function getBrandProducts(brandName: string, limit: number) {
     const { db } = await connectToDatabase()
     const products = await db
       .collection<BrandProductDocument>('products')
-      .find(PUBLIC_PRODUCT_FILTER)
-      .project({ _id: 1, id: 1, slug: 1, name: 1, brand: 1, manufacturer: 1, manufacturerName: 1, manufacturer_name: 1, raw: 1 })
+      .find(await publicCatalogueFilter())
+      .project({ _id: 1, id: 1, slug: 1, name: 1, brand: 1, manufacturer: 1, manufacturerName: 1, manufacturer_name: 1, division: 1, taxonomySource: 1, raw: 1 })
       .toArray()
 
     // Filter by brand name
     return products.filter((p) => {
-      const manufacturer = normalizeProductForSchema(p).manufacturerName || p.brand || p.manufacturer || ""
+      const manufacturer = catalogueBrand(p)
       return manufacturer.toLowerCase().includes(brandName.toLowerCase())
     }).slice(0, limit)
   } catch (error) {

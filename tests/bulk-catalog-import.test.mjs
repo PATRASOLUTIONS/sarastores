@@ -98,9 +98,16 @@ function publishingFixture({ initial = [], locked = false, failSpec = false, rol
   const collections = {
     products: {
       find: (query, opts) => {
-        options.push(opts)
-        assert.equal(query.$or[0].itemno, row.itemno)
-        return { limit: () => ({ toArray: async () => products }) }
+        if (opts.session) options.push(opts)
+        assert.ok(query.$or[0].itemno.$in.some(pattern => pattern.test(row.itemno)))
+        const cursor = {
+          toArray: async () => products.filter(product => query.$or.some(clause => Object.entries(clause).some(([field, condition]) => {
+            const value = field === "raw.itemno" ? product.raw?.itemno : product[field]
+            return condition.$in.some(pattern => pattern.test(String(value ?? "")))
+          }))),
+          limit: () => cursor,
+        }
+        return cursor
       },
       insertOne: async (doc, opts) => { options.push(opts); products = [...products, doc]; return { insertedId: doc._id } },
       updateOne: async (filter, update, opts) => {
@@ -136,7 +143,9 @@ function publishingFixture({ initial = [], locked = false, failSpec = false, rol
 
 test("publishing atomically creates canonical product and approved, reachable specifications", async () => {
   const fixture = publishingFixture()
-  const saved = await fixture.publish(row, productFixture())
+  const result = await fixture.publish(row, productFixture())
+  assert.equal(result.added, true)
+  const saved = result.product
   const { products, specs, sessionsEnded, options, session } = fixture.state()
   assert.equal(products.length, 1)
   assert.equal(specs.length, 1)
@@ -146,7 +155,7 @@ test("publishing atomically creates canonical product and approved, reachable sp
   for (const [field, value] of Object.entries({
     name: row.name, category: row.category, subCategory: row.subCategory,
     brand: row.brand, manufacturerName: row.brand, char_desc: row.charDesc,
-    itemno: row.itemno, sku: row.itemno, active: true, stock: 0, price: 80, mrp: 100,
+    itemno: row.itemno, sku: row.itemno, active: true, stock: 0, price: 80, mrp: 100, gstRate: 18,
   })) assert.equal(product[field], value, field)
   assert.equal(product.raw["Category/Group Name"], row.category)
   assert.equal(product.raw["CHAR DESC"], row.charDesc)

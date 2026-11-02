@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -181,7 +182,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
     slug: item.slug,
     category: item.category,
     subCategory: item.subCategory ?? undefined,
-    brand: item.manufacturerName || item.brand || undefined,
+    brand: catalogueBrand(item) || undefined,
   })), [viewed])
 
   const similarToViewed = useMemo(() => {

@@ -1,7 +1,7 @@
 import { qualityCsvCell, type QualityIssue, type QualityProduct, type QualitySeverity } from "@/lib/catalogue-quality"
 
 export const QUALITY_AREAS = [
-  { id: "identity", label: "Product identity", guidance: "Verify unique SKUs, exact models and genuine manufacturer identifiers." },
+  { id: "identity", label: "SKU, model and barcodes", guidance: "Itemno is your SKU. Manufacturer model numbers and barcodes are checked separately." },
   { id: "taxonomy", label: "Classification", guidance: "Agree consistent division, category, segment and brand labels." },
   { id: "content", label: "Product content", guidance: "Use official specifications and descriptions for the exact model and variant." },
   { id: "images", label: "Product images", guidance: "Confirm the main image and useful views show the exact item and variant." },
@@ -92,7 +92,7 @@ export function catalogueReviewSummary(products: QualityProduct[]) {
 
 /** A review document, with blank proposals and approval cells; never an import payload. */
 export function catalogueReviewCsv(products: QualityProduct[], filters: ReviewFilters, environment: string, scannedAt: string, worksheet = false): string {
-  const columns = ["Clone environment", "Scan time", "Priority", "Product ID", "SKU", "Product", "Active", "Division", "Category", "Segment", "Brand", "Status", "Area", "Rule", "Field", "Severity", "Current value", "Why it matters", "Suggested action"]
+  const columns = ["Catalogue database", "Scan time", "Priority", "Product ID", "SKU", "Product", "Active", "Division", "Category", "Segment", "Brand", "Status", "Area", "Rule", "Field", "Severity", "Current value", "Why it matters", "Suggested action"]
   if (worksheet) columns.push("Proposed value (review only)", "Evidence / official source", "Reviewer", "Approval decision (not applied)")
   const rows = products.flatMap(product => matchingReviewIssues(product, filters).map(issue => {
     const row: unknown[] = [environment, scannedAt, reviewPriority(product), product.id, product.sku, product.name, product.active,

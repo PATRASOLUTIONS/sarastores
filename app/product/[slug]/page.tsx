@@ -1,5 +1,6 @@
 "use client"
 
+import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -419,7 +420,7 @@ export default function ProductDetailPage() {
     return () => controller.abort()
   }, [suggestionId, suggestionCategory, suggestionsAttempt])
 
-  const configuredRailCards = useBanners("pdp-rail", product?.manufacturerName || product?.brand || undefined)
+  const configuredRailCards = useBanners("pdp-rail", catalogueBrand(product) || undefined)
   const railCards = marketing.enabled("rail") ? configuredRailCards : []
 
   const images = useMemo(() => {
@@ -464,7 +465,7 @@ export default function ProductDetailPage() {
   }
 
   const name = cleanProductName(product.name)
-  const brand = String(product.manufacturerName || product.brand || "")
+  const brand = catalogueBrand(product)
   const renderSuggestion = (c: CatalogProduct) => (
     <article
       key={c.id}

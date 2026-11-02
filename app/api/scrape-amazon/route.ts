@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { DEFAULT_GST_RATE } from "@/lib/product-attributes"
 import { requireAdmin } from "@/lib/auth"
 import axios from "axios"
 import * as cheerio from "cheerio"
@@ -991,6 +992,7 @@ How to Report an Issue:
           itemno: canonicalSku,
           sku: canonicalSku,
           ...finalData,
+          gstRate: DEFAULT_GST_RATE,
           // Also set main fields
           name: editedData?.name || cleanedTitle,
           brand: editedData?.brand || cleanedBrand,

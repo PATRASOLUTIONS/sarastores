@@ -1,5 +1,7 @@
 "use client"
 
+import { uniquePublicProductNames } from "@/lib/public-product-names"
+
 import Link from "next/link"
 import type { SyntheticEvent } from "react"
 import { ArrowRight, BadgeCheck, CreditCard, Headphones, MapPin, RefreshCw, ShieldCheck, Star, Store, Truck, Users } from "lucide-react"
@@ -188,7 +190,7 @@ export function HomepageDeals({ products, loading, error, retry }: {
         <div className={styles.catalogueMessage}><p>New deals are on their way.</p><Link href="/products">Explore all products <ArrowRight size={14} /></Link></div>
       ) : (
         <div className={styles.productGrid}>
-          {products.map((product) => <HomeProductCard key={product.id} product={product} warrantyLabel={marketing.text("deals", "warrantyLabel")} />)}
+          {uniquePublicProductNames(products).map((product) => <HomeProductCard key={product.id} product={product} warrantyLabel={marketing.text("deals", "warrantyLabel")} />)}
         </div>
       )}
     </section>
@@ -236,7 +238,7 @@ export function HomepageProductRail({ title, href, ctaText = "View All", product
     <section className={styles.deals} aria-label={label}>
       <HomepageHeading title={title} href={href} ctaText={ctaText} />
       <div className={styles.productGrid}>
-        {products.map((product) => <HomeProductCard key={product.id} product={product} />)}
+        {uniquePublicProductNames(products).map((product) => <HomeProductCard key={product.id} product={product} />)}
       </div>
     </section>
   )
