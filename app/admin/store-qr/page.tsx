@@ -821,7 +821,7 @@ export default function StoreQRPage() {
                     />
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
-                    This may take a few minutes for 70+ stores
+                    This may take a few minutes for 90+ stores
                   </p>
                 </div>
               ) : (

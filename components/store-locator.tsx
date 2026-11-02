@@ -266,7 +266,7 @@ export function StoreLocator() {
     }, (error) => {
       if (request !== locationRequest.current) return
       setGpsLocation(null)
-      setLocationError(error.code === 1 ? "Location access wasn't granted. Showing stores in a shuffled order; you can still search by city or pincode." :
+      setLocationError(error.code === 1 ? null :
         error.code === 3 ? "Location request timed out. Please try again." : "Unable to retrieve your location. Please try again.")
       setLocationLoading(false)
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 })

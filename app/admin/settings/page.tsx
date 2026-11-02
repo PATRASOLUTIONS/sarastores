@@ -328,7 +328,7 @@ export default function AdminSettings() {
                 id="statStores"
                 value={settings.statStores || ""}
                 onChange={(v) => updateField("statStores", v)}
-                placeholder="e.g. 85+"
+                placeholder="e.g. 90+"
               />
             </FieldGroup>
 

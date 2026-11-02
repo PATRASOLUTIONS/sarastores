@@ -1,5 +1,7 @@
 "use client"
 
+import { storeNetworkCount } from "@/lib/store-network"
+
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { MapPin, Store, Headphones, ArrowRight } from "lucide-react"
@@ -29,7 +31,7 @@ export default function StoreCta() {
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary-subtle px-3 py-1 text-xs font-semibold text-brand-primary">
             <Store className="h-3.5 w-3.5" />
-            {storeCount ? `${storeCount} stores across Karnataka` : "Stores across Karnataka"}
+            {`${storeNetworkCount(storeCount)} stores across Karnataka`}
           </span>
           <h2 className="mt-3 text-xl font-bold text-gray-900 md:text-2xl">
             Buy online, or see it in person first

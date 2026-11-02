@@ -1,5 +1,7 @@
 "use client"
 
+import { storeNetworkCount } from "@/lib/store-network"
+
 import SiteImage from "@/components/SiteImage"
 import { uniquePublicProductNames } from "@/lib/public-product-names"
 
@@ -111,7 +113,7 @@ export function HomepageBenefits({ storeCount }: { storeCount?: number }) {
       {benefits.map(({ icon: Icon, title, detail, href }, index) => (
         <Link href={href} key={title}>
           <Icon size={26} strokeWidth={1.5} aria-hidden />
-          <span><strong>{index === 0 && storeCount ? `${storeCount}+ ${marketing.text("benefits", "item1Title", "Stores")}` : title}</strong><small>{detail}</small></span>
+          <span><strong>{index === 0 && storeCount ? `${storeNetworkCount(storeCount)} ${marketing.text("benefits", "item1Title", "Stores")}` : title}</strong><small>{detail}</small></span>
         </Link>
       ))}
     </section>
@@ -293,18 +295,19 @@ export function HomepageStores({ storeCount }: { storeCount?: number }) {
   const marketing = useMarketingContent("home")
   const { storefront } = useBrandImages()
   const reasons = marketing.items("stores", [
-    { icon: MapPin, title: storeCount ? `${storeCount}+ Stores` : "Local Stores", subtitle: "Across Karnataka" },
+    { icon: MapPin, title: `${storeNetworkCount(storeCount)} Stores`, subtitle: "Across Karnataka" },
     { icon: Users, title: "Happy Customers", subtitle: "Our SARA Family" },
     { icon: BadgeCheck, title: "Trusted Brands", subtitle: "100% Genuine" },
     { icon: CreditCard, title: "Easy EMI", subtitle: "All Major Banks" },
     { icon: Headphones, title: "Expert Support", subtitle: "Always Here" },
-  ].map(item => ({ ...item, detail: item.subtitle })))
+  ].map(item => ({ ...item, detail: item.subtitle }))).map((item, index) =>
+    index === 0 ? { ...item, title: `${storeNetworkCount(storeCount)} Stores` } : item)
   return (
     <section className={styles.stores} aria-label="Find a store and why choose SARA">
       <div className={styles.storeCard}>
         <div>
           <h2>{marketing.text("stores", "title")}</h2>
-          <p>{storeCount ? `${storeCount}+ Stores Across Karnataka` : "Your neighbourhood electronics store"}<br />{marketing.text("stores", "description")}</p>
+          <p>{`${storeNetworkCount(storeCount)} Stores Across Karnataka`}<br />{marketing.text("stores", "description")}</p>
           <Link href={marketing.text("stores", "ctaLink")} className={styles.shopButton}>{marketing.text("stores", "ctaText")} <ArrowRight size={14} aria-hidden /></Link>
         </div>
         <SiteImage sizes="(min-width: 1280px) 480px, 40vw" src={marketing.image("stores", "image", storefront)} alt="SARA electronics store" loading="lazy" />

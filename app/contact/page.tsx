@@ -1,5 +1,7 @@
 "use client"
 
+import { storeNetworkCount } from "@/lib/store-network"
+
 import { useState } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import Link from "next/link"
@@ -115,7 +117,7 @@ export default function ContactPage() {
   const email = settings?.storeEmail || "support@saraelectronics.in"
   const address = settings?.storeAddress || "SARA Head Office, Bengaluru, Karnataka"
   const years = settings?.statYears || "25+"
-  const stores = settings?.statStores || "85+"
+  const stores = storeNetworkCount(settings?.statStores)
   const customers = settings?.statCustomers || "2,00,000+"
 
   const update =

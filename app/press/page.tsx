@@ -9,7 +9,7 @@ import { CalendarClock, Download, Mail, MapPin, Phone, Store, Users } from "luci
 
 const FACTS = [
   { icon: CalendarClock, value: "25+ years", label: "Serving customers since 2010" },
-  { icon: Store, value: "85+ stores", label: "Across Karnataka" },
+  { icon: Store, value: "90+ stores", label: "Across Karnataka" },
   { icon: Users, value: "2,00,000+", label: "Customers served" },
   { icon: MapPin, value: "Bengaluru", label: "Head office" },
 ]
