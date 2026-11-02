@@ -72,7 +72,7 @@ export async function GET(req: Request) {
     let body: unknown = text
     try {
       body = JSON.parse(text)
-    } catch (e) {
+    } catch {
       // keep raw text
     }
 

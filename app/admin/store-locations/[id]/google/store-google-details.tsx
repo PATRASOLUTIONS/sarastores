@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ExternalLink, Loader2, RefreshCw, Star, MapPin, Phone, Image as ImageIcon } from "lucide-react"
@@ -13,7 +15,7 @@ export function StoreGoogleDetails({ storeId }: { storeId: string }) {
   const [photoFailed, setPhotoFailed] = useState(false)
   const controller = useRef<AbortController | null>(null)
 
-  async function load(refresh = false) {
+  const load = useCallback(async (refresh = false) => {
     controller.current?.abort()
     const request = new AbortController()
     controller.current = request
@@ -28,9 +30,9 @@ export function StoreGoogleDetails({ storeId }: { storeId: string }) {
       setPhotoFailed(false)
     } catch (error) { if (!request.signal.aborted) setError(error instanceof Error ? error.message : "Unable to load Google data") }
     finally { if (!request.signal.aborted) setLoading(false) }
-  }
+  }, [storeId])
 
-  useEffect(() => { setData(null); void load(); return () => controller.current?.abort() }, [storeId])
+  useEffect(() => { setData(null); void load(); return () => controller.current?.abort() }, [load, storeId])
   const connected = data?.business.status === "connected"
   const business = data?.business
   const notFetched = "Not fetched"
@@ -71,7 +73,7 @@ export function StoreGoogleDetails({ storeId }: { storeId: string }) {
             {business.writeReviewUrl && <a href={business.writeReviewUrl} target="_blank" rel="noopener noreferrer" className={actionClass}>Write a review<ExternalLink size={14} /></a>}</div>
         </section>
         <section className="overflow-hidden rounded-2xl border bg-white"><div className="border-b p-5"><h2 className="font-semibold">Google listing photo</h2></div>
-          {business.photoUrl && !photoFailed ? <figure className="p-5"><img src={business.photoUrl} alt={`Google listing: ${business.name}`} onError={() => setPhotoFailed(true)} className="h-64 w-full rounded-xl object-cover" />
+          {business.photoUrl && !photoFailed ? <figure className="p-5"><SiteImage unoptimized src={business.photoUrl} alt={`Google listing: ${business.name}`} onError={() => setPhotoFailed(true)} className="h-64 w-full rounded-xl object-cover" />
             <figcaption className="mt-3 text-xs text-gray-500">Photo: Google{business.photoCredits?.map((credit, index) => credit.url ? <a key={index} href={credit.url} target="_blank" rel="noopener noreferrer" className="underline"> / {credit.name}</a> : <span key={index}> / {credit.name}</span>)}</figcaption></figure> :
           <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-gray-500"><ImageIcon size={32} /><p>{photoFailed ? "The Google photo could not be displayed. Try refreshing the data." : business.photoMessage || "No Google photo was fetched for this listing."}</p></div>}
           {business.embedUrl && <iframe src={business.embedUrl} title={`Google Maps: ${data.store.name}`} className="h-72 w-full border-t" loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" />}

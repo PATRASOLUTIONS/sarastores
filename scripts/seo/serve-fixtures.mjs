@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url"
 // Local production smoke server. Synthetic data only; no credentials or providers.
 import path from "node:path"
 import crypto from "node:crypto"
@@ -14,7 +15,7 @@ Object.assign(env, {
   SARA_SEO_BUILD_FIXTURES: "catalogue-v2", SESSION_SECRET: crypto.randomBytes(32).toString("hex"),
   NEXT_DIST_DIR: ".seo-build-check", NEXT_TELEMETRY_DISABLED: "1",
   NEXT_PUBLIC_SITE_URL: "https://www.sarastores.com", NEXT_PUBLIC_APP_URL: "https://www.sarastores.com", NEXTAUTH_URL: "https://www.sarastores.com",
-  NODE_OPTIONS: `--require "${path.join(root, "scripts/seo/build-guard.cjs").replaceAll("\\", "/")}"`,
+  NODE_OPTIONS: `--import "${pathToFileURL(path.join(root, "scripts/seo/build-guard.mjs")).href}"`,
 })
 const log = fs.createWriteStream(path.join(root, ".seo-local/fixture-server.log"))
 const child = spawn(process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "start", "-H", "127.0.0.1", "-p", "3016"], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true })

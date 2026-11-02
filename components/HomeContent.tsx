@@ -36,8 +36,8 @@ const StoreCta = dynamic(() => import("@/components/home/StoreCta"), { ssr: fals
 const DATA_TTL = 5 * 60 * 1000 // 5 minutes
 
 export default function HomeContent() {
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [categoryIds, setCategoryIds] = useState<{ [key: string]: string }>({})
+  const [, setIsLoaded] = useState(false)
+  const [, setCategoryIds] = useState<{ [key: string]: string }>({})
   const [homeComponents, setHomeComponents] = useState<HomeComponent[]>([])
   const [manualProductsMap, setManualProductsMap] = useState<Record<string, CatalogProduct[]>>({})
   const [categoryProductsMap, setCategoryProductsMap] = useState<Record<string, CatalogProduct[]>>({})

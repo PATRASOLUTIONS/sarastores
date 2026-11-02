@@ -765,7 +765,7 @@ interface BoschSpecRow {
  */
 export async function scrapeBosch(url: string): Promise<ScrapedProduct> {
   const { html, finalUrl } = await fetchHtml(url, 45000)
-  const $ = cheerio.load(html)
+
   const product = emptyProduct("bosch", finalUrl)
   const flight = flightPayload(html)
 

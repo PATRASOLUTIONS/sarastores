@@ -1,15 +1,16 @@
 "use client"
 
+import { useCallback } from "react"
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { Search, ShoppingCart, SlidersHorizontal, X, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
-import ProductReviews from "@/components/ProductReviews"
-import AdvertisementCarousel from "@/components/AdvertisementCarousel"
-import AddToCartButton from "@/components/AddToCartButton"
+import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
+
+
+
 import { useCart } from "@/hooks/useCart"
 import HeroSection from "@/components/HeroSection"
 import CategoryProductCard from "@/components/CategoryProductCard"
@@ -35,12 +36,12 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
   const [searchTerm, setSearchTerm] = useState("")
   const [products, setProducts] = useState<SubCategoryProductResponse[]>(initialProducts)
   const [subCategoryName, setSubCategoryName] = useState<string>(initialName)
-  const [categories, setCategories] = useState<CatalogCategoryResponse[]>(initialCategories)
+  const [, setCategories] = useState<CatalogCategoryResponse[]>(initialCategories)
   const [isLoading, setIsLoading] = useState(!initialName)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const params = useParams<{ name: string }>()
-  const { cart } = useCart()
+  useCart();
   const subCategoryParam = params.name
 
   // Filter state variables
@@ -49,7 +50,7 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
   const [selectedBrands, setSelectedBrands] = useState<string[]>([])
   const [descriptionFilter, setDescriptionFilter] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(20)
+  const [itemsPerPage] = useState(20)
   const [selectedCharDesc, setSelectedCharDesc] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
   const [types, setTypes] = useState<string[]>([...new Set(initialProducts.map(getProductType).filter(Boolean))])
@@ -63,17 +64,9 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
     charDesc: true
   })
 
-  useEffect(() => {
-    if (initialName) return
-    if (subCategoryParam) {
-      // Decode URL parameter: replace hyphens with spaces
-      const decodedName = decodeURIComponent(subCategoryParam).replace(/-/g, ' ')
-      setSubCategoryName(decodedName)
-      fetchSubCategoryData(decodedName)
-    }
-  }, [subCategoryParam, initialName])
 
-  const fetchSubCategoryData = async (subCatName: string) => {
+
+  const fetchSubCategoryData = useCallback(async (subCatName: string) => {
     setIsLoading(true)
     setError(null)
 
@@ -129,33 +122,35 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [subCategoryParam])
+
+
 
   // Get filtered character descriptions based on other filters
-  const getFilteredCharDescs = () => {
+  const getFilteredCharDescs = useCallback(() => {
     const filtered = new Set<string>()
-    
+
     products.forEach((product) => {
-      const matchesSearch = 
+      const matchesSearch =
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.description.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesType = 
+
+      const matchesType =
         selectedTypes.length === 0 ||
         selectedTypes.includes(getProductType(product))
-      
-      const matchesPrice = 
-        product.price >= priceRange[0] && 
+
+      const matchesPrice =
+        product.price >= priceRange[0] &&
         product.price <= priceRange[1]
-      
-      const matchesBrand = 
+
+      const matchesBrand =
         selectedBrands.length === 0 ||
         selectedBrands.includes(getProductBrand(product))
-      
-      const matchesDescription = 
+
+      const matchesDescription =
         !descriptionFilter ||
         product.description.toLowerCase().includes(descriptionFilter.toLowerCase())
-      
+
       if (matchesSearch && matchesType && matchesPrice && matchesBrand && matchesDescription) {
         const charDesc = getProductCharDesc(product)
         if (charDesc) {
@@ -163,9 +158,19 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
         }
       }
     })
-    
+
     return Array.from(filtered)
-  }
+  }, [descriptionFilter, priceRange, products, searchTerm, selectedBrands, selectedTypes])
+
+  useEffect(() => {
+    if (initialName) return
+    if (subCategoryParam) {
+      // Decode URL parameter: replace hyphens with spaces
+      const decodedName = decodeURIComponent(subCategoryParam).replace(/-/g, ' ')
+      setSubCategoryName(decodedName)
+      fetchSubCategoryData(decodedName)
+    }
+  }, [subCategoryParam, initialName, fetchSubCategoryData])
 
   // Filter products based on search term and other filters
   const filteredProducts = products.filter((product) => {
@@ -176,16 +181,16 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
     const matchesType =
       selectedTypes.length === 0 ||
       selectedTypes.includes(getProductType(product))
-    
+
     const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1]
-    
-    const matchesBrand = selectedBrands.length === 0 || 
+
+    const matchesBrand = selectedBrands.length === 0 ||
               selectedBrands.includes(getProductBrand(product))
-    
-    const matchesCharDesc = selectedCharDesc.length === 0 || 
+
+    const matchesCharDesc = selectedCharDesc.length === 0 ||
                  selectedCharDesc.includes(getProductCharDesc(product))
-    
-    const matchesDescription = !descriptionFilter || 
+
+    const matchesDescription = !descriptionFilter ||
                               product.description.toLowerCase().includes(descriptionFilter.toLowerCase())
 
     return matchesSearch && matchesType && matchesPrice && matchesBrand && matchesCharDesc && matchesDescription
@@ -207,32 +212,32 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
     // Get filtered character descriptions
     const filteredCharDescs = getFilteredCharDescs()
     setCharDescs(filteredCharDescs)
-    
+
     // Remove any selected character descriptions that are no longer in the filtered list
-    setSelectedCharDesc(prev => 
+    setSelectedCharDesc(prev =>
       prev.filter(desc => filteredCharDescs.includes(desc))
     )
-    
+
     // Update available brands based on current filters (except brand filter itself)
     const filteredBrands = new Set<string>()
-    
+
     products.forEach((product) => {
-      const matchesSearch = 
+      const matchesSearch =
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.description.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesType = 
+
+      const matchesType =
         selectedTypes.length === 0 ||
         selectedTypes.includes(getProductType(product))
-      
-      const matchesPrice = 
-        product.price >= priceRange[0] && 
+
+      const matchesPrice =
+        product.price >= priceRange[0] &&
         product.price <= priceRange[1]
-      
-      const matchesDescription = 
+
+      const matchesDescription =
         !descriptionFilter ||
         product.description.toLowerCase().includes(descriptionFilter.toLowerCase())
-      
+
       if (matchesSearch && matchesType && matchesPrice && matchesDescription) {
         const brand = getProductBrand(product)
         if (brand) {
@@ -240,22 +245,23 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
         }
       }
     })
-    
+
     // Update brands list while preserving the original order
-    const newBrands = Array.from(filteredBrands)
+
     setBrands(prevBrands => {
       // Maintain the original order of brands that still exist in the filtered set
       return prevBrands.filter(brand => filteredBrands.has(brand))
         // Add any new brands that weren't in the original list (shouldn't happen, but just in case)
         .concat(Array.from(filteredBrands).filter(brand => !prevBrands.includes(brand)))
     })
-    
+
     // Remove any selected brands that are no longer in the filtered list
-    setSelectedBrands(prev => 
-      prev.filter(brand => filteredBrands.has(brand))
-    )
-    
-  }, [products, searchTerm, selectedTypes, priceRange, descriptionFilter]) // Removed selectedBrands from dependencies to prevent loop
+    setSelectedBrands(prev => {
+      const next = prev.filter(brand => filteredBrands.has(brand))
+      return next.length === prev.length ? prev : next
+    })
+
+  }, [products, searchTerm, selectedTypes, priceRange, descriptionFilter, getFilteredCharDescs]) // Removed selectedBrands from dependencies to prevent loop
 
   const toggleFilter = (filterName: keyof typeof openFilters) => {
     setOpenFilters(prev => ({
@@ -291,7 +297,7 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
     setSearchTerm("")
   }
 
-  const activeFiltersCount = selectedTypes.length + selectedBrands.length + selectedCharDesc.length + 
+  const activeFiltersCount = selectedTypes.length + selectedBrands.length + selectedCharDesc.length +
                             (descriptionFilter ? 1 : 0)
 
   if (isLoading) {
@@ -351,7 +357,7 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
                   <span className="mx-2 text-gray-400">/</span>
                   <span className="text-gray-700 font-medium">{subCategoryName}</span>
                 </nav>
-                
+
                 {/* Category Title and Count */}
                 <div className="flex items-center gap-4">
                   <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{subCategoryName}</h1>
@@ -731,7 +737,7 @@ export default function SubCategoryPage({ initialProducts = [], initialName = ""
                     >
                       <ChevronLeft className="h-5 w-5" />
                     </button>
-                    
+
                     <div className="flex gap-1">
                       {[...Array(totalPages)].map((_, index) => {
                         const pageNumber = index + 1

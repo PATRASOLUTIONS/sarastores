@@ -1,28 +1,11 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { buildActiveProductPriceSheet, fetchAllAdminProducts, type AdminProductResponse } from "@/lib/admin-products-client"
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
-import {
-  Plus,
-  Search,
-  Edit,
-  Trash,
-  Eye,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Database,
-  Trash2,
-  AlertCircle,
-  RefreshCw,
-  Filter,
-  Upload,
-  DollarSign,
-  Shield,
-  FileSpreadsheet,
-} from "lucide-react"
+import { Search, Edit, Trash, Eye, ArrowDown, ArrowUp, ArrowUpDown, Database, AlertCircle, Filter, Upload, DollarSign, Shield, FileSpreadsheet } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import ExcelUpload from "@/components/ExcelUpload"
@@ -269,7 +252,7 @@ function getNormalizedCategoryName(product: Product) {
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [activeProductsCount, setActiveProductsCount] = useState<number>(0)
-  const [allProductsLoaded, setAllProductsLoaded] = useState(false)
+  const [, setAllProductsLoaded] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [subCategories, setSubCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
@@ -295,7 +278,7 @@ export default function AdminProducts() {
   const [priceUpdateFile, setPriceUpdateFile] = useState<File | null>(null)
   const [googleSheetId, setGoogleSheetId] = useState(process.env.NEXT_PUBLIC_GOOGLE_SHEET_PRICE_SYNC_ID || "")
   const [isSyncingGoogle, setIsSyncingGoogle] = useState(false)
-  const [priceUpdateResult, setPriceUpdateResult] = useState<{
+  const [, setPriceUpdateResult] = useState<{
     success: number;
 
     failed: number;
@@ -310,7 +293,7 @@ export default function AdminProducts() {
   const [updatingActiveIds, setUpdatingActiveIds] = useState<string[]>([])
   const [updatingDivision, setUpdatingDivision] = useState(false)
   const [activatingAll, setActivatingAll] = useState(false)
-  const [isAutoSaving, setIsAutoSaving] = useState(false)
+
 
   // Metadata update modal state
   const [showMetadataUpdateModal, setShowMetadataUpdateModal] = useState(false)
@@ -324,18 +307,7 @@ export default function AdminProducts() {
   } | null>(null)
 
   // Column widths state for resizable columns
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
-    name: 250,
-    sku: 120,
-    mrp: 100,
-    category: 150,
-    price: 100,
-    stock: 80,
-    manufacturer: 150,
-    color: 100,
-    capacity: 120,
-    actions: 120
-  })
+
 
   // Keep admin search local to this page only.
 
@@ -484,7 +456,7 @@ export default function AdminProducts() {
 
       try {
         setActiveProductsCount(normalizedAllData.filter((p: Product) => p.active !== false).length)
-      } catch (e) {
+      } catch {
         setActiveProductsCount(0)
       }
       setAllProductsLoaded(true)
@@ -500,7 +472,7 @@ export default function AdminProducts() {
         const normalized = names.map((name) => ({ id: name, name }))
         setSubCategories(normalized)
         console.log('[Admin Products] ✅ Derived sub-categories from products:', normalized.length)
-      } catch (e) {
+      } catch {
         setSubCategories([])
       }
 
@@ -626,94 +598,9 @@ export default function AdminProducts() {
   }
 
   // Open each product's edit page in a new tab/window and attempt to trigger an auto-save
-  const openAllEditPagesAndTriggerSave = async () => {
-    if (isAutoSaving) return
-    if (!window.confirm('Open edit pages for ALL products and trigger save? This will open multiple tabs/windows.')) return
-    setIsAutoSaving(true)
-    try {
-      const windows: Window[] = []
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-      for (const p of products) {
-        try {
-          const url = `/admin/products/${p.id}/edit?autoSave=1`
-          const w = window.open(url, '_blank')
-          if (w) windows.push(w)
-        } catch (e) {
-          console.warn('[Admin Products] ⚠️ Could not open window for', p.id, e)
-        }
-        // small delay to reduce popup blocking and avoid overwhelming the browser
-         
-        await sleep(250)
-      }
 
-      // Give pages a moment to load, then postMessage to request an auto-save
-      await new Promise((r) => setTimeout(r, 1500))
-      for (const w of windows) {
-        try {
-          // send a message the edit page can listen for: { type: 'AUTO_SAVE' }
-          w.postMessage({ type: 'AUTO_SAVE' }, window.location.origin)
-        } catch (e) {
-          // ignore
-        }
-      }
 
-      toast.success(`Opened ${windows.length} edit pages`)
-    } catch (err) {
-      console.error('[Admin Products] ❌ Error opening edit pages:', err)
-      toast.error('Failed to open edit pages')
-    } finally {
-      setIsAutoSaving(false)
-    }
-  }
 
-  const handleClearDatabase = async () => {
-    console.log("[Admin Products] 🚨 Clear database requested")
-    if (!window.confirm(
-      "⚠️ WARNING: This will delete ALL products and categories from the database. This action cannot be undone. Are you absolutely sure?"
-    )) {
-      console.log("[Admin Products] ❌ Clear database cancelled (first confirmation)")
-      return;
-    }
-
-    // Double confirmation
-    if (!window.confirm(
-      "This is your final warning. All data will be permanently deleted. Continue?"
-    )) {
-      console.log("[Admin Products] ❌ Clear database cancelled (second confirmation)")
-      return;
-    }
-
-    try {
-      console.log("[Admin Products] 📡 Sending POST request to /api/clear_database...")
-      const response = await apiFetch("/api/clear_database", {
-        method: "POST",
-      });
-      console.log("[Admin Products] 📥 Clear database response status:", response.status)
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("[Admin Products] ❌ Clear database failed:", errorData)
-        throw new Error(errorData.details || errorData.error || "Failed to clear database");
-      }
-
-      const result = await response.json();
-      console.log("[Admin Products] ✅ Database cleared:", result)
-      alert(
-        `Database cleared successfully! Deleted ${result.products?.deleted || 0} products and ${result.categories?.deleted || 0} categories.`
-      );
-
-      // Reset UI state
-      console.log("[Admin Products] 🔄 Resetting UI state...")
-      setProducts([]);
-      setCategories([]);
-      setSelectedCategory("all");
-      await fetchCategories();
-
-    } catch (err) {
-      console.error("[Admin Products] ❌ Error clearing database:", err);
-      alert(err instanceof Error ? err.message : "An unknown error occurred");
-    }
-  }
 
   const handleActivateAll = async () => {
     console.log("[Admin Products] 🔔 Activate All requested")
@@ -799,12 +686,7 @@ export default function AdminProducts() {
   }
 
   // Handle column resize
-  const handleColumnResize = (columnKey: string, newWidth: number) => {
-    setColumnWidths(prev => ({
-      ...prev,
-      [columnKey]: Math.max(50, newWidth) // Minimum width of 50px
-    }))
-  }
+
 
   // Handle metadata update from Excel
   const handleMetadataUpdate = async (preview = true) => {
@@ -1279,7 +1161,7 @@ export default function AdminProducts() {
               Export
             </button>
           </div>
-          {/* 
+          {/*
           <div className="w-full">
             <button
               onClick={openAllEditPagesAndTriggerSave}
@@ -1597,7 +1479,7 @@ export default function AdminProducts() {
                       <tr key={product.id} className="align-top hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-3">
-                            <img
+                            <SiteImage unoptimized
                               className="h-10 w-10 shrink-0 rounded object-cover"
                               src={product.image || "/placeholder.svg?height=40&width=40"}
                               alt={product.name}

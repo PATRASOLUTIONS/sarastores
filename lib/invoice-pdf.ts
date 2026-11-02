@@ -73,7 +73,6 @@ const GST_RATE = 0.18
  */
 function plain(value: unknown): string {
   if (value === null || value === undefined) return ""
-  // eslint-disable-next-line no-control-regex
   return String(value).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim()
 }
 

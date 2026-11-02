@@ -5,22 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import toast from "react-hot-toast"
-import {
-  BadgeCheck,
-  Calendar,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  CreditCard,
-  Heart,
-  MapPin,
-  RefreshCw,
-  Share2,
-  ShieldCheck,
-  ShoppingBag,
-  Store,
-  Truck,
-} from "lucide-react"
+import { BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Heart, MapPin, RefreshCw, Share2, ShieldCheck, ShoppingBag, Store, Truck } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import ProductLoading from "@/components/product/ProductLoading"

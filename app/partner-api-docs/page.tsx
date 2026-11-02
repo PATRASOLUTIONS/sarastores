@@ -2,33 +2,8 @@
 import { getErrorMessage } from "@/lib/utils"
 
 
-import { useState, useCallback, useEffect, Suspense } from "react"
-import {
-  Book,
-  Code,
-  Key,
-  ShoppingCart,
-  Package,
-  Wallet,
-  Shield,
-  Zap,
-  Copy,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  Terminal,
-  FileJson,
-  AlertCircle,
-  Play,
-  Loader2,
-  Globe,
-  CreditCard,
-  RefreshCw,
-  CheckCircle,
-  XCircle,
-  Settings
-} from "lucide-react"
+import { useState, useEffect, Suspense } from "react"
+import { Book, Code, Key, ShoppingCart, Package, Wallet, Shield, Zap, Copy, Check, ChevronDown, ChevronRight, ExternalLink, Terminal, AlertCircle, Play, Loader2, Globe, CreditCard, CheckCircle, XCircle, Settings } from "lucide-react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { toast, Toaster } from "react-hot-toast"
@@ -41,7 +16,7 @@ interface CodeBlockProps {
   title?: string;
 }
 
-function CodeBlock({ code, language = "json", title }: CodeBlockProps) {
+function CodeBlock({ code, title }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
 
   const copyCode = () => {
@@ -151,17 +126,7 @@ function APIPlayground({ apiKey, baseUrl }: APIPlaygroundProps) {
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<'prepaid' | 'cod'>('prepaid')
   const [orderPartnerOrderId, setOrderPartnerOrderId] = useState('')
 
-  const endpoints = [
-    { id: 'products-list', name: 'List Products', method: 'GET', path: '/products' },
-    { id: 'products-detail', name: 'Get Product', method: 'GET', path: '/products/{id}' },
-    { id: 'products-specifications', name: 'Get Specifications', method: 'GET', path: '/products/{id}/specifications' },
-    { id: 'products-stock', name: 'Check Stock', method: 'POST', path: '/products/stock-check' },
-    { id: 'orders-create', name: 'Create Order', method: 'POST', path: '/orders' },
-    { id: 'orders-list', name: 'List Orders', method: 'GET', path: '/orders' },
-    { id: 'orders-status', name: 'Check Order Status', method: 'GET', path: '/orders/status/{id}' },
-    { id: 'wallet-balance', name: 'Get Wallet Balance', method: 'GET', path: '/wallet/balance' },
-    { id: 'wallet-transactions', name: 'Get Transactions', method: 'GET', path: '/wallet/transactions' },
-  ]
+
 
   const executeRequest = async () => {
     if (!apiKey) {
@@ -1271,7 +1236,7 @@ const options = {
         razorpay_signature: response.razorpay_signature
       })
     });
-    
+
     const result = await verifyResponse.json();
     if (result.success && result.data.verified) {
       // Payment successful!
@@ -2497,7 +2462,7 @@ async function initiatePayment(orderData) {
       notes: { customerName: orderData.customerName }
     })
   });
-  
+
   const { data } = await response.json();
   return data;
 }
@@ -2505,7 +2470,7 @@ async function initiatePayment(orderData) {
 // Step 2: Open Razorpay checkout
 async function openCheckout(orderData) {
   const razorpayData = await initiatePayment(orderData);
-  
+
   const options = {
     key: razorpayData.keyId,
     amount: razorpayData.amount,
@@ -2523,7 +2488,7 @@ async function openCheckout(orderData) {
     },
     theme: { color: '#3B82F6' }
   };
-  
+
   const rzp = new Razorpay(options);
   rzp.open();
 }
@@ -2542,9 +2507,9 @@ async function verifyPayment(razorpayResponse) {
       razorpay_signature: razorpayResponse.razorpay_signature
     })
   });
-  
+
   const result = await response.json();
-  
+
   if (result.success && result.data.verified) {
     // Payment successful - show success page
     window.location.href = '/order-success';
@@ -2774,7 +2739,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       }
     });
-    
+
     const data = await response.json();
     res.status(200).json(data);
   } catch (error) {
@@ -2899,11 +2864,11 @@ class ByteWisePartnerAPI {
     });
 
     const data = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.error?.message || 'API request failed');
     }
-    
+
     return data;
   }
 
@@ -2994,10 +2959,10 @@ class ByteWisePartnerAPI:
             **kwargs
         )
         data = response.json()
-        
+
         if not data.get('success'):
             raise Exception(data.get('error', {}).get('message', 'API request failed'))
-        
+
         return data
 
     # Products
@@ -3067,24 +3032,24 @@ class ByteWisePartnerAPI {
 
     private function request($method, $endpoint, $data = null) {
         $ch = curl_init();
-        
+
         $url = $this->baseUrl . $endpoint;
-        
+
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Bearer ' . $this->apiKey,
             'Content-Type: application/json'
         ]);
-        
+
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         }
-        
+
         $response = curl_exec($ch);
         curl_close($ch);
-        
+
         return json_decode($response, true);
     }
 

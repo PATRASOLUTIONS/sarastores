@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import CategoryGlyph from "@/components/CategoryGlyph"
@@ -49,7 +50,7 @@ export default function SubCategoriesMarquee() {
                 (subCategory.image.startsWith("http") ||
                   subCategory.image.startsWith("data:") ||
                   subCategory.image.startsWith("/")) ? (
-                  <img
+                  <SiteImage
                     src={subCategory.image}
                     alt={subCategory.name}
                     loading="lazy"

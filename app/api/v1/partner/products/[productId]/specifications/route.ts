@@ -4,7 +4,7 @@
  * GET /api/v1/partner/products/[productId]/specifications - Get detailed product specifications
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+
 import { ObjectId } from 'mongodb';
 import {
     withPartnerAuth,
@@ -63,7 +63,7 @@ export const GET = withPartnerAuth(async (
         let product = null;
         try {
             product = await productsCollection.findOne({ _id: new ObjectId(productId), active: true });
-        } catch (e) {
+        } catch {
             product = await productsCollection.findOne({ id: productId, active: true });
         }
 

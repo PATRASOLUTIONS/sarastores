@@ -407,7 +407,7 @@ export async function POST(request: Request) {
     const scrapedSubCategory = categories.length > 1 ? categories[categories.length - 1] : ""
 
     // Legacy full path string (optional, but keeping it if needed for description or logs)
-    const categoryPath = categories.join(" > ") || "General"
+
 
     // Use scraped values as defaults, but allow override if we decide to use the full path somewhere
     // For the 'category' variable used below, we'll default to the scraped top-level category
@@ -497,7 +497,7 @@ export async function POST(request: Request) {
 
       // MUST be from A+ content paths (aplus-media or standard product images in A+ sections)
       // This is the key filter - only accept aplus-media URLs or images we can verify are in A+ content
-      const isAplusMedia = rawSrc.includes("aplus-media") || rawSrc.includes("aplus-seller-content")
+
 
       // Normalize URL for dedup
       const normalizedUrl = rawSrc

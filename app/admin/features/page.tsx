@@ -3,7 +3,7 @@
 
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
-import { Plus, Trash2, Edit, Save, X, Truck, ShieldCheck, Clock, CreditCard, RefreshCcw, Award, Star, Zap, Headphones, Gift } from "lucide-react"
+import { Trash2, Edit } from "lucide-react"
 import { toast } from "react-hot-toast"
 import * as LucideIcons from "lucide-react"
 
@@ -58,7 +58,7 @@ export default function AdminFeaturesPage() {
             if (res.ok) {
                 setFeatures(await res.json())
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to load features")
         } finally {
             setLoading(false)
@@ -87,7 +87,7 @@ export default function AdminFeaturesPage() {
             }
             resetForm()
             fetchFeatures()
-        } catch (error) {
+        } catch {
             toast.error("Operation failed")
         }
     }
@@ -100,7 +100,7 @@ export default function AdminFeaturesPage() {
                 toast.success("Feature deleted")
                 setFeatures(features.filter(f => f.id !== id))
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to delete")
         }
     }

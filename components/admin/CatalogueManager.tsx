@@ -3,23 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import CategoryGlyph from "@/components/CategoryGlyph"
-import {
-  Boxes,
-  Check,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  FolderTree,
-  Globe2,
-  ImageIcon,
-  Loader2,
-  Pencil,
-  Plus,
-  Search,
-  Tags,
-  Trash2,
-  X,
-} from "lucide-react"
+import { Boxes, Check, ExternalLink, Eye, EyeOff, FolderTree, Globe2, Loader2, Pencil, Plus, Search, Tags, Trash2, X } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
 

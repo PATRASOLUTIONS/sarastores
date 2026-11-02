@@ -1,7 +1,11 @@
 // Build-only guard. Never load local secret files, connect a DB or call providers.
-const fs = require("node:fs")
-const path = require("node:path")
-const Module = require("node:module")
+import fs from "node:fs"
+import path from "node:path"
+import Module from "node:module"
+import http from "node:http"
+import https from "node:https"
+import net from "node:net"
+import fixtures from "./build-fixtures.cjs"
 const originalRead = fs.readFileSync
 fs.readFileSync = function (file, options) {
   const name = typeof file === "string" ? path.basename(file) : ""
@@ -9,7 +13,7 @@ fs.readFileSync = function (file, options) {
   return originalRead.call(this, file, options)
 }
 const deny = () => { throw new Error("SEO isolated build guard: database/provider access refused") }
-const { fixtureDatabase } = require("./build-fixtures.cjs")
+const { fixtureDatabase } = fixtures
 function assertFixtureClient(client) {
   const uri = process.env.MONGODB_URI
   if (process.env.SARA_SEO_BUILD_FIXTURES !== "catalogue-v2" || !uri || client.s?.url !== uri) return deny()
@@ -32,16 +36,15 @@ Module._load = function (request, parent, isMain) {
   }
   return value
 }
-require("node:http").request = deny
-require("node:http").get = deny
-const https = require("node:https")
+http.request = deny
+http.get = deny
 const originalRequest = https.request
 https.request = function (input, ...args) {
   if (!fontRequest(input, typeof args[0] === "object" ? args[0] : {})) return deny()
   return originalRequest.call(this, input, ...args)
 }
 https.get = function (input, ...args) { const request = https.request(input, ...args); request.end(); return request }
-const socket = require("node:net").Socket.prototype
+const socket = net.Socket.prototype
 const originalConnect = socket.connect
 socket.connect = function (...args) {
   const options = Array.isArray(args[0]) ? args[0][0] : args[0]
@@ -53,3 +56,6 @@ global.fetch = function (input, options = {}) {
   if (!fontRequest(input, options)) return deny()
   return originalFetch(input, { ...options, credentials: "omit" })
 }
+
+// Named ESM imports must see the same guarded built-ins as CommonJS callers.
+Module.syncBuiltinESMExports()

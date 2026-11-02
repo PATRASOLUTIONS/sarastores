@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
@@ -136,7 +137,7 @@ export default function CampaignPagesAdmin() {
       } else {
         toast.error(typeof data.error === "string" ? data.error : "Failed to save")
       }
-    } catch (err) {
+    } catch {
       toast.error("Error saving campaign")
     } finally {
       lock.release()
@@ -151,7 +152,7 @@ export default function CampaignPagesAdmin() {
       const data = await response.json()
       if (!response.ok || !data.success) throw new Error("Campaign was not deleted")
       fetchCampaigns()
-    } catch (e) {
+    } catch {
       toast.error("Error deleting campaign")
     }
   }
@@ -211,7 +212,7 @@ export default function CampaignPagesAdmin() {
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-8 bg-gray-100 rounded border overflow-hidden flex items-center justify-center flex-shrink-0">
                         {c.banner ? (
-                          <img src={c.banner} alt="Banner" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                          <SiteImage unoptimized src={c.banner} alt="Banner" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                         ) : (
                           <ImageIcon className="w-4 h-4 text-gray-400" />
                         )}
@@ -281,7 +282,7 @@ export default function CampaignPagesAdmin() {
                 <div className="border border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center text-center">
                   {banner ? (
                     <div className="relative w-full max-h-[160px] overflow-hidden rounded mb-3 bg-gray-100 flex items-center justify-center">
-                      <img src={banner} alt="Preview" className="object-contain max-h-[160px]" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                      <SiteImage unoptimized src={banner} alt="Preview" className="object-contain max-h-[160px]" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                       <button type="button" onClick={() => setBanner("")} className="absolute top-2 right-2 p-1.5 bg-white/80 rounded-md shadow hover:bg-red-50 hover:text-red-500 text-gray-600 backdrop-blur-sm">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -328,7 +329,7 @@ export default function CampaignPagesAdmin() {
                             <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-gray-300 text-blue-600 flex-shrink-0 cursor-pointer" />
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                               {p.images?.[0] ? (
-                                <img src={p.images[0]} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                                <SiteImage unoptimized src={p.images[0]} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                               ) : (
                                 <div className="w-8 h-8 rounded bg-gray-100 flex-shrink-0" />
                               )}

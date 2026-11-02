@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import { Star, ChevronLeft, ChevronRight, Quote } from "lucide-react"
 
@@ -37,6 +39,12 @@ export default function TestimonialSection() {
   const [testimonials, setTestimonials] = useState(defaultTestimonials)
   const sectionRef = useRef<HTMLDivElement>(null)
 
+
+
+  const nextTestimonial = useCallback(() => {
+    setActiveIndex((prev) => (prev + 1) % testimonials.length)
+  }, [testimonials.length])
+
   useEffect(() => {
     // Load testimonials from localStorage if available
     try {
@@ -65,10 +73,6 @@ export default function TestimonialSection() {
     return () => observer.disconnect()
   }, [])
 
-  const nextTestimonial = () => {
-    setActiveIndex((prev) => (prev + 1) % testimonials.length)
-  }
-
   const prevTestimonial = () => {
     setActiveIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length)
   }
@@ -79,7 +83,7 @@ export default function TestimonialSection() {
     }, 6000)
 
     return () => clearInterval(interval)
-  }, [testimonials.length])
+  }, [nextTestimonial, testimonials.length])
 
   return (
     <section ref={sectionRef} className="py-20 bg-gray-50 overflow-hidden">
@@ -111,7 +115,7 @@ export default function TestimonialSection() {
                   <Quote className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex items-center mb-6">
-                  <img
+                  <SiteImage
                     src={testimonial.image || "/placeholder.svg"}
                     alt={testimonial.name}
                     className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-md mr-4"
@@ -146,7 +150,7 @@ export default function TestimonialSection() {
                       <Quote className="h-4 w-4 text-white" />
                     </div>
                     <div className="flex items-center mb-4">
-                      <img
+                      <SiteImage
                         src={testimonial.image || "/placeholder.svg"}
                         alt={testimonial.name}
                         className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md mr-3"

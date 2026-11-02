@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -211,7 +212,7 @@ export default function NewVendorProduct() {
               />
               {product.image && (
                 <div className="mt-2 border rounded p-2">
-                  <img
+                  <SiteImage unoptimized
                     src={product.image || "/placeholder.svg?height=200&width=200"}
                     alt={product.name}
                     className="h-40 object-contain mx-auto"

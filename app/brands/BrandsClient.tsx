@@ -168,7 +168,7 @@ export default function BrandsPage({ initialBrands, initialProducts = [] }: { in
     }
     void load()
     return () => controller.abort()
-  }, [attempt])
+  }, [attempt, initialBrands])
 
   const categories = useMemo(() => [...new Set(brands.flatMap((brand) => brand.categories))].sort(), [brands])
   const visible = useMemo(() => brands.filter((brand) => {

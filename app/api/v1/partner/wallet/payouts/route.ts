@@ -4,7 +4,7 @@
  * GET /api/v1/partner/wallet/payouts - List payout history
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { getPartnerPayouts } from '@/lib/partner/wallet';
 import { PAYOUT_STATUSES, isPayoutStatus } from '@/lib/partner/types';

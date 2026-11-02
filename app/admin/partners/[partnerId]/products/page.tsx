@@ -1,22 +1,13 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, use, useRef } from "react"
 import { z } from "zod"
 import { partnerAssignmentProductResponseSchema, partnerAssignmentsResponseSchema } from "@/lib/product-card-response"
 import type { PartnerAssignmentProductResponse } from "@/lib/product-card-response"
-import {
-  ArrowLeft,
-  Search,
-  Package,
-  Check,
-  X,
-  RefreshCw,
-  Plus,
-  Minus,
-  Filter,
-  Image as ImageIcon
-} from "lucide-react"
+import { ArrowLeft, Search, Package, Check, X, RefreshCw, Plus, Minus, Image as ImageIcon } from "lucide-react"
 import Link from "next/link"
 import { toast } from "react-hot-toast"
 
@@ -46,11 +37,9 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
   const [loadFailed, setLoadFailed] = useState(false)
   const latestRequest = useRef(0)
 
-  useEffect(() => {
-    fetchData()
-  }, [partnerId])
 
-  const fetchData = async () => {
+
+  const fetchData = useCallback(async () => {
     const requestId = ++latestRequest.current
     setIsLoading(true)
     setLoadFailed(false)
@@ -89,7 +78,11 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
     } finally {
       if (requestId === latestRequest.current) setIsLoading(false)
     }
-  }
+  }, [partnerId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData, partnerId])
 
   const toggleProduct = (productId: string) => {
     if (!enabledProducts[productId] && products.find(product => product.id === productId)?.active === false) {
@@ -141,7 +134,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
       } else {
         toast.error(data.error?.message || 'Failed to save')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to save changes')
     } finally {
       setIsSaving(false)
@@ -307,7 +300,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
                     <div className="flex items-start justify-between mb-2">
                       <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {product.images?.[0] ? (
-                          <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                          <SiteImage unoptimized src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="h-6 w-6 text-gray-400" />
@@ -366,7 +359,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
                     <div className="flex items-start justify-between mb-2">
                       <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {product.images?.[0] ? (
-                          <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                          <SiteImage unoptimized src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="h-6 w-6 text-gray-400" />

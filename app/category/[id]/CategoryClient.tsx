@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -7,15 +8,15 @@ import { useRouter, useParams } from "next/navigation"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { Search, ShoppingCart, SlidersHorizontal, X, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
-import ProductReviews from "@/components/ProductReviews"
-import AdvertisementCarousel from "@/components/AdvertisementCarousel"
-import AddToCartButton from "@/components/AddToCartButton"
+
+
+
 import { useCart } from "@/hooks/useCart"
 import HeroSection from "@/components/HeroSection"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import CategoryLoading from "@/components/category/CategoryLoading"
 import * as Slider from '@radix-ui/react-slider';
-import { formatPrice } from "@/utils/formatPrice";
+
 import { normalizeProductForSchema } from "@/lib/product-schema"
 import { PRODUCT_SORT_OPTIONS, sortProducts, type ProductSortKey } from "@/lib/product-sort"
 import {
@@ -48,10 +49,10 @@ export default function CategoryPage({ initialCategory, initialProducts, initial
   const [searchTerm, setSearchTerm] = useState("")
   const [products, setProducts] = useState<SubCategoryProductResponse[]>(initialProducts || [])
   const [category, setCategory] = useState<CatalogCategoryResponse | null>(initialCategory || null)
-  const [categories, setCategories] = useState<CatalogCategoryResponse[]>(initialCategories || [])
+  const [, setCategories] = useState<CatalogCategoryResponse[]>(initialCategories || [])
   const [isLoading, setIsLoading] = useState(!initialCategory)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
+  useRouter();
   const params = useParams<{ id: string }>()
   const { cart } = useCart()
   // Decode URL: replace hyphens with spaces and decode URI
@@ -81,14 +82,9 @@ export default function CategoryPage({ initialCategory, initialProducts, initial
     charDesc: true
   })
 
-  useEffect(() => {
-    if (initialCategory) return
-    if (categoryName) {
-      fetchCategoryData()
-    }
-  }, [categoryName, initialCategory])
 
-  const fetchCategoryData = async () => {
+
+  const fetchCategoryData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
@@ -167,7 +163,14 @@ export default function CategoryPage({ initialCategory, initialProducts, initial
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [categoryName, params.id])
+
+  useEffect(() => {
+    if (initialCategory) return
+    if (categoryName) {
+      fetchCategoryData()
+    }
+  }, [categoryName, fetchCategoryData, initialCategory])
 
   // Filter products based on search term and other filters
   const nonFacetMatches = products.filter((product) => {
@@ -278,9 +281,7 @@ export default function CategoryPage({ initialCategory, initialProducts, initial
   };
 
   // Navigate to product details
-  const navigateToProduct = (productId: string) => {
-    router.push(`/product/${productId}`)
-  }
+
 
   if (isLoading) {
     return <CategoryLoading />
@@ -350,7 +351,7 @@ export default function CategoryPage({ initialCategory, initialProducts, initial
         </div> */}
 
         <HeroSection />
-      
+
 
         <div className="container mx-auto px-4 py-8">
           <div className="flex gap-6">

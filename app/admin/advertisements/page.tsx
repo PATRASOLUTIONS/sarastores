@@ -1,6 +1,7 @@
 "use client"
 
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -190,7 +191,7 @@ export default function AdvertisementsPage() {
             <Card key={ad.id} className="p-6">
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="md:w-1/4">
-                  <img
+                  <SiteImage unoptimized
                     src={ad.image || "/placeholder.svg"}
                     alt={ad.title}
                     className="w-full aspect-video object-cover rounded-md bg-gray-100"

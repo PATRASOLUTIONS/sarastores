@@ -1,12 +1,14 @@
 "use client"
 
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
-import { Store, Package, ShoppingBag, Calendar, User, Download, ArrowLeft, ChevronRight } from "lucide-react"
+import { Store, Package, ShoppingBag, Calendar, User, ArrowLeft } from "lucide-react"
 import { toast } from "react-hot-toast"
-import Link from "next/link"
+
 import { useRouter } from "next/navigation"
 
 interface InstoreOrder {
@@ -56,13 +58,9 @@ export default function InstorePurchasesPage() {
   })
   const [filter, setFilter] = useState<"all" | "pending" | "confirmed" | "processing" | "delivered">("all")
 
-  useEffect(() => {
-    if (user?.email) {
-      fetchInstorePurchases()
-    }
-  }, [user])
 
-  const fetchInstorePurchases = async () => {
+
+  const fetchInstorePurchases = useCallback(async () => {
     if (!user || !user.email) return
 
     setIsLoading(true)
@@ -71,8 +69,8 @@ export default function InstorePurchasesPage() {
       if (response.ok) {
         const orders = await response.json()
         // Filter to only show in-store purchases
-        const instoreOnly = orders.filter((order: InstoreOrder) => 
-          order.paymentMethod === 'instore' || 
+        const instoreOnly = orders.filter((order: InstoreOrder) =>
+          order.paymentMethod === 'instore' ||
           order.paymentDetails?.verifiedEmail === user.email
         )
         setInstoreOrders(instoreOnly)
@@ -82,10 +80,10 @@ export default function InstorePurchasesPage() {
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
         const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()))
 
-        const thisMonthOrders = instoreOnly.filter((order: InstoreOrder) => 
+        const thisMonthOrders = instoreOnly.filter((order: InstoreOrder) =>
           new Date(order.createdAt) >= startOfMonth
         )
-        const thisWeekOrders = instoreOnly.filter((order: InstoreOrder) => 
+        const thisWeekOrders = instoreOnly.filter((order: InstoreOrder) =>
           new Date(order.createdAt) >= startOfWeek
         )
 
@@ -104,10 +102,16 @@ export default function InstorePurchasesPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
 
-  const filteredOrders = filter === "all" 
-    ? instoreOrders 
+  useEffect(() => {
+    if (user?.email) {
+      fetchInstorePurchases()
+    }
+  }, [fetchInstorePurchases, user])
+
+  const filteredOrders = filter === "all"
+    ? instoreOrders
     : instoreOrders.filter(order => order.status === filter)
 
   const getStatusColor = (status: string) => {
@@ -368,7 +372,7 @@ export default function InstorePurchasesPage() {
                     {order.items.map((item, index) => (
                       <div key={`${item.id}-${index}`} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
                         <div className="w-16 h-16 bg-white rounded overflow-hidden flex-shrink-0 border">
-                          <img
+                          <SiteImage unoptimized
                             src={item.image || "/placeholder.svg?height=64&width=64"}
                             alt={item.name}
                             className="w-full h-full object-cover"

@@ -1,28 +1,10 @@
 "use client"
 
+import { useCallback } from "react"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, useRef } from "react"
 import { toast } from "react-hot-toast"
-import {
-  BarChart3,
-  TrendingUp,
-  Store,
-  QrCode,
-  Download,
-  RefreshCw,
-  Eye,
-  X,
-  MapPin,
-  MessageCircle,
-  Instagram,
-  Clock,
-  ArrowLeft,
-  Search,
-  FileSpreadsheet,
-  Calendar,
-  Activity,
-  Users,
-} from "lucide-react"
+import { BarChart3, TrendingUp, Store, QrCode, RefreshCw, Eye, X, MapPin, MessageCircle, Instagram, ArrowLeft, Search, FileSpreadsheet, Calendar } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -133,11 +115,9 @@ export default function StoreQRAnalyticsPage() {
   const [activeChart, setActiveChart] = useState<"daily" | "monthly">("daily")
   const latestRequest = useRef(0)
 
-  useEffect(() => {
-    fetchAnalytics()
-  }, [range])
 
-  async function fetchAnalytics() {
+
+  const fetchAnalytics = useCallback(async () => {
     const requestId = ++latestRequest.current
     setLoading(true)
     setSelectedStore(null)
@@ -158,7 +138,11 @@ export default function StoreQRAnalyticsPage() {
     } finally {
       if (requestId === latestRequest.current) setLoading(false)
     }
-  }
+  }, [range])
+
+  useEffect(() => {
+    fetchAnalytics()
+  }, [fetchAnalytics, range])
 
   function downloadExcel() {
     if (!data) return

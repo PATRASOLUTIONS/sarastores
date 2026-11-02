@@ -13,12 +13,14 @@ live sitemap URLs. Its final results supersede the earlier limited sample below.
 
 | Check | Result | Evidence / limit |
 |---|---|---|
-| Dedicated SEO regressions | PASS | 48 Node tests; metadata, Product markup, canonical origins, sitemap failures, public data boundaries, campaigns/manufacturers, article robustness, store schema and build guards |
+| Dedicated SEO regressions | PASS | 56 Node tests; metadata, Product markup, canonical origins, sitemap failures, public data boundaries, campaigns/manufacturers, article robustness, store schema, image-host/fallback behavior, responsive/native sizing and build guards, including named ES module imports |
+| Image warnings and geometry | PASS | All 134 originally reported image warnings resolved. Actual Next rendering and compiled CSS pass 18 desktop/mobile geometry comparisons and delayed-load sizing. Private previews and natural-size images load directly; optimizer host policy is unchanged. |
+| Repository lint | PASS | 1,262 files; zero errors and zero warnings with `--max-warnings 0`; subsequent cleanup documented in [the build/lint report](../lint-and-build-check.md) |
 | Full application suite | EXISTING FAILURES | 820/874 pass; 54 failures, all reproduced against HEAD production sources; no new failures in that comparison |
 | Adversarial validation | PASS | 15 Python tests, including strict Offer adapter failure, robots longest-match rules, request scope, full-crawl URL restrictions and drift changes |
 | Production browser regression | PASS | All 44 indexable templates pass desktop, mobile and JavaScript-disabled checks; primary headings/content retained with APIs and foreign resources blocked |
 | Explicit TypeScript check | PASS | `npx tsc --noEmit`; no diagnostics |
-| Production build | PASS | `npm run build` through the isolated wrapper, exit 0; 221 static pages generated; TypeScript/lint gates enabled; nonblocking lint warnings remain |
+| Production build | PASS | `npm run build` through the isolated wrapper, exit 0; 221 static pages generated; strict TypeScript/lint gates enabled; zero lint warnings |
 | Fixture outputs | PASS | Product/schema/metadata checks and 48 unique www sitemap URLs; 12 synthetic collections; no real catalogue read |
 | Fixture drift | PASS | Baseline established; diff has no changes. Tests detect removed sitemap URLs and changed Offer prices |
 | Upstream integrity / discovery prerequisites | PASS | 467 hashes verified; 22 unique skills; 60 Python scripts syntax checked |
@@ -77,6 +79,17 @@ All evidence is local and ignored: `.seo-local/build.log`, `build-result.json`,
 `local-render.json`, `fix-seo-tests.log`, `fix-types.log`, `head-comparison.json`,
 `cursor-discovery.json`, `installation-validation.json`, `drift/`, `fixtures/`,
 `performance/summary.json` and `runtime/dependency-audit.json`.
+
+The all-image migration adds `all-image-lint-before.json`,
+`all-image-lint-after.json`, `all-image-types.log`, `all-image-seo-tests.log`,
+`all-image-full-tests.log`, `all-image-pricing-tests.log`, `image-migration-result.json`
+and `site-image-layout.json`. All 54 final full-suite failure names match the earlier
+baseline. The isolated loader now transpiles local `.mjs` modules for its VM, and
+manufacturer SSR tests use the application's real Next image configuration.
+Image fixtures use synthetic SVGs and intercepted `.invalid` URLs, with no external
+image requests. The layout comparison includes natural size, maximum height, fixed
+size, CSS aspect ratio, responsive width, fixed height, explicit dimensions, one
+explicit dimension and inline sizing. No live optimization savings are claimed.
 
 The earlier live sample checked seven public pages and inspected 1,315 sitemap URLs. It
 observed apex canonicals after www redirects and API-dependent missing headings,

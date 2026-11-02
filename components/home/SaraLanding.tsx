@@ -123,7 +123,7 @@ export default function SaraLanding({ launch = null, initialProducts }: { launch
         if (data.length) setStoreCount(data.length)
       })
       .catch((error: unknown) => console.error("[Homepage] Could not load stores:", error))
-  }, [loadProducts])
+  }, [initialProducts, loadProducts])
 
   const brands = useMemo<HomeBrand[]>(() => {
     return stockedBrands

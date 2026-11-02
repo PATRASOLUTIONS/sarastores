@@ -48,7 +48,7 @@ const DEFAULT_SEEDS: QAItem[] = [
 ]
 
 export default function CustomerQASection({ productId, productName, seedItems }: CustomerQASectionProps) {
-  const [items, setItems] = useState<QAItem[]>(() => {
+  const [items] = useState<QAItem[]>(() => {
     if (Array.isArray(seedItems) && seedItems.length > 0) return seedItems
     return DEFAULT_SEEDS
   })

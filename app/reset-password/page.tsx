@@ -94,7 +94,7 @@ function ResetPasswordForm() {
       } else {
         setError(data.error || "Failed to reset password. Please try again.")
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again later.")
     } finally {
       lock.release()

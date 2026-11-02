@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { connectToDatabase } from "@/lib/mongodb"
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session"
+
+
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ""
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ""

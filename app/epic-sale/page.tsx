@@ -1,3 +1,4 @@
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import { MapPin, Clock, Gift, Handshake } from "lucide-react"
 import { getPublicPageProducts } from "@/lib/public-page-data"
@@ -73,7 +74,7 @@ export default async function EpicSalePage() {
 
     {/* Optional Hero Image */}
     <div className="absolute right-0 bottom-0 w-[200px] h-[200px] md:w-[350px] md:h-[350px] opacity-80 pointer-events-none hidden md:block">
-        <img
+        <SiteImage loading="eager"
             src="/epic-sale-hero.png"
             alt="Shopping"
             className="w-full h-full object-contain object-bottom"
@@ -249,7 +250,7 @@ function ProductCard({ product }: { product: SaleProduct }) {
 
             {/* Image */}
             <div className="bg-gradient-to-b from-gray-50 to-white p-4 pt-8 pb-3 flex items-center justify-center h-36 md:h-44">
-                <img
+                <SiteImage
                     src={product.image}
                     alt={product.name.replace(/\n/g, " ")}
                     className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300"

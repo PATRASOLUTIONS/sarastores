@@ -3,6 +3,14 @@
 @tailwind utilities;
 @import "tw-animate-css";
 
+@layer base {
+  /* Undo estimated Next dimensions only where the original image had none.
+     Zero specificity lets existing classes, modules and inline styles win. */
+  :where(img[data-site-auto-width]) { width: auto; }
+  :where(img[data-site-auto-height]) { height: auto; }
+  :where(img[data-site-auto-ratio]) { aspect-ratio: auto; }
+}
+
 /* ─── Performance: CSS-only fade-in (replaces framer-motion wrapper) ─── */
 @keyframes fadeIn {
   from { opacity: 0; }

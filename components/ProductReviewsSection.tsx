@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import useSWR from "swr"
@@ -7,11 +8,7 @@ import { z } from "zod"
 import { Star, ThumbsUp, ThumbsDown, CheckCircle2, ChevronDown, User, Search } from "lucide-react"
 import WriteReviewForm from "@/components/WriteReviewForm"
 
-interface ReviewAuthor {
-  name?: string
-  avatar?: string
-  location?: string
-}
+
 
 interface ProductInfo {
   id: string
@@ -275,7 +272,7 @@ export default function ProductReviewsSection({
             <h3 className="mt-3 text-xs font-bold">{review.title}</h3>
             <p className="mt-1 line-clamp-3 break-words text-xs leading-relaxed text-gray-600">{review.content}</p>
             {!!review.images?.length && <div className="mt-3 flex flex-wrap gap-2">
-              {review.images.slice(0, 4).map((image, index) => <a key={`${image}-${index}`} href={image} target="_blank" rel="noopener noreferrer"><img src={image} alt={`Review photo ${index + 1}`} className="h-12 w-12 rounded border border-gray-200 object-cover" loading="lazy" /></a>)}
+              {review.images.slice(0, 4).map((image, index) => <a key={`${image}-${index}`} href={image} target="_blank" rel="noopener noreferrer"><SiteImage src={image} alt={`Review photo ${index + 1}`} className="h-12 w-12 rounded border border-gray-200 object-cover" loading="lazy" /></a>)}
             </div>}
             <Link href="/contact" className="mt-3 inline-block text-[10px] text-gray-500 hover:text-[#1560bd]">Report a concern</Link>
           </article>)}
@@ -507,7 +504,7 @@ export default function ProductReviewsSection({
                           rel="noopener noreferrer"
                           className="block w-16 h-16 rounded-md overflow-hidden border border-gray-200 hover:border-brand-primary"
                         >
-                          <img src={img} alt="" className="w-full h-full object-cover" />
+                          <SiteImage src={img} alt="" className="w-full h-full object-cover" />
                         </a>
                       ))}
                     </div>

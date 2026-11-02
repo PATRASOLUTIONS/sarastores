@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { brandEditorListSchema } from "@/lib/brand-landing-response"
 import { useState, useEffect } from "react"
@@ -24,15 +25,8 @@ import {
     ShoppingBag,
     Award,
     MessageSquare,
-    Star,
     Shield,
     Zap,
-    Settings,
-    Wrench,
-    CheckCircle,
-    Sparkles,
-    Heart,
-    Globe,
     ExternalLink,
 } from "lucide-react"
 
@@ -42,10 +36,7 @@ const ICON_OPTIONS = [
     "Sparkles", "Heart", "Globe", "ShoppingBag", "MessageSquare",
 ]
 
-const ICON_MAP: Record<string, LucideIcon> = {
-    Shield, Zap, Award, Star, Settings, Wrench, CheckCircle,
-    Sparkles, Heart, Globe, ShoppingBag, MessageSquare,
-}
+
 
 const COLOR_OPTIONS = [
     { name: "Blue", value: "blue", bg: "bg-blue-500" },
@@ -274,7 +265,7 @@ export default function AdminBrandEditorPage() {
                         router.push("/admin/brands")
                     }
                 }
-            } catch (error) {
+            } catch {
                 toast.error("Failed to load brand")
             } finally {
                 setLoading(false)
@@ -299,7 +290,7 @@ export default function AdminBrandEditorPage() {
             } else {
                 toast.error(data.message || "Failed to save")
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to save brand")
         } finally {
             setSaving(false)
@@ -829,7 +820,7 @@ export default function AdminBrandEditorPage() {
                                     </div>
                                 </div>
                                 {banner.url && (
-                                    <img
+                                    <SiteImage unoptimized
                                         src={banner.url}
                                         alt={banner.alt}
                                         className="w-16 h-10 rounded object-cover flex-shrink-0"
@@ -1067,7 +1058,7 @@ export default function AdminBrandEditorPage() {
                                     </div>
                                 </div>
                                 {cat.url && (
-                                    <img
+                                    <SiteImage unoptimized
                                         src={cat.url}
                                         alt={cat.title}
                                         className="w-14 h-14 rounded object-cover flex-shrink-0"

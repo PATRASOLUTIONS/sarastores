@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 const _cache: Map<string, { ts: number; data: unknown }> = new Map()
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   const guard = await requireAdmin()
   if (!guard.ok) return guard.response
 

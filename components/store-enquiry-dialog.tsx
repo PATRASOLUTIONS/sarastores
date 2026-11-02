@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { Loader2, MapPin, Phone, Star, ArrowUpRight } from "lucide-react"
@@ -99,7 +100,7 @@ export function StoreEnquiryDialog({ store, origin, onClose }: { store: Store; o
           <p className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-500">{business?.status === "connected" ? "From Google Maps" : "Store details"}</p>
           <h2 className="text-xl font-semibold tracking-tight">{name}</h2>
           {(googlePhoto || store.image) && <figure className="mt-4 overflow-hidden rounded-xl">
-            <img src={googlePhoto || store.image} alt={name} loading="lazy" className="h-44 w-full object-cover" onError={event => {
+            <SiteImage src={googlePhoto || store.image} alt={name} loading="lazy" className="h-44 w-full object-cover" onError={event => {
               if (googlePhoto) setGooglePhotoFailed(true)
               else event.currentTarget.style.display = "none"
             }} />

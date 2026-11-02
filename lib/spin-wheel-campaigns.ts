@@ -8,7 +8,7 @@
  * existing data keeps working without migration.
  */
 import { connectToDatabase } from "@/lib/mongodb"
-import { Db, Collection, type Document, type Filter } from "mongodb"
+import { Collection, type Document, type Filter } from "mongodb"
 
 export interface SpinCampaign {
   name: string
@@ -84,16 +84,7 @@ export interface SpinCouponStats {
   unused: number
 }
 
-const CAMPAIGN_COLLECTIONS = [
-  "participants",
-  "inventory",
-  "couponCodes",
-  "coupons",
-  "otps",
-  "visits",
-] as const
-
-type CampaignCollection = (typeof CAMPAIGN_COLLECTIONS)[number]
+type CampaignCollection = "participants" | "inventory" | "couponCodes" | "coupons" | "otps" | "visits"
 
 /** Original (legacy) collection names — used when campaignSlug is "default" */
 const LEGACY_NAMES: Record<CampaignCollection, string> = {

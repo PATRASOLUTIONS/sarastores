@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCollection, normalizeId } from '@/lib/db-service'
+import { getCollection } from '@/lib/db-service'
 import { requireAdmin } from '@/lib/auth'
 import type { PartnerOrder } from '@/lib/partner/types'
 import type { Filter } from 'mongodb'

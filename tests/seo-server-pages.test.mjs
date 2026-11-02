@@ -61,3 +61,53 @@ test("strict sitemap loaders propagate source failures while storefront fallback
   await assert.rejects(articles.listArticles({ strict: true }), /fixture down/)
   await assert.rejects(stores.getAllStoreLocations({ strict: true }), /fixture down/)
 })
+
+
+test("listing reads project detail blobs without limiting catalogue completeness", async () => {
+  let requestedProjection
+  const records = Array.from({ length: 150 }, (_, i) => ({ ...product, _id: `fixture-${i}`, name: `Fixture Phone ${i}` }))
+  const loader = sourceLoader({
+    react: { cache: fn => fn },
+    "@/lib/db-service": { normalizeId, getCollection: async () => ({
+      find: (filter, options) => {
+        assert.deepEqual(filter, { active: true })
+        assert.equal(options.batchSize, 100)
+        requestedProjection = options.projection
+        // A limit() call is deliberately unsupported: eligible items beyond the
+        // API's first page must remain available to server-rendered filters.
+        return { sort() { return this }, toArray: async () => records }
+      },
+    }) },
+    "@/lib/public-catalogue": { publicCatalogueFilter: async () => ({ active: true }) },
+  }).load("lib/public-page-data.ts")
+  assert.equal((await loader.getPublicPageProducts()).length, 150)
+  assert.equal(requestedProjection.description, 1)
+  assert.equal(requestedProjection["raw.Brand"], 1)
+  assert.equal(requestedProjection["raw.Manufacturer Name"], 1)
+  assert.equal(requestedProjection["raw.MRP"], 1)
+  assert.equal(requestedProjection.raw, undefined)
+  assert.equal(requestedProjection.technical_details, undefined)
+  assert.equal(requestedProjection.vendorSecret, undefined)
+  assert.equal(requestedProjection.specification_images.$slice, 2)
+  assert(Object.keys(requestedProjection).every(key => !key.endsWith(".")))
+})
+
+
+test("product pages normalize BSON specification dates and retain full detail content", async () => {
+  const detailProduct = { ...product, sku: "FIXTURE-SKU" }
+  const specs = { updatedAt: new Date("2026-01-02T03:04:05Z"), technical_details: { Details: "Full product specification" },
+    reviews: [{ rating: 5, createdAt: new Date("2026-01-01T00:00:00Z") }] }
+  const loader = sourceLoader({
+    react: { cache: fn => fn },
+    "@/lib/db-service": { normalizeId, getCollection: async name => {
+      assert.equal(name, "product_specifications")
+      return { findOne: async () => specs }
+    } },
+    "@/lib/reviews": { getReviewProduct: async () => detailProduct },
+  }).load("lib/public-page-data.ts")
+  const result = await loader.getPublicPageProduct(detailProduct.slug)
+  assert.equal(result.technical_details.Details, "Full product specification")
+  assert.equal(result.reviews[0].createdAt, "2026-01-01T00:00:00.000Z")
+  assert.equal(result.id, detailProduct.id)
+  assert(specs.updatedAt instanceof Date)
+})

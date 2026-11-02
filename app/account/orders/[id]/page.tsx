@@ -60,7 +60,7 @@ export default async function AccountOrderDetailPage(context: { params: Promise<
 //   }>
 // }
 
-import { apiFetch } from "@/lib/api-client"
+
 // export default function OrderDetailPage({ params }: { params: { id: string } }) {
 //   const { user } = useAuth()
 //   const router = useRouter()

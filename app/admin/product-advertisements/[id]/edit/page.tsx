@@ -1,6 +1,7 @@
 "use client"
 
 
+import { useCallback } from "react"
 import type React from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
 import { apiFetch } from "@/lib/api-client"
@@ -47,11 +48,9 @@ export default function EditProductAdvertisementPage({ params: pendingParams }: 
     order: 1,
   })
 
-  useEffect(() => {
-    fetchAdvertisement()
-  }, [params.id])
 
-  const fetchAdvertisement = async () => {
+
+  const fetchAdvertisement = useCallback(async () => {
     try {
       setIsFetching(true)
       const response = await apiFetch(`/api/product-advertisements/${params.id}`)
@@ -80,7 +79,11 @@ export default function EditProductAdvertisementPage({ params: pendingParams }: 
     } finally {
       setIsFetching(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    fetchAdvertisement()
+  }, [fetchAdvertisement, params.id])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target

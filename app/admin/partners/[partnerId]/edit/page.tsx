@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, use } from "react"
 import { useSubmitLock } from "@/hooks/useSubmitLock"
@@ -57,15 +58,13 @@ export default function EditPartnerPage({ params }: { params: Promise<{ partnerI
     contactDesignation: '',
   })
 
-  useEffect(() => {
-    fetchPartner()
-  }, [partnerId])
 
-  const fetchPartner = async () => {
+
+  const fetchPartner = useCallback(async () => {
     try {
       const response = await apiFetch(`/api/admin/partners/${partnerId}`)
       const data = await response.json()
-      
+
       if (data.success && data.data.partner) {
         const p = data.data.partner
         setForm({
@@ -98,7 +97,11 @@ export default function EditPartnerPage({ params }: { params: Promise<{ partnerI
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [partnerId, router])
+
+  useEffect(() => {
+    fetchPartner()
+  }, [fetchPartner, partnerId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -107,7 +110,7 @@ export default function EditPartnerPage({ params }: { params: Promise<{ partnerI
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!form.name || !form.email || !form.phone) {
       toast.error('Please fill in all required fields')
       return
@@ -115,7 +118,7 @@ export default function EditPartnerPage({ params }: { params: Promise<{ partnerI
 
     if (!lock.acquire()) return
     setIsSubmitting(true)
-    
+
     try {
       const response = await apiFetch(`/api/admin/partners/${partnerId}`, {
         method: 'PATCH',
@@ -150,7 +153,7 @@ export default function EditPartnerPage({ params }: { params: Promise<{ partnerI
       })
 
       const data = await response.json()
-      
+
       if (data.success) {
         toast.success('Partner updated successfully')
         router.push(`/admin/partners/${partnerId}`)

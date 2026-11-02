@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, use } from "react"
 import {
@@ -116,14 +118,7 @@ interface WalletTransaction {
   paymentMethod?: string;
 }
 
-interface OrderStats {
-  totalOrders: number;
-  completedOrders: number;
-  cancelledOrders: number;
-  pendingOrders: number;
-  totalRevenue: number;
-  totalCommission: number;
-}
+
 
 interface EnabledProduct {
   _id: string;
@@ -199,13 +194,13 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
   const [apiKeys, setApiKeys] = useState<APIKey[]>([])
   const [wallet, setWallet] = useState<WalletInfo | null>(null)
   const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([])
-  const [orderStats, setOrderStats] = useState<OrderStats | null>(null)
+
   const [enabledProducts, setEnabledProducts] = useState<EnabledProduct[]>([])
   const [partnerOrders, setPartnerOrders] = useState<PartnerOrder[]>([])
-  const [isLoadingOrders, setIsLoadingOrders] = useState(false)
+
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'api-keys' | 'orders' | 'payment' | 'products' | 'transactions' | 'api-docs'>('overview')
-  const [showNewKeyModal, setShowNewKeyModal] = useState(false)
+
   const [newKeyData, setNewKeyData] = useState<{ key: string } | null>(null)
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set()) // Track which keys are visible
 
@@ -238,11 +233,9 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
   const [liveKeyId, setLiveKeyId] = useState('')
   const [liveKeySecret, setLiveKeySecret] = useState('')
 
-  useEffect(() => {
-    fetchPartnerDetails()
-  }, [partnerId])
 
-  const fetchPartnerDetails = async () => {
+
+  const fetchPartnerDetails = useCallback(async () => {
     setIsLoading(true)
     try {
       // Fetch partner details
@@ -303,7 +296,11 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [partnerId])
+
+  useEffect(() => {
+    fetchPartnerDetails()
+  }, [fetchPartnerDetails, partnerId])
 
   const handleStatusChange = async (newStatus: Partner['status']) => {
     try {
@@ -320,7 +317,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       } else {
         toast.error(data.error?.message || 'Failed to update partner')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update partner status')
     }
   }
@@ -341,7 +338,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       } else {
         toast.error(data.error?.message || 'Failed to generate API key')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to generate API key')
     }
   }
@@ -384,7 +381,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       } else {
         toast.error(data.error?.message || 'Failed to add funds')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to add funds')
     } finally {
       setIsAddingFunds(false)
@@ -409,7 +406,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       } else {
         toast.error(data.error?.message || 'Failed to remove transaction')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to remove transaction')
     } finally {
       setIsRemovingTransaction(false)
@@ -433,7 +430,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       } else {
         toast.error(data.error?.message || 'Failed to revoke API key')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to revoke API key')
     }
   }
@@ -541,7 +538,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
       } else {
         toast.error(data.error?.message || 'Failed to save settings')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to save Razorpay integration settings')
     } finally {
       setIsSavingRazorpay(false)
@@ -970,7 +967,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
                     <div className="flex items-start gap-3">
                       <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {product.images?.[0] ? (
-                          <img
+                          <SiteImage unoptimized
                             src={product.images[0]}
                             alt={product.name}
                             className="w-full h-full object-cover"

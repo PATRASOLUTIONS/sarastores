@@ -1,9 +1,9 @@
 /**
- * Explicit build-only, in-memory MongoDB fixture. Use with NODE_OPTIONS=--require.
+ * Explicit build-only, in-memory MongoDB fixture. Use with NODE_OPTIONS=--import.
  * Not imported by application code or normal builds; tests/ is excluded from deployment.
  * All reads are empty and every write throws. No MongoDB network connection is made.
  */
-const { MongoClient } = require("mongodb")
+import { MongoClient } from "mongodb"
 const cursor = () => ({
   sort() { return this }, limit() { return this }, skip() { return this }, project() { return this },
   batchSize() { return this }, toArray: async () => [], next: async () => null,

@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth"
 import * as dbService from "@/lib/db-service"
 import { COLLECTIONS } from "@/lib/db-service"
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const slides = await dbService.getAll(COLLECTIONS.SLIDES)
     return NextResponse.json(slides)

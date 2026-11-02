@@ -4,25 +4,7 @@ import { getErrorMessage } from "@/lib/utils"
 
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, useCallback } from "react"
-import {
-  Search,
-  Eye,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
-  RefreshCw,
-  CreditCard,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  DollarSign,
-  Wallet,
-  Users,
-  IndianRupee,
-  BadgeCheck,
-  Hourglass,
-} from "lucide-react"
+import { Search, Eye, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw, CreditCard, ChevronDown, ChevronRight, Loader2, Wallet, Users, IndianRupee, BadgeCheck, Hourglass } from "lucide-react"
 import Link from "next/link"
 import { toast } from "react-hot-toast"
 
@@ -230,7 +212,7 @@ function PartnerRow({
   const toggleSelect = (orderId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      next.has(orderId) ? next.delete(orderId) : next.add(orderId)
+      if (next.has(orderId)) { next.delete(orderId); } else { next.add(orderId); }
       return next
     })
   }

@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import React, { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Header from '@/components/Header'
@@ -153,7 +154,7 @@ export default function ComparePage() {
                     return (
                       <th key={p.id} className="p-4 border-b text-left min-w-[220px] align-top">
                         <div className="flex flex-col items-center gap-2 w-full max-w-[200px] mx-auto">
-                          <img src={firstImage} alt={cleanProductName(p.name)} className="h-20 w-20 object-contain rounded-xl border-2 border-blue-200 bg-white shadow" />
+                          <SiteImage src={firstImage} alt={cleanProductName(p.name)} className="h-20 w-20 object-contain rounded-xl border-2 border-blue-200 bg-white shadow" />
                           <div className="flex flex-col items-center w-full">
                             <span
                               className="font-semibold text-base text-blue-900 leading-tight drop-shadow-sm text-center w-full line-clamp-3"

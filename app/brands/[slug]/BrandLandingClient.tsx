@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
@@ -173,7 +174,7 @@ export default function DynamicBrandPage({ initialBrand, initialProducts }: { in
             }
         }
         fetchProducts()
-    }, [brand])
+    }, [brand, initialProducts])
 
     const nextBanner = () => {
         if (!brand) return
@@ -248,7 +249,7 @@ export default function DynamicBrandPage({ initialBrand, initialProducts }: { in
                             <>
                                 {/* A white chip keeps dark brand marks legible on the navy hero. */}
                                 <span className="inline-flex h-[72px] items-center justify-center rounded-xl bg-white px-6 shadow-sm">
-                                    <img
+                                    <SiteImage loading="eager"
                                         src={brand.logo}
                                         alt={`${brand.name} logo`}
                                         className="max-h-11 w-auto max-w-[220px] object-contain"
@@ -295,7 +296,7 @@ export default function DynamicBrandPage({ initialBrand, initialProducts }: { in
                                         : "opacity-0 scale-105"
                                 }`}
                             >
-                                <img
+                                <SiteImage loading="eager"
                                     src={banner.url}
                                     alt={banner.alt}
                                     className="w-full h-full object-cover"
@@ -319,7 +320,7 @@ export default function DynamicBrandPage({ initialBrand, initialProducts }: { in
                                     {brand.logo ? (
                                         <>
                                             <span className="mb-4 inline-flex h-[72px] items-center justify-center rounded-xl bg-white px-6 shadow-sm">
-                                                <img
+                                                <SiteImage
                                                     src={brand.logo}
                                                     alt={`${brand.name} logo`}
                                                     className="max-h-11 w-auto max-w-[220px] object-contain"
@@ -474,7 +475,7 @@ export default function DynamicBrandPage({ initialBrand, initialProducts }: { in
                                     className="group relative bg-gray-50 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2"
                                 >
                                     <div className="aspect-square overflow-hidden">
-                                        <img
+                                        <SiteImage
                                             src={category.url}
                                             alt={category.title}
                                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"

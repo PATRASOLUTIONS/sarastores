@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     let orderId
     try {
       orderId = createObjectId(id)
-    } catch (error) {
+    } catch {
       return NextResponse.json({ error: "Invalid Order ID format" }, { status: 400 })
     }
 

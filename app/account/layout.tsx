@@ -1,7 +1,7 @@
 import type React from "react"
 import { redirect } from "next/navigation"
-import Header from "@/components/Header"
-import Footer from "@/components/Footer"
+
+
 import { getSession } from "@/lib/auth"
 import AccountClientShell from "./account-client-shell"
 import { pageMetadata } from "@/lib/seo-page"

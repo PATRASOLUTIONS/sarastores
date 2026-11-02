@@ -1,6 +1,6 @@
 /**
  * Search Autocomplete Component
- * 
+ *
  * Enhanced search with:
  * - Debounced input
  * - Keyboard navigation
@@ -11,6 +11,7 @@
 
 'use client';
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Clock, TrendingUp, ArrowRight, Loader2 } from 'lucide-react';
@@ -67,7 +68,7 @@ function addRecentSearch(query: string): void {
     const searches = getRecentSearches().filter(s => s !== query);
     searches.unshift(query);
     localStorage.setItem(
-      RECENT_SEARCHES_KEY, 
+      RECENT_SEARCHES_KEY,
       JSON.stringify(searches.slice(0, MAX_RECENT_SEARCHES))
     );
   } catch {
@@ -115,14 +116,14 @@ export function SearchAutocomplete({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
-  
+
   const debouncedQuery = useDebounce(query, debounceMs);
 
   // Load recent searches on mount
@@ -144,7 +145,7 @@ export function SearchAutocomplete({
         const response = await fetch(
           `/api/search/suggestions?q=${encodeURIComponent(debouncedQuery)}&limit=${maxSuggestions}`
         );
-        
+
         if (response.ok) {
           const data = await response.json();
           setSuggestions(data.suggestions || []);
@@ -164,7 +165,7 @@ export function SearchAutocomplete({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        dropdownRef.current && 
+        dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
         inputRef.current &&
         !inputRef.current.contains(event.target as Node)
@@ -178,46 +179,16 @@ export function SearchAutocomplete({
   }, []);
 
   // Handle keyboard navigation
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    const totalItems = suggestions.length || 
-      (showRecentSearches ? recentSearches.length : 0) ||
-      (showPopularSearches ? POPULAR_SEARCHES.length : 0);
 
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setActiveIndex(prev => (prev < totalItems - 1 ? prev + 1 : 0));
-        break;
-        
-      case 'ArrowUp':
-        e.preventDefault();
-        setActiveIndex(prev => (prev > 0 ? prev - 1 : totalItems - 1));
-        break;
-        
-      case 'Enter':
-        e.preventDefault();
-        if (activeIndex >= 0 && suggestions[activeIndex]) {
-          handleSelectSuggestion(suggestions[activeIndex]);
-        } else if (query.trim()) {
-          handleSearch(query);
-        }
-        break;
-        
-      case 'Escape':
-        setIsOpen(false);
-        inputRef.current?.blur();
-        break;
-    }
-  }, [suggestions, recentSearches, activeIndex, query, showRecentSearches, showPopularSearches]);
 
   // Handle search submission
   const handleSearch = useCallback((searchQuery: string) => {
     if (!searchQuery.trim()) return;
-    
+
     addRecentSearch(searchQuery);
     setRecentSearches(getRecentSearches());
     setIsOpen(false);
-    
+
     if (onSearch) {
       onSearch(searchQuery);
     } else {
@@ -231,16 +202,48 @@ export function SearchAutocomplete({
       addRecentSearch(suggestion.text);
       setRecentSearches(getRecentSearches());
     }
-    
+
     setQuery(suggestion.text);
     setIsOpen(false);
-    
+
     if (onSelect) {
       onSelect(suggestion);
     } else {
       router.push(suggestion.url);
     }
   }, [router, onSelect]);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    const totalItems = suggestions.length ||
+      (showRecentSearches ? recentSearches.length : 0) ||
+      (showPopularSearches ? POPULAR_SEARCHES.length : 0);
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setActiveIndex(prev => (prev < totalItems - 1 ? prev + 1 : 0));
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        setActiveIndex(prev => (prev > 0 ? prev - 1 : totalItems - 1));
+        break;
+
+      case 'Enter':
+        e.preventDefault();
+        if (activeIndex >= 0 && suggestions[activeIndex]) {
+          handleSelectSuggestion(suggestions[activeIndex]);
+        } else if (query.trim()) {
+          handleSearch(query);
+        }
+        break;
+
+      case 'Escape':
+        setIsOpen(false);
+        inputRef.current?.blur();
+        break;
+    }
+  }, [suggestions, showRecentSearches, recentSearches.length, showPopularSearches, activeIndex, query, handleSelectSuggestion, handleSearch]);
 
   // Handle recent search click
   const handleRecentSearchClick = useCallback((search: string) => {
@@ -291,7 +294,7 @@ export function SearchAutocomplete({
           aria-activedescendant={activeIndex >= 0 ? `suggestion-${activeIndex}` : undefined}
           role="combobox"
         />
-        
+
         {/* Loading/Clear Button */}
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
           {isLoading ? (
@@ -343,7 +346,7 @@ export function SearchAutocomplete({
                   aria-selected={activeIndex === index}
                 >
                   {suggestion.image ? (
-                    <img
+                    <SiteImage
                       src={suggestion.image}
                       alt={suggestion.text}
                       className="w-10 h-10 object-cover rounded"

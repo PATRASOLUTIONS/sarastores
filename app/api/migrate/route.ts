@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   if (process.env.NODE_ENV !== "development") {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }

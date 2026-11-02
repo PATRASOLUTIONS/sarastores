@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { CheckCircle, MapPin, Store, Truck, Zap } from "lucide-react"
@@ -210,7 +211,7 @@ export default function FulfilmentSelector({
                       >
                         <span className={styles.storeRadio} aria-hidden="true" />
                         <div className={styles.storeImage}>
-                          <img src={store.image || genericPhoto} alt={store.image ? store.name : "SARA storefront illustration"}
+                          <SiteImage src={store.image || genericPhoto} alt={store.image ? store.name : "SARA storefront illustration"}
                             onError={event => {
                               const image = event.currentTarget
                               if (image.getAttribute("src") !== "/store-locator/storefront.webp") image.src = "/store-locator/storefront.webp"

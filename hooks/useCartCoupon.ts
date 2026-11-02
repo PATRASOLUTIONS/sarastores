@@ -64,7 +64,7 @@ export function useCartCoupon(items: IncomingItem[], owner: string, fulfilment: 
       } else setError(message)
     })
     return () => controller.abort()
-  }, [context, owner, loadedOwner, enabled, attempt, items.length])
+  }, [context, owner, loadedOwner, enabled, attempt, items.length, selection])
 
   const resolved = quote?.context === context && loadedOwner === owner
   const appliedCoupon = loadedOwner === owner && selection

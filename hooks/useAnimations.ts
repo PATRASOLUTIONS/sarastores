@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Hook to detect if user prefers reduced motion.
@@ -135,6 +135,8 @@ export function useAnimatedNumber(value: number, duration = 300) {
  * Returns a ref and visibility state for use with CSS or Framer Motion.
  */
 export function useInViewAnimation(options?: IntersectionObserverInit) {
+  const { threshold = 0.1, rootMargin = "0px 0px -60px 0px", root = null } = options || {}
+
   const ref = useRef<HTMLDivElement>(null)
   const [isInView, setIsInView] = useState(false)
 
@@ -156,15 +158,13 @@ export function useInViewAnimation(options?: IntersectionObserverInit) {
         }
       },
       {
-        threshold: 0.1,
-        rootMargin: '0px 0px -60px 0px',
-        ...options,
+        threshold, rootMargin, root,
       }
     )
 
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [threshold, rootMargin, root])
 
   return { ref, isInView }
 }

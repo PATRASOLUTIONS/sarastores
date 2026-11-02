@@ -1,6 +1,7 @@
 "use client"
 
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
@@ -224,7 +225,7 @@ const StoreForm = ({
           />
           {store.shopImage && (
             <div className="mt-3 relative">
-              <img 
+              <SiteImage unoptimized
                 src={store.shopImage} 
                 alt="Shop preview" 
                 className="w-full h-40 object-cover rounded-xl border"
@@ -307,7 +308,7 @@ export default function StoreLocationsPage() {
       } else {
         toast.error("Failed to load stores")
       }
-    } catch (e) {
+    } catch {
       toast.error("Failed to load stores")
     } finally {
       setLoading(false)
@@ -461,7 +462,7 @@ export default function StoreLocationsPage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to process Excel file", { id: toastId })
     } finally {
       setIsUploading(false)
@@ -493,7 +494,7 @@ export default function StoreLocationsPage() {
       } else {
         toast.error(result.message || "Failed to add store", { id: toastId })
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to add store", { id: toastId })
     }
   }
@@ -525,7 +526,7 @@ export default function StoreLocationsPage() {
       } else {
         toast.error(result.message || "Failed to update store", { id: toastId })
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to update store", { id: toastId })
     }
   }
@@ -557,7 +558,7 @@ export default function StoreLocationsPage() {
       } else {
         toast.error(result.message || "Failed to delete store", { id: toastId })
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete store", { id: toastId })
     } finally {
       deletionInProgress.current = false
@@ -583,7 +584,7 @@ export default function StoreLocationsPage() {
       } else {
         toast.error("Failed to update status", { id: toastId })
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to update status", { id: toastId })
     }
   }
@@ -730,7 +731,7 @@ export default function StoreLocationsPage() {
               {/* Store Image */}
               <div className="relative h-48 bg-gradient-to-br from-blue-100 to-purple-100">
                 {store.shopImage ? (
-                  <img
+                  <SiteImage unoptimized
                     src={store.shopImage}
                     alt={store.shopName}
                     className="w-full h-full object-cover"

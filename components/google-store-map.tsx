@@ -10,14 +10,15 @@ export default function GoogleStoreMap({ stores, selectedStore, className = "", 
 }) {
   const active = stores.find(store => store.id === selectedStore) || stores[0]
   const [resolved, setResolved] = useState<{ id: string; url: string } | null>(null)
+  const activeId = active?.id
   useEffect(() => {
-    if (!active) return
+    if (!activeId) return
     let cancelled = false
-    void getStoreBusiness(active.id).then(data => {
-      if (!cancelled && data.embedUrl) setResolved({ id: active.id, url: data.embedUrl })
+    void getStoreBusiness(activeId).then(data => {
+      if (!cancelled && data.embedUrl) setResolved({ id: activeId, url: data.embedUrl })
     }).catch(() => { /* Keep the map based on the saved store details. */ })
     return () => { cancelled = true }
-  }, [active?.id, resetKey])
+  }, [activeId, resetKey])
   if (!active) return <div className={`flex items-center justify-center bg-gray-50 p-6 text-sm text-gray-600 ${className}`}>No stores match your filters.</div>
   const src = resolved?.id === active.id ? resolved.url : googleStoreEmbed(active.mapUrl || "", active.name, active.address, active.googlePlaceId)
   return <iframe key={`${active.id}:${resetKey}`} src={src} title={`Google Maps: ${active.name}`} className={className}

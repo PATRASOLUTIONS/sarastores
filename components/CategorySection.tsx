@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react"
@@ -156,7 +157,7 @@ export default function CategorySection() {
                       className="min-w-full sm:min-w-1/2 md:min-w-1/3 lg:min-w-[16.66%] px-2 flex-shrink-0"
                     >
                       <div className="group relative h-40 bg-white rounded-xl overflow-hidden shadow hover:shadow-lg border border-slate-200 transition-all">
-                        <img
+                        <SiteImage
                           src={category.image || "/placeholder.svg"}
                           alt={category.name}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"

@@ -15,7 +15,7 @@ export default function AdminClientShell({
   children: React.ReactNode
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  const [, setIsMobile] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useAuth()

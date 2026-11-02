@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { isProductUnavailable } from "@/lib/product-availability"
@@ -201,7 +202,7 @@ export default function FeaturedProducts({ products: propProducts }: FeaturedPro
                 style={{ transitionDelay: `${index * 150}ms` }}
               >
                 <div className="relative overflow-hidden group">
-                  <img
+                  <SiteImage
                     src={product.image || "/placeholder.svg"}
                     alt={product.name}
                     className="w-full h-64 object-cover transition-transform duration-700 group-hover:scale-110"

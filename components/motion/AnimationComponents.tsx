@@ -2,18 +2,7 @@
 
 import React, { useRef, useEffect, useState, ReactNode } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import {
-  fadeUp,
-  fadeIn,
-  staggerContainer,
-  scaleFade,
-  slideDown,
-  collapseItem,
-  numberTick,
-  buttonPress,
-  durations,
-  easings,
-} from '@/lib/animations'
+import { fadeUp, scaleFade, durations, easings } from '@/lib/animations'
 
 // ─── Reveal on Scroll ────────────────────────────────────────────────────
 

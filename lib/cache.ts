@@ -281,7 +281,7 @@ export const cacheHeaders = {
   }),
 };
 
-export default {
+const cacheExports = {
   withCache,
   invalidateCache,
   invalidateCacheByPattern,
@@ -290,4 +290,6 @@ export default {
   cacheKeys,
   cacheHeaders,
   CACHE_TTL,
-};
+}
+
+export default cacheExports

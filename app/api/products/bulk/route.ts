@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       try {
         const objId = createObjectId(String(id))
         orFilters.push({ _id: objId })
-      } catch (e) {
+      } catch {
         // not an ObjectId, try string lookups below
       }
       orFilters.push({ _id: String(id) })

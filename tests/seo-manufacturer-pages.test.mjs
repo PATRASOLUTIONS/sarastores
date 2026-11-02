@@ -3,6 +3,12 @@ import test from "node:test"
 import { sourceLoader } from "./source-loader.mjs"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { createRequire } from "node:module"
+import config from "../next.config.mjs"
+
+const require = createRequire(import.meta.url)
+const { ImageConfigContext } = require("next/dist/shared/lib/image-config-context.shared-runtime.js")
+const { imageConfigDefault } = require("next/dist/shared/lib/image-config.js")
 
 test("manufacturer server pages seed only their public brand and positive prices before hydration", async () => {
   for (const brand of ["bosch", "haier", "lg", "tcl"]) {
@@ -44,7 +50,8 @@ test("manufacturer initial HTML contains its public product, heading and product
       "@/components/CategoryProductCard": ({ product }) => createElement("span", null, product.name),
     })
     const Client = loader.load(`app/${brand}/BrandClient.tsx`).default
-    const html = renderToStaticMarkup(createElement(Client, { initialProducts: [{ id: "fixture", name: "Public fixture appliance", price: 100, stock: 5 }] }))
+    const html = renderToStaticMarkup(createElement(ImageConfigContext.Provider, { value: { ...imageConfigDefault, ...config.images } },
+      createElement(Client, { initialProducts: [{ id: "fixture", name: "Public fixture appliance", price: 100, stock: 5 }] })))
     assert.match(html, /Public fixture appliance/)
     assert.match(html, /<h1(?:\s|>)/)
     assert.ok(html.includes('href="/warranty"'))

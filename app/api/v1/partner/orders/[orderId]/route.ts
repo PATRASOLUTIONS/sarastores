@@ -3,7 +3,7 @@
  * GET /api/v1/partner/orders/[orderId] - Get order details
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withPartnerAuth, PartnerAuthRequest } from '@/lib/partner/auth';
 import { getPartnerOrderById } from '@/lib/partner/orders';
 

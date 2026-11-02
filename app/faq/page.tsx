@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import { Search, ChevronDown, ChevronUp, ShoppingCart, CreditCard, Truck, Package, RotateCcw, Shield, User, Headphones, MapPin, Gift, Monitor, Tag, MessageSquare, type LucideIcon } from "lucide-react"
-import { FAQ_CATEGORIES as FAQ_CONTENT, type FaqItem } from "@/lib/faq-data"
+import { FAQ_CATEGORIES as FAQ_CONTENT } from "@/lib/faq-data"
 
 interface FAQItem {
   q: string

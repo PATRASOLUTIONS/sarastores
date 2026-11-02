@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState } from "react"
 import Link from "next/link"
 import { Heart, ShoppingCart, Trash2, ExternalLink, Star } from "lucide-react"
@@ -137,7 +138,7 @@ function WishlistCard({
         <Link href={`/product/${product.slug || product.id}`} className="absolute inset-0 z-10" aria-label={`Open ${product.name}`}>
           <div className="w-full h-full relative">
             {isImageLoading && <div className="absolute inset-0 bg-gray-100 dark:bg-gray-700 animate-pulse" />}
-            <img
+            <SiteImage
               src={imageSrc || "/placeholder.svg"}
               alt={product.name}
               onLoad={() => setIsImageLoading(false)}

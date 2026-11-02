@@ -268,7 +268,7 @@ export async function remove(collectionName: string, id: string) {
 
 export const deleteById = remove
 
-export async function migrateFromLocalStorage(collectionName: string, localStorageKey: string) {
+export async function migrateFromLocalStorage(collectionName: string, _localStorageKey: string) {
   try {
     if (process.env.NODE_ENV === "development") console.log(`Migration from localStorage not applicable on server side for ${collectionName}`)
     return { success: true, message: "Migration not applicable on server side" }

@@ -1,27 +1,10 @@
 "use client"
+import { useCallback } from "react"
 import { apiFetch } from "@/lib/api-client"
 ;
 
 import { useState, useEffect } from "react"
-import { 
-  Search, 
-  Plus, 
-  Eye, 
-  Edit, 
-  Key,
-  Building2,
-  Mail,
-  Phone,
-  Calendar,
-  TrendingUp,
-  Users,
-  Wallet,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
-  RefreshCw
-} from "lucide-react"
+import { Search, Plus, Eye, Edit, Key, Building2, Mail, Phone, Users, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { toast } from "react-hot-toast"
 
@@ -59,15 +42,13 @@ export default function AdminPartnersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [stats, setStats] = useState<Stats>({ total: 0, active: 0, pending: 0, suspended: 0 })
-  const [showAddModal, setShowAddModal] = useState(false)
-  
+
+
   const itemsPerPage = 10
 
-  useEffect(() => {
-    fetchPartners()
-  }, [currentPage, statusFilter, tierFilter])
 
-  const fetchPartners = async () => {
+
+  const fetchPartners = useCallback(async () => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
@@ -83,7 +64,7 @@ export default function AdminPartnersPage() {
       if (data.success) {
         setPartners(data.data.partners || [])
         setTotalPages(data.data.pagination?.totalPages || 1)
-        
+
         // Calculate stats
         const allPartners = data.data.partners || []
         setStats({
@@ -101,7 +82,11 @@ export default function AdminPartnersPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentPage, statusFilter, tierFilter])
+
+  useEffect(() => {
+    fetchPartners()
+  }, [currentPage, fetchPartners, statusFilter, tierFilter])
 
   const handleStatusChange = async (partnerId: string, newStatus: string) => {
     try {
@@ -110,7 +95,7 @@ export default function AdminPartnersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       })
-      
+
       const data = await response.json()
       if (data.success) {
         toast.success(`Partner ${newStatus} successfully`)
@@ -118,7 +103,7 @@ export default function AdminPartnersPage() {
       } else {
         toast.error(data.error?.message || 'Failed to update partner')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update partner status')
     }
   }

@@ -55,7 +55,7 @@ const Button = ({
 }
 
 export default function OTTSection() {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading] = useState(false)
 
   const handleGetStarted = () => {
     window.open("https://www.systechdigital.co.in/ott", "_blank")

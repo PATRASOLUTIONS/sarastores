@@ -48,16 +48,7 @@ interface CategorySEO {
   productCount?: number;
 }
 
-interface ArticleSEO {
-  title: string;
-  description: string;
-  image?: string;
-  url: string;
-  author?: string;
-  publishedTime?: string;
-  modifiedTime?: string;
-  tags?: string[];
-}
+
 
 interface BreadcrumbItem {
   name: string;
@@ -498,7 +489,7 @@ export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export default {
+const seoExports = {
   siteConfig,
   generateMetadata,
   generateProductMetadata,
@@ -521,4 +512,6 @@ export default {
   getCategoryUrl,
   truncateForMeta,
   stripHtml,
-};
+}
+
+export default seoExports

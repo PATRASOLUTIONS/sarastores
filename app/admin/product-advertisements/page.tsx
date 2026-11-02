@@ -1,6 +1,7 @@
 "use client"
 
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -29,7 +30,7 @@ export default function ProductAdvertisementsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedAds, setSelectedAds] = useState<string[]>([])
-  const router = useRouter()
+  useRouter();
 
   useEffect(() => {
     fetchAdvertisements()
@@ -255,7 +256,7 @@ export default function ProductAdvertisementsPage() {
                   />
                 </td>
                 <td className="px-6 py-4">
-                  <img src={ad.image || "/placeholder.svg"} alt={ad.title} className="h-12 w-20 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                  <SiteImage unoptimized src={ad.image || "/placeholder.svg"} alt={ad.title} className="h-12 w-20 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                 </td>
                 <td className="px-6 py-4">
                   <div>

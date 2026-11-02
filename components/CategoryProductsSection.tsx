@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react"
 import CategoryProductCard from "./CategoryProductCard"
-import { Reveal } from '@/components/motion/AnimationComponents'
+
 import { fetchWithCache, revalidateCache, getCached } from '@/utils/cache'
 import { catalogProductListResponseSchema } from '@/utils/catalog'
 import { uniquePublicProductNames } from '@/lib/public-product-names'

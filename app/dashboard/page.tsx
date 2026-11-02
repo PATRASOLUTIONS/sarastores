@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { z } from "zod"
@@ -189,10 +190,11 @@ export default function DashboardPage() {
     return () => controller.abort()
   }, [accountId, authLoading, offersAttempt])
 
+  const profileOpen = !!profileDraft
   useEffect(() => {
-    if (profileDraft) profileDialog.current?.showModal()
+    if (profileOpen) profileDialog.current?.showModal()
     else profileDialog.current?.close()
-  }, [!!profileDraft])
+  }, [profileOpen])
 
   const openProfile = () => setProfileDraft({
     name: user?.name || "", phone: user?.phone || "", dateOfBirth: user?.dateOfBirth?.slice(0, 10) || "",
@@ -242,7 +244,7 @@ export default function DashboardPage() {
     <section className={styles.welcome}>
       <div><h1>Welcome Back, {(user.name || "there").split(" ")[0]}!</h1><p>Good things happen when you shop with SARA.</p>
         <ul>{PERKS.map(({ icon: Icon, label }) => <li key={label}><Icon size={30} /><span>{label}</span></li>)}</ul></div>
-      <img src="/images/account-welcome-bag.png" alt="" aria-hidden="true" />
+      <SiteImage unoptimized src="/images/account-welcome-bag.png" alt="" aria-hidden="true" />
     </section>
     <section className={styles.panel}>
       <header><h2>My Cart</h2><Link href="/dashboard/cart">View Cart <ArrowRight size={13} /></Link></header>
@@ -309,7 +311,7 @@ export default function DashboardPage() {
       </section>
     </div>
     <section className={styles.membership}><Crown size={38} fill="#ffc400" /><div><h2>Be a SARA Member</h2><p>Explore Sara Coins, membership benefits and rewards for your purchases.</p></div>
-      <Link href="/dashboard/membership">My Membership <ArrowRight size={14} /></Link><img src="/images/account-member-gifts.png" alt="" aria-hidden="true" /></section>
+      <Link href="/dashboard/membership">My Membership <ArrowRight size={14} /></Link><SiteImage unoptimized src="/images/account-member-gifts.png" alt="" aria-hidden="true" /></section>
     <dialog ref={profileDialog} className={styles.dialog} onCancel={event => { if (profileSaving) event.preventDefault(); else setProfileDraft(null) }}>
       {profileDraft && <form onSubmit={saveProfile}>
         <header><h2>Edit Profile Details</h2><button aria-label="Close profile editor" type="button" disabled={profileSaving} onClick={() => setProfileDraft(null)}><X size={20} /></button></header>

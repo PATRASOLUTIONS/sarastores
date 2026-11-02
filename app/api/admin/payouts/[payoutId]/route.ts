@@ -38,7 +38,7 @@ export async function GET(
     let payout;
     try {
       payout = await collection.findOne({ _id: new ObjectId(payoutId) });
-    } catch (e) {
+    } catch {
       payout = await collection.findOne({ id: payoutId });
     }
     

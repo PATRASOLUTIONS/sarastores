@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
@@ -237,7 +238,7 @@ export default function ViewAdvertisementPage({ params: pendingParams }: { param
             <div>
               <Label className="text-sm text-gray-500 block mb-2">Advertisement Image</Label>
               <div className="rounded-lg overflow-hidden border bg-gray-50 aspect-video">
-                <img
+                <SiteImage unoptimized
                   src={advertisement.image || "/placeholder.svg?height=400&width=600"}
                   alt={advertisement.title}
                   className="w-full h-full object-cover"
@@ -273,7 +274,7 @@ export default function ViewAdvertisementPage({ params: pendingParams }: { param
               </div>
               <div className="md:w-1/2">
                 <div className="rounded-lg overflow-hidden">
-                  <img
+                  <SiteImage unoptimized
                     src={advertisement.image || "/placeholder.svg?height=300&width=500"}
                     alt={advertisement.title}
                     className="w-full h-64 object-cover"

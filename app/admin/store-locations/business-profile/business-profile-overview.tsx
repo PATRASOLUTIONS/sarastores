@@ -1,5 +1,7 @@
 "use client"
 
+import { useCallback } from "react"
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ExternalLink, Loader2, RefreshCw, Search, Star, Phone, MapPin, Image as ImageIcon } from "lucide-react"
@@ -38,7 +40,7 @@ function ProfileCard({ profile, extra, loadMore }: { profile: Profile; extra?: E
   const maps = location.metadata?.mapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${location.title || ""} ${address(location)}`)}`
   const action = "inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
   return <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-    <div className="flex h-52 items-center justify-center bg-gray-100">{image && !failedPhoto ? <img src={image} alt={location.title || "Google business photo"} onError={() => setFailedPhoto(true)} loading="lazy" className="h-full w-full object-cover" /> :
+    <div className="flex h-52 items-center justify-center bg-gray-100">{image && !failedPhoto ? <SiteImage unoptimized src={image} alt={location.title || "Google business photo"} onError={() => setFailedPhoto(true)} loading="lazy" className="h-full w-full object-cover" /> :
       <div className="flex flex-col items-center gap-2 px-5 text-center text-xs text-gray-500"><ImageIcon size={30} /><span>{extra?.loading ? "Fetching Google photos..." : "No photo returned by Google"}</span></div>}</div>
     {image && !failedPhoto && <p className="px-5 pt-2 text-xs text-gray-400">Photo: Google Business Profile{cover?.attribution?.profileName ? ` / ${cover.attribution.profileName}` : ""}</p>}
     <div className="space-y-4 p-5">
@@ -52,7 +54,7 @@ function ProfileCard({ profile, extra, loadMore }: { profile: Profile; extra?: E
       {extra?.averageRating != null && <p className="flex items-center gap-2 text-sm"><Star size={16} className="fill-amber-400 text-amber-400" /><strong>{extra.averageRating.toFixed(1)}</strong><span className="text-gray-500">({extra.totalReviews || 0} reviews)</span></p>}
       <details className="rounded-xl border border-gray-100 p-3"><summary className="cursor-pointer text-sm font-medium">Photos and videos ({photos.length} fetched)</summary>
         {extra?.mediaError && <p className="mt-3 text-xs text-amber-700">Business photos: {extra.mediaError}</p>}{extra?.customerError && <p className="mt-3 text-xs text-amber-700">Customer photos: {extra.customerError}</p>}
-        <div className="mt-3 grid grid-cols-2 gap-2">{photos.map(photo => <figure key={photo.name} className="min-w-0">{mediaImage(photo) && <a href={photo.googleUrl || photo.thumbnailUrl} target="_blank" rel="noopener noreferrer"><img src={mediaImage(photo)} alt={photo.description || "Google business photo"} loading="lazy" className="h-28 w-full rounded-lg object-cover" /></a>}<figcaption className="mt-1 text-xs text-gray-400">{photo.mediaFormat || "PHOTO"}{photo.attribution?.profileName ? ` / ${photo.attribution.profileName}` : ""}</figcaption></figure>)}</div>
+        <div className="mt-3 grid grid-cols-2 gap-2">{photos.map(photo => <figure key={photo.name} className="min-w-0">{mediaImage(photo) && <a href={photo.googleUrl || photo.thumbnailUrl} target="_blank" rel="noopener noreferrer"><SiteImage unoptimized src={mediaImage(photo)} alt={photo.description || "Google business photo"} loading="lazy" className="h-28 w-full rounded-lg object-cover" /></a>}<figcaption className="mt-1 text-xs text-gray-400">{photo.mediaFormat || "PHOTO"}{photo.attribution?.profileName ? ` / ${photo.attribution.profileName}` : ""}</figcaption></figure>)}</div>
         {!photos.length && !extra?.loading && <p className="mt-3 text-xs text-gray-500">Google has not returned any photos.</p>}
         <div className="mt-3 flex flex-wrap gap-3">{extra?.mediaNext && <button disabled={extra.moreLoading} type="button" onClick={() => loadMore(profile, "media")} className={action}>Load more business photos</button>}{extra?.customerNext && <button disabled={extra.moreLoading} type="button" onClick={() => loadMore(profile, "customer-media")} className={action}>Load more customer photos</button>}</div>
       </details>
@@ -98,18 +100,9 @@ export function BusinessProfileOverview() {
     catch (error) { setErrors([message(error)]) }
     finally { setStatusLoading(false) }
   }
-  useEffect(() => {
-    const result = new URL(window.location.href).searchParams.get("googleConnection")
-    const known: Record<string, string> = { connected: "Google account connected. Your accessible business profiles will load below.",
-      ACCESS_DENIED: "Google connection was cancelled or access was not granted.", INVALID_STATE: "Connection verification failed. Start again.", EXPIRED_STATE: "The connection request expired. Start again.",
-      SCOPE_REQUIRED: "Allow Google Business Profile access when connecting.", OFFLINE_ACCESS_REQUIRED: "Google did not grant offline access. Remove this app from Google account permissions, then reconnect.",
-      NOT_CONFIGURED: "Check your OAuth client and server connection setup.", RECONNECT_REQUIRED: "Google authorization failed. Check the redirect URI and reconnect.", IDENTITY_FAILED: "The Google identity could not be verified. Try again." }
-    if (result) setCallbackMessage(known[result] || "Google connection could not be completed. Check setup and try again.")
-    void loadStatus()
-    return () => runRef.current?.abort()
-  }, [])
 
-  async function fetchResource(profile: Profile, kind: Kind, signal: AbortSignal, token = "") {
+
+  const fetchResource = useCallback(async (profile: Profile, kind: Kind, signal: AbortSignal, token = "") => {
     const resourceKey = `${profile.location.name}:${kind}`
     const previousSource = resourceSources.current[resourceKey]
     // Page tokens belong to the Google account that produced the first page.
@@ -145,7 +138,7 @@ export function BusinessProfileOverview() {
       }
     }
     throw failure || new Error("No accessible Google source was found for this location.")
-  }
+  }, [])
   async function loadMore(profile: Profile, kind: Kind) {
     const key = profile.location.name
     if (paging.current.has(key)) return
@@ -159,7 +152,7 @@ export function BusinessProfileOverview() {
     finally { if (run === runRef.current) paging.current.delete(key); if (!run?.signal.aborted) updateExtra(key, old => ({ ...old, moreLoading: false })) }
   }
 
-  async function fetchProfiles() {
+  const fetchProfiles = useCallback(async () => {
     if (!status?.configured) return
     runRef.current?.abort()
     const run = new AbortController(); runRef.current = run
@@ -251,9 +244,20 @@ export function BusinessProfileOverview() {
       if (!run.signal.aborted) setProgress(`Fetched ${allProfiles.size} unique Google business profiles from ${allAccounts.size} accounts/groups.`)
     } catch (error) { if (!run.signal.aborted) setErrors([...failures, message(error)]) }
     finally { if (!run.signal.aborted) setBusy(false) }
-  }
+  }, [fetchResource, selectedConnection, status?.configured, status?.connections])
 
-  useEffect(() => { if (status?.configured && status.connections.some(connection => connection.status === "connected")) void fetchProfiles() }, [status, selectedConnection])
+  useEffect(() => {
+    const result = new URL(window.location.href).searchParams.get("googleConnection")
+    const known: Record<string, string> = { connected: "Google account connected. Your accessible business profiles will load below.",
+      ACCESS_DENIED: "Google connection was cancelled or access was not granted.", INVALID_STATE: "Connection verification failed. Start again.", EXPIRED_STATE: "The connection request expired. Start again.",
+      SCOPE_REQUIRED: "Allow Google Business Profile access when connecting.", OFFLINE_ACCESS_REQUIRED: "Google did not grant offline access. Remove this app from Google account permissions, then reconnect.",
+      NOT_CONFIGURED: "Check your OAuth client and server connection setup.", RECONNECT_REQUIRED: "Google authorization failed. Check the redirect URI and reconnect.", IDENTITY_FAILED: "The Google identity could not be verified. Try again." }
+    if (result) setCallbackMessage(known[result] || "Google connection could not be completed. Check setup and try again.")
+    void loadStatus()
+    return () => runRef.current?.abort()
+  }, [])
+
+  useEffect(() => { if (status?.configured && status.connections.some(connection => connection.status === "connected")) void fetchProfiles() }, [status, selectedConnection, fetchProfiles])
   async function disconnect(id: string) {
     try {
       await apiFetchJson(`${BASE}/status`, { method: "DELETE", json: { connectionId: id }, signal: AbortSignal.timeout(15000) }, value => z.object({ success: z.literal(true) }).parse(value))

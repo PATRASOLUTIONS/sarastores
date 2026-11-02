@@ -131,7 +131,7 @@ export async function getAvailableLicenseKeys(
   softwareId: string,
   validityYears: number,
   count: number,
-  maxDevices: number = 1
+  _maxDevices: number = 1
 ) {
   const { db } = await connectToDatabase()
   

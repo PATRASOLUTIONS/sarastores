@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import Image from "next/image"
 
@@ -8,13 +9,13 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useCartUI } from "@/contexts/CartUIContext"
-import { ShoppingCart, Menu, X, Search, User, Heart, MapPin, ChevronDown, TrendingUp, Clock, Package, Zap, Gift, Download, HelpCircle, Phone } from "lucide-react"
+import { ShoppingCart, X, Search, User, Heart, MapPin, ChevronDown, TrendingUp, Clock, Zap, HelpCircle, Phone } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { loginHref } from "@/lib/return-path"
 import { useAuth } from "@/contexts/AuthContext"
 import { useProductSpecImages } from '@/hooks/useProductSpecImages'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cssEasings, durations, scaleFade } from '@/lib/animations'
+import { durations } from '@/lib/animations'
 import { useScrollState } from '@/hooks/useAnimations'
 import DeliverToPincode from '@/components/DeliverToPincode'
 import MegaMenu from '@/components/MegaMenu'
@@ -95,8 +96,8 @@ export default function Header() {
     setReturnLoginHref(loginHref(window.location.pathname, window.location.search))
   }, [pathname])
   const [searchQuery, setSearchQuery] = useState("")
-  const { isScrolled, scrollY } = useScrollState(10)
-  const [cartItemCount, setCartItemCount] = useState(0)
+  const { isScrolled } = useScrollState(10)
+
   const [cartBounce, setCartBounce] = useState(false)
   const [searchSuggestions, setSearchSuggestions] = useState<SearchProduct[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -234,7 +235,7 @@ export default function Header() {
         }}
       >
         <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center group-hover:bg-white transition-colors">
-          <img
+          <SiteImage unoptimized loading="eager"
             src={imageSrc}
             alt={product.name}
             className="w-10 h-10 object-contain"
@@ -432,8 +433,8 @@ export default function Header() {
   useEffect(() => {
     try {
       const s = sessionStorage.getItem('searchQuery') || ''
-      if (s && !searchQuery) setSearchQuery(s)
-    } catch (e) {
+      if (s) setSearchQuery(current => current || s)
+    } catch {
       // ignore
     }
 
@@ -449,7 +450,7 @@ export default function Header() {
   useEffect(() => {
     try {
       sessionStorage.setItem('searchQuery', searchQuery)
-    } catch (e) {
+    } catch {
       // ignore
     }
     window.dispatchEvent(new CustomEvent('search:update', { detail: searchQuery }))

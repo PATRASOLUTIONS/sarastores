@@ -38,7 +38,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     let objectId: ObjectId
     try {
       objectId = new ObjectId(id)
-    } catch (error) {
+    } catch {
       return new Response(JSON.stringify({ error: "Invalid advertisement id" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },

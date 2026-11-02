@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 import { ChevronLeft, ChevronRight, ShoppingBag, ArrowRight } from "lucide-react"
 import Link from "next/link"
@@ -110,7 +111,7 @@ export default function ProductHeroSlider() {
     )
   }
 
-  const currentAd = advertisements[currentSlide]
+
 
   return (
     <div
@@ -123,7 +124,7 @@ export default function ProductHeroSlider() {
         className="flex transition-transform duration-700 ease-in-out h-full"
         style={{ transform: `translateX(-${currentSlide * 100}%)` }}
       >
-        {advertisements.map((ad, index) => (
+        {advertisements.map((ad, _index) => (
           <div
             key={ad._id}
             className="w-full h-[400px] flex-shrink-0 relative"
@@ -132,7 +133,7 @@ export default function ProductHeroSlider() {
             {/* Background Image */}
             {ad.image && (
               <div className="absolute inset-0">
-                <img src={ad.image || "/placeholder.svg"} alt={ad.title} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                <SiteImage loading="eager" src={ad.image || "/placeholder.svg"} alt={ad.title} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                 {/* Overlay */}
                 <div className="absolute inset-0 bg-black" style={{ opacity: (ad.overlayOpacity || 50) / 100 }} />
               </div>

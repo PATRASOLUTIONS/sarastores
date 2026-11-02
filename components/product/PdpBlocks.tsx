@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import ResponsiveBannerImage from "@/components/ResponsiveBannerImage"
 import { ArrowRight, Check, Star } from "lucide-react"
 import { bannerGradient, bannerIsPhotoOnly, type SiteBanner } from "@/hooks/useBanners"
 
@@ -12,14 +13,13 @@ export function OfferCards({ offers }: { offers: SiteBanner[] }) {
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Offers on this product">
       {offers.slice(0, 5).map((offer) => bannerIsPhotoOnly(offer) ? (
         <article key={offer.id} className="overflow-hidden rounded-lg sm:col-span-2 lg:col-span-5">
-          {offer.ctaLink ? <Link href={offer.ctaLink}><img src={offer.image} alt="" className="block h-auto w-full" /></Link> : <img src={offer.image} alt="" className="block h-auto w-full" />}
+          {offer.ctaLink ? <Link href={offer.ctaLink}><ResponsiveBannerImage src={offer.image} alt={offer.title || "Product offer"} sizes="(min-width: 1280px) 1216px, 100vw" className="block h-auto w-full" /></Link> : <ResponsiveBannerImage src={offer.image} alt={offer.title || "Product offer"} sizes="(min-width: 1280px) 1216px, 100vw" className="block h-auto w-full" />}
         </article>
       ) : (
         <article key={offer.id} className="rounded-lg border border-gray-200 bg-white p-3.5">
           <div className="flex h-7 items-center">
             {offer.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={offer.image} alt="" aria-hidden className="h-6 w-auto max-w-[96px] object-contain" />
+              <ResponsiveBannerImage src={offer.image} alt="" decorative width={96} height={24} sizes="96px" className="h-6 w-auto max-w-[96px] object-contain" />
             ) : (
               <span
                 className="rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white"
@@ -55,7 +55,7 @@ export function RailCards({ cards }: { cards: SiteBanner[] }) {
       {cards.slice(0, 3).map((card) => {
         if (bannerIsPhotoOnly(card)) {
           return <article key={card.id} className="overflow-hidden rounded-xl">
-            {card.ctaLink ? <Link href={card.ctaLink}><img src={card.image} alt="" className="block h-auto w-full" /></Link> : <img src={card.image} alt="" className="block h-auto w-full" />}
+            {card.ctaLink ? <Link href={card.ctaLink}><ResponsiveBannerImage src={card.image} alt={card.title || "Product service information"} width={600} height={600} sizes="(min-width: 1024px) 320px, 100vw" className="block h-auto w-full" /></Link> : <ResponsiveBannerImage src={card.image} alt={card.title || "Product service information"} width={600} height={600} sizes="(min-width: 1024px) 320px, 100vw" className="block h-auto w-full" />}
           </article>
         }
         const light = !card.dark

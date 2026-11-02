@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 
 /**
@@ -59,7 +60,7 @@ export default function GaneshBlessing({ active }: { active: boolean }) {
         <span className="ganesh-blessing-aura" />
 
         {hasArtwork ? (
-          <img src="/ganesh/blessing.png" alt="" className="ganesh-blessing-art" />
+          <SiteImage unoptimized src="/ganesh/blessing.png" alt="" className="ganesh-blessing-art" />
         ) : (
           <span className="ganesh-blessing-om">ॐ</span>
         )}

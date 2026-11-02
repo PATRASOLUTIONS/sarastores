@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import Header from "@/components/Header"
@@ -43,7 +44,7 @@ export default function CampaignPage({ initialCampaign }: { initialCampaign?: Pu
         const parsed = publicCampaignPageResponseSchema.safeParse(data)
         if (!res.ok || !parsed.success) throw new Error("Invalid campaign response")
         if (!controller.signal.aborted) setCampaign(parsed.data.campaign)
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) setError("Failed to load campaign page. Please refresh to retry.")
       } finally {
         if (!controller.signal.aborted) setLoading(false)
@@ -92,7 +93,7 @@ export default function CampaignPage({ initialCampaign }: { initialCampaign?: Pu
         {/* Full-width Hero Banner */}
         {campaign.banner && (
            <div className="w-full relative overflow-hidden bg-gray-100 flex items-center justify-center min-h-[160px] md:min-h-[300px] border-b border-gray-100 shadow-sm">
-             <img 
+             <SiteImage loading="eager"
                src={campaign.banner} 
                alt={campaign.name}
                className="w-full h-auto object-cover max-h-[500px]"

@@ -88,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const router = useRouter()
   const SESSION_TIMEOUT = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   const ACTIVITY_TIMEOUT = 12 * 60 * 60 * 1000 // 12 hours of inactivity
-  const COOKIE_GRACE_PERIOD = 250 // allow Set-Cookie propagation before redirecting
+   // allow Set-Cookie propagation before redirecting
 
   const clearStoredAuth = (preserveRedirect = false) => {
     localStorage.removeItem("user")
@@ -97,7 +97,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("loginTime")
   }
 
-  const readStoredTimestamp = (key: "lastActivityTime" | "loginTime") => {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Function to handle user activity
+
+
+  // Function to check session timeout
+
+  const readStoredTimestamp = useCallback((key: "lastActivityTime" | "loginTime") => {
     const value = localStorage.getItem(key)
 
     if (!value) {
@@ -106,15 +129,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const timestamp = Number.parseInt(value, 10)
     return Number.isFinite(timestamp) ? timestamp : null
-  }
+  }, [])
 
-  const clearClientAuthState = (preserveRedirect = false) => {
+  const clearClientAuthState = useCallback((preserveRedirect = false) => {
     authEpoch.current++
     setUser(null)
     clearStoredAuth(preserveRedirect)
-  }
+  }, [])
 
-  const persistClientUser = (nextUser: User | null) => {
+  const persistClientUser = useCallback((nextUser: User | null) => {
     // Skip if the user data is actually the same to avoid unnecessary
     // localStorage writes and state updates that cascade into cart re-loads.
     const current = localStorage.getItem("user")
@@ -136,66 +159,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!localStorage.getItem("lastActivityTime")) {
       localStorage.setItem("lastActivityTime", Date.now().toString())
     }
-  }
+  }, [])
 
-  const refreshUserProfile = async (baseUser: User) => {
-    const epoch = authEpoch.current
-    try {
-      if (!baseUser.id) {
-        return
-      }
-
-      const res = await fetch(`/api/users/${baseUser.id}`)
-      if (!res.ok) {
-        return
-      }
-
-      const fullUser = await res.json().catch(() => null)
-      if (fullUser && epoch === authEpoch.current && !getSessionInvalidReason()) {
-        persistClientUser(fullUser)
-      }
-    } catch (error) {
-      console.warn("Failed to refresh user profile", error)
-    }
-  }
-
-  const fetchSessionUser = async (): Promise<User | null> => {
-    const epoch = authEpoch.current
-    try {
-      const response = await fetch("/api/auth/session", {
-        cache: "no-store",
-        credentials: "same-origin",
-      })
-      if (!response.ok) {
-        return null
-      }
-
-      const data = await response.json().catch(() => null)
-      if (epoch !== authEpoch.current) return null
-      if (!data?.user) {
-        clearClientAuthState(true)
-        return null
-      }
-
-      const invalidReason = getSessionInvalidReason()
-      if (invalidReason) {
-        invalidateSession(invalidReason, true)
-        return null
-      }
-      persistClientUser(data.user)
-      return data.user
-    } catch (error) {
-      console.warn("Failed to hydrate auth session", error)
-      return null
-    }
-  }
-
-  const cancelPendingLogout = () => {
+  const cancelPendingLogout = useCallback(() => {
     logoutRequest.current?.abort()
     logoutRequest.current = null
-  }
+  }, [])
 
-  const requestLogout = () => {
+  const requestLogout = useCallback(() => {
     cancelPendingLogout()
     const controller = new AbortController()
     logoutRequest.current = controller
@@ -203,9 +174,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (err instanceof DOMException && err.name === "AbortError") return
       console.error("Error clearing expired session:", err)
     })
-  }
+  }, [cancelPendingLogout])
 
-  const invalidateSession = (reason?: "expired" | "inactive" | "missing-cookie", notify = false) => {
+  const invalidateSession = useCallback((reason?: "expired" | "inactive" | "missing-cookie", notify = false) => {
     clearClientAuthState()
     requestLogout()
 
@@ -221,9 +192,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (reason === "inactive") {
       toast.error("You have been logged out due to inactivity.")
     }
-  }
+  }, [clearClientAuthState, requestLogout])
 
-  const getSessionInvalidReason = (): "expired" | "inactive" | "missing-cookie" | null => {
+  const getSessionInvalidReason = useCallback((): "expired" | "inactive" | "missing-cookie" | null => {
     const storedUser = localStorage.getItem("user")
 
     if (!storedUser) {
@@ -256,36 +227,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return null
-  }
+  }, [ACTIVITY_TIMEOUT, SESSION_TIMEOUT, readStoredTimestamp])
 
-  // Function to handle user activity
-  const handleUserActivity = () => {
+  const refreshUserProfile = useCallback(async (baseUser: User) => {
+    const epoch = authEpoch.current
+    try {
+      if (!baseUser.id) {
+        return
+      }
+
+      const res = await fetch(`/api/users/${baseUser.id}`)
+      if (!res.ok) {
+        return
+      }
+
+      const fullUser = await res.json().catch(() => null)
+      if (fullUser && epoch === authEpoch.current && !getSessionInvalidReason()) {
+        persistClientUser(fullUser)
+      }
+    } catch (error) {
+      console.warn("Failed to refresh user profile", error)
+    }
+  }, [getSessionInvalidReason, persistClientUser])
+
+  const fetchSessionUser = useCallback(async (): Promise<User | null> => {
+    const epoch = authEpoch.current
+    try {
+      const response = await fetch("/api/auth/session", {
+        cache: "no-store",
+        credentials: "same-origin",
+      })
+      if (!response.ok) {
+        return null
+      }
+
+      const data = await response.json().catch(() => null)
+      if (epoch !== authEpoch.current) return null
+      if (!data?.user) {
+        clearClientAuthState(true)
+        return null
+      }
+
+      const invalidReason = getSessionInvalidReason()
+      if (invalidReason) {
+        invalidateSession(invalidReason, true)
+        return null
+      }
+      persistClientUser(data.user)
+      return data.user
+    } catch (error) {
+      console.warn("Failed to hydrate auth session", error)
+      return null
+    }
+  }, [clearClientAuthState, getSessionInvalidReason, invalidateSession, persistClientUser])
+
+  const handleUserActivity = useCallback(() => {
     // Store the current timestamp when user is active
     if (user) {
       localStorage.setItem('lastActivityTime', Date.now().toString())
     }
-  }
+  }, [user])
 
-  // Function to check session timeout
-  const checkSessionTimeout = () => {
+  const checkSessionTimeout = useCallback(() => {
     const invalidReason = getSessionInvalidReason()
 
     if (invalidReason) {
       invalidateSession(invalidReason, true)
     }
-  }
+  }, [getSessionInvalidReason, invalidateSession])
 
   // Event listeners for user activity
   useEffect(() => {
     if (user) {
       // Set initial activity time when user logs in
       localStorage.setItem('lastActivityTime', Date.now().toString())
-      
+
       // Set login time if not already set
       if (!localStorage.getItem('loginTime')) {
         localStorage.setItem('loginTime', Date.now().toString())
       }
-      
+
       // Add event listeners for user activity
       const events = ['mousedown', 'keydown', 'scroll', 'touchstart']
       events.forEach(event => {
@@ -306,7 +327,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearInterval(sessionCheckInterval)
       }
     }
-  }, [user])
+  }, [checkSessionTimeout, handleUserActivity, user])
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -321,7 +342,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     checkAuth()
-  }, [])
+  }, [fetchSessionUser, refreshUserProfile])
 
   // Links the cookie-banner decision to the account, so the same person is not
   // asked again on another device or network.
@@ -362,7 +383,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener("storage", handleStorageChange)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [])
+  }, [fetchSessionUser])
 
   // Global 401 detector. Wraps `window.fetch` once on mount and listens for
   // a throttled `auth:expired` event. This is the single source of truth
@@ -466,7 +487,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.fetch = originalFetch
       window.removeEventListener("auth:expired", onAuthExpired)
     }
-  }, [])
+  }, [requestLogout])
 
   const checkAuthAndRedirect = (): boolean => {
     if (!user) {
@@ -569,10 +590,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signup = async (
-    name: string, 
-    email: string, 
-    password: string, 
-    honeypot?: string, 
+    name: string,
+    email: string,
+    password: string,
+    honeypot?: string,
     formTimestamp?: number,
     recaptchaToken?: string,
     confirmPassword?: string,
@@ -590,9 +611,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-          name, 
-          email, 
+        body: JSON.stringify({
+          name,
+          email,
           password,
           confirmPassword: confirmPassword ?? password,
           startSession: true,

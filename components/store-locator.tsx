@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { AlertCircle, ArrowRight, ChevronRight, Loader2, MapPin, MessageCircle, Phone, Search, Target, X } from "lucide-react"
@@ -106,6 +106,8 @@ export function StoreLocator() {
   const [radiusKm, setRadiusKm] = useState(25)
   const [now, setNow] = useState<Date | null>(null)
   const locationRequest = useRef(0)
+
+  const invalidateLocationRequest = useCallback(() => { locationRequest.current++ }, [])
   const isPincodeSearch = /^[1-9]\d{5}$/.test(searchQuery.trim())
   const activePlace = placeQuery === searchQuery.trim() ? selectedPlace : null
   const userLocation = isPincodeSearch ? pincodeLocation : activePlace || gpsLocation
@@ -115,8 +117,8 @@ export function StoreLocator() {
     analytics.viewStoreLocator("store_locator_page")
     setNow(new Date())
     const timer = setInterval(() => setNow(new Date()), 60000)
-    return () => { clearInterval(timer); locationRequest.current++; placeRequest.current?.abort() }
-  }, [])
+    return () => { clearInterval(timer); invalidateLocationRequest(); placeRequest.current?.abort() }
+  }, [invalidateLocationRequest])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -272,8 +274,8 @@ export function StoreLocator() {
 
   useEffect(() => {
     getCurrentLocation(true)
-    return () => { locationRequest.current++ }
-  }, [])
+    return () => { invalidateLocationRequest() }
+  }, [invalidateLocationRequest])
 
   const locatedStores = useMemo<LocatedStore[]>(() => stores.map((store) => {
     const coords = coordinates(store.latitude, store.longitude)

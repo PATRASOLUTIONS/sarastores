@@ -1,5 +1,6 @@
 'use client'
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ShoppingCart, Check, Download, Shield, Clock, Users, SlidersHorizontal, X, ChevronDown, Search } from 'lucide-react'
@@ -46,7 +47,7 @@ export default function SoftwarePage({ initialProducts }: { initialProducts?: Pu
     validityYears: true,
   })
 
-  const router = useRouter()
+  useRouter();
   const { user, isAdmin } = useAuth()
 
   useEffect(() => {
@@ -322,7 +323,7 @@ export default function SoftwarePage({ initialProducts }: { initialProducts?: Pu
 
       return true
     })
-  }, [products, searchTerm, selectedCategories, priceRange, selectedPackSizes, selectedValidityYears, availablePackSizes, availableValidityYears])
+  }, [products, searchTerm, selectedCategories, priceRange, selectedPackSizes, selectedValidityYears])
 
   const addToCart = async (product: SoftwareProduct, variant?: IntegrationVariant | null) => {
     if (!user) {
@@ -746,7 +747,7 @@ export default function SoftwarePage({ initialProducts }: { initialProducts?: Pu
                     className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
                   >
                     <div className="relative h-48 bg-gradient-to-br from-brand-primary to-brand-primary-hover">
-                      <img
+                      <SiteImage
                         src={product.image}
                         alt={product.name}
                         className="w-full h-full object-cover"
@@ -830,7 +831,7 @@ export default function SoftwarePage({ initialProducts }: { initialProducts?: Pu
               {selectedProduct.isKGen ? (
                 <div>
                   <div className="mb-4">
-                    <img src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-48 object-cover rounded" />
+                    <SiteImage src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-48 object-cover rounded" />
                   </div>
 
                   <div className="mb-4">

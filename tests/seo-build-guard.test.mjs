@@ -1,15 +1,16 @@
+import { pathToFileURL } from "node:url"
 import assert from "node:assert/strict"
 import test from "node:test"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 
 const root = path.resolve(import.meta.dirname, "..")
-const guard = path.join(root, "scripts/seo/build-guard.cjs")
+const guard = path.join(root, "scripts/seo/build-guard.mjs")
 function run(code, fixtureMode = "catalogue-v2") {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     ["path", "systemroot", "windir", "temp", "tmp", "pathext"].includes(key.toLowerCase())))
   Object.assign(env, { MONGODB_URI: "mongodb://seo-fixture.invalid/synthetic", SARA_SEO_BUILD_FIXTURES: fixtureMode })
-  return execFileSync(process.execPath, ["--require", guard, "-e", `
+  return execFileSync(process.execPath, ["--import", pathToFileURL(guard).href, "-e", `
     const assert = require('node:assert/strict'); const { MongoClient } = require('mongodb');
     (async () => { ${code} })().catch(error => { console.error(error); process.exitCode = 1 })
   `], { cwd: root, env, encoding: "utf8", windowsHide: true })
@@ -46,5 +47,15 @@ test("isolated build rejects external requests and hides local environment files
     assert.throws(() => require('node:http').get('http://localhost/'), /access refused/);
     assert.throws(() => fetch('https://example.invalid/'), /access refused/);
     assert.equal(require('node:fs').readFileSync('.env.local', 'utf8'), '');
+  `), "")
+})
+
+test("isolated build also hides synthetic environment files through named ESM imports", () => {
+  assert.equal(run(`
+    const fs = await import('node:fs');
+    const filename = '.seo-local/.env.esm-fixture';
+    fs.writeFileSync(filename, 'synthetic fixture only');
+    assert.equal(fs.readFileSync(filename, 'utf8'), '');
+    fs.unlinkSync(filename);
   `), "")
 })

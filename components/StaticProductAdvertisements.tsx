@@ -1,4 +1,5 @@
 "use client"
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
@@ -57,7 +58,7 @@ export default function StaticProductAdvertisements() {
                   </div>
 
                   <div className="md:w-1/2 flex items-center justify-center">
-                    <img
+                    <SiteImage
                       src={ad.image || "/placeholder.svg?height=400&width=600"}
                       alt={ad.title || "Featured product"}
                       className="rounded-lg shadow-lg max-h-48 object-cover"

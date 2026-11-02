@@ -1,6 +1,7 @@
 "use client"
 
-import React, { JSX, useState } from "react"
+import SiteImage from "@/components/SiteImage"
+import React, {  useState } from "react"
 import { useAuth } from "../contexts/AuthContext"
 import useSWR from "swr"
 import ProductReviewsSection from "./ProductReviewsSection"
@@ -9,99 +10,7 @@ import { fetchProductSpecification } from "@/lib/product-specification-response"
 import toast from "react-hot-toast"
 
 // Helper to recursively render JSON with syntax highlighting and collapsible sections
-function JSONViewer({ data }: { data: unknown }): JSX.Element {
-  const [expanded, setExpanded] = useState<{ [key: string]: boolean }>({})
 
-  const toggleExpand = (key: string) => {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  const renderValue = (value: unknown, depth: number = 0): JSX.Element => {
-    const indent = depth * 16
-
-    if (value === null) {
-      return <span className="text-gray-500">null</span>
-    }
-    if (typeof value === "boolean") {
-      return <span className="text-purple-600">{String(value)}</span>
-    }
-    if (typeof value === "number") {
-      return <span className="text-green-600">{value}</span>
-    }
-    if (typeof value === "string") {
-      return <span className="text-red-600">&quot;{value}&quot;</span>
-    }
-    if (Array.isArray(value)) {
-      if (value.length === 0) return <span className="text-gray-600">[]</span>
-      const key = `array-${depth}-${Math.random()}`
-      const isExp = expanded[key]
-      return (
-        <div>
-          <button
-            onClick={() => toggleExpand(key)}
-            className="text-blue-600 hover:underline cursor-pointer mr-2"
-          >
-            {isExp ? "▼" : "▶"}
-          </button>
-          <span className="text-gray-600">[</span>
-          {isExp && (
-            <div>
-              {value.map((item, idx) => (
-                <div key={idx} style={{ marginLeft: `${indent + 16}px` }}>
-                  {renderValue(item, depth + 1)}
-                  {idx < value.length - 1 && <span className="text-gray-600">,</span>}
-                </div>
-              ))}
-              <div style={{ marginLeft: `${indent}px` }}>
-                <span className="text-gray-600">]</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )
-    }
-    if (typeof value === "object") {
-      const entries: [string, unknown][] = Object.entries(value)
-      const keys = entries.map(([key]) => key)
-      if (keys.length === 0) return <span className="text-gray-600">{"{}"}</span>
-      const key = `obj-${depth}-${Math.random()}`
-      const isExp = expanded[key]
-      return (
-        <div>
-          <button
-            onClick={() => toggleExpand(key)}
-            className="text-blue-600 hover:underline cursor-pointer mr-2"
-          >
-            {isExp ? "▼" : "▶"}
-          </button>
-          <span className="text-gray-600">{"{}"}</span>
-          {isExp && (
-            <div>
-              {entries.map(([k, item], idx) => (
-                <div key={k} style={{ marginLeft: `${indent + 16}px` }}>
-                  <span className="text-blue-700 font-semibold">&quot;{k}&quot;</span>
-                  <span className="text-gray-600">: </span>
-                  {renderValue(item, depth + 1)}
-                  {idx < keys.length - 1 && <span className="text-gray-600">,</span>}
-                </div>
-              ))}
-              <div style={{ marginLeft: `${indent}px` }}>
-                <span className="text-gray-600">{"{}"}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )
-    }
-    return <span className="text-gray-600">{String(value)}</span>
-  }
-
-  return (
-    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono whitespace-pre-wrap break-words">
-      {renderValue(data)}
-    </pre>
-  )
-}
 
 interface ProductSpecificationTabsProps {
   section?: "specs" | "manufacturer"
@@ -124,25 +33,7 @@ interface ProductSpecificationTabsProps {
   mrp?: number | null
 }
 
-export default function ProductSpecificationTabs({
-  section,
-  technicalDetails,
-  fromManufacturer,
-  specificationImages,
-  fallbackImages,
-  productDescription,
-  sku,
-  reviews,
-  productId,
-  productName,
-  productImage,
-  reviewAverage,
-  reviewCount,
-  overview,
-  includedComponents,
-  features,
-  mrp,
-}: ProductSpecificationTabsProps) {
+export default function ProductSpecificationTabs({ section, technicalDetails, fromManufacturer, specificationImages, fallbackImages, productDescription, sku, reviews, productId, productName, productImage, reviewAverage, reviewCount, overview, includedComponents, features }: ProductSpecificationTabsProps) {
   const { isAdmin } = useAuth()
 
   // Build tabs array conditionally - only show Reviews if reviews exist
@@ -322,7 +213,7 @@ export default function ProductSpecificationTabs({
                         setFailedImages(previous => ({ ...previous, [image]: false }))
                         setImageAttempts(previous => ({ ...previous, [image]: (previous[image] || 0) + 1 }))
                       }}>Retry image {idx + 1}</button>
-                    </p> : <img
+                    </p> : <SiteImage
                       key={imageAttempts[image] || 0}
                       src={image}
                       alt={`${productName || "Product"} features and details, image ${idx + 1}`}
@@ -710,7 +601,7 @@ export default function ProductSpecificationTabs({
                           className="rounded-lg border border-purple-200 overflow-hidden hover:shadow-lg transition-shadow"
                           title={`Image ${idx + 1}`}
                         >
-                          <img
+                          <SiteImage
                             src={img}
                             alt={`Spec ${idx + 1}`}
                             className="w-full h-32 object-cover hover:scale-105 transition-transform"
@@ -774,7 +665,7 @@ export default function ProductSpecificationTabs({
                                     rel="noopener noreferrer"
                                     className="flex-shrink-0"
                                   >
-                                    <img
+                                    <SiteImage
                                       src={img}
                                       alt={`Review ${idx + 1} image ${imgIdx + 1}`}
                                       className="h-16 w-16 object-cover rounded border border-orange-200"

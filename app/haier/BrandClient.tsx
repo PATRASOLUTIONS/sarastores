@@ -1,11 +1,12 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import CategoryProductCard from "@/components/CategoryProductCard"
 import Link from "next/link"
-import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, Star, Wind, Snowflake, Droplets, Shirt } from "lucide-react"
+import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, Star, Wind, Snowflake, Droplets } from "lucide-react"
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { brandProductListResponseSchema, type BrandProduct } from "@/lib/brand-landing-response"
 
@@ -60,16 +61,7 @@ const haierCategoryImages = [
 ]
 
 // Haier lifestyle images
-const haierLifestyleImages = [
-    {
-        url: "https://images.unsplash.com/photo-1556911220-bff31c812dba?w=1500&h=1500&fit=crop",
-        alt: "Illustrative home and appliance setting",
-    },
-    {
-        url: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1500&h=1500&fit=crop",
-        alt: "Illustrative home and appliance setting",
-    },
-]
+
 
 export default function HaierBrandPage({ initialProducts }: { initialProducts?: BrandProduct[] } = {}) {
     const [products, setProducts] = useState<BrandProduct[]>(initialProducts || [])
@@ -154,7 +146,7 @@ export default function HaierBrandPage({ initialProducts }: { initialProducts?: 
                                 : "opacity-0 scale-105"
                                 }`}
                         >
-                            <img
+                            <SiteImage loading="eager"
                                 src={banner.url}
                                 alt={banner.alt}
                                 className="w-full h-full object-cover"
@@ -280,14 +272,14 @@ export default function HaierBrandPage({ initialProducts }: { initialProducts?: 
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                         {availableCategories.length > 0 ? (
-                            availableCategories.map((category, index) => (
+                            availableCategories.map((category, _index) => (
                                 <Link
                                     href={`/products?brands=Haier&subCategory=${encodeURIComponent(category.title)}`}
                                     key={category.title}
                                     className="group relative bg-gray-50 rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2"
                                 >
                                     <div className="aspect-square overflow-hidden">
-                                        <img
+                                        <SiteImage
                                             src={category.url}
                                             alt={category.title}
                                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"

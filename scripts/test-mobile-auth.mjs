@@ -18,7 +18,7 @@ let pass = 0
 let fail = 0
 function check(label, ok, detail = "") {
   console.log(`${ok ? "  PASS" : "  FAIL"}  ${label}${detail ? "   " + detail : ""}`)
-  ok ? pass++ : fail++
+  if (ok) { pass++; } else { fail++; }
 }
 
 async function call(path, { method = "GET", token, body } = {}) {

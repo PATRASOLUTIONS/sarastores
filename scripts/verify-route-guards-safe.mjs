@@ -48,7 +48,7 @@ let fail = 0
 const problems = []
 const report = (ok, label, detail) => {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label.padEnd(58)} ${detail}`)
-  ok ? pass++ : fail++
+  if (ok) { pass++; } else { fail++; }
   if (!ok) problems.push(`${label} — ${detail}`)
 }
 

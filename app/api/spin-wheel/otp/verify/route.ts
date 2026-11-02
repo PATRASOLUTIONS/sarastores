@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     const cleanPhone = phone.replace(/\D/g, "").slice(-10)
 
-    const { db } = await connectToDatabase()
+    await connectToDatabase();
     const otpCol = await getCampaignCollection(campaignSlug, "otps")
 
     const otpRecord = await otpCol.findOne({ phone: cleanPhone })

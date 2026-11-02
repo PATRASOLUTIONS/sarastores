@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { uniquePublicProductNames } from "@/lib/public-product-names"
 
 import Link from "next/link"
@@ -251,7 +252,7 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
     <section className={styles.promotions} style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }} aria-label="Exchange, EMI and special offers">
       {cards.map((card) => bannerIsPhotoOnly(card) ? (
         <article key={card.id} className={`${styles.promoCard} ${styles.promoPhotoCard}`}>
-          {card.ctaLink ? <Link href={card.ctaLink}><img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <img src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
+          {card.ctaLink ? <Link href={card.ctaLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
         </article>
       ) : (
         <article key={card.id} className={`${styles.promoCard} ${!card.image ? styles.emiCard : ""}`} style={bannerGradient(card)}>
@@ -260,7 +261,7 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
             <p>{card.subtitle}</p>
             {card.ctaText && <Link href={card.ctaLink || "/offers"} className={styles.shopButton}>{card.ctaText} <ArrowRight size={14} aria-hidden /></Link>}
           </div>
-          {card.image && <img src={card.image} alt="" className={styles.promoImage} loading="lazy" />}
+          {card.image && <SiteImage sizes="(min-width: 1024px) 200px, 40vw" src={card.image} alt="" className={styles.promoImage} loading="lazy" />}
         </article>
       ))}
     </section>
@@ -278,7 +279,7 @@ export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
         {brands.map(({ name, logo, href }) => (
           <Link key={name} href={href} className={styles.circleItem}>
             <span className={styles.brandCircle}>
-              {logo ? <img src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, HOME_BRANDS.find((item) => item.name === name)?.logo)} /> : <strong>{name}</strong>}
+              {logo ? <SiteImage sizes="65px" src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, HOME_BRANDS.find((item) => item.name === name)?.logo)} /> : <strong>{name}</strong>}
             </span>
             <span>{name}</span>
           </Link>
@@ -306,7 +307,7 @@ export function HomepageStores({ storeCount }: { storeCount?: number }) {
           <p>{storeCount ? `${storeCount}+ Stores Across Karnataka` : "Your neighbourhood electronics store"}<br />{marketing.text("stores", "description")}</p>
           <Link href={marketing.text("stores", "ctaLink")} className={styles.shopButton}>{marketing.text("stores", "ctaText")} <ArrowRight size={14} aria-hidden /></Link>
         </div>
-        <img src={marketing.image("stores", "image", storefront)} alt="SARA electronics store" loading="lazy" />
+        <SiteImage sizes="(min-width: 1280px) 480px, 40vw" src={marketing.image("stores", "image", storefront)} alt="SARA electronics store" loading="lazy" />
       </div>
       <div className={styles.whyCard}>
         <h2>{marketing.text("stores", "whyTitle")}</h2>

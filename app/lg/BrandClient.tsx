@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useState, useEffect, useRef } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -7,7 +8,7 @@ import CategoryProductCard from "@/components/CategoryProductCard"
 import Link from "next/link"
 import { ArrowRight, ChevronLeft, ChevronRight, Sparkles, Shield, Zap, Award, Star, X, Grid, ZoomIn } from "lucide-react"
 import { lgLifestyleGalleryImages } from "./data"
-import { motion, AnimatePresence } from "framer-motion"
+
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { brandProductListResponseSchema, type BrandProduct } from "@/lib/brand-landing-response"
 
@@ -85,7 +86,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isGalleryOpen, setIsGalleryOpen] = useState(false)
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
-    const [availableCategories, setAvailableCategories] = useState(() => initialProducts === undefined ? lgCategoryImages :
+    const [, setAvailableCategories] = useState(() => initialProducts === undefined ? lgCategoryImages :
         lgCategoryImages.filter(category => initialProducts.some(product =>
             (product.subCategory || product.description || "").trim().toLowerCase() === category.title.toLowerCase())))
     const productsRef = useRef<HTMLDivElement>(null)
@@ -165,7 +166,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
                                 : "opacity-0 scale-105"
                                 }`}
                         >
-                            <img
+                            <SiteImage loading="eager"
                                 src={banner.url}
                                 alt={banner.alt}
                                 className="w-full h-full object-cover"
@@ -346,7 +347,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
                                 className="relative rounded-3xl overflow-hidden shadow-lg group cursor-pointer"
                                 onClick={() => setIsGalleryOpen(true)}
                             >
-                                <img
+                                <SiteImage
                                     src={image.url}
                                     alt={image.alt}
                                     className="w-full h-80 md:h-[400px] object-cover transition-transform duration-700 group-hover:scale-105"
@@ -391,7 +392,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
                                         className="break-inside-avoid relative rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition-all cursor-zoom-in"
                                         onClick={() => setSelectedImage(src)}
                                     >
-                                        <img
+                                        <SiteImage
                                             src={src}
                                             alt={`LG Lifestyle ${index + 1}`}
                                             loading="lazy"
@@ -418,7 +419,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
                     >
                         <X className="h-8 w-8" />
                     </button>
-                    <img
+                    <SiteImage
                         src={selectedImage}
                         alt="Full view"
                         className="max-w-full max-h-full object-contain rounded-lg shadow-2xl scale-in-95 animate-in duration-200"
@@ -447,7 +448,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
                             <div className="relative">
                                 <div className="w-16 h-16 border-4 border-red-200 border-t-red-600 rounded-full animate-spin" />
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <img src="/lg.png" alt="LG" className="h-6 w-6 object-contain" />
+                                    <SiteImage src="/lg.png" alt="LG" className="h-6 w-6 object-contain" />
                                 </div>
                             </div>
                         </div>
@@ -472,7 +473,7 @@ export default function LGBrandPage({ initialProducts }: { initialProducts?: Bra
                     ) : (
                         <div className="text-center py-16">
                             <div className="mb-6">
-                                <img
+                                <SiteImage
                                     src="/lg.png"
                                     alt="LG"
                                     className="h-16 mx-auto opacity-30"

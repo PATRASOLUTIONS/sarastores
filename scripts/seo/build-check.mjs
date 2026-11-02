@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url"
 // Strict local Next build with no database or provider access. No deployment.
 import fs from "node:fs"
 import path from "node:path"
@@ -14,6 +15,14 @@ const output = path.join(root, ".seo-local")
 fs.mkdirSync(output, { recursive: true })
 const configPath = path.join(root, "tsconfig.json")
 const before = fs.readFileSync(configPath)
+// Keep generated types and incremental caches independent of an active dev build.
+const projectConfig = JSON.parse(before.toString("utf8"))
+fs.writeFileSync(path.join(output, "tsconfig-build.json"), JSON.stringify({
+  extends: "../tsconfig.json",
+  compilerOptions: { incremental: false, baseUrl: root },
+  include: ["../**/*.ts", "../**/*.tsx", "../.seo-build-check/types/**/*.ts", "../next-env.d.ts"],
+  exclude: [...(projectConfig.exclude || []).map(entry => `../${entry}`), "../.next*/**", "../.seo-local/**", "../.seo-tools/**"],
+}, null, 2))
 const env = {}
 for (const [key, value] of Object.entries(process.env)) {
   if (["path", "systemroot", "windir", "temp", "tmp", "pathext", "userprofile", "localappdata", "appdata", "comspec"].includes(key.toLowerCase())) env[key] = value
@@ -23,7 +32,8 @@ Object.assign(env, {
   SESSION_SECRET: crypto.randomBytes(32).toString("hex"),
   NEXT_PUBLIC_SITE_URL: "https://sarastores.com", NEXT_PUBLIC_APP_URL: "https://sarastores.com", NEXTAUTH_URL: "https://sarastores.com",
   NEXT_DIST_DIR: ".seo-build-check", NEXT_BUILD_CPUS: "1", NEXT_TELEMETRY_DISABLED: "1",
-  NODE_OPTIONS: `--require "${path.join(root, "scripts/seo/build-guard.cjs").replaceAll("\\", "/")}"`,
+  NEXT_TSCONFIG_PATH: ".seo-local/tsconfig-build.json",
+  NODE_OPTIONS: `--import "${pathToFileURL(path.join(root, "scripts/seo/build-guard.mjs")).href}"`,
 })
 const log = fs.createWriteStream(path.join(output, "build.log"))
 const npmCli = path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js")
@@ -36,7 +46,6 @@ const result = await new Promise(resolve => {
   child.on("exit", (code, signal) => resolve({ exitCode: code ?? 1, signal }))
 })
 await new Promise(resolve => log.end(resolve))
-if (!fs.readFileSync(configPath).equals(before)) fs.writeFileSync(configPath, before)
 fs.writeFileSync(path.join(output, "build-result.json"), JSON.stringify({ ...result, fixtureMode: "catalogue-v2", fixtureCollections: fixtureModule.fixtureCollectionNames, databaseConnectionsPermitted: false, providerRequestsPermitted: false, envFilesRead: false, typeAndLintGatesDisabled: false }, null, 2))
 console.log(JSON.stringify({ ...result, log: ".seo-local/build.log", databaseConnectionsPermitted: false, envFilesRead: false }))
 process.exitCode = result.exitCode

@@ -1,7 +1,8 @@
 "use client"
 
+import { useCallback } from "react"
 import { useState, useEffect } from "react"
-import Link from "next/link"
+
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Tag, Copy } from "lucide-react"
@@ -25,14 +26,12 @@ interface OfferProduct {
 export default function OfferSection() {
   const [offers, setOffers] = useState<OfferProduct[]>([])
   const [loading, setLoading] = useState(true)
-  const { user, isAdmin } = useAuth()
-  const router = useRouter()
+  useAuth();
+  useRouter();
 
-  useEffect(() => {
-    fetchOffers()
-  }, [])
 
-  const fetchOffers = async () => {
+
+  const fetchOffers = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch("/api/offers")
@@ -50,13 +49,17 @@ export default function OfferSection() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchOffers()
+  }, [fetchOffers])
 
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
       toast.success("Coupon code copied")
-    } catch (err) {
+    } catch {
       toast.error("Failed to copy code")
     }
   }
@@ -138,14 +141,14 @@ export default function OfferSection() {
                           </div>
                         </div>
 
-                        
+
                       </div>
                     ) : (
                       <p className={`mt-1 text-sm ${idx % 2 === 0 ? 'text-gray-300' : 'text-gray-600'} max-w-md`}>{offer.name}</p>
                     )}
                   </div>
 
-                  
+
                 </div>
 
                 {/* Right image (40%) - stacks above on small screens */}

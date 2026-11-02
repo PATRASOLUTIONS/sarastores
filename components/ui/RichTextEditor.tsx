@@ -9,12 +9,7 @@ import Underline from "@tiptap/extension-underline"
 import { TextStyle } from "@tiptap/extension-text-style"
 import Color from "@tiptap/extension-color"
 import Placeholder from "@tiptap/extension-placeholder"
-import {
-  Bold, Italic, Underline as UnderlineIcon, Strikethrough,
-  Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight,
-  List, ListOrdered, Link as LinkIcon, Image as ImageIcon,
-  Undo, Redo, Palette, Type
-} from "lucide-react"
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Link as LinkIcon, Image as ImageIcon, Undo, Redo, Palette } from "lucide-react"
 import { useEffect, useCallback } from "react"
 
 interface RichTextEditorProps {

@@ -1,21 +1,15 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
+import { useMemo } from "react"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import QRCode from "qrcode"
 import { toast } from "react-hot-toast"
-import {
-  BarChart3, Users, Ticket, Package, Store, TrendingUp,
-  Search, Download, RefreshCw, Eye, Trophy, AlertCircle,
-  Copy, ExternalLink, Loader2, ArrowUpRight, ArrowDownRight,
-  CheckCircle2, XCircle, Edit2, Save, ChevronDown, Plus, Trash2, Link, FileSpreadsheet, QrCode, ToggleLeft, ToggleRight, Settings, Image, Gift
-} from "lucide-react"
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Legend, PieChart, Pie, Cell
-} from "recharts"
-import EmojiPicker from "emoji-picker-react"
+import { BarChart3, Users, Ticket, Package, Store, TrendingUp, Search, Download, RefreshCw, Eye, Trophy, AlertCircle, Loader2, ArrowUpRight, ArrowDownRight, CheckCircle2, XCircle, Save, Plus, Trash2, Link, FileSpreadsheet, QrCode, Settings, Image as ImageIcon, Gift } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts"
+
 
 interface SpinStore {
   store: string
@@ -627,7 +621,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-2xl overflow-hidden">
                     {item.productImage ? (
-                      <img src={item.productImage} alt={item.prizeName} className="w-full h-full object-cover" />
+                      <SiteImage unoptimized src={item.productImage} alt={item.prizeName} className="w-full h-full object-cover" />
                     ) : (
                       item.emoji || "🎁"
                     )}
@@ -728,7 +722,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                       </div>
                       <div className="border border-dashed border-amber-300 rounded-lg p-4 bg-amber-50">
                         <label className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-2">
-                          <Image className="w-4 h-4" /> Upload Image
+                          <ImageIcon className="w-4 h-4" /> Upload Image
                         </label>
                         <input
                           type="file"
@@ -750,7 +744,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                         <p className="text-[10px] text-amber-700 mt-2 font-medium">💡 Please remove the background of the image before uploading</p>
                         {editingItem.productImage && (
                           <div className="mt-3 flex items-center gap-2">
-                            <img src={editingItem.productImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-amber-200" />
+                            <SiteImage unoptimized src={editingItem.productImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-amber-200" />
                             <button
                               onClick={() => setEditingItem({ ...editingItem, productImage: "" })}
                               className="p-1 text-red-500 hover:bg-red-50 rounded text-xs font-bold"
@@ -932,9 +926,9 @@ function WheelPreviewTab({ campaignSlug }: { campaignSlug: string }) {
   const [preloadedImages, setPreloadedImages] = useState<{ [key: number]: HTMLImageElement }>({})
   const [rotation, setRotation] = useState(0)
 
-  const wheelItems = inventory.length
+  const wheelItems = useMemo(() => inventory.length
     ? inventory
-    : [{ prizeName: "NO ACTIVE PRIZES", emoji: "🎁", productImage: null, isActive: true }]
+    : [{ prizeName: "NO ACTIVE PRIZES", emoji: "🎁", productImage: null, isActive: true }], [inventory])
 
   const fetchInventory = useCallback(async () => {
     setLoading(true)
@@ -1562,7 +1556,7 @@ function StoresTab({ campaignSlug }: { campaignSlug: string }) {
             <p className="text-xs text-gray-500 mb-6 px-4">Print this and display it at the billing counter.</p>
 
             <div className="border border-gray-200 p-2 rounded-2xl mx-auto inline-block bg-white shadow-sm mb-6">
-              <img src={qrCodeDataUrl} alt={`${showQrModal.store} QR Code`} className="w-48 h-48" />
+              <SiteImage unoptimized src={qrCodeDataUrl} alt={`${showQrModal.store} QR Code`} className="w-48 h-48" />
             </div>
 
             <div className="text-left bg-gray-50 p-3 rounded-xl border border-gray-100 mb-6 truncate">

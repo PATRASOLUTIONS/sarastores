@@ -1,17 +1,6 @@
 "use client"
 
-import BrandGuidelines, {
-  COLORS,
-  TYPOGRAPHY,
-  SPACING,
-  getPrimaryButtonClasses,
-  getSecondaryButtonClasses,
-  getCardClasses,
-  getInputClasses,
-  getHeadingClasses,
-  getBadgeClasses,
-  GRADIENTS,
-} from "@/lib/brandGuidelines"
+import { COLORS, SPACING, getPrimaryButtonClasses, getSecondaryButtonClasses, getCardClasses, getInputClasses, getHeadingClasses, getBadgeClasses, GRADIENTS } from "@/lib/brandGuidelines"
 
 export default function BrandGuidelinesPage() {
   return (

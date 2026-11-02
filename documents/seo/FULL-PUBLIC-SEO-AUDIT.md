@@ -74,10 +74,10 @@ new product alias redirects or merges were added.
 | Mobile hydration | 44 / 44 pass; no document horizontal overflow at 390px |
 | JavaScript-disabled browser | 44 / 44 pass; primary headings/content remain visible |
 | Missing public resources and excluded utilities | 14 / 14 probes pass: eight 404 resources and six noindex utilities, including the intended error-page redirect |
-| Node SEO regressions | 48 pass |
+| Node SEO regressions | 56 pass |
 | Offline Python validation | 15 pass; explicit process exit 0 |
 | Explicit TypeScript | `npx tsc --noEmit`, exit 0 |
-| Production build | `npm run build` through isolated wrapper, exit 0; type/lint gates enabled; 221 static pages generated; existing nonblocking lint warnings remain |
+| Production build | `npm run build` through isolated wrapper, exit 0; strict type/lint gates enabled; 221 static pages generated; zero lint warnings |
 | Synthetic XML sitemap | HTTP 200; 48 unique www URLs; expired draw and noncanonical Super Sunday alias excluded |
 | Full application suite | 820 / 874 pass; 54 existing failures reproduced against HEAD sources |
 | Visual checks | 14 synthetic desktop/mobile screenshots captured without page JavaScript; product, products, brands, store and home screenshots inspected |
@@ -94,6 +94,22 @@ under `.seo-local/`: `full-public/summary.json`, `full-public/pages.jsonl`,
 The repository-wide suite has existing failures documented in
 [SEO-TESTING-REPORT.md](SEO-TESTING-REPORT.md). Passing SEO checks do not make that
 release gate green.
+
+The subsequent image-warning fixes cover the four reported PDP offer/rail warnings
+and all 130 remaining flagged images across 80 storefront and administration files.
+ESLint reports zero `@next/next/no-img-element` warnings and zero errors in the
+application/component scope. The subsequent repository cleanup also passes full
+ESLint with zero errors/warnings across 1,262 files; see the
+[build/lint report](../lint-and-build-check.md). No rule was disabled.
+Known hosts use the unchanged optimizer allowlist. Protected media, private previews,
+SVGs, unsupported suppliers and natural-size images retain direct loading. Existing
+classes, hero loading and caller-owned error handlers are preserved; two optional
+admin product names now have fallback alt text. Real Next rendering with compiled
+production CSS passed 18 native/Next geometry comparisons at desktop/mobile widths,
+plus a delayed image check (both reserve 0px before load and 75px after load).
+These synthetic checks establish layout preservation, not measured live CWV gains.
+The isolated build uses its own type configuration/cache and does not rewrite the
+project tsconfig. The owner's 16-link exclusion is unchanged.
 
 ## Remaining limits
 

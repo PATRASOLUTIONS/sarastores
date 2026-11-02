@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -34,7 +35,7 @@ import { prepareCheckoutAttempt, clearCheckoutAttempt, resolveCheckoutAttempt } 
 import { useCartGifts, clearCartGiftChoices } from "@/hooks/useCartGifts"
 import CartGifts from "@/components/cart/CartGifts"
 import { GiftAwardSchema, giftSelectionSignature } from "@/lib/gift-validation"
-import { apiFetch, apiFetchJson } from "@/lib/api-client"
+import { apiFetch } from "@/lib/api-client"
 import { useCartCoupon } from "@/hooks/useCartCoupon"
 import { clearCartCoupon } from "@/lib/cart-coupon"
 import CartCoupon from "@/components/cart/CartCoupon"
@@ -49,21 +50,7 @@ import { SavedDeliveryAddressSchema, PincodeRestrictionsResponseSchema, GuestChe
 import OrderSuccess from "@/components/OrderSuccess"
 import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-confirmation"
 import { PaymentConfigurationSchema, HostedPaymentStatusSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
-import {
-  ArrowLeft,
-  ArrowRight,
-  CreditCard,
-  Truck,
-  Shield,
-  CheckCircle,
-  User,
-  MapPin,
-  Phone,
-  Mail,
-  Trash2,
-  Heart,
-  Store, Home, Pencil, Headphones, Tag,
-} from "lucide-react"
+import { ArrowRight, CreditCard, Truck, Shield, CheckCircle, MapPin, Phone, Mail, Trash2, Heart, Store, Home, Headphones, Tag } from "lucide-react"
 import { toast } from "react-hot-toast"
 
 const CHECKOUT_TRACKER = ["Address", "Delivery", "Payment", "Review & Place Order"]
@@ -116,7 +103,7 @@ export default function CheckoutPage() {
   const [orderPlaced, setOrderPlaced] = useState(false)
   const [orderId, setOrderId] = useState("")
   const [placedOrder, setPlacedOrder] = useState<OrderConfirmation | null>(null)
-  const [paymentCompleted, setPaymentCompleted] = useState(false)
+
   const [paymentRecovery, setPaymentRecovery] = useState<CheckoutRecovery | null>(null)
   const [recoveringPayment, setRecoveringPayment] = useState(false)
   const recoveryLock = useSubmitLock()
@@ -129,7 +116,7 @@ export default function CheckoutPage() {
   const checkoutOwner = accountId || "guest"
   const checkoutOwnerRef = useRef(checkoutOwner)
   checkoutOwnerRef.current = checkoutOwner
-  useEffect(() => { setCheckoutChange(null) }, [checkoutOwner])
+
   const restoredDraftOwner = useRef<string | null>(null)
   const [draftOwner, setDraftOwner] = useState<string | null>(null)
   const draftReady = !authLoading && draftOwner === checkoutOwner
@@ -163,6 +150,256 @@ export default function CheckoutPage() {
   const [catalogueError, setCatalogueError] = useState("")
   const [catalogueAttempt, setCatalogueAttempt] = useState(0)
   const catalogueIds = JSON.stringify(cart.filter(item => item.type !== "software" && !isSaraCare(item)).map(item => item.id).sort())
+
+
+  const [paymentMethod, setPaymentMethod] = useState<"online" | "cash-on-delivery" | "instore" | "store-payment">("online")
+  const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
+  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
+  const [storePaymentEnabled, setStorePaymentEnabled] = useState(false)
+  const [payStore, setPayStore] = useState<PayAtStoreChoice | null>(null)
+  const [storeRequest, setStoreRequest] = useState<StorePaymentRequestResponse | null>(null)
+  const [storeRequestContext, setStoreRequestContext] = useState<string | null>(null)
+  const [storeTransaction, setStoreTransaction] = useState<{ platform: StorePaymentPlatform | ""; transactionId: string }>({ platform: "", transactionId: "" })
+  const [draftStorageError, setDraftStorageError] = useState(false)
+  const [storeRequestLoading, setStoreRequestLoading] = useState(false)
+  const [storeDialogOpen, setStoreDialogOpen] = useState(false)
+  const [paymentConfigError, setPaymentConfigError] = useState("")
+  const [paymentConfigLoading, setPaymentConfigLoading] = useState(true)
+  const [pincodeRules, setPincodeRules] = useState<PincodeRestrictions | null>(null)
+  const [pincodeRulesLoading, setPincodeRulesLoading] = useState(true)
+  const [pincodeRulesError, setPincodeRulesError] = useState("")
+  const [pincodeRulesAttempt, setPincodeRulesAttempt] = useState(0)
+  const nationwideDelivery = pincodeRules?.mode === "all"
+  const [hostedReturn, setHostedReturn] = useState<{ orderId: string; checkoutToken: string; storeOrderId: string;
+    total: number; tax: number; shipping: number; guestAccessToken?: string;
+    items?: z.infer<typeof PurchasedItemsSchema>; owner?: string } | null>(null)
+  const [hostedStatus, setHostedStatus] = useState("")
+  const [hostedRecoveryBlocked, setHostedRecoveryBlocked] = useState(false)
+  const [hostedStatusAttempt, setHostedStatusAttempt] = useState(0)
+  const hostedPurchaseReported = useRef(new Set<string>())
+
+
+
+
+
+
+
+  // Click & Pick: home delivery or collection from a SARA store.
+  const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
+  const [pickupStore, setPickupStore] = useState<PickupStore | null>(null)
+  const isPickup = fulfilmentMethod === "pickup"
+  const storeStock = useStoreStock(cart)
+  const nearbyStores = useNearbyStores(customerData.pincode, customerData.city, { allStores: true })
+  const [deliveryFallbackStoreId, setDeliveryFallbackStoreId] = useState<string | null>(null)
+  const fulfilmentStoreId = isPickup ? pickupStore?.id : deliveryFallbackStoreId || undefined
+  const pickupUnavailable = Boolean(pickupStore && storeStock.storeIds && !storeStock.storeIds.has(pickupStore.id))
+  const freeDeliveryFallback = Boolean(storeStock.deliveryAvailable && storeStock.storeIds && (
+    storeStock.storeIds.size === 0 || pickupUnavailable || (deliveryFallbackStoreId && !storeStock.storeIds.has(deliveryFallbackStoreId))
+  ))
+  const allowStorePayment = isPickup && storePaymentEnabled && Boolean(pickupStore && storeStock.storeIds?.has(pickupStore.id)) && !storeStock.error
+  const changeFulfilmentMethod = (method: FulfilmentMethod) => {
+    if (method === "pickup") setDeliveryFallbackStoreId(null)
+    else if (pickupUnavailable && pickupStore) setDeliveryFallbackStoreId(pickupStore.id)
+    if (method === "delivery") {
+      setPaymentMethod("online")
+      setPayStore(null)
+      setStoreDialogOpen(false)
+    }
+    setFulfilmentMethod(method)
+  }
+
+
+
+
+  // Guest checkout: the shopper explicitly opts out of signing in.
+  const [continueAsGuest, setContinueAsGuest] = useState(false)
+  const [guestAccessToken, setGuestAccessToken] = useState<string | null>(null)
+
+  // Rewards points proposed for redemption; the server decides the real value.
+  const [redeemPoints, setRedeemPoints] = useState(0)
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0)
+
+  // Shipping settings from database
+  const [shippingFee, setShippingFee] = useState(99)
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(1000)
+  const { data: settingsData, error: settingsError, isLoading: isLoadingSettings } = useSettingsData()
+
+  // Update local state when settings data is loaded
+
+
+  // Coupon state and derived totals
+  const coupon = useCartCoupon(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId }, !authLoading && !cartLoading)
+  const { couponCode, setCouponCode, appliedCoupon, couponDiscount, setCouponDiscount, applyingCoupon } = coupon
+
+
+
+  const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [cartLineKey(item), item.quantity, item.price])])
+  const cartGifts = useCartGifts(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId })
+  const quoteContext = JSON.stringify([couponContext, appliedCoupon?.code, redeemPoints, fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback,
+    cartGifts.declinedGiftPromotions, cartGifts.selectedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
+  const currentQuoteContext = useRef(quoteContext)
+  currentQuoteContext.current = quoteContext
+  const [verifiedQuote, setVerifiedQuote] = useState<{ context: string; subtotal: number; tax: number;
+    shipping: number; total: number; amount: number } | null>(null)
+  const currentQuote = verifiedQuote?.context === quoteContext ? verifiedQuote : null
+  const couponContextRef = useRef(couponContext)
+  couponContextRef.current = couponContext
+
+  // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
+  const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross, careGross } = cart.reduce((acc, item) => {
+    const qty = item.quantity || 1
+    if (isSaraCare(item)) {
+      acc.careGross += item.price * qty
+    } else if (item.type === 'software') {
+      // For software, price includes GST, so we calculate base price (price/1.18)
+      const basePrice = (item.price / 1.18) * qty;
+      acc.softwareBaseTotal += basePrice;
+      acc.softwareGross += item.price * qty;
+    } else {
+      // For hardware, price includes GST as well; compute base by dividing by 1.18
+      const basePrice = (item.price / 1.18) * qty;
+      acc.hardwareBaseTotal += basePrice;
+      acc.hardwareGross += item.price * qty;
+    }
+    return acc;
+  }, { softwareBaseTotal: 0, hardwareBaseTotal: 0, softwareGross: 0, hardwareGross: 0, careGross: 0 });
+
+  // Calculate GST for software and hardware (18% of their base prices)
+  const softwareGST = softwareBaseTotal * 0.18
+  const hardwareGST = hardwareBaseTotal * 0.18
+  const careGST = careGross - careGross / 1.18
+
+  // Subtotal (tax-exclusive base amount)
+  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal + careGross / 1.18
+
+  // Gross totals (base + GST)
+  const softwareTotal = softwareBaseTotal + softwareGST
+  const hardwareTotal = hardwareBaseTotal + hardwareGST
+
+  // Total tax (software + hardware)
+  const tax = currentQuote?.tax ?? softwareGST + hardwareGST + careGST
+
+  // Only apply shipping if there are hardware items in the cart
+  const hasHardware = cart.some(item => item.type !== 'software' && !isSaraCare(item))
+  let shipping = 0
+  if (hasHardware && !isLoadingSettings && !isPickup) {
+    const hardwareGrossSubtotal = hardwareGross
+    shipping = (hardwareGrossSubtotal > 0 && hardwareGrossSubtotal < freeShippingThreshold) ? shippingFee : 0
+  }
+  if (!isPickup && freeDeliveryFallback) shipping = 0
+  if (currentQuote) shipping = currentQuote.shipping
+
+  // Apply coupon discount (if any) on gross amounts (softwareTotal + hardwareTotal)
+  const preCouponTotal = softwareTotal + hardwareTotal + careGross
+  const discountedTotal = Math.max(0, preCouponTotal - couponDiscount)
+
+  // Calculate final total (after coupon and adding shipping)
+  const total = currentQuote?.total ?? discountedTotal + shipping
+
+  // Indicative only — /api/orders recomputes and debits the points.
+  const payableTotal = currentQuote?.amount ?? Math.round(Math.max(0, total - loyaltyDiscount) * 100) / 100
+  const productDiscount = cart.filter(item => !isSaraCare(item)).reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
+  const totalMrp = softwareGross + hardwareGross + productDiscount
+  const unavailableItem = cart.find(item => {
+    if (isSaraCare(item)) return false
+    const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
+    return ((!isPickup || item.type === "software") && typeof item.stock === "number" && item.stock < quantity)
+      || (typeof item.maxPurchaseQuantity === "number" && item.maxPurchaseQuantity < quantity)
+  })
+  const cartError = saraCareError || cartLimitError(cart) || (unavailableItem
+    ? `${unavailableItem.name} is unavailable in the requested quantity. Reduce its quantity or remove it before placing an order.`
+    : null)
+
+
+
+
+
+
+  // Close the remove-item dialog on Escape.
+
+
+  // Redirect to cart if empty after loading completes.
+  // On a direct load of /checkout the cart context briefly reports "not loading,
+  // empty" while AuthContext is still hydrating, so the redirect is deferred and
+  // cancelled if the cart arrives.
+
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    editedCustomerFields.current.add(name)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    if (name === "state") editedCustomerFields.current.add("city")
+    setCustomerData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+    if (name === "firstName" || name === "lastName" || name === "email" || name === "phone") {
+      const parsed = CheckoutContactSchema.shape[name].safeParse(value)
+      setCustomerErrors(previous => {
+        const next = { ...previous }
+        if (parsed.success) delete next[name]
+        else next[name] = parsed.error.issues[0].message
+        return next
+      })
+    }
+  }
+  const validateContactField = (field: "firstName" | "lastName" | "email" | "phone") => {
+    const parsed = CheckoutContactSchema.shape[field].safeParse(customerData[field])
+    if (parsed.success) setCustomerData(previous => ({ ...previous, [field]: parsed.data }))
+    setCustomerErrors(previous => {
+      const next = { ...previous }
+      if (parsed.success) delete next[field]
+      else next[field] = parsed.error.issues[0].message
+      return next
+    })
+  }
+  const validateContactDetails = () => {
+    const parsed = CheckoutContactSchema.safeParse(customerData)
+    if (parsed.success) {
+      setCustomerErrors({})
+      setCustomerData(previous => ({ ...previous, ...parsed.data }))
+      return true
+    }
+    const errors: Record<string, string> = {}
+    for (const issue of parsed.error.issues) {
+      const field = String(issue.path[0])
+      if (!errors[field]) errors[field] = issue.message
+    }
+    setCustomerErrors(errors)
+    setEditingAddress(true)
+    openCheckoutStep(1)
+    requestAnimationFrame(() => document.getElementById(String(parsed.error.issues[0].path[0]))?.focus())
+    toast.error(parsed.error.issues[0].message)
+    return false
+  }
+  const startNewAddress = () => {
+    for (const field of ["address", "city", "pincode"]) editedCustomerFields.current.add(field)
+    setCustomerData(previous => ({ ...previous, address: "", city: "", pincode: "", state: "Karnataka" }))
+    setEditingAddress(true)
+    openCheckoutStep(1)
+    setAddressNotice("")
+    setSelectedAddressId(null)
+    setAddressType("home")
+  }
+
+  const selectAddress = useCallback((address: SavedDeliveryAddress, advance = true) => {
+    setCustomerErrors({})
+    const { id, type, ...details } = address
+    for (const field of Object.keys(details)) editedCustomerFields.current.add(field)
+    setCustomerData(previous => ({ ...previous, ...details }))
+    setSelectedAddressId(id)
+    setAddressType(type)
+    const complete = CheckoutContactSchema.omit({ email: true }).safeParse(details).success
+    setEditingAddress(!complete)
+    setConfirmedDelivery(null)
+    setConfirmedPayment(null)
+    if (advance) openCheckoutStep(complete ? 2 : 1)
+    setAddressNotice("")
+  }, [])
+
+  useEffect(() => { setCheckoutChange(null) }, [checkoutOwner])
+
   useEffect(() => {
     const ids: string[] = JSON.parse(catalogueIds)
     if (!ids.length) { setCatalogue({}); setCatalogueError(""); setCatalogueLoading(false); return }
@@ -196,32 +433,6 @@ export default function CheckoutPage() {
     void load()
     return () => controller.abort()
   }, [catalogueIds, catalogueAttempt, refreshItemPrices])
-
-  const [paymentMethod, setPaymentMethod] = useState<"online" | "cash-on-delivery" | "instore" | "store-payment">("online")
-  const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
-  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null)
-  const [storePaymentEnabled, setStorePaymentEnabled] = useState(false)
-  const [payStore, setPayStore] = useState<PayAtStoreChoice | null>(null)
-  const [storeRequest, setStoreRequest] = useState<StorePaymentRequestResponse | null>(null)
-  const [storeRequestContext, setStoreRequestContext] = useState<string | null>(null)
-  const [storeTransaction, setStoreTransaction] = useState<{ platform: StorePaymentPlatform | ""; transactionId: string }>({ platform: "", transactionId: "" })
-  const [draftStorageError, setDraftStorageError] = useState(false)
-  const [storeRequestLoading, setStoreRequestLoading] = useState(false)
-  const [storeDialogOpen, setStoreDialogOpen] = useState(false)
-  const [paymentConfigError, setPaymentConfigError] = useState("")
-  const [paymentConfigLoading, setPaymentConfigLoading] = useState(true)
-  const [pincodeRules, setPincodeRules] = useState<PincodeRestrictions | null>(null)
-  const [pincodeRulesLoading, setPincodeRulesLoading] = useState(true)
-  const [pincodeRulesError, setPincodeRulesError] = useState("")
-  const [pincodeRulesAttempt, setPincodeRulesAttempt] = useState(0)
-  const nationwideDelivery = pincodeRules?.mode === "all"
-  const [hostedReturn, setHostedReturn] = useState<{ orderId: string; checkoutToken: string; storeOrderId: string;
-    total: number; tax: number; shipping: number; guestAccessToken?: string;
-    items?: z.infer<typeof PurchasedItemsSchema>; owner?: string } | null>(null)
-  const [hostedStatus, setHostedStatus] = useState("")
-  const [hostedRecoveryBlocked, setHostedRecoveryBlocked] = useState(false)
-  const [hostedStatusAttempt, setHostedStatusAttempt] = useState(0)
-  const hostedPurchaseReported = useRef(new Set<string>())
 
   useEffect(() => {
     const controller = new AbortController()
@@ -350,29 +561,6 @@ export default function CheckoutPage() {
     return () => { controller.abort(); if (timer) clearTimeout(timer) }
   }, [hostedReturn, authLoading, hostedStatusAttempt, completePurchase, router, cart, checkoutOwner])
 
-  // Click & Pick: home delivery or collection from a SARA store.
-  const [fulfilmentMethod, setFulfilmentMethod] = useState<FulfilmentMethod>("delivery")
-  const [pickupStore, setPickupStore] = useState<PickupStore | null>(null)
-  const isPickup = fulfilmentMethod === "pickup"
-  const storeStock = useStoreStock(cart)
-  const nearbyStores = useNearbyStores(customerData.pincode, customerData.city, { allStores: true })
-  const [deliveryFallbackStoreId, setDeliveryFallbackStoreId] = useState<string | null>(null)
-  const fulfilmentStoreId = isPickup ? pickupStore?.id : deliveryFallbackStoreId || undefined
-  const pickupUnavailable = Boolean(pickupStore && storeStock.storeIds && !storeStock.storeIds.has(pickupStore.id))
-  const freeDeliveryFallback = Boolean(storeStock.deliveryAvailable && storeStock.storeIds && (
-    storeStock.storeIds.size === 0 || pickupUnavailable || (deliveryFallbackStoreId && !storeStock.storeIds.has(deliveryFallbackStoreId))
-  ))
-  const allowStorePayment = isPickup && storePaymentEnabled && Boolean(pickupStore && storeStock.storeIds?.has(pickupStore.id)) && !storeStock.error
-  const changeFulfilmentMethod = (method: FulfilmentMethod) => {
-    if (method === "pickup") setDeliveryFallbackStoreId(null)
-    else if (pickupUnavailable && pickupStore) setDeliveryFallbackStoreId(pickupStore.id)
-    if (method === "delivery") {
-      setPaymentMethod("online")
-      setPayStore(null)
-      setStoreDialogOpen(false)
-    }
-    setFulfilmentMethod(method)
-  }
   useEffect(() => {
     if (paymentMethod === "cash-on-delivery" || paymentMethod === "instore" ||
       (paymentMethod === "store-payment" && draftReady && (!isPickup || (!allowStorePayment && !storeStock.loading && Boolean(storeStock.storeIds))))) {
@@ -380,31 +568,19 @@ export default function CheckoutPage() {
       setPayStore(null)
     }
   }, [paymentMethod, isPickup, allowStorePayment, storeStock.loading, storeStock.storeIds, draftReady])
+
   useEffect(() => {
     if (draftReady && !paymentConfigLoading && !paymentConfigError && (!paymentProvider || !paymentProviders.includes(paymentProvider))) {
       setPaymentProvider(paymentProviders[0] || null)
     }
   }, [draftReady, paymentConfigLoading, paymentConfigError, paymentProvider, paymentProviders])
+
   useEffect(() => {
     if (deliveryFallbackStoreId && storeStock.storeIds && !storeStock.loading && !storeStock.byStore[deliveryFallbackStoreId]) {
       setDeliveryFallbackStoreId(null)
     }
   }, [deliveryFallbackStoreId, storeStock.storeIds, storeStock.loading, storeStock.byStore])
 
-  // Guest checkout: the shopper explicitly opts out of signing in.
-  const [continueAsGuest, setContinueAsGuest] = useState(false)
-  const [guestAccessToken, setGuestAccessToken] = useState<string | null>(null)
-
-  // Rewards points proposed for redemption; the server decides the real value.
-  const [redeemPoints, setRedeemPoints] = useState(0)
-  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0)
-
-  // Shipping settings from database
-  const [shippingFee, setShippingFee] = useState(99)
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState(1000)
-  const { data: settingsData, error: settingsError, isLoading: isLoadingSettings } = useSettingsData()
-
-  // Update local state when settings data is loaded
   useEffect(() => {
     if (settingsData) {
       if (settingsData.shippingFee !== undefined) {
@@ -416,9 +592,6 @@ export default function CheckoutPage() {
     }
   }, [settingsData])
 
-  // Coupon state and derived totals
-  const coupon = useCartCoupon(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId }, !authLoading && !cartLoading)
-  const { couponCode, setCouponCode, appliedCoupon, couponDiscount, setCouponDiscount, applyingCoupon } = coupon
   useEffect(() => {
     if (authLoading || restoredDraftOwner.current === checkoutOwner) return
     let draft = readCheckoutDraft(checkoutOwner)
@@ -459,7 +632,7 @@ export default function CheckoutPage() {
     setPaymentRecovery(readCheckoutRecovery(checkoutOwner))
     restoredDraftOwner.current = checkoutOwner
     setDraftOwner(checkoutOwner)
-  }, [authLoading, accountId, checkoutOwner])
+  }, [authLoading, accountId, checkoutOwner, setCouponCode])
 
   useEffect(() => {
     // Never replace a saved draft with the initial empty render, or copy an
@@ -476,83 +649,6 @@ export default function CheckoutPage() {
   }, [draftReady, checkoutOwner, customerData, continueAsGuest, editingAddress,
     addressType, selectedAddressId, couponCode, orderPlaced, fulfilmentMethod, pickupStore, deliveryFallbackStoreId,
     paymentMethod, paymentProvider, redeemPoints, storeRequest, storeRequestContext, storeTransaction, appliedCoupon])
-  const couponContext = JSON.stringify([user?.id ?? null, cart.map(item => [cartLineKey(item), item.quantity, item.price])])
-  const cartGifts = useCartGifts(cart, checkoutOwner, { method: fulfilmentMethod, storeId: fulfilmentStoreId })
-  const quoteContext = JSON.stringify([couponContext, appliedCoupon?.code, redeemPoints, fulfilmentMethod, fulfilmentStoreId, freeDeliveryFallback,
-    cartGifts.declinedGiftPromotions, cartGifts.selectedGiftPromotions, cartGifts.gifts.map(gift => [gift.promotionId, gift.giftId, gift.quantity])])
-  const currentQuoteContext = useRef(quoteContext)
-  currentQuoteContext.current = quoteContext
-  const [verifiedQuote, setVerifiedQuote] = useState<{ context: string; subtotal: number; tax: number;
-    shipping: number; total: number; amount: number } | null>(null)
-  const currentQuote = verifiedQuote?.context === quoteContext ? verifiedQuote : null
-  const couponContextRef = useRef(couponContext)
-  couponContextRef.current = couponContext
-
-  // Calculate totals for software and hardware separately (treat item.price as gross, including GST)
-  const { softwareBaseTotal, hardwareBaseTotal, softwareGross, hardwareGross, careGross } = cart.reduce((acc, item) => {
-    const qty = item.quantity || 1
-    if (isSaraCare(item)) {
-      acc.careGross += item.price * qty
-    } else if (item.type === 'software') {
-      // For software, price includes GST, so we calculate base price (price/1.18)
-      const basePrice = (item.price / 1.18) * qty;
-      acc.softwareBaseTotal += basePrice;
-      acc.softwareGross += item.price * qty;
-    } else {
-      // For hardware, price includes GST as well; compute base by dividing by 1.18
-      const basePrice = (item.price / 1.18) * qty;
-      acc.hardwareBaseTotal += basePrice;
-      acc.hardwareGross += item.price * qty;
-    }
-    return acc;
-  }, { softwareBaseTotal: 0, hardwareBaseTotal: 0, softwareGross: 0, hardwareGross: 0, careGross: 0 });
-
-  // Calculate GST for software and hardware (18% of their base prices)
-  const softwareGST = softwareBaseTotal * 0.18
-  const hardwareGST = hardwareBaseTotal * 0.18
-  const careGST = careGross - careGross / 1.18
-
-  // Subtotal (tax-exclusive base amount)
-  const subtotal = currentQuote?.subtotal ?? softwareBaseTotal + hardwareBaseTotal + careGross / 1.18
-
-  // Gross totals (base + GST)
-  const softwareTotal = softwareBaseTotal + softwareGST
-  const hardwareTotal = hardwareBaseTotal + hardwareGST
-
-  // Total tax (software + hardware)
-  const tax = currentQuote?.tax ?? softwareGST + hardwareGST + careGST
-
-  // Only apply shipping if there are hardware items in the cart
-  const hasHardware = cart.some(item => item.type !== 'software' && !isSaraCare(item))
-  let shipping = 0
-  if (hasHardware && !isLoadingSettings && !isPickup) {
-    const hardwareGrossSubtotal = hardwareGross
-    shipping = (hardwareGrossSubtotal > 0 && hardwareGrossSubtotal < freeShippingThreshold) ? shippingFee : 0
-  }
-  if (!isPickup && freeDeliveryFallback) shipping = 0
-  if (currentQuote) shipping = currentQuote.shipping
-
-  // Apply coupon discount (if any) on gross amounts (softwareTotal + hardwareTotal)
-  const preCouponTotal = softwareTotal + hardwareTotal + careGross
-  const discountedTotal = Math.max(0, preCouponTotal - couponDiscount)
-
-  // Calculate final total (after coupon and adding shipping)
-  const total = currentQuote?.total ?? discountedTotal + shipping
-
-  // Indicative only — /api/orders recomputes and debits the points.
-  const payableTotal = currentQuote?.amount ?? Math.round(Math.max(0, total - loyaltyDiscount) * 100) / 100
-  const productDiscount = cart.filter(item => !isSaraCare(item)).reduce((sum, item) => sum + Math.max(0, (catalogue[item.id]?.mrp || item.price) - item.price) * item.quantity, 0)
-  const totalMrp = softwareGross + hardwareGross + productDiscount
-  const unavailableItem = cart.find(item => {
-    if (isSaraCare(item)) return false
-    const quantity = cart.filter(line => line.id === item.id).reduce((sum, line) => sum + line.quantity, 0)
-    return ((!isPickup || item.type === "software") && typeof item.stock === "number" && item.stock < quantity)
-      || (typeof item.maxPurchaseQuantity === "number" && item.maxPurchaseQuantity < quantity)
-  })
-  const cartError = saraCareError || cartLimitError(cart) || (unavailableItem
-    ? `${unavailableItem.name} is unavailable in the requested quantity. Reduce its quantity or remove it before placing an order.`
-    : null)
-
 
   useEffect(() => {
     if (!draftReady) return
@@ -638,9 +734,8 @@ export default function CheckoutPage() {
     }
     void loadAddresses()
     return () => controller.abort()
-  }, [draftReady, accountId, addressesAttempt])
+  }, [draftReady, accountId, addressesAttempt, selectAddress])
 
-  // Close the remove-item dialog on Escape.
   useEffect(() => {
     if (!itemToRemove) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -650,10 +745,6 @@ export default function CheckoutPage() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [itemToRemove])
 
-  // Redirect to cart if empty after loading completes.
-  // On a direct load of /checkout the cart context briefly reports "not loading,
-  // empty" while AuthContext is still hydrating, so the redirect is deferred and
-  // cancelled if the cart arrives.
   useEffect(() => {
     if (authLoading || !draftReady || cartLoading || orderPlaced || paymentRecovery || hostedReturn || hostedRecoveryBlocked || cart.length > 0) return
 
@@ -664,80 +755,6 @@ export default function CheckoutPage() {
 
     return () => clearTimeout(timer)
   }, [authLoading, draftReady, cartLoading, cart.length, orderPlaced, paymentRecovery, hostedReturn, hostedRecoveryBlocked, router])
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    editedCustomerFields.current.add(name)
-    setConfirmedDelivery(null)
-    setConfirmedPayment(null)
-    if (name === "state") editedCustomerFields.current.add("city")
-    setCustomerData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-    if (name === "firstName" || name === "lastName" || name === "email" || name === "phone") {
-      const parsed = CheckoutContactSchema.shape[name].safeParse(value)
-      setCustomerErrors(previous => {
-        const next = { ...previous }
-        if (parsed.success) delete next[name]
-        else next[name] = parsed.error.issues[0].message
-        return next
-      })
-    }
-  }
-  const validateContactField = (field: "firstName" | "lastName" | "email" | "phone") => {
-    const parsed = CheckoutContactSchema.shape[field].safeParse(customerData[field])
-    if (parsed.success) setCustomerData(previous => ({ ...previous, [field]: parsed.data }))
-    setCustomerErrors(previous => {
-      const next = { ...previous }
-      if (parsed.success) delete next[field]
-      else next[field] = parsed.error.issues[0].message
-      return next
-    })
-  }
-  const validateContactDetails = () => {
-    const parsed = CheckoutContactSchema.safeParse(customerData)
-    if (parsed.success) {
-      setCustomerErrors({})
-      setCustomerData(previous => ({ ...previous, ...parsed.data }))
-      return true
-    }
-    const errors: Record<string, string> = {}
-    for (const issue of parsed.error.issues) {
-      const field = String(issue.path[0])
-      if (!errors[field]) errors[field] = issue.message
-    }
-    setCustomerErrors(errors)
-    setEditingAddress(true)
-    openCheckoutStep(1)
-    requestAnimationFrame(() => document.getElementById(String(parsed.error.issues[0].path[0]))?.focus())
-    toast.error(parsed.error.issues[0].message)
-    return false
-  }
-  const startNewAddress = () => {
-    for (const field of ["address", "city", "pincode"]) editedCustomerFields.current.add(field)
-    setCustomerData(previous => ({ ...previous, address: "", city: "", pincode: "", state: "Karnataka" }))
-    setEditingAddress(true)
-    openCheckoutStep(1)
-    setAddressNotice("")
-    setSelectedAddressId(null)
-    setAddressType("home")
-  }
-
-  const selectAddress = (address: SavedDeliveryAddress, advance = true) => {
-    setCustomerErrors({})
-    const { id, type, ...details } = address
-    for (const field of Object.keys(details)) editedCustomerFields.current.add(field)
-    setCustomerData(previous => ({ ...previous, ...details }))
-    setSelectedAddressId(id)
-    setAddressType(type)
-    const complete = CheckoutContactSchema.omit({ email: true }).safeParse(details).success
-    setEditingAddress(!complete)
-    setConfirmedDelivery(null)
-    setConfirmedPayment(null)
-    if (advance) openCheckoutStep(complete ? 2 : 1)
-    setAddressNotice("")
-  }
 
   const useEnteredAddress = () => {
     if (!user && !continueAsGuest) { toast.error("Choose to sign in or continue as a guest"); return }
@@ -985,7 +1002,7 @@ export default function CheckoutPage() {
         toast.error("Sorry, we do not deliver to this pincode.")
         return false
       }
-    } catch (e) {
+    } catch {
       toast.error("Could not verify pincode delivery. Please try again.")
       return false
     }

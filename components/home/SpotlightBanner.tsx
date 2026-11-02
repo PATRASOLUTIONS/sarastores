@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import Link from "next/link"
 import { formatPrice } from "@/utils/formatPrice"
 import { ArrowRight, Truck, ShieldCheck, BadgeIndianRupee } from "lucide-react"
@@ -22,7 +23,7 @@ export default function SpotlightBanner({ product }: { product: CatalogProduct }
       <div className="flex flex-col items-center gap-6 p-5 sm:flex-row md:p-8">
         <div className="relative flex-shrink-0">
           <div className="flex h-36 w-36 items-center justify-center rounded-xl bg-white p-3 md:h-44 md:w-44">
-            <img
+            <SiteImage loading="eager"
               src={product.image}
               alt={product.name}
               className="h-full w-full object-contain"

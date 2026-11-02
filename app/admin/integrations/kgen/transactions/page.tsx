@@ -1,4 +1,5 @@
 "use client"
+import { useCallback } from "react"
 import { getErrorMessage } from "@/lib/utils"
 
 
@@ -32,15 +33,15 @@ export default function KGenTransactionsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState<boolean>(false)
 
-  const buildUrl = (cursor?: string) => {
+  const buildUrl = useCallback((cursor?: string) => {
     const params = new URLSearchParams()
     if (txnType) params.set('txnType', txnType)
     if (limit) params.set('limit', String(limit))
     if (cursor) params.set('nextCursor', cursor)
     return `/api/integrations/exlr8/wallet/transactions?${params.toString()}`
-  }
+  }, [limit, txnType])
 
-  const fetchTransactions = async (opts: { append?: boolean;
+  const fetchTransactions = useCallback(async (opts: { append?: boolean;
  cursor?: string } = {}) => {
     const { append = false, cursor } = opts
     setLoading(true)
@@ -67,12 +68,12 @@ export default function KGenTransactionsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildUrl])
 
   useEffect(() => {
     // initial fetch (reset list)
     fetchTransactions({ append: false })
-  }, [txnType, limit])
+  }, [txnType, limit, fetchTransactions])
 
   const loadMore = () => {
     if (!nextCursor) return

@@ -206,7 +206,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }: AdminSidebarProps) {
     return candidates.sort((a, b) => b.length - a.length)[0] ?? null
   }, [pathname])
 
-  const allowedPages: string[] | null = user?.allowedPages ?? null
+
 
   const sections = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -223,7 +223,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }: AdminSidebarProps) {
       if (term) items = items.filter((i) => i.name.toLowerCase().includes(term))
       return { ...section, items }
     }).filter((section) => section.items.length > 0)
-  }, [allowedPages, user, isLoading, query])
+  }, [user, isLoading, query])
 
   const showText = (isMobile && isOpen) || (!isMobile && !isLaptopCollapsed)
   const handleLinkClick = () => {

@@ -3,35 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import {
-    Gift,
-    Trophy,
-    Star,
-    Sparkles,
-    Phone,
-    Tv,
-    Laptop,
-    Headphones,
-    Watch,
-    Smartphone,
-    CheckCircle2,
-    AlertCircle,
-    Calendar,
-    Clock,
-    Users,
-    FileText,
-    ChevronDown,
-    ChevronUp,
-    Send,
-    PartyPopper,
-    Zap,
-    Shield,
-    Crown,
-    Ticket,
-    Award,
-    MapPin,
-    MessageSquare
-} from "lucide-react"
+import { Gift, Trophy, Sparkles, Phone, Tv, Laptop, Headphones, Watch, Smartphone, CheckCircle2, AlertCircle, Calendar, FileText, ChevronDown, ChevronUp, Send, PartyPopper, Zap, Crown, Ticket, MapPin, MessageSquare } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import LeadForm from "@/components/LeadForm"
@@ -93,38 +65,7 @@ const assuredGifts = [
 ]
 
 // Steps to Participate
-const participationSteps = [
-    {
-        step: 1,
-        title: "Shop at Sara Mobiles",
-        description: "Purchase any electronics worth ₹5,000 or more from any Sara Mobiles store or online",
-        icon: Gift
-    },
-    {
-        step: 2,
-        title: "Save Your Invoice",
-        description: "Keep your purchase invoice safe - you'll need the invoice number for registration",
-        icon: FileText
-    },
-    {
-        step: 3,
-        title: "Send SMS",
-        description: `SMS your details to ${campaignInfo.smsNumber} in the format: ${campaignInfo.smsFormat}`,
-        icon: MessageSquare
-    },
-    {
-        step: 4,
-        title: "Get Confirmation",
-        description: "Receive a unique registration code via SMS confirming your entry",
-        icon: CheckCircle2
-    },
-    {
-        step: 5,
-        title: "Win Prizes!",
-        description: "Winners are selected daily and will be contacted by Sara Mobiles team",
-        icon: Trophy
-    }
-]
+
 
 // Terms & Conditions
 const termsCategories = [

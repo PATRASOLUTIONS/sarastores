@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
 
@@ -52,7 +53,7 @@ export default function BrandMarquee() {
         el.style.setProperty('--marquee-duration', `${duration}s`)
         // set translation % so keyframes can translate by exactly one base-set
         el.style.setProperty('--marquee-translate', `-${100 / REPEAT}%`)
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -118,7 +119,7 @@ export default function BrandMarquee() {
               >
                 {category.image && (
                   category.image.startsWith("http") ? (
-                    <img
+                    <SiteImage
                       src={category.image}
                       alt={category.name}
                       loading="lazy"

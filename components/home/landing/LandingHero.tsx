@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { FaApple } from "react-icons/fa"
@@ -40,8 +41,8 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
       }} aria-roledescription={slides.length > 1 ? "carousel" : undefined}>
         {photoHero && <h1 className="sr-only">{slide.title || "SARA Electronics — Mobiles and Home Appliances"}</h1>}
         {photoHero ? (
-          slide.ctaLink ? <Link href={slide.ctaLink} className={styles.heroPhotoLink}><img src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <img src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
-        ) : slide.image && <img src={slide.image} alt="" className={styles.heroArt} fetchPriority="high" />}
+          slide.ctaLink ? <Link href={slide.ctaLink} className={styles.heroPhotoLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
+        ) : slide.image && <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={slide.image} alt="" className={styles.heroArt} fetchPriority="high" />}
         {!photoHero && <div className={styles.heroCopy}>
           <div className={styles.heroTitle}>
             {isIphone && <FaApple className={styles.appleMark} aria-hidden />}
@@ -68,8 +69,8 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
           const photo = bannerIsPhotoOnly(banner)
           return <article key={banner.id} className={styles.sideCard} style={photo ? undefined : { ...bannerGradient(banner), color: banner.dark ? "var(--brand-text-primary)" : "#fff" }}>
             {photo ? (
-              banner.ctaLink ? <Link href={banner.ctaLink} className={styles.heroPhotoLink}><img src={banner.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <img src={banner.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
-            ) : banner.image && <img src={banner.image} alt="" className={styles.sideImage} fetchPriority="high" />}
+              banner.ctaLink ? <Link href={banner.ctaLink} className={styles.heroPhotoLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={banner.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={banner.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
+            ) : banner.image && <SiteImage sizes="(min-width: 1024px) 320px, 50vw" src={banner.image} alt="" className={styles.sideImage} fetchPriority="high" />}
             {!photo && <div className={styles.sideCopy}>
               <h2 style={{ whiteSpace: "pre-line" }}>{banner.title}</h2>
               {banner.subtitle && <p>{banner.subtitle}</p>}

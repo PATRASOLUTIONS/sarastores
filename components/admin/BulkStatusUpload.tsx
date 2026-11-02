@@ -10,7 +10,7 @@ export default function BulkStatusUpload({ onComplete }: { onComplete?: (result:
   const [rows, setRows] = useState<BulkOrderRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [previewCount, setPreviewCount] = useState(100) // Show all rows by default
+   // Show all rows by default
 
   const handleFile = async (file?: File) => {
     setError(null)
@@ -90,7 +90,7 @@ export default function BulkStatusUpload({ onComplete }: { onComplete?: (result:
 
     // Validate approved rows
     const invalidRows: string[] = []
-    approvedRows.forEach((r, index) => {
+    approvedRows.forEach((r, _index) => {
       const originalIndex = rows.indexOf(r) + 1
       if (!r.orderId || r.orderId.trim() === "") {
         invalidRows.push(`Row ${originalIndex}: Missing Order ID`)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { CalendarClock, Users, Store, Star } from "lucide-react"
+import { CalendarClock, Users, Store } from "lucide-react"
 import { useReducedMotion } from "@/hooks/useAnimations"
 
 type Stat = {

@@ -51,10 +51,11 @@ export default function SavedAddresses() {
     return () => controller.abort()
   }, [accountId, attempt])
 
+  const draftOpen = !!draft
   useEffect(() => {
-    if (draft) dialogRef.current?.showModal()
+    if (draftOpen) dialogRef.current?.showModal()
     else dialogRef.current?.close()
-  }, [!!draft])
+  }, [draftOpen])
 
   const newAddress = () => {
     const [firstName = "", ...lastName] = (user?.name || "").trim().split(/\s+/)

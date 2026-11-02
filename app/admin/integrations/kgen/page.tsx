@@ -1,5 +1,6 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { IntegrationError } from "./integration-error"
 import React, { useEffect, useMemo, useState } from "react"
@@ -73,17 +74,17 @@ export default function KGenIntegrationPage() {
   const [searchTerm, setSearchTerm] = useState<string>("")
   const [rowsPerPage, setRowsPerPage] = useState<number>(10)
   const [currentPage, setCurrentPage] = useState<number>(1)
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [sortKey] = useState<string | null>(null)
+  const [sortDir] = useState<"asc" | "desc">("asc")
   const [totalOrders, setTotalOrders] = useState<number | null>(null)
   const [totalPayments, setTotalPayments] = useState<number | null>(null)
-  const [totalProducts, setTotalProducts] = useState<number | null>(null)
+  const [, setTotalProducts] = useState<number | null>(null)
   const [walletBalance, setWalletBalance] = useState<{ balance: number;
  currency?: string } | null>(null)
   const [walletError, setWalletError] = useState<string | null>(null)
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null)
-  const [totalOrdersOpen, setTotalOrdersOpen] = useState<number | null>(null)
-  const [totalPaymentsPending, setTotalPaymentsPending] = useState<number | null>(null)
+  const [, setTotalOrdersOpen] = useState<number | null>(null)
+  const [, setTotalPaymentsPending] = useState<number | null>(null)
   const [salesData, setSalesData] = useState<Array<{ date: string; value: number }>>([])
 
   const fetchProducts = async (nextCursor?: string, append = false) => {
@@ -221,7 +222,7 @@ export default function KGenIntegrationPage() {
         if (typeof pTotal === "number") setTotalProducts(Number(pTotal))
         else setTotalProducts(null)
       }
-    } catch (e) {
+    } catch {
       setTotalProducts(null)
     }
 
@@ -385,7 +386,7 @@ export default function KGenIntegrationPage() {
     : null
   const walletSubtitle = walletBalance ? "Available balance" : walletError ? `Error: ${walletError}` : undefined
 
-  const DetailsButton = ({ rowId, item }: { rowId: string; item: IntegrationProduct }) => {
+  const DetailsButton = ({ rowId }: { rowId: string; item: IntegrationProduct }) => {
     const isOpen = expandedId === rowId
     return (
       <button
@@ -413,23 +414,16 @@ export default function KGenIntegrationPage() {
       : []
     const variants = Array.isArray(item.variants) ? item.variants : Array.isArray(item.items) ? item.items : []
 
-    const copyToClipboard = async (text: string) => {
-      try {
-        await navigator.clipboard.writeText(text)
-        alert("Copied to clipboard")
-      } catch (e) {
-        console.error("copy failed", e)
-      }
-    }
+
 
     return (
       <div className="bg-gray-50 border-t border-gray-200 p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="md:col-span-1">
             {img ? (
-              <img
+              <SiteImage unoptimized
                 src={img || "/placeholder.svg"}
-                alt={item.productDisplayName || item.productName || item.productID}
+                alt={item.productDisplayName || item.productName || item.productID || "Product"}
                 className="w-full h-40 object-cover rounded-lg"
               />
             ) : (

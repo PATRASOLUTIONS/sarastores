@@ -3,12 +3,7 @@ import type { AnyBulkWriteOperation, Document } from "mongodb"
 import * as XLSX from "xlsx"
 import { requireAdmin } from "@/lib/auth"
 import { getCollection } from "@/lib/db-service"
-import {
-  extractMetadataSheetRow,
-  metadataDocumentUpdates,
-  metadataRowHasUpdates,
-  metadataSheetRowFromProduct,
-} from "@/lib/product-metadata-sheet"
+import { extractMetadataSheetRow, metadataDocumentUpdates, metadataRowHasUpdates } from "@/lib/product-metadata-sheet"
 
 interface PreviewRow {
   itemno: string

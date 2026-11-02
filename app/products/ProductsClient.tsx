@@ -376,7 +376,7 @@ export default function ProductsPage({ initialProducts, initialCategories }: { i
     window.addEventListener("focus", onFocus)
     document.addEventListener("visibilitychange", onFocus)
     return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus) }
-  }, [retryCount])
+  }, [initialProducts, retryCount])
 
   const eligibleProducts = useMemo(() => products.filter(product => {
     const price = Number(product.price)

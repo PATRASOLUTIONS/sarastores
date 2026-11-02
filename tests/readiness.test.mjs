@@ -2180,7 +2180,7 @@ test("delivery estimator handles both legacy string and object restrictions with
     const effects = []
     const states = []
     const loader = sourceLoader({
-      react: { useState: initial => [initial, value => states.push(value)], useEffect: effect => effects.push(effect) },
+      react: { useState: initial => [initial, value => states.push(value)], useCallback: callback => callback, useEffect: effect => effects.push(effect) },
       "@/lib/store-data": { stores: [] },
       "@/lib/analytics": { analytics: { checkPincode: () => {} } },
     }, { fetch: async () => Response.json(rules),
@@ -5919,7 +5919,7 @@ test("campaign progress rejects truncation, malformed events and inconsistent co
     assert.equal(events.some(event => event.type === "complete"), false)
     assert.equal(stream.locked, false)
   }
-  await assert.rejects(async () => { for await (const _event of readCampaignProgress(null)) {} }, /no progress stream/)
+  await assert.rejects(async () => { for await (const event of readCampaignProgress(null)) { assert.fail(`Unexpected event: ${event.type}`) } }, /no progress stream/)
 })
 
 test("order sequence initializes its documented starting number and increments existing counters atomically", async () => {

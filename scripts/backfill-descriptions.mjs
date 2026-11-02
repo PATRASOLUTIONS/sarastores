@@ -113,7 +113,6 @@ function generateDescription(p) {
   const brand = pickBrand(p, cleaned)
   const charDesc = String(pickCharDesc(p) || "").trim()
 
-  const cat = subCategory ? subCategory.toLowerCase() : "product"
   const safeName = cleaned || rawName.trim()
   if (!safeName) return ""
 
@@ -156,15 +155,7 @@ function generateDescription(p) {
   return sentences.join(" ")
 }
 
-function isJunk(desc) {
-  if (!desc) return true
-  const s = String(desc).trim()
-  if (s.length === 0) return true
-  if (MARKETPLACE_NOISE.test(s)) return true
-  // "description == name" is the symptom the user reported — treat as junk
-  // when the two are basically the same string (>80% match on first 60 chars).
-  return false
-}
+
 
 // ---- main ----------------------------------------------------------------
 
