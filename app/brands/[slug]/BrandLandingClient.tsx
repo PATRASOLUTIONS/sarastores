@@ -52,17 +52,17 @@ function IconComponent({ name, className }: { name: string; className?: string }
     return <Icon className={className} />
 }
 
-export default function DynamicBrandPage() {
+export default function DynamicBrandPage({ initialBrand, initialProducts }: { initialBrand?: BrandLanding; initialProducts?: BrandProduct[] } = {}) {
     const params = useParams<{ slug: string }>()
     const slug = params.slug
 
-    const [brand, setBrand] = useState<BrandLanding | null>(null)
-    const [products, setProducts] = useState<BrandProduct[]>([])
-    const [loading, setLoading] = useState(true)
-    const [productsLoading, setProductsLoading] = useState(true)
+    const [brand, setBrand] = useState<BrandLanding | null>(initialBrand || null)
+    const [products, setProducts] = useState<BrandProduct[]>(initialProducts || [])
+    const [loading, setLoading] = useState(!initialBrand)
+    const [productsLoading, setProductsLoading] = useState(!initialProducts)
     const [currentBanner, setCurrentBanner] = useState(0)
     const [isVisible, setIsVisible] = useState(false)
-    const [availableCategories, setAvailableCategories] = useState<BrandLanding["categories"]>([])
+    const [availableCategories, setAvailableCategories] = useState<BrandLanding["categories"]>(initialBrand?.categories || [])
     const [notFound, setNotFound] = useState(false)
 
     const heroRef = useRef<HTMLDivElement>(null)
@@ -70,6 +70,7 @@ export default function DynamicBrandPage() {
 
     // Fetch brand data
     useEffect(() => {
+        if (initialBrand) return
         const fetchBrand = async () => {
             try {
                 const res = await fetch(`/api/brands?slug=${encodeURIComponent(slug)}`)
@@ -99,7 +100,7 @@ export default function DynamicBrandPage() {
             }
         }
         if (slug) fetchBrand()
-    }, [slug])
+    }, [slug, initialBrand])
 
     // Auto-rotate banner
     useEffect(() => {
@@ -129,6 +130,7 @@ export default function DynamicBrandPage() {
     // Fetch products filtered by manufacturer
     useEffect(() => {
         if (!brand) return
+        if (initialProducts) return
         const fetchProducts = async () => {
             try {
                 const response = await fetch("/api/products")

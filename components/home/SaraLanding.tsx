@@ -63,14 +63,14 @@ function parseProducts(data: unknown): HomeProduct[] {
   })
 }
 
-export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunch | null }) {
+export default function SaraLanding({ launch = null, initialProducts }: { launch?: HandshakeLaunch | null; initialProducts?: HomeProduct[] }) {
   const marketing = useMarketingContent("home")
-  const [products, setProducts] = useState<HomeProduct[]>([])
+  const [products, setProducts] = useState<HomeProduct[]>(initialProducts || [])
   const [stockedBrands, setStockedBrands] = useState<{ name: string; count: number }[]>([])
   const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
   const [brandImages, setBrandImages] = useState<Record<string, string>>({})
   const [storeCount, setStoreCount] = useState<number>()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialProducts)
   const [catalogueError, setCatalogueError] = useState<string>()
   const stripBanners = useBanners("home-strip")
   const duoBanners = useBanners("home-duo")
@@ -100,7 +100,7 @@ export default function SaraLanding({ launch = null }: { launch?: HandshakeLaunc
   }, [])
 
   useEffect(() => {
-    void loadProducts()
+    if (!initialProducts) void loadProducts()
     // Fetched live, not from the client cache, so a brand that sells out
     // leaves the Top Brands rail on the next visit.
     fetchJson("/api/brands/in-stock")

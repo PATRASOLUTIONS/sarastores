@@ -155,6 +155,31 @@ export function buildWebSiteJsonLd({ origin, settings }: { origin: string; setti
   }
 }
 
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+const DAY_ALIASES = [
+  ["mo", "mon", "monday"], ["tu", "tue", "tuesday"], ["we", "wed", "wednesday"],
+  ["th", "thu", "thursday"], ["fr", "fri", "friday"], ["sa", "sat", "saturday"], ["su", "sun", "sunday"],
+]
+
+function parseOpeningHours(spec: string) {
+  const match = spec.trim().match(/^(.+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/)
+  if (!match || ![match[2], match[3]].every(clock => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(clock))) return null
+  const days = new Set<number>()
+  const dayIndex = (name: string) => DAY_ALIASES.findIndex(aliases => aliases.includes(name.trim().toLowerCase()))
+  for (const entry of match[1].split(",")) {
+    const range = entry.trim().split("-")
+    if (range.length > 2 || range.some(day => dayIndex(day) < 0)) return null
+    const start = dayIndex(range[0]), end = dayIndex(range.at(-1)!)
+    for (let index = start; ; index = (index + 1) % 7) {
+      days.add(index)
+      if (index === end) break
+    }
+  }
+  if (!days.size) return null
+  return { "@type": "OpeningHoursSpecification",
+    dayOfWeek: Array.from(days, index => `https://schema.org/${WEEKDAYS[index]}`), opens: match[2], closes: match[3] }
+}
+
 export function buildLocalBusinessJsonLd({
   settings,
   origin,
@@ -203,23 +228,13 @@ export function buildLocalBusinessJsonLd({
     }
   }
 
-  if (Array.isArray(settings?.openingHours) && settings.openingHours.length) {
-    data.openingHoursSpecification = settings.openingHours.map((spec) => {
-      // Accepts either "Mo-Sa 09:00-21:00" or {"days":[...], "opens":"...", "closes":"..."}
-      if (typeof spec === "string") {
-        const match = spec.match(/^(\S+)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/)
-        if (match) {
-          return {
-            "@type": "OpeningHoursSpecification",
-            dayOfWeek: match[1].split("-"),
-            opens: match[2],
-            closes: match[3],
-          }
-        }
-        return { "@type": "OpeningHoursSpecification", description: spec }
-      }
-      return spec
-    })
+  const hours = Array.isArray(settings?.openingHours) && settings.openingHours.length
+    ? settings.openingHours : Array.isArray(settings?.hours) ? settings.hours : settings?.hours ? [settings.hours] : []
+  const sourceHours = hours.filter((value): value is string => typeof value === "string" && Boolean(value.trim())).map(value => value.trim())
+  if (sourceHours.length) {
+    data.openingHours = sourceHours
+    const specifications = sourceHours.map(parseOpeningHours).filter(value => value !== null)
+    if (specifications.length) data.openingHoursSpecification = specifications
   }
 
   return data

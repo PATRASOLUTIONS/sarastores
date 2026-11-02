@@ -580,7 +580,7 @@ test("signup and resend deliver visible verification links matching the stored t
   assert.equal(app.mail.length, 2)
   for (const message of app.mail) {
     const url = new URL(message.html.match(/href="([^"]+)"/)[1].replaceAll("&amp;", "&"))
-    assert.equal(url.origin, "https://sarastores.com")
+    assert.equal(url.origin, "https://www.sarastores.com")
     assert.equal(url.pathname, "/api/auth/verify-email")
     const user = app.records.find(record => record._id.toString() === url.searchParams.get("userId"))
     assert.equal(url.searchParams.get("token"), user.emailVerificationToken)

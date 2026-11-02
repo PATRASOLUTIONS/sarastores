@@ -11,6 +11,7 @@ import {
   getArticleBySlug,
   getRelatedArticles,
   listArticles,
+  renderArticleHtml,
 } from "@/lib/articles"
 import { safeJsonLd } from "@/lib/jsonld-safe"
 import { buildPageMetadata, getCompanyName, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
@@ -121,10 +122,10 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
           <p className="mt-6 text-lg text-gray-700">{article.excerpt}</p>
 
-          {/* Sanitised on write in lib/articles.ts, never on render. */}
+          {/* Keep legacy content safe and authored headings below the page title. */}
           <div
             className="prose prose-slate mt-6 max-w-none prose-headings:font-bold prose-a:text-brand-primary"
-            dangerouslySetInnerHTML={{ __html: article.content }}
+            dangerouslySetInnerHTML={{ __html: renderArticleHtml(article.content) }}
           />
 
           {article.tags.length > 0 && (
@@ -156,7 +157,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
               {related.map((entry) => (
                 <li key={entry.slug}>
                   <Link
-                    href={`/blog/${entry.slug}`}
+                    href={`/blog/${encodeURIComponent(entry.slug)}`}
                     className="block h-full rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
                   >
                     <h3 className="line-clamp-2 font-semibold text-gray-900">{entry.title}</h3>

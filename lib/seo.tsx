@@ -88,7 +88,7 @@ interface OrganizationSEO {
 export const siteConfig: SiteConfig = {
   name: 'Sara Electronics',
   description: 'Your one-stop shop for electronics, appliances, and more. Quality products at competitive prices with fast delivery across India.',
-  url: getConfiguredSiteOrigin() || 'https://sarastores.com',
+  url: getConfiguredSiteOrigin() || 'https://www.sarastores.com',
   ogImage: '/og',
   twitter: '@saraelectronics',
   locale: 'en_IN',

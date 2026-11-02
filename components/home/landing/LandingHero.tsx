@@ -30,13 +30,15 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
 
   const pairedSideBanners = sideBanners.length >= 2 ? sideBanners.slice(0, 2) : []
   const photoHero = !!slide && bannerIsPhotoOnly(slide)
-  if (!slide && pairedSideBanners.length === 0) return null
+  if (!slide && pairedSideBanners.length === 0) return <h1 className="sr-only">SARA Electronics — Mobiles and Home Appliances</h1>
 
   return (
     <section className={`${styles.heroGrid} ${!slide || pairedSideBanners.length === 0 || photoHero ? styles.heroSingle : ""}`} aria-label="Featured offers">
+      {!slide && <h1 className="sr-only">SARA Electronics — Mobiles and Home Appliances</h1>}
       {slide && <div className={styles.hero} style={photoHero ? undefined : { ...bannerGradient(slide), color: slide.dark ? "var(--brand-text-primary)" : "#fff" }} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocusCapture={() => setPaused(true)} onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setPaused(false)
       }} aria-roledescription={slides.length > 1 ? "carousel" : undefined}>
+        {photoHero && <h1 className="sr-only">{slide.title || "SARA Electronics — Mobiles and Home Appliances"}</h1>}
         {photoHero ? (
           slide.ctaLink ? <Link href={slide.ctaLink} className={styles.heroPhotoLink}><img src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <img src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
         ) : slide.image && <img src={slide.image} alt="" className={styles.heroArt} fetchPriority="high" />}

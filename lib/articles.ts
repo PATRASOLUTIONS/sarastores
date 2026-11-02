@@ -3,14 +3,14 @@ import { getCollection, normalizeId } from "@/lib/db-service"
 import { estimateReadingMinutes, type Article } from "@/lib/article-types"
 import { absoluteSeoImage } from "@/lib/seo-metadata"
 import type { Document } from "mongodb"
+import { load } from "cheerio"
 
 /**
  * Buying guides and articles ("CONTENT / BLOG" in the BRD).
  *
  * Articles are authored in the admin Tiptap editor, so `content` is HTML. It is
- * sanitised on write rather than on render — the render path uses
- * dangerouslySetInnerHTML, and sanitising once at the boundary means a stored
- * payload can never reach a browser unfiltered.
+ * sanitised on write. The public render helper also sanitises legacy content
+ * and makes authored title headings body sections without changing stored data.
  */
 
 export { ARTICLE_CATEGORIES, estimateReadingMinutes, slugifyArticle } from "@/lib/article-types"
@@ -35,26 +35,65 @@ export function sanitizeArticleHtml(html: unknown): string {
   })
 }
 
+/** The page owns its h1; retain authored headings as body sections without DB writes. */
+export function renderArticleHtml(html: unknown): string {
+  const $ = load(sanitizeArticleHtml(html), undefined, false)
+  $("h1").each((_, heading) => {
+    const sectionHeading = $("<h2></h2>")
+    const attributes = $(heading).attr()
+    if (attributes) sectionHeading.attr(attributes)
+    sectionHeading.append($(heading).contents())
+    $(heading).replaceWith(sectionHeading)
+  })
+  return $.html()
+}
+
+function articleText(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback
+}
+
+function articleDate(value: unknown): string | null {
+  if (value == null || value === "" || !(typeof value === "string" || typeof value === "number" || Object.prototype.toString.call(value) === "[object Date]")) return null
+  const date = new Date(value as string | number)
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null
+}
+
+function articleImage(value: unknown): string {
+  const source = articleText(value).trim()
+  if (!source || /[\u0000-\u001f\u007f]/.test(source)) return ""
+  if (source.startsWith("/") && !source.startsWith("//")) return source
+  try {
+    const url = new URL(source)
+    return url.protocol === "https:" && !url.username && !url.password ? source : ""
+  } catch { return "" }
+}
+
+function publicArticle(article: Article): boolean {
+  return Boolean(article.title.trim() && article.slug.trim())
+}
+
 function toArticle(doc: Document): Article {
   const normalized = normalizeId(doc)
+  const content = articleText(normalized.content)
+  const readingMinutes = Number(normalized.readingMinutes)
   return {
-    id: normalized.id,
-    slug: normalized.slug || "",
-    title: normalized.title || "",
-    excerpt: normalized.excerpt || "",
-    content: normalized.content || "",
-    coverImage: normalized.coverImage || "",
-    category: normalized.category || "Buying Guides",
-    tags: Array.isArray(normalized.tags) ? normalized.tags : [],
-    author: normalized.author || "Sara Electronics",
+    id: articleText(normalized.id),
+    slug: articleText(normalized.slug),
+    title: articleText(normalized.title),
+    excerpt: articleText(normalized.excerpt),
+    content,
+    coverImage: articleImage(normalized.coverImage),
+    category: articleText(normalized.category, "Buying Guides") || "Buying Guides",
+    tags: Array.isArray(normalized.tags) ? normalized.tags.filter((tag: unknown): tag is string => typeof tag === "string") : [],
+    author: articleText(normalized.author, "Sara Electronics") || "Sara Electronics",
     status: normalized.status === "draft" ? "draft" : "published",
-    publishedAt: normalized.publishedAt ? new Date(normalized.publishedAt).toISOString() : null,
-    seoTitle: normalized.seoTitle || null,
-    seoDescription: normalized.seoDescription || null,
-    relatedProductIds: Array.isArray(normalized.relatedProductIds) ? normalized.relatedProductIds : [],
-    readingMinutes: Number(normalized.readingMinutes) || estimateReadingMinutes(normalized.content || ""),
-    createdAt: normalized.createdAt ? new Date(normalized.createdAt).toISOString() : null,
-    updatedAt: normalized.updatedAt ? new Date(normalized.updatedAt).toISOString() : null,
+    publishedAt: articleDate(normalized.publishedAt),
+    seoTitle: articleText(normalized.seoTitle) || null,
+    seoDescription: articleText(normalized.seoDescription) || null,
+    relatedProductIds: Array.isArray(normalized.relatedProductIds) ? normalized.relatedProductIds.filter((id: unknown): id is string => typeof id === "string") : [],
+    readingMinutes: Number.isFinite(readingMinutes) && readingMinutes > 0 ? readingMinutes : estimateReadingMinutes(content),
+    createdAt: articleDate(normalized.createdAt),
+    updatedAt: articleDate(normalized.updatedAt),
   }
 }
 
@@ -65,6 +104,7 @@ export async function listArticles(options: {
   tag?: string | null
   limit?: number
   includeDrafts?: boolean
+  strict?: boolean
 } = {}): Promise<Article[]> {
   try {
     const collection = await getCollection(ARTICLES_COLLECTION)
@@ -75,8 +115,10 @@ export async function listArticles(options: {
     let query = collection.find(filter).sort({ publishedAt: -1, createdAt: -1 })
     if (options.limit && options.limit > 0) query = query.limit(options.limit)
 
-    return (await query.toArray()).map(toArticle)
-  } catch {
+    const articles = (await query.toArray()).map(toArticle)
+    return options.includeDrafts ? articles : articles.filter(publicArticle)
+  } catch (error) {
+    if (options.strict) throw error
     // A missing collection must not break the storefront.
     return []
   }
@@ -92,7 +134,8 @@ export async function getArticleBySlug(
       ? { slug }
       : { slug, ...PUBLISHED_FILTER }
     const doc = await collection.findOne(filter)
-    return doc ? toArticle(doc) : null
+    const article = doc ? toArticle(doc) : null
+    return article && (options.includeDrafts || publicArticle(article)) ? article : null
   } catch {
     return null
   }
@@ -132,7 +175,7 @@ export function buildArticleJsonLd(article: Article, origin: string) {
     ...(article.updatedAt ? { dateModified: article.updatedAt } : {}),
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `${origin}/blog/${article.slug}`,
+      "@id": `${origin}/blog/${encodeURIComponent(article.slug)}`,
     },
   }
 }

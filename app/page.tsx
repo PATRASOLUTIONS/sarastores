@@ -1,4 +1,7 @@
 import SaraLanding from "@/components/home/SaraLanding"
+import { getPublicPageProducts } from "@/lib/public-page-data"
+
+export const dynamic = "force-dynamic"
 
 /*
  * The grand-opening curtain is retired.
@@ -16,10 +19,11 @@ import SaraLanding from "@/components/home/SaraLanding"
  * cannot be undone by configuration. The component and lib/handshake.ts are
  * left in place, so restoring the ceremony is one prop away.
  */
-export default function Home() {
+export default async function Home() {
+  const products = (await getPublicPageProducts()).filter(product => product.stock > 0 && product.price > 0)
   return (
     <div className="flex min-h-screen flex-col bg-[#EEF2F7]">
-      <SaraLanding />
+      <SaraLanding initialProducts={products} />
     </div>
   )
 }

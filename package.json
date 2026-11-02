@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:seo": "node --test tests/seo-regression.test.mjs tests/product-metadata-brand.test.mjs tests/seo-build-guard.test.mjs tests/seo-server-pages.test.mjs tests/site-origin.test.mjs tests/seo-manufacturer-pages.test.mjs tests/seo-public-metadata.test.mjs tests/seo-public-promotions.test.mjs tests/seo-public-catalogue.test.mjs",
+    "seo:skills": "python scripts/seo/validate-install.py",
+    "seo:fixtures": "node scripts/seo/fixtures.mjs",
+    "seo:validate": "python scripts/seo/audit.py --fixtures",
+    "seo:google-preflight": "python scripts/seo/google-preflight.py",
+    "seo:doctor": "python scripts/seo/run.py doctor --json",
     "build": "next build",
     "dev": "next dev",
     "dev:3005": "next dev -p 3005",

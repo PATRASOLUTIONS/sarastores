@@ -48,6 +48,11 @@ const nextConfig = {
 
   compress: true,
 
+  async redirects() {
+    return [{ source: '/:path*', has: [{ type: 'host', value: 'sarastores.com' }],
+      destination: 'https://www.sarastores.com/:path*', permanent: true }]
+  },
+
   // Security Headers
   async headers() {
     const isProd = process.env.NODE_ENV === 'production'

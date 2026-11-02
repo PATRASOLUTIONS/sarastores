@@ -81,6 +81,14 @@ function derivePincode(address: string): string {
   return match ? match[1] : ""
 }
 
+function validLatitude(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= -90 && value <= 90
+}
+
+function validLongitude(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= -180 && value <= 180
+}
+
 function toStoreLocation(doc: WithId<StoredStoreLocation>): StoreLocation | null {
   const name = String(doc?.shopName || "").trim()
   if (!name) return null
@@ -99,15 +107,15 @@ function toStoreLocation(doc: WithId<StoredStoreLocation>): StoreLocation | null
     pincode: String(doc?.pincode || derivePincode(address)),
     phone: String(doc?.mobileNo || "").trim(),
     email: String(doc?.emailId || "").trim(),
-    hours: String(doc?.shopTiming || "9:00 AM - 9:00 PM").trim(),
+    hours: typeof doc?.shopTiming === "string" ? doc.shopTiming.trim() : "",
     image: String(doc?.shopImage || "").trim(),
     mapUrl: String(doc?.googleMapLocation || "").trim(),
-    ...(typeof doc?.latitude === "number" ? { latitude: doc.latitude } : {}),
-    ...(typeof doc?.longitude === "number" ? { longitude: doc.longitude } : {}),
+    ...(validLatitude(doc?.latitude) ? { latitude: doc.latitude } : {}),
+    ...(validLongitude(doc?.longitude) ? { longitude: doc.longitude } : {}),
   }
 }
 
-export async function getAllStoreLocations(): Promise<StoreLocation[]> {
+export async function getAllStoreLocations({ strict = false }: { strict?: boolean } = {}): Promise<StoreLocation[]> {
   try {
     const collection = await getCollection<StoredStoreLocation>("store_locations")
     const docs = await collection.find(ACTIVE_RETAIL_STORE_FILTER).sort({ shopName: 1 }).toArray()
@@ -115,6 +123,7 @@ export async function getAllStoreLocations(): Promise<StoreLocation[]> {
       .map(toStoreLocation)
       .filter((store): store is StoreLocation => store !== null && store.citySlug.length > 0)
   } catch (error) {
+    if (strict) throw error
     console.error("[Store locations] Failed to load active stores", error)
     // Store pages must not 500 the whole route when Mongo is unreachable.
     return []
@@ -169,7 +178,7 @@ export function buildStoreJsonLd(store: StoreLocation, origin: string) {
       ...(store.pincode ? { postalCode: store.pincode } : {}),
       addressCountry: "IN",
     },
-    ...(typeof store.latitude === "number" && typeof store.longitude === "number"
+    ...(validLatitude(store.latitude) && validLongitude(store.longitude)
       ? {
           geo: {
             "@type": "GeoCoordinates",
@@ -179,7 +188,7 @@ export function buildStoreJsonLd(store: StoreLocation, origin: string) {
         }
       : {}),
     ...(store.mapUrl ? { hasMap: store.mapUrl } : {}),
-    openingHours: store.hours,
+    ...(store.hours?.trim() ? { openingHours: store.hours.trim() } : {}),
     priceRange: "₹₹",
   }
 }

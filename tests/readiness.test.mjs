@@ -4913,27 +4913,25 @@ test("category list contracts preserve IDs/slugs and tolerate nullable legacy pr
   assert.equal(catalogCategoryListResponseSchema.safeParse([{ name: "Fixture" }]).success, false)
 })
 
-test("festival shelves render typed projected cards and preserve discounted-versus-full-shelf thresholds", async () => {
+test("festival shelves render public cards and preserve discounted-versus-full-shelf thresholds", async () => {
   const { createElement } = await import("react")
   const { renderToStaticMarkup } = await import("react-dom/server")
-  for (const [discountedCount, expectedCount, expectedQueries] of [[7, 12, 3], [8, 8, 2]]) {
-    const products = Array.from({ length: 12 }, (_, index) => ({ id: `fixture-${index}`, name: `Fixture product ${index}`, price: 100, image: "/fixture.png" }))
-    const queries = []
+  for (const [discountedCount, expectedCount] of [[7, 12], [8, 8]]) {
+    const products = Array.from({ length: 12 }, (_, index) => ({ id: `fixture-${index}`, name: `Fixture product ${index}`,
+      price: 100, mrp: index < discountedCount ? 150 : 100, stock: 5, image: "/fixture.png" }))
     const loader = sourceLoader({
       "@/components/Header": () => null,
       "@/components/Footer": () => null,
       "@/components/CategoryProductCard": ({ product }) => createElement("div", { "data-product-id": product.id }, product.name),
       "@/lib/seo-page": { pageMetadata: () => () => ({}) },
-      "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products", CATEGORIES: "categories" }, findMany: async (collection, filter, options) => {
-        queries.push({ collection, filter, options })
-        if (collection === "categories") return [{ id: "fixture-category", name: "Fixture category", slug: "fixture-category", image: null }]
-        assert.equal(options.projection.price, 1)
-        return filter.discount ? products.slice(0, discountedCount) : products
+      "@/lib/public-page-data": { getPublicPageProducts: async () => products },
+      "@/lib/db-service": { COLLECTIONS: { CATEGORIES: "categories" }, findMany: async collection => {
+        assert.equal(collection, "categories")
+        return [{ id: "fixture-category", name: "Fixture category", slug: "fixture-category", image: null }]
       } },
     })
     const html = renderToStaticMarkup(await loader.load("app/ganesh/page.tsx").default())
     assert.equal(Array.from(html.matchAll(/data-product-id=/g)).length, expectedCount)
-    assert.equal(queries.length, expectedQueries)
     assert.ok(html.includes('href="/category/fixture-category"'))
   }
 })

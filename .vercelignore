@@ -47,3 +47,10 @@ scripts/archive/
 scripts/diagnostics/
 scripts/utilities/
 scripts/legacy/
+
+# Development-only SEO integration, skills and reports.
+.seo-tools/
+.seo-local/
+.seo-build-check/
+.agents/
+scripts/seo/

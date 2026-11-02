@@ -9,16 +9,17 @@ import { Loader2 } from "lucide-react"
 import Link from "next/link"
 import { publicCampaignPageResponseSchema, type PublicCampaignPage } from "@/lib/campaign-page"
 
-export default function CampaignExperience({ fixedSlug }: { fixedSlug?: string }) {
+export default function CampaignExperience({ fixedSlug, initialCampaign }: { fixedSlug?: string; initialCampaign?: PublicCampaignPage }) {
   const params = useParams()
   const slug = fixedSlug || (typeof params?.slug === "string" ? params.slug : undefined)
-  const [campaign, setCampaign] = useState<PublicCampaignPage | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [campaign, setCampaign] = useState<PublicCampaignPage | null>(initialCampaign || null)
+  const [loading, setLoading] = useState(!initialCampaign)
   const [error, setError] = useState<string | null>(null)
   const [missing, setMissing] = useState(false)
 
   useEffect(() => {
     if (!slug) return
+    if (initialCampaign?.slug === slug) return
     const controller = new AbortController()
     setLoading(true)
     setCampaign(null)
@@ -51,7 +52,7 @@ export default function CampaignExperience({ fixedSlug }: { fixedSlug?: string }
 
     void fetchCampaign()
     return () => controller.abort()
-  }, [slug])
+  }, [slug, initialCampaign])
 
   if (loading) {
     return (

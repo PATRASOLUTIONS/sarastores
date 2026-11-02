@@ -70,3 +70,11 @@ order_debug_dump.json
 # Captured stdout from a local server or test run.
 /e2e-run.log
 /prod-server.log
+
+# Pinned external SEO source is reproduced by scripts/seo/install.py.
+/.seo-tools/
+# Raw audits, isolated Python runtime and OAuth/API exports stay local.
+/.seo-local/
+/.seo-build-check/
+/scripts/seo/__pycache__/
+/scripts/seo/**/__pycache__/

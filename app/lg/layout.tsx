@@ -5,7 +5,7 @@ export const generateMetadata = pageMetadata({
   path: "/lg",
   title: (brand) => `LG Electronics — TVs, Refrigerators, Washing Machines & ACs | ${brand}`,
   description:
-    "Buy LG televisions, refrigerators, washing machines and air conditioners at Sara Electronics. OLED and QNED TVs, frost-free refrigerators and inverter ACs with full LG warranty and no-cost EMI.",
+    "Browse LG televisions, refrigerators, washing machines and air conditioners. Compare available models and current prices, with product-specific warranty and payment terms.",
 })
 
 export default function LgLayout({ children }: { children: React.ReactNode }) {

@@ -3,9 +3,10 @@ import { pageMetadata } from "@/lib/seo-page"
 
 export const generateMetadata = pageMetadata({
   path: "/lucky-draw",
-  title: (brand) => `Lucky Draw — Win Electronics Prizes | ${brand}`,
+  noIndex: true,
+  title: (brand) => `Lucky Draw - Archived Campaign | ${brand}`,
   description:
-    "Take part in the Sara Electronics lucky draw for a chance to win televisions, appliances and vouchers. Enter with your purchase and check your result instantly.",
+    "Archived information for the Shubham Lucky Draw campaign advertised from 15 January to 28 February 2026. Entries are closed; contact our team about previous entries.",
 })
 
 export default function LuckyDrawLayout({ children }: { children: React.ReactNode }) {

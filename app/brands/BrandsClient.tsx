@@ -125,19 +125,20 @@ function BrandLogo({ name, src }: { name: string; src?: string }) {
   </span>
 }
 
-export default function BrandsPage() {
+export default function BrandsPage({ initialBrands, initialProducts = [] }: { initialBrands?: CatalogRecord[]; initialProducts?: CatalogRecord[] } = {}) {
   const marketing = useMarketingContent("brands")
-  const [brands, setBrands] = useState<Brand[]>([])
+  const [brands, setBrands] = useState<Brand[]>(() => initialBrands ? buildBrands(initialBrands, initialProducts) : [])
   const [logoManifest, setLogoManifest] = useState<Record<string, string>>({})
   const [query, setQuery] = useState("")
   const [letter, setLetter] = useState("All")
   const [category, setCategory] = useState("")
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialBrands)
   const [error, setError] = useState("")
   const [attempt, setAttempt] = useState(0)
   const hero = useBanners("brands-hero")[0]
 
   useEffect(() => {
+    if (initialBrands && attempt === 0) return
     const controller = new AbortController()
     const load = async () => {
       setLoading(true)
