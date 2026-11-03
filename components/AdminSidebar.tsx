@@ -128,6 +128,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Spin Wheel", path: "/admin/spin-wheel", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Spin Campaigns", path: "/admin/spin-wheel/campaigns", icon: <Boxes className="h-5 w-5" /> },
       { name: "Lucky Draw", path: "/admin/lucky-draw", icon: <Gift className="h-5 w-5" /> },
+      { name: "Diwali Gifts", path: "/admin/diwali", icon: <Gift className="h-5 w-5" /> },
     ],
   },
   {

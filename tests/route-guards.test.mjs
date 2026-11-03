@@ -28,12 +28,16 @@ const GUARDS = [
   // mobile access tokens, guest order tokens.
   /requireCron\s*\(/, /withPartnerAuth\s*[(<]/, /authenticatePartner\s*\(/, /validateAPIKey\s*\(/,
   /verifyGuestAccessToken\s*\(/, /verifyPendingSignupToken\s*\(/, /verifyAccessToken\s*\(/,
+  // Diwali's verified-mobile cookie is an opaque database-backed capability.
+  /register\s*\(\(await cookies\(\)\)\.get\('diwali_verified'\)/,
   // Webhooks authenticate by signature.
   /verifyWebhookSignature|verifyRazorpaySignature|verifyPartnerPayment|createHmac\s*\(|timingSafeEqual\s*\(/,
 ]
 
 /** route -> why it is reachable without an identified caller. */
 const INTENTIONALLY_PUBLIC = {
+  "/api/diwali/otp/send": "public mobile verification entry; same-origin, shared per-address/per-mobile rate limits",
+  "/api/diwali/otp/verify": "OTP is the credential; expiring, five attempts, one-use and shared request limits",
   "/api/sara-care/quote": "read-only catalogue protection quote for guest carts; validated and rate limited; no account data",
   "/api/auth/login": "issues the session; cannot require one",
   "/api/auth/logout": "clears the cookie; must work with an expired session",
