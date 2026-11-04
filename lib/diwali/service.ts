@@ -8,6 +8,7 @@ import { DiwaliError } from './http'
 import { ConfigSchema, DEFAULT_CONFIG, type CampaignConfig, type ClaimAction, type RegistrationSchema } from './schemas'
 import type { z } from 'zod'
 import { GIFTS, giftForRupees, normalizeInvoice, deliveryDueAt, indiaDate, safeCsv, isRealDate, type GiftCode } from './rules'
+import { ONLINE_STORE, onlineOrderPaymentState, onlineOrderGiftError, type OnlineOrderState } from './online-rules'
 
 export const COLLECTIONS = { config: 'diwali_config', claims: 'diwali_claims', audit: 'diwali_audit', otp: 'diwali_otp', sessions: 'diwali_sessions', messages: 'diwali_messages', stock: 'diwali_stock', receipts: 'diwali_message_receipts' } as const
 export type StringRecord = Document & { _id: string; resends?: Array<{ actor: string; note: string; confirmedNotSent: boolean; at: Date }> }
@@ -82,7 +83,7 @@ export async function saveConfig(user: User, config: CampaignConfig) {
   })
 }
 export function publicConfig(config: CampaignConfig) {
-  return { enabled: config.enabled, campaignStart: config.campaignStart, campaignEnd: config.campaignEnd, registrationStart: config.registrationStart, registrationEnd: config.registrationEnd, stores: config.stores, termsEn: config.termsEn, termsKn: config.termsKn, privacyEn: config.privacyEn, privacyKn: config.privacyKn, consentVersion: config.consentVersion }
+  return { enabled: config.enabled, campaignStart: config.campaignStart, campaignEnd: config.campaignEnd, registrationStart: config.registrationStart, registrationEnd: config.registrationEnd, stores: config.stores.filter(store => store.code !== ONLINE_STORE), termsEn: config.termsEn, termsKn: config.termsKn, privacyEn: config.privacyEn, privacyKn: config.privacyKn, consentVersion: config.consentVersion }
 }
 function registrationOpen(config: CampaignConfig) {
   const today = indiaDate(new Date())
@@ -128,6 +129,7 @@ export async function register(token: string | undefined, input: z.infer<typeof 
   if (prior) return customerClaim(prior)
   registrationOpen(config)
   if (input.consentVersion !== config.consentVersion) throw new DiwaliError('The consent notice changed. Refresh the page and review it again.', 409)
+  if (input.storeCode === ONLINE_STORE) throw new DiwaliError('Website orders register their Diwali gift automatically at checkout', 409)
   if (!config.stores.some(store => store.code === input.storeCode)) throw new DiwaliError('Select a valid store')
   const normalized = normalizeInvoice(input.invoice)
   if (!normalized) throw new DiwaliError('Enter a valid invoice number')
@@ -178,9 +180,17 @@ export async function listClaims(user: User, params: URLSearchParams) {
   const page = Math.floor(Math.max(1, Math.min(10000, Number(params.get('page')) || 1))), size = 30
   const collection = await getCollection<Claim>(COLLECTIONS.claims)
   const [rows, total] = await Promise.all([collection.find(scoped).sort({ createdAt: -1 }).skip((page - 1) * size).limit(size).toArray(), collection.countDocuments(scoped)])
+  const onlineIds = rows.filter(row => row.source === 'online').map(row => row.orderId)
+  const orders = onlineIds.length ? await (await getCollection<Document & OnlineOrderState>('orders')).find({ orderId: { $in: onlineIds } }, { projection: { orderId: 1, status: 1, paymentVerification: 1, paymentMethod: 1 } }).toArray() : []
+  for (const row of rows) if (row.source === 'online') {
+    const order = orders.find(order => order.orderId === row.orderId)
+    row.paymentState = onlineOrderPaymentState(order || null)
+    row.orderStatus = order?.status || 'unavailable'
+    row.orderDocumentId = order?._id.toString()
+  }
   await audit(undefined, user.id, 'list', 'campaign', { page, returned: rows.length })
   return { items: rows.map(row => {
-    if (access.role === 'management') return { id: row._id, reference: row.reference, status: row.status, fulfilment: row.fulfilment, storeCode: row.storeCode, city: row.city, enteredValue: row.enteredValue, verifiedValue: row.verifiedValue, giftCode: row.giftCode, dueAt: row.dueAt, createdAt: row.createdAt, version: row.version }
+    if (access.role === 'management') return { id: row._id, reference: row.reference, status: row.status, fulfilment: row.fulfilment, storeCode: row.storeCode, city: row.city, enteredValue: row.enteredValue, verifiedValue: row.verifiedValue, giftCode: row.giftCode, dueAt: row.dueAt, createdAt: row.createdAt, version: row.version, source: row.source, orderId: row.orderId, paymentState: row.paymentState, orderStatus: row.orderStatus }
     return normalizeId(row)
   }), total, page }
 }
@@ -189,6 +199,12 @@ export async function getClaim(user: User, id: string) {
   if (access.role === 'management') throw new DiwaliError('Detailed customer records are restricted', 403)
   const claim = await (await getCollection<Claim>(COLLECTIONS.claims)).findOne({ $and: [{ _id: id }, scopeFilter(user, config)] })
   if (!claim) throw new DiwaliError('Claim not found', 404)
+  if (claim.source === 'online') {
+    const order = await (await getCollection<Document & OnlineOrderState>('orders')).findOne({ orderId: claim.orderId })
+    claim.paymentState = onlineOrderPaymentState(order)
+    claim.orderStatus = order?.status || 'unavailable'
+    claim.orderDocumentId = order?._id.toString()
+  }
   await audit(undefined, user.id, 'view', id)
   const history = await (await getCollection(COLLECTIONS.audit)).find({ claimId: id }).sort({ at: -1 }).limit(100).toArray()
   return { claim: normalizeId(claim), history: history.map(normalizeId) }
@@ -210,7 +226,16 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
     if (!claim) throw new DiwaliError('Claim not found', 404)
     if (claim.version !== action.version) throw new DiwaliError('Another operator updated this claim. Refresh before continuing.', 409)
     const patch: Document = { updatedAt: new Date() }
+    if (claim.source === 'online' && ['approve', 'pack', 'dispatch'].includes(action.action)) {
+      const order = await (await getCollection<Document & OnlineOrderState>('orders')).findOne({ orderId: claim.orderId }, { session })
+      const error = onlineOrderGiftError(order, claim.enteredValue)
+      if (error) throw new DiwaliError(error, 409)
+      if (order?.diwaliGift?.giftCode !== claim.giftCode || order?.diwaliGift?.eligibleValue !== claim.enteredValue) throw new DiwaliError('Online gift must match the original order', 409)
+      if (action.action === 'approve' && (action.verifiedValue !== claim.enteredValue || action.invoiceDate !== claim.invoiceDate)) throw new DiwaliError('Online invoice value and date come from the order and cannot be changed', 409)
+    }
     if (action.action === 'correct') {
+      if (claim.source === 'online') throw new DiwaliError('Online invoice identity comes from the order and cannot be edited', 409)
+      if (action.storeCode === ONLINE_STORE) throw new DiwaliError('The online invoice namespace is reserved for website orders', 409)
       if (claim.status !== 'pending') throw new DiwaliError('Invoice identity is locked after review', 409)
       if (!config.stores.some(store => store.code === action.storeCode)) throw new DiwaliError('Select a valid store')
       const invoice = normalizeInvoice(action.invoice)
@@ -221,7 +246,8 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
       if (action.action === 'approve') {
         if (!config.rulesConfirmed || !config.calendarConfirmed) throw new DiwaliError('Campaign rules and working-day calendar must be confirmed first', 409)
         if (action.invoiceDate < config.campaignStart || action.invoiceDate > config.campaignEnd) throw new DiwaliError('Invoice is outside the eligible purchase dates')
-        if (!config.stores.some(store => store.code === action.storeCode) || action.storeCode !== claim.storeCode || access.stores.length && !access.stores.includes(action.storeCode)) throw new DiwaliError('Invoice store must match the registered store; request an audited correction if incorrect')
+        const onlineStore = claim.source === 'online' && action.storeCode === ONLINE_STORE
+        if ((!onlineStore && !config.stores.some(store => store.code === action.storeCode)) || action.storeCode !== claim.storeCode || access.stores.length && !access.stores.includes(action.storeCode)) throw new DiwaliError('Invoice store must match the registered store; request an audited correction if incorrect')
         const gift = giftForRupees(action.verifiedValue)
         if (!gift) throw new DiwaliError('Invoice is ineligible')
         Object.assign(patch, { status: 'approved', verifiedValue: action.verifiedValue, invoiceDate: action.invoiceDate, giftCode: gift.code, approvedAt: patch.updatedAt, approvedBy: user.id, dueAt: deliveryDueAt(patch.updatedAt, config.workingDays, config.holidays), calendar: { workingDays: config.workingDays, holidays: config.holidays }, verificationNote: action.note })
@@ -297,7 +323,7 @@ export async function exportClaims(user: User, params = new URLSearchParams()) {
   const collection = await getCollection<Claim>(COLLECTIONS.claims), match = reportFilter(user, config, params)
   if (await collection.countDocuments(match) > 10000) throw new DiwaliError('Export exceeds 10,000 records. Use a narrower reporting scope.', 413)
   const rows = await collection.find(match).sort({ createdAt: -1 }).limit(10000).toArray()
-  const fields = ['reference', 'name', 'mobile', 'address', 'city', 'district', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
+  const fields = ['reference', 'source', 'orderId', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
   await audit(undefined, user.id, 'export', 'campaign', { count: rows.length })
   return [fields.map(safeCsv).join(','), ...rows.map(row => fields.map(field => safeCsv(row[field] instanceof Date ? row[field].toISOString() : row[field])).join(','))].join('\r\n')
 }

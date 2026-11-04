@@ -29,6 +29,7 @@ export default function MarkdownEditor({ id, label, value, onChange, disabled = 
     else replacement = selected.split('\n').map((line, index) => `${format === 'heading' ? '## ' : format === 'bullet' ? '- ' : format === 'numbered' ? `${index + 1}. ` : '> '}${line}`).join('\n')
     const next = value.slice(0, start) + replacement + value.slice(end)
     if (next.length > 20000) return
+    setPreview(false)
     onChange(next)
     requestAnimationFrame(() => { editor.focus(); editor.setSelectionRange(start, start + replacement.length) })
   }
@@ -43,7 +44,7 @@ export default function MarkdownEditor({ id, label, value, onChange, disabled = 
           {formats.map(item => <button key={item.format} type="button" disabled={disabled} onClick={() => formatSelection(item.format)} className="rounded-md border bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50">{item.label}</button>)}
         </div>}
       </div>
-      {showPreview ? <div className="min-h-[240px] p-4" aria-label={`${label} preview`}>{value.trim() ? <MarkdownContent content={value} /> : <p className="text-sm text-gray-500">Nothing to preview yet.</p>}</div> : <textarea ref={textarea} id={id} aria-invalid={!!error} aria-describedby={`${id}-help${error ? ` ${id}-error` : ''}`} disabled={disabled} value={value} onChange={event => onChange(event.target.value)} maxLength={20000} rows={10} className="block w-full resize-y bg-white p-4 font-mono text-sm leading-6 text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-100 disabled:bg-gray-50" placeholder="Write your approved notice using Markdown…" />}
+      {showPreview ? <div className="min-h-[240px] p-4" aria-label={`${label} preview`}>{value.trim() ? <MarkdownContent content={value} /> : <p className="text-sm text-gray-500">Nothing to preview yet.</p>}</div> : <textarea ref={textarea} id={id} aria-invalid={!!error} aria-describedby={`${id}-help${error ? ` ${id}-error` : ''}`} disabled={disabled} value={value} onChange={event => { setPreview(false); onChange(event.target.value) }} maxLength={20000} rows={10} className="block w-full resize-y bg-white p-4 font-mono text-sm leading-6 text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-100 disabled:bg-gray-50" placeholder="Write your approved notice using Markdown…" />}
     </div>
     {error && <p id={`${id}-error`} className="text-sm text-red-800">{error}</p>}
     <p id={`${id}-help`} className="text-xs text-gray-500">Markdown supports headings, bold, lists, links and tables. Preview shows the website formatting. {value.length.toLocaleString()} / 20,000 characters.</p>

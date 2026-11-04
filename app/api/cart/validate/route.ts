@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth"
 import { CheckoutQuoteSchema, quoteCheckout } from "@/lib/checkout-payment"
 import { handleApiError } from "@/lib/api-error"
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
+import { getConfig } from "@/lib/diwali/service"
+import { onlineGift } from "@/lib/diwali/online-rules"
 
 // Read-only validation supports both authenticated customers and guest carts.
 // It creates no order, payment, reservation or external provider request.
@@ -21,7 +23,8 @@ export async function POST(request: NextRequest) {
       quote = await quoteCheckout(parsed.data.items, { ...options, couponCode: null })
     }
     if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 400 })
-    return NextResponse.json({ success: true, pricing: quote.pricing, amount: quote.amount, couponMessage }, {
+    const diwaliGift = onlineGift(await getConfig(), quote.amount, quote.pricing.shipping)
+    return NextResponse.json({ success: true, pricing: quote.pricing, amount: quote.amount, couponMessage, diwaliGift }, {
       headers: { "Cache-Control": "private, no-store" },
     })
   } catch (error) { return handleApiError(error, "Checkout validation is temporarily unavailable.") }

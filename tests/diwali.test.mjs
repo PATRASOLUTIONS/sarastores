@@ -90,6 +90,69 @@ test('campaign remains closed without complete bilingual notices and approved po
   assert.equal(RegistrationSchema.safeParse({ mobile: '9000000000' }).success, false)
 })
 
+test('opening validation identifies every missing approval, store and notice separately', () => {
+  const { ConfigSchema, DEFAULT_CONFIG } = sourceLoader().load('lib/diwali/schemas.ts')
+  const result = ConfigSchema.safeParse({ ...DEFAULT_CONFIG, enabled: true })
+  assert.equal(result.success, false)
+  assert.deepEqual(Array.from(result.error.issues, issue => issue.path[0]), ['rulesConfirmed', 'calendarConfirmed', 'stores', 'termsEn', 'termsKn', 'privacyEn', 'privacyKn'])
+  assert.equal(ConfigSchema.safeParse({ ...DEFAULT_CONFIG, enabled: false }).success, true)
+  const dates = ConfigSchema.safeParse({ ...DEFAULT_CONFIG, campaignEnd: '2026-11-01', registrationEnd: '2026-11-01' })
+  assert.deepEqual(Array.from(dates.error.issues, issue => issue.path[0]), ['campaignEnd', 'registrationEnd'])
+})
+
+test('settings save highlights missing fields, focuses the first error and supports saving a closed draft', async () => {
+  const { DEFAULT_CONFIG } = sourceLoader().load('lib/diwali/schemas.ts')
+  const state = [], frames = [], requests = [], scrolled = [], focused = []
+  let index = 0
+  state[0] = { ...DEFAULT_CONFIG, enabled: true }
+  state[1] = { role: 'superadmin', export: true, stores: [] }
+  const loader = sourceLoader({
+    react: { useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
+    'next/navigation': { useRouter() { return {} } },
+    '@/lib/api-client': { async apiFetch(url, options) { requests.push({ url, options }); return Response.json({ saved: true }) } },
+  }, { context: {
+    requestAnimationFrame(callback) { frames.push(callback) },
+    document: { getElementById(id) { return { scrollIntoView() { scrolled.push(id) }, querySelector() { return { focus() { focused.push(id) } } } } } },
+  } })
+  const Component = loader.load('components/diwali/AdminGift.tsx').default
+  function renderNodes() {
+    index = 0
+    const nodes = []
+    function visit(node) { if (Array.isArray(node)) return node.forEach(visit); if (!node || typeof node !== 'object' || !node.props) return; nodes.push(node); visit(node.props.children) }
+    visit(Component({ section: 'settings' }))
+    return nodes
+  }
+  let nodes = renderNodes()
+  assert.equal(nodes.filter(node => node.type === 'button' && node.props.type === 'submit' && node.props.children === 'Save campaign settings').length, 2)
+  await nodes.find(node => node.type === 'form' && node.props.id === 'diwali-settings-form').props.onSubmit({ preventDefault() {} })
+  frames.splice(0).forEach(callback => callback())
+  assert.equal(requests.length, 0)
+  assert.deepEqual(scrolled, ['diwali-rulesConfirmed-section'])
+  assert.deepEqual(focused, scrolled)
+  nodes = renderNodes()
+  const summary = nodes.find(node => node.props.id === 'diwali-settings-errors')
+  assert.ok(summary)
+  assert.equal(nodes.filter(node => node.type === 'li').length, 7)
+  state[0] = { ...state[0], enabled: false }
+  nodes = renderNodes()
+  await nodes.find(node => node.type === 'form' && node.props.id === 'diwali-settings-form').props.onSubmit({ preventDefault() {} })
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].options.json.enabled, false)
+  assert.ok(!renderNodes().find(node => node.props.id === 'diwali-settings-errors'))
+})
+
+test('API validation returns the setting to highlight', async () => {
+  const loader = sourceLoader()
+  const { ConfigSchema, DEFAULT_CONFIG } = loader.load('lib/diwali/schemas.ts')
+  const { body, errorResponse } = loader.load('lib/diwali/http.ts')
+  const request = new Request('https://sara.test/api/admin/diwali/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...DEFAULT_CONFIG, enabled: true }) })
+  try { await body(request, ConfigSchema); assert.fail('Incomplete open configuration must be rejected') } catch (error) {
+    const response = errorResponse(error)
+    assert.equal(response.status, 400)
+    assert.equal((await response.json()).field, 'rulesConfirmed')
+  }
+})
+
 test('gift stock accepts a quantity without a procurement reference and still validates quantities', () => {
   const { StockSchema } = sourceLoader().load('lib/diwali/schemas.ts')
   const parsed = StockSchema.parse({ giftCode: 'silver5', quantity: 10 })
@@ -108,17 +171,24 @@ test('customers can enter gift details before OTP verification but cannot submit
       return [current === 1 ? { ...DEFAULT_CONFIG, enabled: true, registrationStart: '2000-01-01', registrationEnd: '2099-12-31' } : initial, value => { if (current === 2) error = value }]
     },
   }
-  const Component = sourceLoader({ react }).load('components/diwali/PublicGift.tsx').default
+  const loader = sourceLoader({ react })
+  const Component = loader.load('components/diwali/PublicGift.tsx').default
+  const GiftRegistration = loader.load('components/diwali/GiftRegistration.tsx').default
   const tree = Component({ mode: 'register' })
   const nodes = []
   function visit(node) {
     if (Array.isArray(node)) return node.forEach(visit)
     if (!node || typeof node !== 'object' || !node.props) return
     nodes.push(node)
+    if (node.type === GiftRegistration) visit(GiftRegistration(node.props))
     visit(node.props.children)
   }
   visit(tree)
   assert.equal(nodes.find(node => node.type === 'fieldset').props.disabled, false)
+  for (const name of ['name', 'address', 'city', 'district', 'pincode', 'storeCode', 'invoice', 'accuracy']) {
+    assert.equal(nodes.find(node => node.props.name === name)?.props.required, true, `${name} must remain required`)
+  }
+  assert.equal(nodes.filter(node => node.type === 'nav' || node.type === 'footer').length, 0)
   assert.equal(nodes.find(node => node.type === 'button' && node.props.children === 'Submit registration').props.disabled, true)
   let prevented = false
   await nodes.find(node => node.type === 'form').props.onSubmit({ preventDefault() { prevented = true } })

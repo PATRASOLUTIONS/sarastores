@@ -51,7 +51,7 @@ try {
   await page.route('**/api/diwali/otp/send', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ challenge }) }))
   assert.equal((await context.request.get(`${origin}/api/admin/diwali/registrations`)).status(), 401)
   await page.goto(`${origin}/diwali-gift`, { waitUntil: 'domcontentloaded', timeout: 180000 })
-  await page.getByRole('heading', { name: 'Register your gift' }).waitFor({ timeout: 120000 })
+  await page.getByRole('heading', { name: 'Register Your Diwali Gift' }).waitFor({ timeout: 120000 })
   // The storefront consent banner is outside the campaign; dismiss if presented.
   const essential = page.getByRole('button', { name: /essential only|reject optional|necessary only|reject all/i })
   if (await essential.count()) await essential.first().click()

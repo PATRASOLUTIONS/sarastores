@@ -31,6 +31,8 @@ import { idempotentCheckout } from "@/lib/checkout-idempotency"
 import { handleApiError } from "@/lib/api-error"
 import { DeclinedGiftPromotionsSchema, SelectedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
 import { quoteGiftPromotions, consumeGiftPromotions } from "@/lib/gift-promotions"
+import { prepareOnlineDiwaliOrder, recordOnlineDiwaliOrder } from "@/lib/diwali/online-orders"
+import type { OnlineGift } from "@/lib/diwali/online-rules"
 
 export const dynamic = "force-dynamic"
 
@@ -60,6 +62,7 @@ interface OrderListDocument {
   timeline?: unknown[]
   externalQueue?: unknown
   notes?: string
+  diwaliGift?: OnlineGift | null
 }
 
 function generateOrderNotes(orderData: Record<string, unknown>): string {
@@ -233,6 +236,7 @@ export async function GET(request: NextRequest) {
       ],
       externalQueue: order.externalQueue || null,
       notes: order.notes || null,
+      diwaliGift: order.diwaliGift || null,
       source: "direct",
       createdAt: order.createdAt || new Date().toISOString(),
       updatedAt: order.updatedAt || new Date().toISOString(),
@@ -296,6 +300,7 @@ export async function GET(request: NextRequest) {
           })),
           externalQueue: null,
           notes: po.notes || null,
+          diwaliGift: null,
           source: "partner",
           partnerId: po.partnerId,
           partnerName: partnerNameMap[po.partnerId] || po.partnerId || "Unknown",
@@ -726,6 +731,10 @@ async function createOrder(request: NextRequest) {
       updatedAt: new Date(),
     }
 
+    const diwaliGift = await prepareOnlineDiwaliOrder(newOrder)
+    const diwaliOrder = { ...newOrder, diwaliGift }
+    Object.assign(newOrder, { diwaliGift })
+
     const orderNotes = generateOrderNotes({
       items: validatedItems,
       customer: newOrder.customer,
@@ -739,6 +748,7 @@ async function createOrder(request: NextRequest) {
     })
 
     newOrder.notes = orderNotes
+    if (diwaliGift) newOrder.notes += `\nDIWALI GIFT: ${diwaliGift.label} | Eligible value Rs. ${diwaliGift.eligibleValue} | Auto registration; pending payment confirmation and SARA review\n`
     if (pricing.gifts.length) newOrder.notes += "\nFREE GIFTS:\n" + pricing.gifts.map(gift => `${gift.name} | SKU ${gift.sku} | Qty ${gift.quantity} | FREE (Rs. 0) | ${gift.code}`).join("\n")
 
     const hostedCheckout = hosted
@@ -768,6 +778,7 @@ async function createOrder(request: NextRequest) {
         !== checkoutFingerprint(pricing, { fulfilment: parsed.data.fulfilment, redeemPoints: parsed.data.redeemPoints }, payableTotal)) {
         throw new CheckoutConflictError("Prices or checkout charges changed. Please review checkout before retrying.")
       }
+      await recordOnlineDiwaliOrder(diwaliOrder, transaction)
       if (hosted) return
       try { await consumeGiftPromotions(pricing.gifts || [], orderId, userId, transaction) }
       catch (error) { throw new CheckoutConflictError(error instanceof Error ? error.message : "Free gift usage could not be recorded") }

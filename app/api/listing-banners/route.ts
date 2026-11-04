@@ -44,6 +44,7 @@ const BannerSchema = z.object({
   bullets: z.array(z.string().max(60)).max(6).optional().default([]),
   order: z.number().int().min(0).max(999).optional().default(0),
   active: z.boolean().optional().default(false),
+  expiresAt: z.string().datetime({ offset: true }).transform(value => new Date(value).toISOString()).nullable().optional().default(null),
 })
 
 export async function GET(request: NextRequest) {
@@ -58,7 +59,10 @@ export async function GET(request: NextRequest) {
 
     const filter: Record<string, unknown> = {}
     if (placement && (PLACEMENTS as readonly string[]).includes(placement)) filter.placement = placement
-    if (!includeInactive) filter.active = true
+    if (!includeInactive) {
+      filter.active = true
+      filter.$or = [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: new Date().toISOString() } }]
+    }
 
     const collection = await getCollection(COLLECTION)
     const docs = await collection.find(filter).sort({ order: 1, createdAt: 1 }).toArray()

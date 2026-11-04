@@ -12,6 +12,16 @@ Money currently accepts whole-rupee amounts only. Fractional values are rejected
 
 Approval uses the verified invoice value, eligible purchase date and manual cancellation/refund declarations. Approval day is excluded from the seven-working-day calculation; the deadline is the end of the seventh configured working day in Asia/Kolkata. Each approval retains its calendar snapshot and due date. Packing reserves confirmed stock; dispatch consumes the reservation; delivery requires a proof/reference.
 
+## Online checkout registration
+
+While both configured purchase and registration windows are open, the cart shows the campaign poster and the estimated Silver/Gold gift. Checkout applies eligibility automatically. The server uses the discounted order value including GST, after rewards and excluding delivery charges; existing whole-rupee slab rules apply. `/api/cart/validate` confirms this value before payment. The gift is separate from coupon discounts and catalogue free-gift promotions.
+
+Each eligible website order stores its `diwaliGift` snapshot and creates one pending claim in the same order transaction. The order supplies customer/contact details, its trusted delivery address or pickup-store address, and its invoice identity. Guest purchases are included; the mobile is not labelled OTP-verified and WhatsApp campaign consent defaults to false. In-store employee purchases use the existing separate registration workflow. Retries cannot create a second claim. Failed hosted payments remain visible as blocked/pending records.
+
+Admin registrations and reports include the `ONLINE` channel; details link to the order and show its current payment/order status. Value, date and invoice identity are locked to the order. Approval, packing and dispatch check confirmed payment, cancellation/refund/review status and unchanged order value. COD can qualify for approval after the order is delivered. Existing manual approval, stock reservation and gift-delivery workflow remain in place. Scoped staff need `ONLINE` in their permitted store master/assignment to access this channel; full admins see it automatically. The `ONLINE` invoice namespace is reserved for automatic orders and cannot be used for a manual claim.
+
+Focused checks: `node --test tests/diwali-online.test.mjs tests/diwali.test.mjs tests/cart-coupon.test.mjs`. These use synthetic fixtures and mocked provider/database boundaries.
+
 ## Environment and official messaging
 
 Configure secrets in the hosting environment, never in public code:

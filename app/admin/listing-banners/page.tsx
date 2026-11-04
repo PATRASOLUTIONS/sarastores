@@ -6,12 +6,12 @@ import { useSWRConfig } from "swr"
 import toast from "react-hot-toast"
 import { Loader2, Plus, Trash2, Upload } from "lucide-react"
 import { apiFetchJson } from "@/lib/api-client"
-import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, bannerIsPhotoOnly, siteBannerListResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
+import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, bannerIsPhotoOnly, siteBannerListResponseSchema, siteBannerResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
 import { imageUploadResponseSchema } from "@/lib/media-response"
-import { ListingHero, ListingPromoRow } from "@/components/products/ListingBanners"
-import LandingHero from "@/components/home/landing/LandingHero"
-import { HomepagePromotions } from "@/components/home/landing/HomepageSections"
-import homepageStyles from "@/components/home/landing/homepage.module.css"
+import BannerSectionPreview from "@/components/admin/BannerSectionPreview"
+import BannerPlacementMap from "@/components/admin/BannerPlacementMap"
+import { BANNER_LOCATIONS } from "@/lib/banner-placements"
+import { BANNER_UPDATE_KEY, bannerIsVisible, selectVisibleBanners, deadlineIndiaInput, deadlineFromIndiaInput } from "@/lib/banner-schedule"
 
 type Draft = Omit<SiteBanner, "id"> & { id?: string }
 
@@ -23,7 +23,7 @@ const BLANK: Draft = {
   script: "",
   ctaText: "",
   ctaLink: "/products",
-  image: "/homepage/hero-iphone.webp",
+  image: "",
   bgFrom: "#1560BD",
   bgTo: "#0B3C87",
   accent: "#E11D2E",
@@ -31,6 +31,7 @@ const BLANK: Draft = {
   bullets: [],
   order: 0,
   active: false,
+  expiresAt: null,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -67,9 +68,13 @@ export default function ListingBannersAdminPage() {
   const [uploading, setUploading] = useState(false)
   const [busyId, setBusyId] = useState<string>()
   const [placementFilter, setPlacementFilter] = useState("all")
+  const [dirty, setDirty] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const { mutate } = useSWRConfig()
-  const invalidate = () => mutate((key) => typeof key === "string" && key.startsWith("/api/listing-banners"))
+  const invalidate = async () => {
+    await mutate((key) => typeof key === "string" && key.startsWith("/api/listing-banners"))
+    try { window.localStorage.setItem(BANNER_UPDATE_KEY, String(Date.now())) } catch { /* Polling remains available if storage is disabled. */ }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -87,7 +92,9 @@ export default function ListingBannersAdminPage() {
     load()
   }, [])
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }))
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => { setDirty(true); setDraft((d) => ({ ...d, [key]: value })) }
+  const editBanner = (banner: SiteBanner) => { setDraft({ ...BLANK, ...banner }); setDirty(false); document.getElementById('banner-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  const addToPlacement = (placement: BannerPlacement) => { setDraft({ ...BLANK, placement }); setDirty(false); document.getElementById('banner-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 
   const handleUpload = async (file: File) => {
     setUploading(true)
@@ -108,17 +115,21 @@ export default function ListingBannersAdminPage() {
 
   const save = async () => {
     if (!draft.title.trim() && !(draft.image || "").trim()) return toast.error("Add a title or upload a photo")
+    if (draft.expiresAt !== null && draft.expiresAt !== undefined && !Number.isFinite(Date.parse(draft.expiresAt))) return toast.error("Set a valid deadline or select Never")
     setSaving(true)
     try {
       const { id, ...payload } = draft
+      let savedId = id
       if (id) {
         await apiFetchJson(`/api/listing-banners?id=${id}`, { method: "PUT", json: payload })
         toast.success("Banner updated")
       } else {
-        await apiFetchJson("/api/listing-banners", { method: "POST", json: payload })
+        const created = await apiFetchJson("/api/listing-banners", { method: "POST", json: payload }, siteBannerResponseSchema.parse)
+        savedId = created.id
         toast.success("Banner created")
       }
-      setDraft(BLANK)
+      setDraft({ ...payload, id: savedId })
+      setDirty(false)
       await invalidate()
       await load()
     } catch (err) {
@@ -145,6 +156,7 @@ export default function ListingBannersAdminPage() {
   }
 
   const toggle = async (banner: SiteBanner) => {
+    if (!banner.active && banner.expiresAt && !bannerIsVisible({ ...banner, active: true })) return toast.error("This poster expired. Edit its deadline or choose Never before turning it on.")
     setBusyId(banner.id)
     try {
       const active = !banner.active
@@ -161,31 +173,13 @@ export default function ListingBannersAdminPage() {
   }
 
   const preview: SiteBanner = { ...draft, id: draft.id || "preview" }
+  const mappedBanners = dirty && (preview.title || preview.image) ? [...banners.filter(banner => banner.id !== preview.id), preview] : banners
+  const location = BANNER_LOCATIONS[draft.placement]
 
   const renderPreview = () => {
-    switch (draft.placement) {
-      case "hero":
-        return <ListingHero banner={preview} />
-      case "promo":
-        return <ListingPromoRow banners={[preview]} />
-      case "home-hero":
-        return <div className={homepageStyles.homepage}><LandingHero previewBanners={[preview]} /></div>
-      case "home-strip":
-        return <div className={homepageStyles.homepage}><HomepagePromotions banners={[preview]} /></div>
-      case "home-duo":
-        return <div className={homepageStyles.homepage}><LandingHero previewBanners={[]} sideBanners={[preview]} /></div>
-      case "home-card":
-        return <div className={homepageStyles.homepage}><HomepagePromotions banners={[preview]} /></div>
-      case "home-statement":
-        return <div className={homepageStyles.homepage}><HomepagePromotions banners={[preview]} /></div>
-      case "cart-promo":
-      case "brands-hero":
-      case "pdp-offer":
-      case "pdp-rail":
-        return <ListingHero banner={preview} />
-      default:
-        return null
-    }
+    const homeSide = selectVisibleBanners(banners.filter(banner => banner.placement === 'home-duo' && banner.id !== preview.id))
+    const candidates = draft.placement === 'home-duo' ? [preview, ...homeSide].slice(0, 2) : [preview]
+    return <BannerSectionPreview placement={draft.placement} banners={candidates} scope={draft.scope} homeSide={homeSide} homeHero={selectVisibleBanners(banners.filter(banner => banner.placement === 'home-hero'))} />
   }
 
   return (
@@ -193,8 +187,7 @@ export default function ListingBannersAdminPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Banners &amp; Promos</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Campaign banners on home, listing, product, brand and cart pages. Upload artwork and edit copy, links, colours, visibility and order here. Leave “Scope” blank to show a
-          banner everywhere, or type a category name (e.g. <code>TV</code>) to target one listing.
+          Manage posters by their actual page and section. Choose a deadline or Never, upload artwork, and save changes to publish. Audience targeting is available for listing divisions and product brands; leave it blank for the default audience of that placement.
         </p>
         <p className="mt-2 text-sm text-gray-600">New posters start off. Turn on the ones you want to show. Main posters rotate; the first two enabled sub banners and first three enabled below-deals banners appear by order. The first enabled Cart promotional banner appears by order; turning all Cart banners off hides its promotional area. A banner with a photo and no title, subtitle, note, bullets or button fills the full width.</p>
         <ul className="mt-3 grid gap-1 text-sm text-gray-700 sm:grid-cols-2">
@@ -205,7 +198,7 @@ export default function ListingBannersAdminPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div id="banner-editor" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-5">
           <h2 className="mb-4 text-base font-bold text-gray-900">{draft.id ? "Edit banner" : "New banner"}</h2>
 
           <div className="space-y-4">
@@ -213,7 +206,7 @@ export default function ListingBannersAdminPage() {
               <Field label="Placement">
                 <select
                   value={draft.placement}
-                  onChange={(e) => set("placement", e.target.value as BannerPlacement)}
+                  onChange={(e) => { const placement = e.target.value as BannerPlacement; set("placement", placement); if (!BANNER_LOCATIONS[placement].scope) set("scope", "") }}
                   className={inputClass}
                 >
                   {BANNER_PLACEMENTS.map((placement) => (
@@ -223,10 +216,11 @@ export default function ListingBannersAdminPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Scope (optional)">
-                <input value={draft.scope} onChange={(e) => set("scope", e.target.value)} className={inputClass} placeholder="All listings" />
+              <Field label={location.scope || "Audience"}>
+                <input value={draft.scope} onChange={(e) => set("scope", e.target.value)} className={inputClass} placeholder={location.scope ? 'All audiences' : 'All visitors'} disabled={!location.scope && !draft.scope} />
               </Field>
             </div>
+            <div className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900"><p className="font-semibold">{location.page} · {location.section}</p><p className="mt-1 text-xs leading-5">{location.note}</p>{!location.scope && draft.scope && <p className="mt-2 font-semibold">Clear Audience to display this poster on this page.</p>}</div>
 
             <Field label="Title">
               <input value={draft.title} onChange={(e) => set("title", e.target.value)} className={inputClass} />
@@ -309,6 +303,12 @@ export default function ListingBannersAdminPage() {
               ))}
             </div>
 
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <Field label="Hide poster after"><select className={inputClass} value={draft.expiresAt === null || draft.expiresAt === undefined ? 'never' : 'deadline'} onChange={event => set('expiresAt', event.target.value === 'never' ? null : '')}><option value="never">Never</option><option value="deadline">Set a deadline</option></select></Field>
+              {draft.expiresAt !== null && draft.expiresAt !== undefined && <div className="mt-3"><Field label="Deadline — India Standard Time (IST)"><input type="datetime-local" className={inputClass} value={deadlineIndiaInput(draft.expiresAt)} onChange={event => { try { set('expiresAt', event.target.value ? deadlineFromIndiaInput(event.target.value) : '') } catch (error) { toast.error(error instanceof Error ? error.message : 'Invalid deadline') } }} /></Field></div>}
+              <p className="mt-2 text-xs text-gray-600">The poster hides automatically at this date and time on every page where it appears. Never means no expiry; the On/Off switch still controls visibility.</p>
+              {draft.expiresAt && Date.parse(draft.expiresAt) <= Date.now() && <p className="mt-2 text-xs font-semibold text-red-700">This deadline has passed. The poster will stay hidden until you change it or select Never.</p>}
+            </div>
             <div className="flex flex-wrap items-center gap-5">
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={!!draft.dark} onChange={(e) => set("dark", e.target.checked)} className="h-4 w-4" />
@@ -316,7 +316,7 @@ export default function ListingBannersAdminPage() {
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={draft.active !== false} onChange={(e) => set("active", e.target.checked)} className="h-4 w-4" />
-                On — visible on storefront
+                On — eligible before the deadline
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 Order
@@ -342,7 +342,7 @@ export default function ListingBannersAdminPage() {
               {draft.id && (
                 <button
                   type="button"
-                  onClick={() => setDraft(BLANK)}
+                  onClick={() => { setDraft(BLANK); setDirty(false) }}
                   className="h-11 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
@@ -354,12 +354,13 @@ export default function ListingBannersAdminPage() {
 
         <div className="space-y-6">
           <div>
-            <h2 className="mb-3 text-base font-bold text-gray-900">Live preview</h2>
+            <h2 className="mb-2 text-base font-bold text-gray-900">{location.page} — {location.section}</h2>
+            <p className="mb-3 text-xs text-gray-500">{dirty ? 'Unsaved artwork preview — Save to publish.' : 'Artwork preview.'} This uses the storefront section’s own component. Visibility and slot selection are shown in the placement map.</p>
             {bannerIsPhotoOnly(preview) || preview.title.trim() || preview.image ? renderPreview() : <p className="text-sm text-gray-500">Add a title or a photo to preview this banner.</p>}
           </div>
 
           <div>
-            <h2 className="mb-3 text-base font-bold text-gray-900">All banners</h2>
+            <h2 className="mb-3 text-base font-bold text-gray-900">Inspect page and section</h2>
             <label className="mb-3 block text-sm text-gray-600">
               Filter placement
               <select value={placementFilter} onChange={(event) => setPlacementFilter(event.target.value)} className={`${inputClass} mt-1`}>
@@ -368,6 +369,8 @@ export default function ListingBannersAdminPage() {
                 {BANNER_PLACEMENTS.map((placement) => <option key={placement} value={placement}>{BANNER_PLACEMENT_LABELS[placement]}</option>)}
               </select>
             </label>
+            {!loading && <BannerPlacementMap banners={mappedBanners} draftId={dirty ? preview.id : undefined} filter={placementFilter} edit={editBanner} add={addToPlacement} />}
+            <h2 className="mb-3 mt-6 text-base font-bold text-gray-900">Manage saved posters</h2>
             {loading ? (
               <p className="text-sm text-gray-500">Loading…</p>
             ) : banners.length === 0 ? (
@@ -383,11 +386,12 @@ export default function ListingBannersAdminPage() {
                       {banner.image && <SiteImage unoptimized src={banner.image} alt="" className="h-full w-full object-contain" />}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-gray-900">{banner.title}</p>
+                      <p className="truncate text-sm font-semibold text-gray-900">{banner.title || 'Photo-only poster'}</p>
                       <p className="truncate text-xs text-gray-500">
-                        {banner.placement} · {banner.scope ? `scope: ${banner.scope}` : "all listings"} ·{" "}
-                        {banner.active === false ? "inactive" : "active"}
+                        {BANNER_PLACEMENT_LABELS[banner.placement]} · {banner.scope || "all audiences"} ·{" "}
+                        {!banner.active ? 'Off' : bannerIsVisible(banner) ? 'Eligible' : 'Expired — hidden'}
                       </p>
+                      <p className="text-xs text-gray-500">{banner.expiresAt ? `Deadline: ${new Date(banner.expiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST` : 'Deadline: Never'}</p>
                     </div>
                     <button
                       type="button"
@@ -402,7 +406,7 @@ export default function ListingBannersAdminPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDraft({ ...BLANK, ...banner })}
+                      onClick={() => editBanner(banner)}
                       className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                     >
                       Edit

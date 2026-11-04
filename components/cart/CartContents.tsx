@@ -1,6 +1,5 @@
 "use client"
 
-import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -9,6 +8,7 @@ import { toast } from "react-hot-toast"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import CartProductImage from "@/components/CartProductImage"
+import CartPromotion from "@/components/cart/CartPromotion"
 import { useCart } from "@/hooks/useCart"
 import { useWishlist } from "@/hooks/useWishlist"
 import { useSettingsData } from "@/hooks/useSettingsData"
@@ -18,7 +18,7 @@ import styles from "@/app/cart/cart.module.css"
 import { cartLimitError } from "@/lib/cart-limits"
 import { cartLineKey } from "@/lib/cart-line"
 import { purchaseStock, MAX_PURCHASE_QUANTITY } from "@/lib/purchase-validation"
-import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
+import { useBanners } from "@/hooks/useBanners"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import CartGifts from "@/components/cart/CartGifts"
@@ -28,6 +28,7 @@ import { useCartGifts } from "@/hooks/useCartGifts"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartCoupon } from "@/hooks/useCartCoupon"
 import CartCoupon from "@/components/cart/CartCoupon"
+import CartDiwaliGift from "@/components/diwali/CartDiwaliGift"
 
 type Product = {
   id: string
@@ -319,6 +320,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
           </section>
           <aside className={styles.summaryColumn}>
             <CartCoupon coupon={coupon} />
+            {!embedded && <CartDiwaliGift total={Math.max(0, totals.gross - coupon.couponDiscount)} />}
             <section className={styles.summary} aria-labelledby="price-details">
               <h2 id="price-details">Price Details</h2>
               <SaraCareNotice />
@@ -356,13 +358,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
                 <strong>{money(product.price)}</strong><button type="button" disabled={adding.includes(product.id)} onClick={() => void addSuggestion(product)}>{adding.includes(product.id) ? "Adding..." : "Add to Cart"}</button>
               </li>)}</ul> : <p>No additional recommendations are available right now. <Link href="/products">Browse products</Link></p>}
           </div>
-          {promotion && (bannerIsPhotoOnly(promotion) ? <aside className={styles.shopCard}>
-            {promotion.ctaLink ? <Link href={promotion.ctaLink}><SiteImage src={promotion.image} alt="" className="block h-auto w-full" /></Link> : <SiteImage src={promotion.image} alt="" className="block h-auto w-full" />}
-          </aside> : <aside className={styles.shopCard} style={{ ...bannerGradient(promotion), color: promotion.dark ? "#071331" : "#fff" }}>
-            {promotion.image && <CartProductImage src={promotion.image} name={promotion.title} />}
-            <h3>{promotion.title}</h3>{promotion.subtitle && <p>{promotion.subtitle}</p>}
-            {promotion.ctaText && promotion.ctaLink && <Link href={promotion.ctaLink}>{promotion.ctaText} <ArrowRight size={13} /></Link>}
-          </aside>)}
+          {promotion && <CartPromotion banner={promotion} />}
         </section>}
       </>}
       {!embedded && marketing.enabled("services") && <section className={styles.benefits} aria-label="Why shop at SARA"><ul>{marketing.items("services", BENEFITS).map(({ icon: Icon, title, detail, href }) => <li key={title}><Link href={href}>

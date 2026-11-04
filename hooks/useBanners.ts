@@ -2,6 +2,8 @@
 
 import useSWR from "swr"
 import { z } from "zod"
+import { useEffect, useState } from "react"
+import { BANNER_UPDATE_KEY, selectVisibleBanners } from "@/lib/banner-schedule"
 
 export const BANNER_PLACEMENTS = [
   "hero",
@@ -23,11 +25,11 @@ export const BANNER_PLACEMENT_LABELS: Record<BannerPlacement, string> = {
   hero: "Listing page — hero",
   promo: "Listing page — promo tile",
   "home-hero": "Home — main poster carousel",
-  "home-strip": "Home — full-width strip",
+  "home-strip": "Home — below-deals row (strip artwork)",
   "home-duo": "Home — side / sub banners",
   "home-card": "Home — below-deals banners",
-  "home-statement": "Home — closing statement band",
-  "pdp-offer": "Product page — offer card",
+  "home-statement": "Home — below-deals row (statement artwork)",
+  "pdp-offer": "Product page — offer cards above detail tabs",
   "pdp-rail": "Product page — side rail card",
   "brands-hero": "Brands page — hero",
   "cart-promo": "Cart — promotional banner",
@@ -51,6 +53,7 @@ export const siteBannerResponseSchema = z.object({
   bullets: z.array(z.string()).optional(),
   order: z.number().optional(),
   active: z.boolean().optional(),
+  expiresAt: z.string().datetime({ offset: true }).nullish(),
 })
 export type SiteBanner = z.infer<typeof siteBannerResponseSchema>
 export const siteBannerListResponseSchema = z.array(siteBannerResponseSchema)
@@ -67,16 +70,30 @@ const fetcher = async (url: string): Promise<SiteBanner[]> => {
  * the caller's context (e.g. the active category on a listing page).
  */
 export function useBanners(placement: BannerPlacement, scope?: string): SiteBanner[] {
-  const { data } = useSWR<SiteBanner[]>(`/api/listing-banners?placement=${placement}`, fetcher, {
-    revalidateOnFocus: false,
+  const { data, mutate } = useSWR<SiteBanner[]>(`/api/listing-banners?placement=${placement}`, fetcher, {
+    revalidateOnFocus: true,
     refreshInterval: 30000,
     onError: (error: unknown) => console.error("[Banners] Loading failed:", error),
   })
 
-  const all = Array.isArray(data) ? data.filter((banner) => banner.active === true) : []
-  const key = (scope || "").trim().toLowerCase()
-  const scoped = key ? all.filter((b) => (b.scope || "").trim().toLowerCase() === key) : []
-  return scoped.length > 0 ? scoped : all.filter((b) => !(b.scope || "").trim())
+  const now = useBannerClock(data || [])
+  useEffect(() => {
+    const refresh = (event: StorageEvent) => { if (event.key === BANNER_UPDATE_KEY) void mutate() }
+    window.addEventListener('storage', refresh)
+    return () => window.removeEventListener('storage', refresh)
+  }, [mutate])
+  return selectVisibleBanners(Array.isArray(data) ? data : [], scope, now)
+}
+
+export function useBannerClock(data: SiteBanner[]) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const deadlines = (data || []).filter(banner => banner.active).map(banner => Date.parse(banner.expiresAt || '')).filter(time => time > now)
+    if (!deadlines.length) return
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(Math.max(1, Math.min(...deadlines) - Date.now() + 1), 2_147_483_000))
+    return () => window.clearTimeout(timer)
+  }, [data, now])
+  return Math.max(now, Date.now())
 }
 
 export function bannerIsPhotoOnly(banner: Pick<SiteBanner, "title" | "subtitle" | "script" | "ctaText" | "bullets" | "image">) {

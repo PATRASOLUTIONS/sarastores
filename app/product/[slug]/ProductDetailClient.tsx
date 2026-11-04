@@ -12,7 +12,7 @@ import ProductLoading from "@/components/product/ProductLoading"
 import ProductSaraCare, { useProductSaraCare } from "@/components/product/ProductSaraCare"
 import type { SaraCareYears } from "@/lib/sara-care-types"
 import ProductSpecificationTabs from "@/components/ProductSpecificationTabs"
-import { RailCards, Stars } from "@/components/product/PdpBlocks"
+import { OfferCards, RailCards, Stars } from "@/components/product/PdpBlocks"
 import ProductReviewsSection from "@/components/ProductReviewsSection"
 import RazorpayOffers from "@/components/product/RazorpayOffers"
 import { useRazorpayOffers } from "@/hooks/useRazorpayOffers"
@@ -406,6 +406,7 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
     return () => controller.abort()
   }, [suggestionId, suggestionCategory, suggestionsAttempt])
 
+  const offerCards = useBanners("pdp-offer", catalogueBrand(product) || undefined)
   const configuredRailCards = useBanners("pdp-rail", catalogueBrand(product) || undefined)
   const railCards = marketing.enabled("rail") ? configuredRailCards : []
 
@@ -860,6 +861,7 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
           <RazorpayOffers offers={liveOffers} loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} mode="rail" onSelect={id => { setTab(id); document.getElementById("product-details-tabs")?.scrollIntoView({ behavior: "smooth" }) }} />
 
           {/* ── Tabs ─────────────────────────────────────────────── */}
+          <OfferCards offers={offerCards} />
           <div id="product-details-tabs" className="min-w-0 scroll-mt-4 bg-white">
             <div className="flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Product details">
               {TABS.filter(item => (item.id !== "faqs" || marketing.enabled("faqs")) && (item.id !== "sara-care" || !!productCare.offer)).map(({ id, label }) => (
