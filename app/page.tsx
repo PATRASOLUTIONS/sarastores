@@ -1,7 +1,27 @@
 import SaraLanding from "@/components/home/SaraLanding"
 import { getPublicPageProducts } from "@/lib/public-page-data"
+import { buildHomepageMetadata, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
+import { getHomepageBannerImage } from "@/lib/homepage-banner"
 
 export const dynamic = "force-dynamic"
+
+export async function generateMetadata() {
+  const timers: ReturnType<typeof setTimeout>[] = []
+  const bounded = <T,>(work: Promise<T>) => Promise.race([
+    work,
+    new Promise<null>(resolve => { timers.push(setTimeout(() => resolve(null), 1500)) }),
+  ])
+  try {
+    const origin = await getOriginFromHeaders()
+    const [settings, image] = await Promise.all([
+      bounded(getSiteSettings()),
+      bounded(getHomepageBannerImage(origin)),
+    ])
+    return buildHomepageMetadata(settings, origin, image)
+  } finally {
+    timers.forEach(clearTimeout)
+  }
+}
 
 /*
  * The grand-opening curtain is retired.
