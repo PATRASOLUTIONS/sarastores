@@ -13,6 +13,7 @@ import { validateCampaignStaff, readStoreReferral, resolveStoreLink } from './st
 import { staffCanAccessPage } from '@/lib/admin-access'
 import { assertDiwaliCustomerAllowed } from './blocklist'
 import { assertNewDiwaliRegistration, reserveDiwaliRegistrationIdentity, DUPLICATE_REGISTRATION_MESSAGE } from './registration-identity'
+import { queueRegistrationEmails } from './registration-notifications'
 
 export const COLLECTIONS = { config: 'diwali_config', claims: 'diwali_claims', audit: 'diwali_audit', otp: 'diwali_otp', sessions: 'diwali_sessions', messages: 'diwali_messages', stock: 'diwali_stock', receipts: 'diwali_message_receipts' } as const
 export type StringRecord = Document & { _id: string; resends?: Array<{ actor: string; note: string; confirmedNotSent: boolean; at: Date }> }
@@ -42,6 +43,7 @@ export function initializeDiwali() {
     await (await getCollection<StringRecord>(COLLECTIONS.messages)).createIndexes([{ key: { eventKey: 1 }, unique: true }, { key: { providerId: 1 }, sparse: true, unique: true }, { key: { status: 1, nextAt: 1 } }])
     for (const name of [COLLECTIONS.otp, COLLECTIONS.sessions, COLLECTIONS.receipts]) await (await getCollection(name)).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     await (await getCollection(COLLECTIONS.audit)).createIndex({ claimId: 1, at: -1 })
+    await (await getCollection('diwali_registration_emails')).createIndexes([{ key: { status: 1, createdAt: 1 } }, { key: { reference: 1, status: 1 } }])
   })().catch(error => { initialized = undefined; throw error })
   return initialized
 }
@@ -162,6 +164,7 @@ export async function register(token: string | undefined, input: z.infer<typeof 
       await reserveDiwaliRegistrationIdentity(claim._id, verified.mobile, input.email, session)
       await collection.insertOne(claim, { session })
       await audit(session, `customer:${hash(verified.mobile)}`, 'register', claim._id)
+      await queueRegistrationEmails(claim, session)
       return claim
     })
     return customerClaim(registered)

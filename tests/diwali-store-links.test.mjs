@@ -143,6 +143,7 @@ test('submitted registrations retain only signed store attribution and remain id
         if (name === 'diwali_config') return { _id: '2026', ...config }
         if (name === 'diwali_sessions') return { mobile: '9000000099', verifiedAt: new Date() }
         if (name === 'diwali_blocklist') return null
+        if (name === 'diwali_notification_settings') return null
         if (name === 'diwali_claims') return claims.find(claim => filter.$or ? filter.$or.some(match => match.mobile === claim.mobile || match.email && new RegExp(match.email.$regex, match.email.$options).test(claim.email)) : claim.requestKey === filter.requestKey) || null
         if (name === 'store_locations') return { _id: 'one', shopName: 'QR branch', storeCode: 'ONE', isActive: true }
         throw new Error(`Unexpected lookup: ${name}`)

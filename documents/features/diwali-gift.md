@@ -72,6 +72,12 @@ The operator requested no build or lint run. TypeScript checking and focused reg
 
 Optional registration/rejection/delivered templates, live POS integration, automated refund monitoring and courier booking/webhooks are not connected. Dispatch and proof-of-delivery are entered manually. Legal notices and gift procurement facts must be supplied by SARA, not inferred from the demonstration.
 
+## Employee registration emails
+
+Full administrators can open **Email notifications** from `/admin/diwali` and configure `/admin/diwali/notifications`. Enable alerts with up to 10 employee email addresses. SMTP uses the existing `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` and optional `SMTP_SECURE` settings. Configuration checks validate local settings without contacting the provider; actual mail-server acceptance is recorded per recipient.
+
+Only new successful public form registrations queue employee alerts. Each email includes the reference, customer name/contact, entered invoice value, invoice/store and a link to the authenticated claim review. The queue writes in the claim transaction, and `next/server` `after()` processes mail after the HTTP response. Duplicate/idempotent requests create no extra mail. Failed or uncertain SMTP outcomes never undo a saved registration and are not automatically resent. A **Send pending emails** button processes queued messages in batches of 10; disabling notifications or removing recipients prevents sending queued alerts to those employees. Employee recipients need existing campaign dashboard access to open the link. Settings and queue data are kept out of public campaign responses.
+
 ## Store posters and registration celebration
 
 Store QR previews, PNG downloads and bulk printing use the supplied Deepavali celebration artwork with each store's tracked QR and store name in its white centre. The public registration success screen shows a one-time gold/silver coin animation and bilingual congratulations, retaining the pending invoice-verification wording and reference. Reduced-motion preferences disable the falling coins. An isolated browser fixture can be checked with `node --test scripts/diwali-celebration-smoke.mjs` (installed Chrome required); it uses synthetic data and never calls the application, database or messaging provider.

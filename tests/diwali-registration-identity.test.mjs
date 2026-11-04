@@ -3,7 +3,7 @@ import test from 'node:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { sourceLoader } from './source-loader.mjs'
 
-function fixture() {
+function fixture(notificationSettings = null, failQueue = false) {
   let rows = [], reservations = new Map(), queue = Promise.resolve()
   const sent = [], writes = [], tokens = new Map()
   const defaults = sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG
@@ -23,16 +23,18 @@ function fixture() {
       async findOne(query) {
         if (name === 'diwali_config') return { _id: '2026', ...config }
         if (name === 'diwali_sessions') return tokens.get(query._id) || null
+        if (name === 'diwali_notification_settings') return notificationSettings
         if (name !== 'diwali_claims') return null
         return rows.find(row => query.$or ? query.$or.some(match => match.mobile ? row.mobile === match.mobile : new RegExp(match.email.$regex, match.email.$options).test(row.email || '')) : row.requestKey === query.requestKey && row.mobile === query.mobile) || null
       },
       async insertOne(row, options) {
+        if (name === 'diwali_registration_emails' && failQueue) throw new Error('Synthetic email queue failure')
         if (name === 'diwali_registration_identities') {
           if (reservations.has(row._id)) throw Object.assign(new Error('Duplicate identity'), { code: 11000, keyValue: { _id: row._id } })
           reservations.set(row._id, row)
         }
         if (name === 'diwali_claims') rows.push(row)
-        writes.push({ name, options })
+        writes.push({ name, row, options })
       }, async updateOne() {}, async deleteOne() {},
     }) },
     '@/lib/whatsapp-template': { sendWhatsAppTemplate: async () => { sent.push(true); return { success: true } } },
@@ -93,4 +95,22 @@ test('unique identity reservations reject racing writes even before a claim is v
   const results = await Promise.allSettled([reserveDiwaliRegistrationIdentity('first', '9876543210', undefined, {}), reserveDiwaliRegistrationIdentity('second', '+91 9876543210', undefined, {})])
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
   assert.equal(results.find(result => result.status === 'rejected').reason.code, 11000)
+})
+
+test('one email per selected employee is queued atomically and request retries add no extra email', async () => {
+  const f = fixture({ enabled: true, recipients: ['first@example.com', 'second@example.com'] })
+  const token = f.token('9876543210'), input = f.input()
+  await f.service.register(token, input)
+  await f.service.register(token, input)
+  const emails = f.writes.filter(write => write.name === 'diwali_registration_emails')
+  assert.equal(emails.length, 2)
+  assert.deepEqual(emails.map(write => write.row.recipient), ['first@example.com', 'second@example.com'])
+  assert.ok(emails.every(write => write.options.session && write.row.status === 'queued'))
+})
+
+test('a queue persistence failure rolls back the claim and identities so the same form can be retried', async () => {
+  const f = fixture({ enabled: true, recipients: ['first@example.com'] }, true)
+  await assert.rejects(f.service.register(f.token('9876543210'), f.input()), /email queue failure/)
+  assert.equal(f.rows().length, 0)
+  assert.equal(f.writes.length, 0)
 })
