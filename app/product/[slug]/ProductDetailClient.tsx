@@ -1,5 +1,8 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
+import { optimizedImageUrl } from "@/lib/image-sources.mjs"
+
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
@@ -158,8 +161,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
                 active === i ? "border-[#1560BD] ring-1 ring-[#1560BD]" : "border-gray-200"
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt="" aria-hidden className="h-full w-full object-contain" />
+              <SiteImage sizes="58px" src={src} alt="" aria-hidden className="h-full w-full object-contain" />
             </button>
           ))}
         </div>
@@ -177,10 +179,11 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
               })
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <SiteImage
               src={list[active]}
               alt={name}
+              sizes="(min-width: 1024px) 560px, (min-width: 640px) 50vw, 100vw"
+              loading="eager"
               className="h-full w-full object-contain"
               onError={(e) => {
                 e.currentTarget.src = "/placeholder.svg"
@@ -193,7 +196,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
               aria-hidden="true"
               className="pointer-events-none absolute left-[calc(100%+12px)] top-0 z-50 hidden aspect-square w-[min(52vw,720px)] border border-gray-300 bg-white bg-no-repeat shadow-xl lg:block"
               style={{
-                backgroundImage: `url(${JSON.stringify(list[active])})`,
+                backgroundImage: `url(${JSON.stringify(optimizedImageUrl(list[active]))})`,
                 backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`,
                 backgroundSize: "220%",
               }}
@@ -234,8 +237,7 @@ function Gallery({ images, name }: { images: string[]; name: string }) {
               active === i ? "border-[#1560BD]" : "border-gray-200"
             }`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" aria-hidden className="h-full w-full object-contain" />
+            <SiteImage sizes="48px" src={src} alt="" aria-hidden className="h-full w-full object-contain" />
           </button>
         ))}
       </div>
@@ -460,8 +462,7 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
     >
       <Link href={`/product/${c.slug || c.id}`}>
         <span className="flex h-16 items-center justify-center overflow-hidden rounded bg-gray-50">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={c.image} alt={cleanProductName(c.name)} className="h-full w-full object-contain p-1" loading="lazy" />
+          <SiteImage sizes="96px" src={c.image} alt={cleanProductName(c.name)} className="h-full w-full object-contain p-1" loading="lazy" />
         </span>
         <p className="mt-1.5 line-clamp-2 text-[11px] leading-tight text-gray-700">
           {cleanProductName(c.name)}

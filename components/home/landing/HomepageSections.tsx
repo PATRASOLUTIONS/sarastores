@@ -135,7 +135,7 @@ export function HomepageBrandPedestals({ brands }: { brands: HomeBrand[] }) {
           <Link key={name} href={href} className={styles.pedestalItem}>
             <span className={styles.pedestalStage}>
               {logo ? (
-                <img src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, "/placeholder.svg")} />
+                <SiteImage src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, "/placeholder.svg")} />
               ) : (
                 <strong>{name.slice(0, 1)}</strong>
               )}
@@ -159,8 +159,7 @@ export function HomepageCategories({ categories }: { categories: HomeCategory[] 
         {categories.map(({ label, image, href, count, fallbackImage }) => (
           <Link key={label} href={href} className={styles.circleItem}>
             <span className={styles.categoryCircle}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, fallbackImage)} />
+              <SiteImage sizes="80px" src={image} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, fallbackImage)} />
             </span>
             <span>{label}</span>
             {count ? <small className={styles.circleCount}>{count} {count === 1 ? "product" : "products"}</small> : null}
@@ -209,8 +208,7 @@ export function HomeProductCard({ product, warrantyLabel = "Brand warranty inclu
     <article className={styles.productCard}>
       <Link href={`/product/${product.slug || product.id}`} className={styles.productImage} aria-label={name}>
         {discount > 0 && <span className={styles.discount}>{discount}% OFF</span>}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={product.image} alt={name} loading="lazy" onError={(event) => {
+        <SiteImage sizes="(min-width: 1280px) 240px, (min-width: 768px) 33vw, 50vw" src={product.image} alt={name} loading="lazy" onError={(event) => {
           event.currentTarget.onerror = null
           event.currentTarget.src = "/placeholder.svg"
         }} />

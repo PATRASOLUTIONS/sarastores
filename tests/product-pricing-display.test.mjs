@@ -3,10 +3,20 @@ import test from "node:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { sourceLoader } from "./source-loader.mjs"
+import { createRequire } from 'node:module'
+import config from '../next.config.mjs'
+
+const require = createRequire(import.meta.url)
+const { getImgProps } = require('next/dist/shared/lib/get-img-props.js')
+const { imageConfigDefault } = require('next/dist/shared/lib/image-config.js')
+const defaultLoader = require('next/dist/shared/lib/image-loader.js').default
+const optimizedImage = props => createElement('img', getImgProps(props, {
+  defaultLoader, imgConf: { ...imageConfigDefault, ...config.images },
+}).props)
 
 const product = { id: "fixture", name: "Synthetic TV", price: 23456, mrp: 34567, stock: 5, active: true, image: "/fixture.png" }
 const link = ({ children, ...props }) => createElement("a", props, children)
-function cardLoader() {
+function cardLoader(overrides = {}) {
   return sourceLoader({
     "next/link": link,
     "next/navigation": { useRouter: () => ({ push() {} }) },
@@ -18,6 +28,24 @@ function cardLoader() {
     "@/hooks/useMarketingContent": { useMarketingContent: () => ({ text: () => "Fixture", enabled: () => false }) },
     "@/hooks/useBrandImages": { useBrandImages: () => ({}) },
     "./homepage.module.css": {},
+    ...overrides,
+  })
+}
+
+for (const kind of ['category', 'listing grid', 'listing list', 'home', 'cart']) {
+  test(`${kind} product photos are served through the website optimizer`, () => {
+    const loader = cardLoader({ 'next/image': { __esModule: true, default: optimizedImage } })
+    const photo = 'https://rukmini1.flixcart.com/image/1500/1500/xif0q/mobile/product.jpeg'
+    const Component = kind === 'category' ? loader.load('components/CategoryProductCard.tsx').default
+      : kind === 'home' ? loader.load('components/home/landing/HomepageSections.tsx').HomeProductCard
+      : kind === 'cart' ? loader.load('components/CartProductImage.tsx').default
+      : loader.load('components/products/ProductListingCard.tsx').default
+    const html = renderToStaticMarkup(createElement(Component, {
+      product: { ...product, image: photo }, src: photo, name: product.name,
+      layout: kind === 'listing list' ? 'list' : 'grid',
+    }))
+    assert.match(html, /src="\/_next\/image\?url=https%3A%2F%2Frukmini1\.flixcart\.com/)
+    assert.match(html, /srcSet=/)
   })
 }
 for (const kind of ["category", "listing grid", "listing list", "home"]) {
@@ -54,6 +82,7 @@ for (const stock of [0, 5]) {
         useEffect() {}, useMemo: callback => callback(), useCallback: callback => callback,
       },
       "next/link": link,
+      'next/image': { __esModule: true, default: optimizedImage },
       "next/navigation": { useRouter: () => ({ push() {} }), useParams: () => ({ slug: "fixture" }) },
       "@/components/Header": () => null, "@/components/Footer": () => null,
       "@/components/ProductSpecificationTabs": () => null, "@/components/ProductReviewsSection": () => null,
@@ -71,6 +100,8 @@ for (const stock of [0, 5]) {
     })
     const tree = loader.load("app/product/[slug]/ProductDetailClient.tsx").default({ initialProduct: { ...product, stock } })
     const html = renderToStaticMarkup(tree)
+    assert.match(html, /src="\/_next\/image\?url=%2Ffixture\.png/)
+    assert.match(html, /loading="eager"/)
     if (stock) {
       assert.match(html, /<span class="font-heading text-2xl[^\"]*">₹23,456<\/span>/, "Main price must be visible")
       assert.match(html, /<p class="text-sm font-bold text-gray-900">₹23,456<\/p>/, "Mobile-bar price must be visible")
