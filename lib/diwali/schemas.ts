@@ -21,11 +21,19 @@ export const ConfigSchema = z.object({
   stores: z.array(z.object({ code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(150) }).strict()).max(300),
   staff: z.array(z.object({ userId: z.string().min(1).max(100), role: Role, export: z.boolean(), stores: z.array(z.string().max(40)).max(300) }).strict()).max(200),
 }).strict().superRefine((config, ctx) => {
-  if (config.campaignStart > config.campaignEnd || config.registrationStart > config.registrationEnd) ctx.addIssue({ code: 'custom', message: 'Start date must precede closing date' })
-  if (new Set(config.stores.map(store => store.code)).size !== config.stores.length) ctx.addIssue({ code: 'custom', message: 'Store codes must be unique' })
-  if (new Set(config.staff.map(staff => staff.userId)).size !== config.staff.length) ctx.addIssue({ code: 'custom', message: 'Staff assignments must be unique' })
-  if (config.staff.some(staff => staff.stores.some(code => !config.stores.some(store => store.code === code)))) ctx.addIssue({ code: 'custom', message: 'Staff store restrictions must use the store master' })
-  if (config.enabled && (!config.rulesConfirmed || !config.calendarConfirmed || !config.stores.length || !config.termsEn.trim() || !config.termsKn.trim() || !config.privacyEn.trim() || !config.privacyKn.trim())) ctx.addIssue({ code: 'custom', message: 'Confirm rules/calendar and supply stores and bilingual legal copy before opening registration' })
+  if (config.campaignStart > config.campaignEnd) ctx.addIssue({ code: 'custom', path: ['campaignEnd'], message: 'Campaign end must be on or after campaign start.' })
+  if (config.registrationStart > config.registrationEnd) ctx.addIssue({ code: 'custom', path: ['registrationEnd'], message: 'Registration end must be on or after registration start.' })
+  if (new Set(config.stores.map(store => store.code)).size !== config.stores.length) ctx.addIssue({ code: 'custom', path: ['stores'], message: 'Store codes must be unique.' })
+  if (new Set(config.staff.map(staff => staff.userId)).size !== config.staff.length) ctx.addIssue({ code: 'custom', path: ['staff'], message: 'Staff assignments must be unique.' })
+  if (config.staff.some(staff => staff.stores.some(code => !config.stores.some(store => store.code === code)))) ctx.addIssue({ code: 'custom', path: ['staff'], message: 'Staff store restrictions must use the store master.' })
+  if (config.enabled) {
+    if (!config.rulesConfirmed) ctx.addIssue({ code: 'custom', path: ['rulesConfirmed'], message: 'Confirm finance approval of the eligibility rules before opening registration.' })
+    if (!config.calendarConfirmed) ctx.addIssue({ code: 'custom', path: ['calendarConfirmed'], message: 'Confirm operations approval of the calendar before opening registration.' })
+    if (!config.stores.length) ctx.addIssue({ code: 'custom', path: ['stores'], message: 'Add at least one store with its code and name before opening registration.' })
+    for (const [key, label] of [['termsEn', 'English campaign terms'], ['termsKn', 'Kannada campaign terms'], ['privacyEn', 'English privacy notice'], ['privacyKn', 'Kannada privacy notice']] as const) {
+      if (!config[key].trim()) ctx.addIssue({ code: 'custom', path: [key], message: `Enter the approved ${label} before opening registration.` })
+    }
+  }
 })
 export type CampaignConfig = z.infer<typeof ConfigSchema>
 export const DEFAULT_CONFIG: CampaignConfig = {

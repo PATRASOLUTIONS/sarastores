@@ -72,11 +72,11 @@ async function audit(session: ClientSession | undefined, actor: string, action: 
 }
 export async function saveConfig(user: User, config: CampaignConfig) {
   authorize(user, await getConfig(), 'settings')
-  if (config.enabled && (!process.env.DIWALI_OTP_TEMPLATE || process.env.DIWALI_MESSAGING_ENABLED !== 'true' || !process.env.ASKEVA_API_KEY || !process.env.ASKEVA_API_URL || !process.env.DIWALI_APPROVED_TEMPLATE_EN || !process.env.DIWALI_APPROVED_TEMPLATE_KN || !process.env.DIWALI_DISPATCH_TEMPLATE_EN || !process.env.DIWALI_DISPATCH_TEMPLATE_KN)) throw new DiwaliError('Configure OTP and bilingual approval/dispatch messaging before opening registration')
+  if (config.enabled && (!process.env.DIWALI_OTP_TEMPLATE || process.env.DIWALI_MESSAGING_ENABLED !== 'true' || !process.env.ASKEVA_API_KEY || !process.env.ASKEVA_API_URL || !process.env.DIWALI_APPROVED_TEMPLATE_EN || !process.env.DIWALI_APPROVED_TEMPLATE_KN || !process.env.DIWALI_DISPATCH_TEMPLATE_EN || !process.env.DIWALI_DISPATCH_TEMPLATE_KN)) throw new DiwaliError('Configure OTP and bilingual approval/dispatch messaging before opening registration', 400, 'enabled')
   await transaction(async session => {
     const collection = await getCollection<StringRecord>(COLLECTIONS.config)
     const before = await collection.findOne({ _id: '2026' } as Filter<StringRecord>, { session })
-    if (before && await (await getCollection(COLLECTIONS.claims)).countDocuments({}, { session }) && (before.campaignStart !== config.campaignStart || before.campaignEnd !== config.campaignEnd)) throw new DiwaliError('Purchase dates are locked after the first registration')
+    if (before && await (await getCollection(COLLECTIONS.claims)).countDocuments({}, { session }) && (before.campaignStart !== config.campaignStart || before.campaignEnd !== config.campaignEnd)) throw new DiwaliError('Purchase dates are locked after the first registration', 400, before.campaignStart !== config.campaignStart ? 'campaignStart' : 'campaignEnd')
     await collection.updateOne({ _id: '2026' } as Filter<StringRecord>, { $set: { ...config, updatedAt: new Date() } }, { upsert: true, session })
     await audit(session, user.id, 'settings', 'campaign', { before, after: config })
   })

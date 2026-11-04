@@ -5,10 +5,10 @@ import { createHash } from 'node:crypto'
 import type { z } from 'zod'
 
 export class DiwaliError extends Error {
-  constructor(message: string, public status = 400) { super(message) }
+  constructor(message: string, public status = 400, public field?: string) { super(message) }
 }
 export function errorResponse(error: unknown) {
-  if (error instanceof DiwaliError) return NextResponse.json({ error: error.message }, { status: error.status })
+  if (error instanceof DiwaliError) return NextResponse.json({ error: error.message, ...(error.field ? { field: error.field } : {}) }, { status: error.status })
   if (error && typeof error === 'object' && 'code' in error && error.code === 11000) return json({ error: 'This invoice already has a claim. No second gift can be allocated.' }, 409)
   return handleApiError(error, 'The gift service is temporarily unavailable. Please try again.')
 }
@@ -24,7 +24,7 @@ export async function body<T extends z.ZodTypeAny>(request: Request, schema: T):
   let value: unknown
   try { value = JSON.parse(text) } catch { throw new DiwaliError('Invalid JSON') }
   const parsed = schema.safeParse(value)
-  if (!parsed.success) throw new DiwaliError(parsed.error.issues[0]?.message || 'Invalid input')
+  if (!parsed.success) throw new DiwaliError(parsed.error.issues[0]?.message || 'Invalid input', 400, parsed.error.issues[0]?.path[0]?.toString())
   return parsed.data
 }
 export async function limit(request: Request, purpose: string, identity = '', maximum = 10) {
