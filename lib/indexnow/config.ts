@@ -22,5 +22,5 @@ export function indexNowConfig() {
     ...(!production ? ['Submissions are disabled in development and preview deployments.'] : []),
   ]
   return { key, keyValid, origin: originValid ? origin : undefined, enabled, ready: !problems.length, problems,
-    keyUrl: originValid ? `${origin}${INDEXNOW_KEY_PATH}` : null }
+    keyUrl: originValid && keyValid ? `${origin}/${key}.txt` : null }
 }

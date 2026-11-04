@@ -17,7 +17,7 @@ export default function SaraCareOptions({ item, disabled = false, variant = "com
   const selected = parent?.saraCareSelection === null ? null : parent?.saraCareSelection ?? care?.saraCare?.durationYears ?? offer?.defaultYears ?? null
   const lastYears = useRef<SaraCareYears | null>(null)
   useEffect(() => { if (selected !== null) lastYears.current = selected }, [selected])
-  if (!parent || !offer || (!isSaraCare(item) && care)) return null
+  if (!parent || !offer) return null
   const locked = disabled || isLoading || saraCareLoading
   const remembered = offer.options.some(option => option.years === lastYears.current) ? lastYears.current : offer.defaultYears
   return <section aria-label={`Sara Care for ${parent.name}`} className={`w-full max-w-md rounded-lg border border-gray-200 bg-gray-50 text-gray-900 ${selected === null ? "p-2" : "p-3"} ${variant === "checkout" ? "my-2" : "mt-2"}`}>

@@ -1,11 +1,16 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { parseEnv } from 'node:util'
 
-const target = resolve('.env.indexnow.local')
-if (existsSync(target)) {
-  console.log('Existing .env.indexnow.local preserved. Copy its IndexNow variables into Vercel Production settings.')
-} else {
-  writeFileSync(target, `# Generated IndexNow setup. This file is ignored by Git and is not loaded automatically.\n# Copy these two variables into Vercel Production environment variables, then deploy.\nINDEXNOW_KEY=${randomBytes(32).toString('hex')}\nINDEXNOW_ENABLED=true\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
-  console.log('Created .env.indexnow.local with a generated verification key. No provider contacted or database changed.')
+const target = resolve('.env.local')
+const existing = existsSync(target) ? readFileSync(target, 'utf8') : ''
+const values = parseEnv(existing)
+const additions = []
+if (!values.INDEXNOW_KEY?.trim()) {
+  if ('INDEXNOW_KEY' in values) throw new Error('INDEXNOW_KEY is empty in .env.local. Set it there before running setup again.')
+  additions.push(`INDEXNOW_KEY=${randomBytes(32).toString('hex')}`)
 }
+if (!('INDEXNOW_ENABLED' in values)) additions.push('INDEXNOW_ENABLED=true')
+if (additions.length) writeFileSync(target, existing + (existing && !existing.endsWith('\n') ? '\n' : '') + '\n# IndexNow production setup: copy these variables to Vercel Production.\n' + additions.join('\n') + '\n', { encoding: 'utf8', mode: 0o600 })
+console.log('IndexNow settings are in .env.local. Existing values and .env were preserved. No additional environment file or provider call was made.')

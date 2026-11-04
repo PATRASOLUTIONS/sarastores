@@ -5,14 +5,19 @@ import ResponsiveBannerImage from "@/components/ResponsiveBannerImage"
 import { ArrowRight, Check, Star } from "lucide-react"
 import { bannerGradient, bannerIsPhotoOnly, type SiteBanner } from "@/hooks/useBanners"
 
-/** Bank / accessory / EMI offer cards under the hero — all admin managed. */
+const HIDDEN_SERVICE_OFFER_TITLES = new Set(['up to 24 months', 'free installation & demo', 'collect from a sara store'])
+
+/** Admin offer cards under the hero; omit the retired generic service strip. */
 export function OfferCards({ offers }: { offers: SiteBanner[] }) {
-  if (offers.length === 0) return null
+  const visibleOffers = offers.filter(offer => offer.image || !HIDDEN_SERVICE_OFFER_TITLES.has(offer.title.trim().toLowerCase())).slice(0, 5)
+  if (visibleOffers.length === 0) return null
+  const textCount = visibleOffers.filter(offer => !bannerIsPhotoOnly(offer)).length
+  const columns = ['lg:grid-cols-1', 'lg:grid-cols-1', 'lg:grid-cols-2', 'lg:grid-cols-3', 'lg:grid-cols-4', 'lg:grid-cols-5'][textCount]
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Offers on this product">
-      {offers.slice(0, 5).map((offer) => bannerIsPhotoOnly(offer) ? (
-        <article key={offer.id} className="overflow-hidden rounded-lg sm:col-span-2 lg:col-span-5">
+    <section className={`grid gap-3 ${textCount > 1 ? 'sm:grid-cols-2' : ''} ${columns}`} aria-label="Offers on this product">
+      {visibleOffers.map((offer) => bannerIsPhotoOnly(offer) ? (
+        <article key={offer.id} className="col-span-full overflow-hidden rounded-lg">
           {offer.ctaLink ? <Link href={offer.ctaLink}><ResponsiveBannerImage src={offer.image} alt={offer.title || "Product offer"} sizes="(min-width: 1280px) 1216px, 100vw" className="block h-auto w-full" /></Link> : <ResponsiveBannerImage src={offer.image} alt={offer.title || "Product offer"} sizes="(min-width: 1280px) 1216px, 100vw" className="block h-auto w-full" />}
         </article>
       ) : (

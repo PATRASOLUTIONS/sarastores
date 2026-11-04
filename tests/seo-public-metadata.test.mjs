@@ -10,6 +10,73 @@ const seo = { buildPageMetadata, getOriginFromHeaders: async () => origin,
   getSiteSettings: async () => ({}), getCompanyName: () => "Sara" }
 const missing = () => { throw new Error("NOT_FOUND") }
 
+test("homepage metadata remains complete without database settings and uses the generated preview fallback", () => {
+  const build = sourceLoader().load("lib/seo-metadata.ts").buildHomepageMetadata
+  for (const settings of [null, { metaTitle: '   ', metaDescription: '<p> </p>', storeDescription: ' ' }]) {
+    const metadata = build(settings, origin)
+    assert.equal(metadata.title, 'SARA Electronics | Mobiles & Home Appliances')
+    assert.ok(metadata.description.includes('Karnataka'))
+    assert.equal(metadata.openGraph.title, metadata.title)
+    assert.equal(metadata.openGraph.description, metadata.description)
+    assert.equal(metadata.alternates.canonical, `${origin}/`)
+    const preview = new URL(metadata.twitter.images[0])
+    assert.equal(preview.origin, origin)
+    assert.equal(preview.pathname, '/og')
+    assert.equal(preview.searchParams.get('title'), metadata.title)
+    assert.equal(metadata.openGraph.images[0].url, metadata.twitter.images[0])
+    assert.equal(metadata.openGraph.images[0].width, 1200)
+  }
+  const custom = build({ metaTitle: 'SARA &amp; Electronics', metaDescription: '<p>Shop our catalogue.</p>' }, origin)
+  assert.equal(custom.title, 'SARA & Electronics')
+  assert.equal(custom.description, 'Shop our catalogue.')
+})
+
+test("homepage exports server metadata independently of catalogue loading", async () => {
+  const metadata = sourceLoader().load("lib/seo-metadata.ts")
+  const page = sourceLoader({
+    '@/components/home/SaraLanding': () => null,
+    '@/lib/public-page-data': { getPublicPageProducts: () => { throw new Error('Metadata must not load catalogue') } },
+    '@/lib/homepage-banner': { getHomepageBannerImage: async () => `${origin}/active-home-banner.jpg` },
+    '@/lib/seo-metadata': { ...metadata, getOriginFromHeaders: async () => origin, getSiteSettings: async () => null },
+  }).load('app/page.tsx')
+  const result = await page.generateMetadata()
+  assert.ok(result.title)
+  assert.ok(result.description)
+  assert.equal(result.openGraph.images[0].url, `${origin}/active-home-banner.jpg`)
+  assert.equal(result.twitter.images[0], `${origin}/active-home-banner.jpg`)
+  assert.equal(result.openGraph.images[0].width, undefined, 'Do not invent dimensions for uploaded banners')
+})
+
+test('homepage share artwork follows active carousel order and schedules, and reflects banner edits', async () => {
+  const weekday = new Date(Date.now() + 330 * 60_000).getUTCDay()
+  let heroEnabled = true
+  const banners = [
+    { active: false, image: '/off.jpg', order: 0 },
+    { active: true, image: '/expired.jpg', order: 0, expiresAt: '2000-01-01T00:00:00Z' },
+    { active: true, image: '/future.jpg', order: 0, startsAt: '2099-01-01T00:00:00Z' },
+    { active: true, image: '/other-day.jpg', order: 0, weekdays: [(weekday + 1) % 7] },
+    { active: true, image: '/scoped.jpg', order: 0, scope: 'mobiles' },
+    { active: true, image: 'data:image/png;base64,invalid', order: 0 },
+    { active: true, image: '/second.jpg', order: 2 },
+    { active: true, image: '/first.jpg', order: 1 },
+  ]
+  const reader = sourceLoader({ '@/lib/db-service': { getCollection: async name => name === 'listing_banners' ? {
+    find(query) {
+      assert.equal(query.placement, 'home-hero')
+      assert.equal(query.active, true)
+      return { sort(order) { assert.equal(order.createdAt, 1); return this }, toArray: async () => banners }
+    },
+  } : { findOne: async () => ({ enabled: heroEnabled }) } } }).load('lib/homepage-banner.ts').getHomepageBannerImage
+  assert.equal(await reader(origin), `${origin}/first.jpg`)
+  banners[7].image = '/replacement.jpg'
+  assert.equal(await reader(origin), `${origin}/replacement.jpg`)
+  heroEnabled = false
+  assert.equal(await reader(origin), null)
+  heroEnabled = true
+  banners.forEach(banner => { banner.active = false })
+  assert.equal(await reader(origin), null)
+})
+
 test("indexable async catalogue routes do not stream their primary content behind loading shells", () => {
   const root = path.resolve(import.meta.dirname, "..")
   for (const route of ["product/[slug]", "products", "category/[id]", "brands/[slug]", "software", "lg", "offers", "store-locator"]) {

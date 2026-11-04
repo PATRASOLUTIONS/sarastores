@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sourceLoader } from './source-loader.mjs'
 import { checkDeploymentEnvironment } from '../scripts/check-deployment-env.mjs'
+import nextConfig from '../next.config.mjs'
+import { createRequire } from 'node:module'
 
 const origin = 'https://www.sara.test'
 const key = 'synthetic-indexnow-verification-key'
@@ -36,10 +38,10 @@ function harness() {
   }, { env, fetch: async (url, options) => {
     fetches.push({ url, options })
     assert.equal(options.redirect, 'error')
-    if (url === `${origin}/indexnow-key.txt`) return new Response(keyBody, { status: keyStatus })
+    if (url === `${origin}/${key}.txt`) return new Response(keyBody, { status: keyStatus })
     assert.equal(url, 'https://api.indexnow.org/indexnow')
     const body = JSON.parse(options.body)
-    assert.equal(body.key, key); assert.equal(body.host, 'www.sara.test'); assert.equal(body.keyLocation, `${origin}/indexnow-key.txt`)
+    assert.equal(body.key, key); assert.equal(body.host, 'www.sara.test'); assert.equal(body.keyLocation, `${origin}/${key}.txt`)
     assert.ok(body.urlList.length <= 1000)
     assert.ok(body.urlList.every(url => url.startsWith(origin + '/')))
     assert.deepEqual(Object.keys(body).sort(), ['host', 'key', 'keyLocation', 'urlList'])
@@ -55,7 +57,7 @@ test('IndexNow requires explicit production opt-in, a valid public origin and pr
   }
   const config = sourceLoader({}, { env: { ...env, NEXT_PUBLIC_SITE_URL: 'https://sarastores.com' } }).load('lib/indexnow/config.ts').indexNowConfig()
   assert.equal(config.ready, true)
-  assert.equal(config.keyUrl, 'https://www.sarastores.com/indexnow-key.txt')
+  assert.equal(config.keyUrl, `https://www.sarastores.com/${key}.txt`)
 })
 
 test('deployment preflight validates enabled IndexNow without requiring disabled installations', () => {
@@ -76,6 +78,24 @@ test('public verification file serves exactly the configured key without a login
   assert.equal(sourceLoader({}, { env: { INDEXNOW_KEY: 'bad/key' } }).load('app/indexnow-key.txt/route.ts').GET().status, 404)
 })
 
+test('key-named verification URL rewrites correctly and only the configured filename serves the key', async () => {
+  const route = sourceLoader({}, { env }).load('app/indexnow-key/[key]/route.ts')
+  const response = await route.GET(new Request(`${origin}/${key}.txt`), { params: Promise.resolve({ key }) })
+  assert.equal(response.status, 200)
+  assert.equal(await response.text(), key)
+  assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8')
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  const wrong = await route.GET(new Request(`${origin}/wrong-key.txt`), { params: Promise.resolve({ key: 'wrong-key' }) })
+  assert.equal(wrong.status, 404)
+  assert.doesNotMatch(await wrong.text(), new RegExp(key))
+  const rewrite = (await nextConfig.rewrites()).find(row => row.destination === '/indexnow-key/:indexNowKey')
+  assert.ok(rewrite)
+  const { pathToRegexp } = createRequire(import.meta.url)('next/dist/compiled/path-to-regexp')
+  const match = pathToRegexp(rewrite.source).exec(`/${key}.txt`)
+  assert.equal(match[1], key)
+  assert.equal(pathToRegexp(rewrite.source).test('/robots.txt'), false)
+})
+
 test('only clean public sitemap routes are eligible; accounts, checkout, tokens and external URLs stay private', () => {
   const { publicIndexNowUrl } = harness().service
   for (const path of ['/admin/indexnow', '/api/orders', '/checkout', '/cart', '/order/secret', '/account', '/diwali-gift/store/secret', '/lucky-draw/secret/draw', '/product/item?token=secret', '/product/item#private', '/products?q=search', '/product/%0aheader']) assert.equal(publicIndexNowUrl(origin + path, origin), null)
@@ -88,7 +108,7 @@ test('initial sync verifies the deployed key; unchanged pages do not resubmit; u
   const h = harness()
   let result = await h.service.runIndexNow()
   assert.equal(result.accepted, 1); assert.equal(result.remaining, 0)
-  assert.equal(h.fetches[0].url, `${origin}/indexnow-key.txt`)
+  assert.equal(h.fetches[0].url, `${origin}/${key}.txt`)
   result = await h.service.runIndexNow()
   assert.equal(result.attempted, 0); assert.equal(h.fetches.length, 2)
   h.setEntries([{ url: `${origin}/product/synthetic`, lastModified: '2026-11-05' }])

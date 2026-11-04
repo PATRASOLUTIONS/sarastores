@@ -81,6 +81,20 @@ export function shareImageUrl({ title, description, companyName, origin }: {
   return url.href
 }
 
+/** Use the visible homepage artwork, with the generated preview when no banner is eligible. */
+export function buildHomepageMetadata(settings: {
+  metaTitle?: string; metaDescription?: string; storeDescription?: string;
+  storeName?: string; companyName?: string; siteName?: string;
+} | null, origin: string, bannerImage?: string | null): Metadata {
+  const title = seoText(settings?.metaTitle || '') || 'SARA Electronics | Mobiles & Home Appliances'
+  const description = seoText(settings?.metaDescription || '') || seoText(settings?.storeDescription || '') ||
+    'Shop smartphones, TVs, refrigerators and home appliances at SARA Electronics. Explore easy EMI, online shopping and store pickup across Karnataka.'
+  const resolvedImage = absoluteSeoImage(bannerImage, origin)
+  const image = resolvedImage && !/\.svg(?:[?#]|$)/i.test(resolvedImage) ? resolvedImage : undefined
+  return buildPageMetadata({ title, description, origin, pageUrl: `${origin}/`,
+    companyName: seoText(getCompanyName(settings)) || 'Sara Electronics', imageUrl: image })
+}
+
 /**
  * Creates standardized page metadata with OG & Twitter tags.
  */
