@@ -97,10 +97,14 @@ export async function sendOtp(mobile: string, language: 'en' | 'kn', purpose: 'r
   await initializeDiwali()
   if (purpose === 'register') registrationOpen(await getConfig())
   if (process.env.DIWALI_MESSAGING_ENABLED !== 'true' || !process.env.DIWALI_OTP_TEMPLATE) throw new DiwaliError('Mobile verification is not configured', 503)
+  // A shared authentication template may be approved in only one language.
+  // This override affects OTPs, not the customer's approval/dispatch language.
+  const otpLanguage = process.env.DIWALI_OTP_LANGUAGE?.trim() || language
+  if (otpLanguage !== 'en' && otpLanguage !== 'kn') throw new DiwaliError('Mobile verification language is not configured', 503)
   const challenge = randomUUID(), otp = String(randomInt(100000, 1000000))
   const collection = await getCollection<StringRecord>(COLLECTIONS.otp)
   await collection.insertOne({ _id: challenge, mobile, otpHash: otpHash(challenge, otp), attempts: 0, ready: false, expiresAt: new Date(Date.now() + 5 * 60_000) } as StringRecord)
-  const result = await sendWhatsAppTemplate(mobile, { name: process.env.DIWALI_OTP_TEMPLATE, language: { code: language, policy: 'deterministic' }, components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }, { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }] }, undefined, 'Diwali OTP')
+  const result = await sendWhatsAppTemplate(mobile, { name: process.env.DIWALI_OTP_TEMPLATE.trim(), language: { code: otpLanguage, policy: 'deterministic' }, components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }, { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }] }, undefined, 'Diwali OTP')
   if (!result.success) { await collection.deleteOne({ _id: challenge } as Filter<StringRecord>); throw new DiwaliError('Could not send verification code. Please try again.', 503) }
   await collection.updateOne({ _id: challenge } as Filter<StringRecord>, { $set: { ready: true } })
   return challenge
