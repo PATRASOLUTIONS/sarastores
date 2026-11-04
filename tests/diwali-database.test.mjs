@@ -4,14 +4,14 @@ import { randomUUID } from 'node:crypto'
 import { MongoClient } from 'mongodb'
 import { sourceLoader } from './source-loader.mjs'
 
-// This suite is opt-in. It never loads .env.local or uses the commerce database.
-test('Diwali transactional integration on an isolated synthetic MongoDB database', { skip: !process.env.DIWALI_TEST_DATABASE, timeout: 120000 }, async t => {
+// Opt-in integration uses only DIWALI_TEST_MONGODB_URI and a fresh synthetic database.
+test('Diwali transactional integration on an isolated synthetic MongoDB database', { skip: !process.env.DIWALI_TEST_DATABASE || !process.env.DIWALI_TEST_MONGODB_URI, timeout: 120000 }, async t => {
   const prefix = process.env.DIWALI_TEST_DATABASE
   assert.match(prefix, /^sara_diwali_isolated_test_[a-zA-Z0-9_]+$/)
-  assert.ok(process.env.MONGODB_URI, 'Supply MONGODB_URI only through the ignored test environment')
+  assert.ok(process.env.DIWALI_TEST_MONGODB_URI, 'Supply a dedicated isolated test-cluster URI through DIWALI_TEST_MONGODB_URI')
   // This Atlas tier limits database names to 38 bytes.
   const databaseName = `${prefix}_${randomUUID().replaceAll('-', '').slice(0, 6)}`
-  const client = new MongoClient(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000, maxPoolSize: 4 })
+  const client = new MongoClient(process.env.DIWALI_TEST_MONGODB_URI, { serverSelectionTimeoutMS: 10000, maxPoolSize: 4 })
   try { await client.connect() } catch { await client.close(); throw new Error('Isolated test cluster connection failed; check network and Atlas access') }
   const db = client.db(databaseName)
   const normalizeId = document => { const { _id, id, ...rest } = document; return { ...rest, id: String(_id) } }

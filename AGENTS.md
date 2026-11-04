@@ -82,7 +82,9 @@ Quick summary:
 
 `MONGODB_URI` is validated at module load in [lib/mongodb.ts](lib/mongodb.ts) — it throws without it, so `.env.local` must exist before any build. `SESSION_SECRET` (or `NEXTAUTH_SECRET`) must be ≥16 chars.
 
-**`.env.example` is unusable as-is:** every line is commented out, it declares `SMTP_PASSWORD` while code reads `SMTP_PASS`, and ~27 variables the code reads are missing from it. Check actual `process.env` usage before assuming a variable name.
+**Owner environment-file policy (2026-11-04): keep only `.env` and `.env.local` at the project root. Never modify `.env`; put local settings and newly required variables in `.env.local`. Do not create extra `.env.*` files, templates or environment backups. Keep configuration reference material in `documents/integrations/production-environment.md`. Isolated Diwali QA uses dedicated `DIWALI_TEST_MONGODB_URI` and `DIWALI_TEST_DATABASE` variables in `.env.local`, never the app database URI. Report missing variable names without printing values.**
+
+The owner subsequently restored `.env.production.local` as a **names-only production inventory** and requested missing names appended below it. Preserve that inventory without adding credential assignments; it is the explicit exception to the two-file policy. Runtime additions still go only into `.env.local`, and `.env` stays untouched.
 
 Three overlapping URL variables exist — `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_APP_URL`, `NEXTAUTH_URL` — with three different fallbacks. Keep them in sync.
 

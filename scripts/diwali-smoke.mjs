@@ -11,8 +11,9 @@ import { sourceLoader } from '../tests/source-loader.mjs'
 // and an isolated dev server. No production build or real WhatsApp sends.
 assert.match(process.env.DIWALI_TEST_DATABASE || '', /^sara_diwali_isolated_test_[a-zA-Z0-9_]+$/)
 assert.ok(process.env.SESSION_SECRET)
+assert.ok(process.env.DIWALI_TEST_MONGODB_URI, 'Configure the dedicated isolated test-cluster URI, not the app MONGODB_URI')
 const databaseName = `sara_diwali_browser_${randomUUID().replaceAll('-', '').slice(0, 10)}`
-const client = new MongoClient(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
+const client = new MongoClient(process.env.DIWALI_TEST_MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
 const port = Number(process.env.DIWALI_SMOKE_PORT || 3011), origin = `http://localhost:${port}`
 const root = process.cwd(), artifacts = path.join(root, 'documents/private-artifacts/diwali')
 let server, browser
@@ -29,7 +30,7 @@ try {
   await db.collection('users').insertOne({ _id: new ObjectId(adminId), name: 'Synthetic QA administrator', email: 'diwali-qa@example.invalid', role: 'admin', status: 'active', sessionVersion: 0 })
   const sessionToken = await loader.load('lib/session.ts').createSessionToken({ id: adminId, email: 'diwali-qa@example.invalid', name: 'Synthetic QA administrator', role: 'admin', sessionVersion: 0 })
   await fs.mkdir(artifacts, { recursive: true })
-  server = spawn(process.execPath, [path.join(root, 'node_modules/next/dist/bin/next'), 'dev', '-p', String(port)], { cwd: root, windowsHide: true, env: { ...process.env, MONGODB_DB: databaseName, DB_NAME: databaseName, NEXT_DIST_DIR: '.next-diwali-test', SESSION_SECRET: process.env.SESSION_SECRET, DIWALI_MESSAGING_ENABLED: 'false', WHATSAPP_CAMPAIGNS_ENABLED: 'false', ASKEVA_API_KEY: '', ASKEVA_API_URL: '', NEXT_PUBLIC_SITE_URL: origin, NEXT_PUBLIC_APP_URL: origin, NEXTAUTH_URL: origin, RATE_LIMIT_BACKEND: 'mongodb', NODE_ENV: 'development' }, stdio: ['ignore', 'pipe', 'pipe'] })
+  server = spawn(process.execPath, [path.join(root, 'node_modules/next/dist/bin/next'), 'dev', '-p', String(port)], { cwd: root, windowsHide: true, env: { ...process.env, MONGODB_URI: process.env.DIWALI_TEST_MONGODB_URI, MONGODB_DB: databaseName, DB_NAME: databaseName, NEXT_DIST_DIR: '.next-diwali-test', SESSION_SECRET: process.env.SESSION_SECRET, DIWALI_MESSAGING_ENABLED: 'false', WHATSAPP_CAMPAIGNS_ENABLED: 'false', ASKEVA_API_KEY: '', ASKEVA_API_URL: '', NEXT_PUBLIC_SITE_URL: origin, NEXT_PUBLIC_APP_URL: origin, NEXTAUTH_URL: origin, RATE_LIMIT_BACKEND: 'mongodb', NODE_ENV: 'development' }, stdio: ['ignore', 'pipe', 'pipe'] })
   server.stdout.on('data', chunk => serverLog.push(String(chunk)))
   server.stderr.on('data', chunk => serverLog.push(String(chunk)))
   let ready = false

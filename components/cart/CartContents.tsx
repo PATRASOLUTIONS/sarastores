@@ -23,7 +23,7 @@ import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingStatus } from "@/components/marketing/MarketingSections"
 import CartGifts from "@/components/cart/CartGifts"
 import SaraCareOptions, { SaraCareNotice } from "@/components/cart/SaraCareOptions"
-import { isSaraCare, formatSaraCarePrice } from "@/lib/sara-care-types"
+import { isSaraCare } from "@/lib/sara-care-types"
 import { useCartGifts } from "@/hooks/useCartGifts"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCartCoupon } from "@/hooks/useCartCoupon"
@@ -59,6 +59,7 @@ const isProduct = (value: unknown): value is Product => {
 export default function CartContents({ embedded = false }: { embedded?: boolean }) {
   const marketing = useMarketingContent("cart")
   const { cart, addToCart, updateQuantity, refreshItemPrices, removeFromCart, isLoading, isHydrating, saraCareError } = useCart()
+  const productLines = cart.filter(item => !isSaraCare(item))
   const { user, isLoading: authLoading } = useAuth()
   const coupon = useCartCoupon(cart, user?.id || "guest", { method: "delivery" }, !authLoading && !isLoading)
   const { addToWishlist, isInWishlist } = useWishlist()
@@ -82,13 +83,13 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
   const idsKey = JSON.stringify([...new Set(cart.filter((item) => item.type !== "software" && !isSaraCare(item)).map((item) => item.id))].sort())
 
   useEffect(() => {
-    const ids = cart.map(cartLineKey)
+    const ids = cart.filter(item => !isSaraCare(item)).map(cartLineKey)
     const added = ids.filter((id) => !knownIds.current.has(id))
     knownIds.current = new Set(ids)
     setSelectedIds((previous) => [...previous.filter((id) => ids.includes(id)), ...added])
   }, [cart])
 
-  const allSelected = cart.length > 0 && selectedIds.length === cart.length
+  const allSelected = productLines.length > 0 && selectedIds.length === productLines.length
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = selectedIds.length > 0 && !allSelected
   }, [allSelected, selectedIds.length, isLoading])
@@ -239,7 +240,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
     <ContentTag className={styles.container}>
       <MarketingStatus page="cart" />
       <header className={styles.pageHeading}>
-        <div><h1>{embedded ? "My Cart" : "Your Cart"} ({cart.length} {cart.length === 1 ? "item" : "items"})</h1>
+        <div><h1>{embedded ? "My Cart" : "Your Cart"} ({productLines.length} {productLines.length === 1 ? "item" : "items"})</h1>
           {marketing.enabled("intro") && <p>{marketing.text("intro", "description")}</p>}</div>
         <ol className={styles.steps} aria-label="Checkout progress">{STEPS.map((step, index) => <li key={step} aria-current={index === 0 ? "step" : undefined}>
           <span>{index === 0 ? "•" : index + 1}</span><strong>{step}</strong>
@@ -253,24 +254,15 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
         <div className={styles.cartLayout}>
           <section className={styles.items} aria-label="Cart items">
             <div className={styles.bulkActions}>
-              <label><input ref={selectAll} type="checkbox" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : cart.map(cartLineKey))} />
-                Select All ({cart.length} items)</label>
+              <label><input ref={selectAll} type="checkbox" checked={allSelected} onChange={() => setSelectedIds(allSelected ? [] : productLines.map(cartLineKey))} />
+                Select All ({productLines.length} items)</label>
               <button type="button" disabled={selectedIds.length === 0} onClick={() => {
                 selectedIds.forEach((id) => removeFromCart(id)); toast.success("Selected items removed")
               }}><Trash2 size={15} /> Remove</button>
               <span className="sr-only">Selection applies to bulk removal. Checkout includes every cart item.</span>
             </div>
-            <ul>{cart.map((item) => {
+            <ul>{productLines.map((item) => {
               const lineKey = cartLineKey(item)
-              if (item.saraCare) return <li key={lineKey} className={styles.careItem}>
-                <div className={styles.careItemHeader}>
-                  <input type="checkbox" checked={selectedIds.includes(lineKey)} aria-label={`Select Sara Care for ${item.saraCare.parentName}`} onChange={() => setSelectedIds(previous => previous.includes(lineKey) ? previous.filter(id => id !== lineKey) : [...previous, lineKey])} />
-                  <span className={styles.careIcon} aria-hidden="true"><ShieldCheck size={23} strokeWidth={1.6} /></span>
-                  <div className={styles.careItemCopy}><h2>Sara Care</h2><p>For {cleanProductName(item.saraCare.parentName)}</p></div>
-                  <strong className={styles.carePrice}>{formatSaraCarePrice(item.price * item.quantity)}</strong>
-                </div>
-                <div className={styles.careItemControls}><SaraCareOptions item={item} /></div>
-              </li>
               const otherQuantity = cart.filter(line => line.id === item.id && cartLineKey(line) !== lineKey)
                 .reduce((sum, line) => sum + line.quantity, 0)
               const product = products[item.id]
@@ -328,7 +320,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
               {(detailsError || (!settingsLoading && !totals.validShipping)) && <p role="alert" className={styles.error}>{detailsError || "Shipping charges are temporarily unavailable. Please refresh to try again."}</p>}
               {detailsError && <button type="button" className={styles.textButton} onClick={() => setAttempt((value) => value + 1)}>Retry product details</button>}
               <dl>
-                <div><dt>Total MRP ({cart.length} items)</dt><dd>{money(totals.mrp)}</dd></div>
+                <div><dt>Total MRP ({productLines.length} items)</dt><dd>{money(totals.mrp)}</dd></div>
                 <div className={styles.discount}><dt>Discount</dt><dd>− {money(totals.savings)}</dd></div>
                 <div className={styles.discount}><dt>Coupon Discount</dt><dd>{coupon.applyingCoupon ? "Checking..." : coupon.couponDiscount > 0 ? `− ${money(coupon.couponDiscount)}` : money(0)}</dd></div>
                 <div className={styles.shipping}><dt>Delivery Charges</dt><dd className={totals.validShipping && totals.shipping === 0 ? styles.discount : undefined}>

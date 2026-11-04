@@ -432,8 +432,8 @@ test("production preflight checks only enabled gateways and rejects missing or U
   assert.equal(liveErrors.some(error => /^PINELABS|^PAYTM/.test(error)), false)
 })
 
-test("production template includes explicit gateway flags and placeholder live credentials", () => {
-  const template = fs.readFileSync(path.resolve(".env.production.example"), "utf8")
+test("production documentation includes explicit gateway flags and placeholder live credentials", () => {
+  const template = fs.readFileSync(path.resolve("documents/integrations/production-environment.md"), "utf8")
   for (const setting of [
     "RAZORPAY_ENABLED=true", "PINELABS_ENABLED=true", "PAYTM_ENABLED=false",
     "PAYMENT_DEFAULT_PROVIDER=pinelabs", "PINELABS_ENVIRONMENT=production", "PAYTM_ENVIRONMENT=production",

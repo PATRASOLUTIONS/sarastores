@@ -136,6 +136,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: "/:indexNowKey([a-zA-Z0-9-]{8,128}).txt",
+        destination: "/indexnow-key/:indexNowKey",
+      },
+      {
         source: "/.well-known/apple-app-site-association",
         destination: "/api/well-known/apple-app-site-association",
       },

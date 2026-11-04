@@ -283,7 +283,9 @@ Subfolders: `ui/` (9 shadcn/Radix primitives + Tiptap `RichTextEditor`), `admin/
 
 ## 9. Environment variables
 
-`.env.local` is required. **[.env.example](.env.example) is unusable as-is** — every line is commented out, it declares `SMTP_PASSWORD` while the code reads `SMTP_PASS`, and it is missing most of the variables below. Check actual `process.env` usage before assuming a name.
+`.env.local` is required. Owner policy: keep only `.env` and `.env.local` at the project root; preserve `.env` unchanged and use `.env.local` for all local additions. Never create extra environment files or backups. Reference configuration lives in [production-environment.md](documents/integrations/production-environment.md). Audit names/status with `node scripts/check-env-completeness.mjs --report`; never print credential values. Isolated Diwali QA uses the dedicated `DIWALI_TEST_MONGODB_URI`, not the app `MONGODB_URI`.
+
+Owner-approved exception: preserve `.env.production.local` as a names-only production inventory with missing names listed below; do not put credential values there. It is not used to infer the actual hosted values.
 
 | Area | Variables |
 | --- | --- |

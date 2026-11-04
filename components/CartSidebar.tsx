@@ -189,7 +189,7 @@ export default function CartSidebar() {
                 </div>
               ) : (
                 <ul className="space-y-3">
-                  {cart.map((item) => {
+                  {cart.filter(item => !isSaraCare(item)).map((item) => {
                     const lineKey = cartLineKey(item)
                     const isHighlighted = highlightId === item.id
                     return (
