@@ -61,7 +61,7 @@ const BANNERS = [
     dark: true,
     bullets: [],
     order: 2,
-    active: true,
+    active: false,
   },
   {
     placement: "pdp-offer",
@@ -78,7 +78,7 @@ const BANNERS = [
     dark: true,
     bullets: [],
     order: 3,
-    active: true,
+    active: false,
   },
   {
     placement: "pdp-offer",
@@ -95,7 +95,7 @@ const BANNERS = [
     dark: true,
     bullets: [],
     order: 4,
-    active: true,
+    active: false,
   },
   {
     placement: "pdp-rail",
