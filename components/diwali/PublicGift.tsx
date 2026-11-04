@@ -4,7 +4,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { CheckCircle2, Gift, ShieldCheck, Truck } from 'lucide-react'
-import { GIFTS, giftForRupees } from '@/lib/diwali/rules'
+import { GIFTS, giftForRupees, indiaDate } from '@/lib/diwali/rules'
+import MarkdownContent from '@/components/ui/MarkdownContent'
 
 type Config = { enabled: boolean; campaignStart: string; campaignEnd: string; registrationStart: string; registrationEnd: string; stores: { code: string; name: string }[]; termsEn: string; termsKn: string; privacyEn: string; privacyKn: string; consentVersion: string }
 type Status = { reference: string; status: string; fulfilment: string | null; gift: string | null; dueAt?: string; courier?: string; awb?: string; trackingUrl?: string; deliveredAt?: string }
@@ -27,13 +28,22 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
   const t = (english: string, kannada: string) => language === 'kn' ? kannada : english
   const loadStatus = async () => { const response = await api<{ items: Status[] }>('/api/diwali/status'); setStatuses(response.items); setVerified(true) }
   useEffect(() => {
+    let active = true
+    const refreshConfig = () => {
+      if (document.visibilityState === 'hidden') return
+      api<Config>('/api/diwali/config').then(value => { if (active) setConfig(value) }).catch(error => { if (active) setError(error.message) })
+    }
     setRequestId(crypto.randomUUID())
-    api<Config>('/api/diwali/config').then(setConfig).catch(error => setError(error.message))
+    refreshConfig()
+    window.addEventListener('focus', refreshConfig)
+    const timer = window.setInterval(refreshConfig, 60_000)
     if (mode === 'status' || mode === 'confirmation') loadStatus().catch(() => {})
+    return () => { active = false; window.removeEventListener('focus', refreshConfig); window.clearInterval(timer) }
   }, [mode])
   async function task(work: () => Promise<void>) { setBusy(true); setError(''); try { await work() } catch (error) { setError(error instanceof Error ? error.message : 'Please try again') } finally { setBusy(false) } }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!verified) { setError(t('Verify your mobile number before submitting registration.', 'ನೋಂದಣಿ ಸಲ್ಲಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.')); return }
     const data = new FormData(event.currentTarget)
     await task(async () => {
       const claim = await api<Status>('/api/diwali/register', { requestId, name: data.get('name'), address: data.get('address'), city: data.get('city'), district: data.get('district'), pincode: data.get('pincode'), storeCode: data.get('storeCode'), invoice: data.get('invoice'), enteredValue: Number(amount), language, accuracy: data.get('accuracy') === 'on', whatsappConsent: data.get('consent') === 'on', consentVersion: config?.consentVersion })
@@ -41,7 +51,7 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
     })
   }
   const preview = giftForRupees(Number(amount))
-  const now = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
+  const now = indiaDate(new Date())
   const open = !!config?.enabled && now >= config.registrationStart && now <= config.registrationEnd
   const statusCards = (items: Status[]) => items.map(claim => <article key={claim.reference} className="rounded-2xl border border-stone-200 bg-white p-6">
     <p className="text-sm text-stone-500">{t('Registration reference', 'ನೋಂದಣಿ ಸಂಖ್ಯೆ')}</p><p className="break-all text-lg font-bold">{claim.reference}</p>
@@ -57,15 +67,19 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4"><Link href="/diwali-gift" className="text-sm font-bold tracking-widest text-red-800">SARA · DIWALI DHAMAKA 2026</Link><div className="flex gap-2" aria-label="Language"><button type="button" aria-pressed={language === 'en'} onClick={() => setLanguage('en')} className={`rounded-full border px-4 py-2 ${language === 'en' ? 'bg-red-800 text-white' : 'bg-white'}`}>English</button><button type="button" aria-pressed={language === 'kn'} onClick={() => setLanguage('kn')} className={`rounded-full border px-4 py-2 ${language === 'kn' ? 'bg-red-800 text-white' : 'bg-white'}`}>ಕನ್ನಡ</button></div></div>
       <nav className="mb-6 flex flex-wrap gap-5 text-sm font-medium"><Link href="/diwali-gift">{t('Register', 'ನೋಂದಣಿ')}</Link><Link href="/diwali-gift/status">{t('Check gift status', 'ಉಡುಗೊರೆಯ ಸ್ಥಿತಿ')}</Link><a href="tel:+919071002220">{t('Help', 'ಸಹಾಯ')}: +91 90710 02220</a></nav>
       {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900">{error}</div>}
-      {!config ? <p role="status">{t('Loading campaign…', 'ಮಾಹಿತಿಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ…')}</p> : mode === 'terms' || mode === 'privacy' ? <section className="rounded-2xl bg-white p-6 sm:p-10"><h1 className="mb-5 text-3xl font-bold">{mode === 'terms' ? t('Campaign terms', 'ಅಭಿಯಾನದ ನಿಯಮಗಳು') : t('Privacy notice', 'ಗೌಪ್ಯತೆ ಸೂಚನೆ')}</h1><p className="whitespace-pre-wrap leading-7">{(mode === 'terms' ? language === 'en' ? config.termsEn : config.termsKn : language === 'en' ? config.privacyEn : config.privacyKn) || t('Registration will open after SARA publishes the approved notice.', 'SARA ಅನುಮೋದಿತ ಸೂಚನೆಯನ್ನು ಪ್ರಕಟಿಸಿದ ನಂತರ ನೋಂದಣಿ ತೆರೆಯುತ್ತದೆ.')}</p></section> : <>
+      {!config ? <p role="status">{t('Loading campaign…', 'ಮಾಹಿತಿಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ…')}</p> : mode === 'terms' || mode === 'privacy' ? <section className="rounded-2xl bg-white p-6 sm:p-10"><h1 className="mb-5 text-3xl font-bold">{mode === 'terms' ? t('Campaign terms', 'ಅಭಿಯಾನದ ನಿಯಮಗಳು') : t('Privacy notice', 'ಗೌಪ್ಯತೆ ಸೂಚನೆ')}</h1><MarkdownContent content={(mode === 'terms' ? language === 'en' ? config.termsEn : config.termsKn : language === 'en' ? config.privacyEn : config.privacyKn) || t('Registration will open after SARA publishes the approved notice.', 'SARA ಅನುಮೋದಿತ ಸೂಚನೆಯನ್ನು ಪ್ರಕಟಿಸಿದ ನಂತರ ನೋಂದಣಿ ತೆರೆಯುತ್ತದೆ.')} /></section> : <>
         {mode === 'register' && !result && <><div className="overflow-hidden rounded-3xl bg-red-900"><Image src="/images/diwali-2026.webp" alt="SARA Diwali Dhamaka campaign" width={1600} height={620} priority className="h-auto w-full" /></div><div className="my-8 grid gap-8 lg:grid-cols-[1fr_1.2fr]">
           <section><p className="mb-3 text-sm font-semibold uppercase tracking-widest text-red-800">{t('Celebrate with SARA', 'SARA ಜೊತೆಗೆ ಸಂಭ್ರಮಿಸಿ')}</p><h1 className="text-4xl font-bold leading-tight sm:text-5xl">{t('Your purchase. Your Diwali gift.', 'ನಿಮ್ಮ ಖರೀದಿ. ನಿಮ್ಮ ದೀಪಾವಳಿ ಉಡುಗೊರೆ.')}</h1><p className="mt-5 leading-7 text-stone-600">{t('Register your qualifying invoice for a Silver or Gold gift. SARA will verify your invoice before confirming eligibility.', 'ಬೆಳ್ಳಿ ಅಥವಾ ಚಿನ್ನದ ಉಡುಗೊರೆಗಾಗಿ ನಿಮ್ಮ ಅರ್ಹ ಬಿಲ್ ಅನ್ನು ನೋಂದಾಯಿಸಿ. ಅರ್ಹತೆಯನ್ನು ದೃಢೀಕರಿಸುವ ಮೊದಲು SARA ನಿಮ್ಮ ಬಿಲ್ ಅನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ.')}</p>
           <p className="mt-4 font-semibold">{config.campaignStart} – {config.campaignEnd}</p><p className="mt-2 text-sm">{t('Minimum eligible purchase ₹15,000. Whole-rupee invoice values only.', 'ಕನಿಷ್ಠ ಅರ್ಹ ಖರೀದಿ ₹15,000. ಪೂರ್ಣ ರೂಪಾಯಿ ಬಿಲ್ ಮೊತ್ತಗಳು ಮಾತ್ರ.')}</p>
           <div className="mt-6 space-y-3">{GIFTS.map(gift => <div key={gift.code} className="flex items-center justify-between rounded-xl border border-amber-200 bg-white p-4"><span className="text-sm">₹{gift.min.toLocaleString('en-IN')}{gift.max ? ` – ₹${gift.max.toLocaleString('en-IN')}` : '+'}</span><span className="font-semibold text-red-800">{language === 'kn' ? gift.kannada : gift.label}</span></div>)}</div>
           <div className="mt-6 space-y-4 text-sm text-stone-600"><p className="flex gap-3"><ShieldCheck className="h-5 w-5 shrink-0" />{t('Manual invoice verification by SARA', 'SARA ಮೂಲಕ ಬಿಲ್ ಪರಿಶೀಲನೆ')}</p><p className="flex gap-3"><Truck className="h-5 w-5 shrink-0" />{t('Delivery within 7 working days after approval', 'ಅನುಮೋದನೆಯ ನಂತರ 7 ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ ವಿತರಣೆ')}</p></div></section>
           <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8"><h2 className="text-2xl font-bold">{t('Register your gift', 'ನಿಮ್ಮ ಉಡುಗೊರೆಯನ್ನು ನೋಂದಾಯಿಸಿ')}</h2>
+          <p className="mt-3 text-sm text-stone-600">{t('Registration dates (IST)', 'ನೋಂದಣಿ ದಿನಾಂಕಗಳು (IST)')}: {config.registrationStart} – {config.registrationEnd}</p>
+          {!open && <p className="mt-3 text-sm">{!config.enabled ? t('SARA has not enabled registration yet.', 'SARA ಇನ್ನೂ ನೋಂದಣಿಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿಲ್ಲ.') : now < config.registrationStart ? t(`Registration opens on ${config.registrationStart}.`, `ನೋಂದಣಿ ${config.registrationStart} ರಂದು ತೆರೆಯುತ್ತದೆ.`) : t(`Registration ended on ${config.registrationEnd}.`, `ನೋಂದಣಿ ${config.registrationEnd} ರಂದು ಮುಕ್ತಾಯಗೊಂಡಿದೆ.`)}</p>}
           {!open ? <p className="mt-6 rounded-xl bg-amber-50 p-4">{t('Registration is currently closed. Please contact SARA for assistance.', 'ನೋಂದಣಿ ಪ್ರಸ್ತುತ ಮುಚ್ಚಲಾಗಿದೆ. ಸಹಾಯಕ್ಕಾಗಿ SARA ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.')}</p> : <><div className="mt-6 rounded-xl bg-stone-50 p-4">{verified ? <p className="flex items-center gap-2 font-semibold text-green-800"><CheckCircle2 className="h-5 w-5" />{mobile} · {t('Mobile verified', 'ಮೊಬೈಲ್ ಪರಿಶೀಲಿಸಲಾಗಿದೆ')}</p> : <><label className="text-sm font-medium">{t('Mobile number', 'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ')}<input className={field} value={mobile} onChange={event => { setMobile(event.target.value); setChallenge('') }} type="tel" inputMode="numeric" maxLength={10} autoComplete="tel-national" /></label><button type="button" className={`${button} mt-3`} disabled={busy || !/^[6-9]\d{9}$/.test(mobile)} onClick={() => task(async () => { const response = await api<{ challenge: string }>('/api/diwali/otp/send', { mobile, language, purpose: 'register' }); setChallenge(response.challenge) })}>{t('Send verification code', 'ಪರಿಶೀಲನೆ ಕೋಡ್ ಕಳುಹಿಸಿ')}</button>{challenge && <div className="mt-4"><label className="text-sm">{t('Six-digit code sent on WhatsApp', 'WhatsApp ನಲ್ಲಿ ಕಳುಹಿಸಿದ ಆರು ಅಂಕಿಯ ಕೋಡ್')}<input className={field} value={otp} onChange={event => setOtp(event.target.value)} maxLength={6} inputMode="numeric" autoComplete="one-time-code" /></label><button type="button" className={`${button} mt-3`} disabled={busy || !/^\d{6}$/.test(otp)} onClick={() => task(async () => { await api('/api/diwali/otp/verify', { challenge, otp }); setVerified(true) })}>{t('Verify mobile', 'ಮೊಬೈಲ್ ಪರಿಶೀಲಿಸಿ')}</button></div>}</>}</div>
-          <form onSubmit={submit} className="mt-6 space-y-5"><fieldset disabled={!verified || busy} className="space-y-5">
+          <form onSubmit={submit} className="mt-6 space-y-5">
+            {!verified && <p className="rounded-xl bg-amber-50 p-4 text-sm">{t('You can fill in your details now. Verify your mobile number above to submit your registration.', 'ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಈಗ ಭರ್ತಿ ಮಾಡಬಹುದು. ನೋಂದಣಿ ಸಲ್ಲಿಸಲು ಮೇಲಿನ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.')}</p>}
+            <fieldset disabled={busy} className="space-y-5">
             <label className="block text-sm font-medium">{t('Full name', 'ಪೂರ್ಣ ಹೆಸರು')}<input name="name" className={field} required minLength={2} maxLength={150} autoComplete="name" /></label>
             <label className="block text-sm font-medium">{t('Complete delivery address', 'ಸಂಪೂರ್ಣ ವಿತರಣಾ ವಿಳಾಸ')}<textarea name="address" className={field} required minLength={10} maxLength={800} autoComplete="street-address" rows={3} /></label>
             <div className="grid gap-4 sm:grid-cols-2">{[['city', t('City', 'ನಗರ')], ['district', t('District', 'ಜಿಲ್ಲೆ')]].map(([name, label]) => <label key={name} className="text-sm font-medium">{label}<input name={name} className={field} required minLength={2} maxLength={100} /></label>)}</div>

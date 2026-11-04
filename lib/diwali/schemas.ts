@@ -54,4 +54,4 @@ export const ActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('resume'), version: z.number().int().nonnegative(), note: z.string().trim().min(3).max(1000) }).strict(),
 ])
 export type ClaimAction = z.infer<typeof ActionSchema>
-export const StockSchema = z.object({ giftCode: z.enum(['silver5', 'silver10', 'silver15', 'silver20', 'gold1']), quantity: z.number().int().min(1).max(100000), note: z.string().trim().min(3).max(500) }).strict()
+export const StockSchema = z.object({ giftCode: z.enum(['silver5', 'silver10', 'silver15', 'silver20', 'gold1']), quantity: z.number().int().min(1).max(100000), note: z.string().trim().max(500).default('') }).strict()

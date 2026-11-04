@@ -1,6 +1,68 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sourceLoader } from './source-loader.mjs'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+
+test('Markdown notices render formatting and Kannada without executing HTML or unsafe links', () => {
+  const MarkdownContent = sourceLoader().load('components/ui/MarkdownContent.tsx').default
+  const content = '## ನಿಯಮಗಳು\n\n**Approved** and *verified*.\n\n- First\n- Second\n\n[Help](https://example.com/help)\n\n| Gift | Value |\n| --- | --- |\n| Silver | 15000 |\n\n<script>alert(1)</script>\n\n[Unsafe](javascript:alert%281%29)'
+  const html = renderToStaticMarkup(createElement(MarkdownContent, { content }))
+  assert.match(html, /<h2>ನಿಯಮಗಳು<\/h2>/)
+  assert.match(html, /<strong>Approved<\/strong>/)
+  assert.match(html, /<em>verified<\/em>/)
+  assert.match(html, /<li>First<\/li>/)
+  assert.match(html, /href="https:\/\/example.com\/help"/)
+  assert.match(html, /<table>/)
+  assert.doesNotMatch(html, /<script|javascript:/i)
+  assert.match(renderToStaticMarkup(createElement(MarkdownContent, { content: 'Existing plain text notice.' })), /Existing plain text notice\./)
+})
+
+test('public terms and privacy use the exact saved Markdown for the selected language', () => {
+  const { DEFAULT_CONFIG } = sourceLoader().load('lib/diwali/schemas.ts')
+  const config = { ...DEFAULT_CONFIG, termsEn: '## English terms\n\n**Approved terms**', termsKn: '## ನಿಯಮಗಳು\n\n**ಅನುಮೋದಿಸಲಾಗಿದೆ**', privacyEn: '## English privacy\n\n- Data notice', privacyKn: '## ಗೌಪ್ಯತೆ\n\n- ಮಾಹಿತಿ' }
+  for (const [mode, language, key] of [['terms', 'en', 'termsEn'], ['terms', 'kn', 'termsKn'], ['privacy', 'en', 'privacyEn'], ['privacy', 'kn', 'privacyKn']]) {
+    let index = 0
+    const loader = sourceLoader({ react: { useEffect() {}, useState(initial) { const current = index++; return [current === 0 ? language : current === 1 ? config : initial, () => {}] } } })
+    const MarkdownContent = loader.load('components/ui/MarkdownContent.tsx').default
+    const tree = loader.load('components/diwali/PublicGift.tsx').default({ mode })
+    let renderedNotice
+    function visit(node) {
+      if (Array.isArray(node)) return node.forEach(visit)
+      if (!node || typeof node !== 'object' || !node.props) return
+      if (node.type === MarkdownContent) renderedNotice = node.props.content
+      visit(node.props.children)
+    }
+    visit(tree)
+    assert.equal(renderedNotice, config[key])
+  }
+})
+
+test('Markdown editor formats selected Kannada text and previews the same source', () => {
+  const text = 'ನಿಯಮಗಳು'
+  let changed, preview = false
+  const editor = { selectionStart: 0, selectionEnd: text.length, focus() {}, setSelectionRange() {} }
+  const loader = sourceLoader({ react: { useRef() { return { current: editor } }, useState() { return [preview, value => { preview = value }] } } }, { context: { requestAnimationFrame(callback) { callback() } } })
+  const Component = loader.load('components/ui/MarkdownEditor.tsx').default
+  const MarkdownContent = loader.load('components/ui/MarkdownContent.tsx').default
+  function nodesOf(tree) {
+    const nodes = []
+    function visit(node) {
+      if (Array.isArray(node)) return node.forEach(visit)
+      if (!node || typeof node !== 'object' || !node.props) return
+      nodes.push(node); visit(node.props.children)
+    }
+    visit(tree)
+    return nodes
+  }
+  const props = { id: 'notice', label: 'Kannada terms', value: text, onChange(value) { changed = value } }
+  const nodes = nodesOf(Component(props))
+  nodes.find(node => node.type === 'button' && node.props.children === 'Bold').props.onClick()
+  assert.equal(changed, `**${text}**`)
+  nodes.find(node => node.type === 'button' && node.props.children === 'Preview').props.onClick()
+  const rendered = nodesOf(Component({ ...props, value: changed })).find(node => node.type === MarkdownContent)
+  assert.equal(rendered.props.content, changed)
+})
 
 test('Diwali gift engine matches every approved boundary and rejects unconfirmed fractional values', () => {
   const { giftForRupees } = sourceLoader().load('lib/diwali/rules.ts')
@@ -26,6 +88,42 @@ test('campaign remains closed without complete bilingual notices and approved po
   assert.equal(ConfigSchema.safeParse({ ...DEFAULT_CONFIG, enabled: true }).success, false)
   assert.equal(ConfigSchema.safeParse({ ...DEFAULT_CONFIG, holidays: ['2026-02-30'] }).success, false)
   assert.equal(RegistrationSchema.safeParse({ mobile: '9000000000' }).success, false)
+})
+
+test('gift stock accepts a quantity without a procurement reference and still validates quantities', () => {
+  const { StockSchema } = sourceLoader().load('lib/diwali/schemas.ts')
+  const parsed = StockSchema.parse({ giftCode: 'silver5', quantity: 10 })
+  assert.equal(parsed.note, '')
+  assert.equal(StockSchema.safeParse({ giftCode: 'silver5', quantity: 10, note: '' }).success, true)
+  for (const quantity of [0, -1, 1.5, 100001]) assert.equal(StockSchema.safeParse({ giftCode: 'silver5', quantity }).success, false)
+})
+
+test('customers can enter gift details before OTP verification but cannot submit them', async () => {
+  const { DEFAULT_CONFIG } = sourceLoader().load('lib/diwali/schemas.ts')
+  let index = 0, error = ''
+  const react = {
+    useEffect() {},
+    useState(initial) {
+      const current = index++
+      return [current === 1 ? { ...DEFAULT_CONFIG, enabled: true, registrationStart: '2000-01-01', registrationEnd: '2099-12-31' } : initial, value => { if (current === 2) error = value }]
+    },
+  }
+  const Component = sourceLoader({ react }).load('components/diwali/PublicGift.tsx').default
+  const tree = Component({ mode: 'register' })
+  const nodes = []
+  function visit(node) {
+    if (Array.isArray(node)) return node.forEach(visit)
+    if (!node || typeof node !== 'object' || !node.props) return
+    nodes.push(node)
+    visit(node.props.children)
+  }
+  visit(tree)
+  assert.equal(nodes.find(node => node.type === 'fieldset').props.disabled, false)
+  assert.equal(nodes.find(node => node.type === 'button' && node.props.children === 'Submit registration').props.disabled, true)
+  let prevented = false
+  await nodes.find(node => node.type === 'form').props.onSubmit({ preventDefault() { prevented = true } })
+  assert.equal(prevented, true)
+  assert.match(error, /Verify your mobile number/)
 })
 test('campaign permissions separate verification, fulfilment, management and export', () => {
   const { authorize } = sourceLoader().load('lib/diwali/service.ts')

@@ -257,7 +257,7 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
     return normalizeId(updated)
   })
 }
-export async function addStock(user: User, giftCode: GiftCode, quantity: number, note: string) {
+export async function addStock(user: User, giftCode: GiftCode, quantity: number, note = '') {
   authorize(user, await getConfig(), 'settings')
   await transaction(async session => {
     await (await getCollection<StringRecord>(COLLECTIONS.stock)).updateOne({ _id: giftCode } as Filter<StringRecord>, { $inc: { available: quantity, received: quantity }, $setOnInsert: { reserved: 0, dispatched: 0 } }, { upsert: true, session })
