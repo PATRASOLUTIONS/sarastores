@@ -3,6 +3,9 @@ import { remoteImagePatterns } from "./lib/image-sources.mjs"
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Sharing tools may send ordinary browser user agents and read only <head>.
+  // Resolve metadata before HTML for all requests so previews never miss it.
+  htmlLimitedBots: /.*/,
   distDir: process.env.NEXT_DIST_DIR || ".next",
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || "tsconfig.json" },
   // Next spawns one static-generation worker per CPU by default, which exhausts
