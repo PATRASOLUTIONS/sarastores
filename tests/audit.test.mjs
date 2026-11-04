@@ -451,6 +451,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
   }
   const loader = sourceLoader({
     "@/lib/auth": auth(account),
+    "@/lib/diwali/online-orders": { prepareOnlineDiwaliOrder: async () => null, recordOnlineDiwaliOrder: async () => {} },
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { ORDERS: {} } },
     "@/lib/order-pricing": orderPricing,
     "@/lib/order-id": { generateOrderId: async () => "FIXTURE-ORDER" },

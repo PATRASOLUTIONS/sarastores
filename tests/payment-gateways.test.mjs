@@ -454,6 +454,7 @@ for (const provider of ["pinelabs", "paytm"]) {
     const token = crypto.randomBytes(32).toString("base64url")
     const loader = sourceLoader({
       "@/lib/auth": { getSession: async () => null },
+      "@/lib/diwali/online-orders": { prepareOnlineDiwaliOrder: async () => null, recordOnlineDiwaliOrder: async () => {} },
       "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { ORDERS: {} } },
       "@/lib/order-id": { generateOrderId: async () => request.reference },
       "@/lib/order-pricing": {

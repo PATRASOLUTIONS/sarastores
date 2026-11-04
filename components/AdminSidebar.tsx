@@ -111,6 +111,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Marketing Dashboard", path: "/admin/marketing", icon: <Megaphone className="h-5 w-5" /> },
       { name: "Coupons & Offers", path: "/admin/promotions", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Gift Listing", path: "/admin/gifts", icon: <BadgePercent className="h-5 w-5" /> },
+      { name: "IndexNow", path: "/admin/indexnow", icon: <Search className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Sara Care", path: "/admin/sara-care", icon: <BadgePercent className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Super Sunday", path: "/admin/super-sunday", icon: <Star className="h-5 w-5" /> },
       { name: "Campaigns & Email", path: "/admin/customer-centric", icon: <MessageSquare className="h-5 w-5" /> },
@@ -128,6 +129,7 @@ const MENU_SECTIONS: MenuSection[] = [
       { name: "Spin Wheel", path: "/admin/spin-wheel", icon: <BadgePercent className="h-5 w-5" /> },
       { name: "Spin Campaigns", path: "/admin/spin-wheel/campaigns", icon: <Boxes className="h-5 w-5" /> },
       { name: "Lucky Draw", path: "/admin/lucky-draw", icon: <Gift className="h-5 w-5" /> },
+      { name: "Diwali Gifts", path: "/admin/diwali", icon: <Gift className="h-5 w-5" /> },
     ],
   },
   {

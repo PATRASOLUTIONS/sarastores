@@ -39,6 +39,8 @@ import { apiFetch } from "@/lib/api-client"
 import { useCartCoupon } from "@/hooks/useCartCoupon"
 import { clearCartCoupon } from "@/lib/cart-coupon"
 import CartCoupon from "@/components/cart/CartCoupon"
+import CartDiwaliGift from "@/components/diwali/CartDiwaliGift"
+import { OnlineGiftSchema, type OnlineGift } from "@/lib/diwali/online-rules"
 import { z } from "zod"
 import styles from "./checkout.module.css"
 import CheckoutSection from "./CheckoutSection"
@@ -240,7 +242,7 @@ export default function CheckoutPage() {
   const currentQuoteContext = useRef(quoteContext)
   currentQuoteContext.current = quoteContext
   const [verifiedQuote, setVerifiedQuote] = useState<{ context: string; subtotal: number; tax: number;
-    shipping: number; total: number; amount: number } | null>(null)
+    shipping: number; total: number; amount: number; diwaliGift?: OnlineGift | null } | null>(null)
   const currentQuote = verifiedQuote?.context === quoteContext ? verifiedQuote : null
   const couponContextRef = useRef(couponContext)
   couponContextRef.current = couponContext
@@ -1052,6 +1054,7 @@ export default function CheckoutPage() {
     const data = await response.json().catch(() => null)
     if (!response.ok) { toast.error(data?.error || "Product stock and prices could not be validated."); return false }
     const result = z.object({ success: z.literal(true), amount: z.number().finite().nonnegative(),
+      diwaliGift: OnlineGiftSchema.nullable().optional(),
       couponMessage: z.string().nullable().optional().default(null),
       pricing: z.object({ subtotal: z.number().finite(), tax: z.number().finite(), shipping: z.number().finite(),
         total: z.number().finite(), couponDiscount: z.number().finite(),
@@ -1088,12 +1091,12 @@ export default function CheckoutPage() {
     if (changedPrices || changedCoupon || changedTotal) {
       coupon.acceptCheckoutQuote(quote.pricing.coupon, updatedCart)
       refreshItemPrices(prices)
-      setVerifiedQuote({ context: updatedContext, ...quote.pricing, amount: quote.amount })
+      setVerifiedQuote({ context: updatedContext, ...quote.pricing, amount: quote.amount, diwaliGift: quote.diwaliGift })
       setCheckoutChange({ previousTotal: payableTotal, updatedTotal: quote.amount, pricesChanged: changedPrices,
         couponChanged: changedCoupon, couponMessage: quote.couponMessage, action })
       return false
     }
-    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount })
+    setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount, diwaliGift: quote.diwaliGift })
     setCouponDiscount(quote.pricing.couponDiscount)
     analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
     return true
@@ -1992,6 +1995,7 @@ export default function CheckoutPage() {
 
                 {/* Coupon input */}
                 <CartGifts quote={cartGifts} compact disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
+                <CartDiwaliGift total={payableTotal} shipping={shipping} checkout confirmedGift={currentQuote?.diwaliGift} />
                 <CartCoupon id="checkout-coupon" coupon={coupon} disabled={isProcessing || paymentPending || storeRequestLoading || !!paymentRecovery} />
 
                 {catalogueLoading && <p role="status" className="text-xs text-gray-600">Refreshing prices and stock...</p>}

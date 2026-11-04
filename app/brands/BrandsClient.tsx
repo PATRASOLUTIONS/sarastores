@@ -3,10 +3,11 @@
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, ChevronRight, CreditCard, Search, ShieldCheck, Star, Tag, Truck, Wrench } from "lucide-react"
+import { ArrowRight, ChevronRight, CreditCard, Search, ShieldCheck, Truck, Wrench } from "lucide-react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
-import { bannerGradient, bannerIsPhotoOnly, useBanners } from "@/hooks/useBanners"
+import BrandsHero from "@/components/brands/BrandsHero"
+import { useBanners } from "@/hooks/useBanners"
 import { titleCaseLabel } from "@/lib/product-display"
 import { brandOf, categoryOf } from "@/utils/catalog"
 import styles from "./brands.module.css"
@@ -24,11 +25,6 @@ type Brand = {
 type CatalogRecord = Record<string, unknown>
 
 const LETTERS = ["All", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""), "#"]
-const HERO_POINTS = [
-  { icon: ShieldCheck, title: "Genuine", detail: "Products" },
-  { icon: Tag, title: "Explore", detail: "Brand Offers" },
-  { icon: Star, title: "Wide Range", detail: "Across Categories" },
-]
 const BENEFITS = [
   { icon: ShieldCheck, title: "Genuine Products", detail: "From Trusted Brands", href: "/warranty" },
   { icon: CreditCard, title: "Easy EMI Options", detail: "Available at Checkout", href: "/emi" },
@@ -189,19 +185,7 @@ export default function BrandsPage({ initialBrands, initialProducts = [] }: { in
       </nav>
       <MarketingSections page="brands">
       <MarketingSection page="brands" section="hero">
-      <section className={`${styles.hero} ${hero ? styles.customHero : ""} ${hero && !hero.dark ? styles.lightText : ""} ${hero && bannerIsPhotoOnly(hero) ? styles.photoHero : ""}`}
-        style={hero && !bannerIsPhotoOnly(hero) ? bannerGradient(hero) : undefined} aria-labelledby="brands-hero-heading">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={hero?.image || marketing.text("hero", "image")} alt="Electronics and home appliances from leading brands" className={hero && bannerIsPhotoOnly(hero) ? styles.heroPhoto : styles.heroImage} />
-        {!(hero && bannerIsPhotoOnly(hero)) && <div className={styles.heroContent}>
-          <h1 id="brands-hero-heading" className="font-heading whitespace-pre-line">{hero?.title || marketing.text("hero", "title")}</h1>
-          <p>{hero?.subtitle || marketing.text("hero", "description")}</p>
-          <ul className={styles.heroPoints}>{marketing.items("hero", HERO_POINTS).map(({ icon: Icon, title, detail }) => <li key={title}>
-            <Icon strokeWidth={1.6} /><span>{title}<br />{detail}</span>
-          </li>)}</ul>
-          {hero?.ctaText && hero.ctaLink && <Link href={hero.ctaLink} className={styles.heroCta}>{hero.ctaText}<ArrowRight size={14} /></Link>}
-        </div>}
-      </section>
+      <BrandsHero banner={hero} />
       </MarketingSection>
 
       <MarketingSection page="brands" section="directory">

@@ -42,6 +42,8 @@ export const ACTIVE_RETAIL_STORE_FILTER = {
  */
 
 export interface StoreLocation {
+  createdAt?: Date
+  updatedAt?: Date
   id: string
   name: string
   slug: string
@@ -98,6 +100,8 @@ function toStoreLocation(doc: WithId<StoredStoreLocation>): StoreLocation | null
 
   return {
     id: doc._id?.toString?.() || String(doc.id || ""),
+    ...(doc.createdAt ? { createdAt: doc.createdAt } : {}),
+    ...(doc.updatedAt ? { updatedAt: doc.updatedAt } : {}),
     name,
     slug: slugify(name),
     address,

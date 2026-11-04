@@ -19,6 +19,7 @@ test("checkout validation requotes an expired coupon without creating a payment 
   const pricing = { items: [{ id: "fixture-product", price: 118 }], total: 118, coupon: null, couponDiscount: 0 }
   const loader = sourceLoader({
     "@/lib/auth": { getSession: async () => ({ user: { id: "session-user" } }) },
+    "@/lib/diwali/service": { getConfig: async () => sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG },
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { API: {} } },
     "@/lib/checkout-payment": {
       CheckoutQuoteSchema: sourceLoader().load("lib/checkout-payment.ts").CheckoutQuoteSchema,

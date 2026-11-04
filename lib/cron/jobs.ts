@@ -1,7 +1,7 @@
 /**
  * The scheduled-job registry.
  *
- * Vercel's Hobby plan allows only two cron entries, but this platform has six
+ * Vercel's Hobby plan allows only two cron entries, but this platform has seven
  * nightly jobs. Rather than drop four of them, the jobs are grouped and a
  * single cron invocation runs a whole group in order. The per-job routes under
  * `/api/cron/*` still exist for manual and external triggering.
@@ -11,6 +11,7 @@
  * next night's run rather than being tracked as partial state.
  */
 
+import { runIndexNow } from "@/lib/indexnow/service"
 import { getCollection, COLLECTIONS } from "@/lib/db-service"
 import { rebuildCustomerProfile, EARNING_STATUSES } from "@/lib/customer-profile"
 import { runCartRecovery } from "@/lib/retention/cart-recovery"
@@ -23,7 +24,7 @@ import {
   anonymiseExpiredOrders,
 } from "@/lib/retention/data-retention"
 
-export type JobOptions = { dryRun: boolean }
+export type JobOptions = { dryRun: boolean; budgetMs?: number }
 export type JobResult = Record<string, unknown>
 
 export type CronJob = {
@@ -110,12 +111,22 @@ const lifecycleReminders: CronJob = {
 }
 
 /**
- * Jobs that only touch our own derived data are grouped separately from jobs
+ * Site/profile maintenance (including IndexNow) is grouped separately from jobs
  * that send messages to customers, so a failure in one group cannot stop the
  * other and the blast radius of a bad deploy is halved.
  */
+const indexNow: CronJob = {
+  name: "indexnow",
+  description: "Notify IndexNow of new, changed and removed public sitemap URLs",
+  async run({ dryRun, budgetMs }) {
+    const report = await runIndexNow({ dryRun, maxBatches: 1, budgetMs: Math.min(20_000, budgetMs ?? 20_000) })
+    if (report.status === "failed") throw new Error(report.message)
+    return { ...report }
+  },
+}
+
 export const CRON_GROUPS = {
-  maintenance: [rebuildProfiles, segmentCustomers, dataRetention],
+  maintenance: [indexNow, rebuildProfiles, segmentCustomers, dataRetention],
   outreach: [cartRecovery, wishlistAlerts, lifecycleReminders],
 } satisfies Record<string, CronJob[]>
 
@@ -159,7 +170,7 @@ export async function runCronGroup(
 
     const jobStart = Date.now()
     try {
-      const result = await job.run({ dryRun })
+      const result = await job.run({ dryRun, budgetMs: Math.max(0, budgetMs - elapsed) })
       jobs.push({ job: job.name, status: "ok", ms: Date.now() - jobStart, result })
     } catch (error) {
       // Logged server-side; the response carries only the message.
