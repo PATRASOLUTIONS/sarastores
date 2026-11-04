@@ -77,3 +77,11 @@ test("both Sara hosts share the deployed canonical and the apex redirect preserv
   assert.equal(redirect.destination, "https://www.sarastores.com/:path*")
   assert.equal(redirect.permanent, true)
 })
+
+test('metadata is resolved in the initial HTML head for browsers and unknown preview crawlers', async () => {
+  const { default: config } = await import('../next.config.mjs')
+  assert.ok(config.htmlLimitedBots instanceof RegExp)
+  for (const agent of ['Mozilla/5.0', 'facebookexternalhit/1.1', 'WhatsApp/2.24', 'UnknownPreviewTool/1.0', '']) {
+    assert.equal(config.htmlLimitedBots.test(agent), true, `${agent} must receive metadata before HTML streaming`)
+  }
+})

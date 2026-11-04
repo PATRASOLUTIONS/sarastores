@@ -1,5 +1,7 @@
 "use client"
 
+import SiteImage from "@/components/SiteImage"
+
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -145,8 +147,7 @@ export default function ProductListingCard({ product, offersMode = false, offerL
                 {badge.label}
               </span>
             )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={image} alt={displayName} loading="lazy" className="h-full w-full scale-[1.08] object-contain" onError={(e) => { e.currentTarget.src = "/placeholder.svg" }} />
+            <SiteImage sizes="96px" src={image} alt={displayName} loading="lazy" className="h-full w-full scale-[1.08] object-contain" onError={(e) => { e.currentTarget.src = "/placeholder.svg" }} />
           </Link>
           <div className="mt-2">
             <CompareProductButton productId={id} name={displayName} variant="checkbox" />
@@ -225,11 +226,10 @@ export default function ProductListingCard({ product, offersMode = false, offerL
 
         <Link href={href} className="block">
           <div className={`flex aspect-[4/3] items-center justify-center overflow-hidden rounded-t-lg p-2 ${offersMode ? "bg-white" : "bg-gray-50"}`}>
-            {/* Catalogue images are hotlinked from many CDNs, so a plain img avoids loader failures. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <SiteImage
               src={image}
               alt={displayName}
+              sizes="(min-width: 1280px) 240px, (min-width: 768px) 33vw, 50vw"
               loading="lazy"
               className="h-full w-full scale-[1.05] object-contain transition-transform duration-300 group-hover:scale-110"
               onError={(e) => {

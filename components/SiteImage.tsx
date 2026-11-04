@@ -21,18 +21,25 @@ export default function SiteImage({
   const nativeWidth = imageDimension(width)
   const nativeHeight = imageDimension(height)
   const resolvedSizes = imageSizes({ sizes, className, width, style })
+  const optimized = !unoptimized && !isReplacement && Boolean(resolvedSizes) && canOptimizeImage(current)
   return <NextImage {...props} ref={ref} src={current}
     width={nativeWidth || 1600} height={nativeHeight || 900}
     data-site-auto-width={nativeWidth === undefined ? "" : undefined}
     data-site-auto-height={nativeHeight === undefined ? "" : undefined}
     data-site-auto-ratio={nativeWidth === undefined || nativeHeight === undefined ? "" : undefined}
     sizes={resolvedSizes} className={className} style={style}
-    unoptimized={unoptimized || isReplacement || !resolvedSizes || !canOptimizeImage(current)}
+    unoptimized={!optimized}
     loading={loading || (priority || fetchPriority === "high" ? "eager" : "lazy")}
     fetchPriority={fetchPriority} priority={priority && loading !== "lazy"}
     onError={event => {
-      // A failed imperative fallback must not restart the same request repeatedly.
-      if (!onError || isReplacement) return
+      // Recover from optimizer errors before a caller replaces the photo.
+      if (optimized) {
+        event.currentTarget.removeAttribute('srcset')
+        setReplacement({ source, src: source })
+        return
+      }
+      // A failed placeholder must not restart the same request repeatedly.
+      if (!onError || isReplacement && current !== source) return
       const image = event.currentTarget
       const before = image.getAttribute("src")
       onError(event)

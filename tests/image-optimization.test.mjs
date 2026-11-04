@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { createRequire } from "node:module"
 import config from "../next.config.mjs"
-import { canOptimizeImage, remoteImagePatterns } from "../lib/image-sources.mjs"
+import { canOptimizeImage, optimizedImageUrl, remoteImagePatterns } from "../lib/image-sources.mjs"
 import { sourceLoader } from "./source-loader.mjs"
 
 const require = createRequire(import.meta.url)
@@ -81,6 +81,12 @@ test("imperative image fallbacks clear srcset and recover when the source change
   Image(props).props.onError({ currentTarget: element })
   assert.equal(attributes.has("srcset"), false)
   let rendered = Image(props).props
+  assert.equal(rendered.src, props.src, 'Retry the original photo after an optimizer failure')
+  assert.equal(rendered.unoptimized, true)
+  assert.equal(calls, 0, 'Do not replace an available photo before the direct retry fails')
+  attributes.set('src', props.src)
+  rendered.onError({ currentTarget: element })
+  rendered = Image(props).props
   assert.equal(rendered.src, "/placeholder.svg")
   assert.equal(rendered.unoptimized, true)
   rendered.onError({ currentTarget: element })
@@ -94,9 +100,21 @@ test("state-only error handlers keep their own hide or loading behavior", () => 
   const Image = siteHarness()
   let failed = false
   const props = { src: "https://www.lg.com/photo.jpg", alt: "Product", className: "w-16", onError: () => { failed = true } }
-  Image(props).props.onError({ currentTarget: { getAttribute: () => props.src } })
+  const element = { getAttribute: () => props.src, removeAttribute() {} }
+  Image(props).props.onError({ currentTarget: element })
+  assert.equal(failed, false)
+  Image(props).props.onError({ currentTarget: element })
   assert.equal(failed, true)
   assert.equal(Image(props).props.src, props.src)
+})
+
+test('gallery zoom uses the same-origin optimizer only for approved image sources', () => {
+  const source = 'https://rukmini1.flixcart.com/image/1500/1500/product.jpeg'
+  const url = new URL(optimizedImageUrl(source), 'https://www.sarastores.com')
+  assert.equal(url.pathname, '/_next/image')
+  assert.equal(url.searchParams.get('url'), source)
+  assert.equal(url.searchParams.get('w'), '1920')
+  assert.equal(optimizedImageUrl('https://unconfigured.example/photo.jpg'), 'https://unconfigured.example/photo.jpg')
 })
 
 test("banner fallback does not replace the next uploaded image", () => {
