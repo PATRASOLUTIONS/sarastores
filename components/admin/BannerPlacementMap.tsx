@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import SiteImage from '@/components/SiteImage'
 import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, bannerIsPhotoOnly, useBannerClock, type BannerPlacement, type SiteBanner } from '@/hooks/useBanners'
 import { BANNER_LOCATIONS, HOME_PROMOTION_PLACEMENTS } from '@/lib/banner-placements'
-import { bannerIsVisible, selectVisibleBanners } from '@/lib/banner-schedule'
+import { bannerVisibilityStatus, bannerScheduleSummary, selectVisibleBanners } from '@/lib/banner-schedule'
 import { useMarketingContent } from '@/hooks/useMarketingContent'
 
 function PlacementCard({ placement, banners, draftId, now, edit, add }: { placement: BannerPlacement; banners: SiteBanner[]; draftId?: string; now: number; edit: (banner: SiteBanner) => void; add: (placement: BannerPlacement) => void }) {
@@ -26,8 +26,8 @@ function PlacementCard({ placement, banners, draftId, now, edit, add }: { placem
   const main = selectVisibleBanners(banners.filter(banner => banner.placement === 'home-hero'), '', now)[0]
   const sideHidden = placement === 'home-duo' && (selected.length < 2 || !!main && bannerIsPhotoOnly(main))
   const status = (banner: SiteBanner) => {
-    if (!banner.active) return 'Off — hidden'
-    if (!bannerIsVisible(banner, now)) return 'Expired — hidden'
+    const visibility = bannerVisibilityStatus(banner, now)
+    if (visibility !== 'Eligible') return visibility
     if ((banner.scope || '').trim() && !location.scope) return 'Scoped incorrectly — clear scope'
     if (!enabled) return 'Page section is off'
     if (sideHidden) return selected.length < 2 ? 'Needs two side banners' : 'Hidden on photo-only main slides'
@@ -43,7 +43,7 @@ function PlacementCard({ placement, banners, draftId, now, edit, add }: { placem
     {location.scope && <label className="mb-3 block text-xs font-medium text-gray-600">Inspect audience<select value={scope} onChange={event => setScope(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm"><option value="">Default / all audiences</option>{scopes.map(value => <option key={value}>{value}</option>)}</select></label>}
     <div className="space-y-2">{items.map(banner => <div key={banner.id} className={`flex items-start gap-3 rounded-xl border p-3 ${draftId === banner.id ? 'border-blue-400 bg-blue-50' : 'border-gray-100'}`}>
       <button type="button" onClick={() => edit(banner)} aria-label={`Edit poster ${banner.title || banner.id}`} className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100">{banner.image ? <SiteImage unoptimized src={banner.image} alt={banner.title || 'Poster artwork'} className="h-full w-full object-contain" /> : <span className="text-xs text-gray-500">Text poster</span>}</button>
-      <div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold">{banner.title || 'Photo-only poster'}</p><p className="mt-1 text-xs text-gray-600">Order {banner.order || 0} · {banner.scope || 'All audiences'}</p><p className={`mt-1 text-xs font-medium ${status(banner).includes('hidden') ? 'text-red-700' : 'text-blue-800'}`}>{status(banner)}</p><p className="mt-1 text-xs text-gray-500">{banner.expiresAt ? `Deadline: ${new Date(banner.expiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST` : 'Deadline: Never'}</p></div>
+      <div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold">{banner.title || 'Photo-only poster'}</p><p className="mt-1 text-xs text-gray-600">Order {banner.order || 0} · {banner.scope || 'All audiences'}</p><p className={`mt-1 text-xs font-medium ${status(banner).includes('hidden') ? 'text-red-700' : 'text-blue-800'}`}>{status(banner)}</p><p className="mt-1 text-xs text-gray-500">{bannerScheduleSummary(banner)}</p></div>
       <button type="button" onClick={() => edit(banner)} className="rounded-lg border px-2 py-1 text-xs">Edit</button>
     </div>)}{!items.length && <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">No posters assigned here.</p>}</div>
     <button type="button" onClick={() => add(placement)} className="mt-3 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-800">Add poster to this section</button>
@@ -52,5 +52,5 @@ function PlacementCard({ placement, banners, draftId, now, edit, add }: { placem
 
 export default function BannerPlacementMap({ banners, draftId, filter, edit, add }: { banners: SiteBanner[]; draftId?: string; filter: string; edit: (banner: SiteBanner) => void; add: (placement: BannerPlacement) => void }) {
   const now = useBannerClock(banners)
-  return <section aria-labelledby="banner-page-map"><h2 id="banner-page-map" className="mb-2 text-lg font-bold">Where every poster appears</h2><p className="mb-4 text-sm text-gray-500">Click a poster to edit it. Changes appear in its section preview immediately; Save publishes them. Deadlines and the section’s display limit decide which posters can show.</p><div className="grid gap-4 xl:grid-cols-2">{BANNER_PLACEMENTS.filter(placement => filter === 'all' || filter === 'home' && placement.startsWith('home-') || filter === placement).map(placement => <PlacementCard key={placement} placement={placement} banners={banners} draftId={draftId} now={now} edit={edit} add={add} />)}</div></section>
+  return <section aria-labelledby="banner-page-map"><h2 id="banner-page-map" className="mb-2 text-lg font-bold">Where every poster appears</h2><p className="mb-4 text-sm text-gray-500">Click a poster to edit it. Changes appear in its section preview immediately; Save publishes them. Weekdays, date ranges and the section’s display limit decide which posters can show.</p><div className="grid gap-4 xl:grid-cols-2">{BANNER_PLACEMENTS.filter(placement => filter === 'all' || filter === 'home' && placement.startsWith('home-') || filter === placement).map(placement => <PlacementCard key={placement} placement={placement} banners={banners} draftId={draftId} now={now} edit={edit} add={add} />)}</div></section>
 }

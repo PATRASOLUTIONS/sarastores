@@ -6,12 +6,13 @@ import { useSWRConfig } from "swr"
 import toast from "react-hot-toast"
 import { Loader2, Plus, Trash2, Upload } from "lucide-react"
 import { apiFetchJson } from "@/lib/api-client"
-import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, bannerIsPhotoOnly, siteBannerListResponseSchema, siteBannerResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
+import { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, bannerIsPhotoOnly, useBannerClock, siteBannerListResponseSchema, siteBannerResponseSchema, type BannerPlacement, type SiteBanner } from "@/hooks/useBanners"
 import { imageUploadResponseSchema } from "@/lib/media-response"
 import BannerSectionPreview from "@/components/admin/BannerSectionPreview"
 import BannerPlacementMap from "@/components/admin/BannerPlacementMap"
 import { BANNER_LOCATIONS } from "@/lib/banner-placements"
-import { BANNER_UPDATE_KEY, bannerIsVisible, selectVisibleBanners, deadlineIndiaInput, deadlineFromIndiaInput } from "@/lib/banner-schedule"
+import { BANNER_UPDATE_KEY, BannerScheduleSchema, bannerVisibilityStatus, bannerScheduleSummary, selectVisibleBanners } from "@/lib/banner-schedule"
+import BannerScheduleEditor from "@/components/admin/BannerScheduleEditor"
 
 type Draft = Omit<SiteBanner, "id"> & { id?: string }
 
@@ -32,6 +33,8 @@ const BLANK: Draft = {
   order: 0,
   active: false,
   expiresAt: null,
+  startsAt: null,
+  weekdays: null,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -71,6 +74,7 @@ export default function ListingBannersAdminPage() {
   const [dirty, setDirty] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const { mutate } = useSWRConfig()
+  const now = useBannerClock(banners)
   const invalidate = async () => {
     await mutate((key) => typeof key === "string" && key.startsWith("/api/listing-banners"))
     try { window.localStorage.setItem(BANNER_UPDATE_KEY, String(Date.now())) } catch { /* Polling remains available if storage is disabled. */ }
@@ -115,7 +119,13 @@ export default function ListingBannersAdminPage() {
 
   const save = async () => {
     if (!draft.title.trim() && !(draft.image || "").trim()) return toast.error("Add a title or upload a photo")
-    if (draft.expiresAt !== null && draft.expiresAt !== undefined && !Number.isFinite(Date.parse(draft.expiresAt))) return toast.error("Set a valid deadline or select Never")
+    const schedule = BannerScheduleSchema.safeParse(draft)
+    if (!schedule.success) {
+      const issue = schedule.error.issues[0]
+      toast.error(issue.message)
+      document.getElementById(`banner-${issue.path[0]}`)?.focus()
+      return
+    }
     setSaving(true)
     try {
       const { id, ...payload } = draft
@@ -156,7 +166,7 @@ export default function ListingBannersAdminPage() {
   }
 
   const toggle = async (banner: SiteBanner) => {
-    if (!banner.active && banner.expiresAt && !bannerIsVisible({ ...banner, active: true })) return toast.error("This poster expired. Edit its deadline or choose Never before turning it on.")
+    if (!banner.active && banner.expiresAt && Date.parse(banner.expiresAt) <= Date.now()) return toast.error("This poster expired. Edit its end date or choose Never end before turning it on.")
     setBusyId(banner.id)
     try {
       const active = !banner.active
@@ -187,7 +197,7 @@ export default function ListingBannersAdminPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Banners &amp; Promos</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Manage posters by their actual page and section. Choose a deadline or Never, upload artwork, and save changes to publish. Audience targeting is available for listing divisions and product brands; leave it blank for the default audience of that placement.
+          Manage posters by their actual page and section. Choose weekdays and a visibility date range, upload artwork, and save changes to publish. Audience targeting is available for listing divisions and product brands; leave it blank for the default audience of that placement.
         </p>
         <p className="mt-2 text-sm text-gray-600">New posters start off. Turn on the ones you want to show. Main posters rotate; the first two enabled sub banners and first three enabled below-deals banners appear by order. The first enabled Cart promotional banner appears by order; turning all Cart banners off hides its promotional area. A banner with a photo and no title, subtitle, note, bullets or button fills the full width.</p>
         <ul className="mt-3 grid gap-1 text-sm text-gray-700 sm:grid-cols-2">
@@ -303,12 +313,7 @@ export default function ListingBannersAdminPage() {
               ))}
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-              <Field label="Hide poster after"><select className={inputClass} value={draft.expiresAt === null || draft.expiresAt === undefined ? 'never' : 'deadline'} onChange={event => set('expiresAt', event.target.value === 'never' ? null : '')}><option value="never">Never</option><option value="deadline">Set a deadline</option></select></Field>
-              {draft.expiresAt !== null && draft.expiresAt !== undefined && <div className="mt-3"><Field label="Deadline — India Standard Time (IST)"><input type="datetime-local" className={inputClass} value={deadlineIndiaInput(draft.expiresAt)} onChange={event => { try { set('expiresAt', event.target.value ? deadlineFromIndiaInput(event.target.value) : '') } catch (error) { toast.error(error instanceof Error ? error.message : 'Invalid deadline') } }} /></Field></div>}
-              <p className="mt-2 text-xs text-gray-600">The poster hides automatically at this date and time on every page where it appears. Never means no expiry; the On/Off switch still controls visibility.</p>
-              {draft.expiresAt && Date.parse(draft.expiresAt) <= Date.now() && <p className="mt-2 text-xs font-semibold text-red-700">This deadline has passed. The poster will stay hidden until you change it or select Never.</p>}
-            </div>
+            <BannerScheduleEditor schedule={draft} onChange={schedule => { setDirty(true); setDraft(current => ({ ...current, ...schedule })) }} />
             <div className="flex flex-wrap items-center gap-5">
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={!!draft.dark} onChange={(e) => set("dark", e.target.checked)} className="h-4 w-4" />
@@ -316,7 +321,7 @@ export default function ListingBannersAdminPage() {
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={draft.active !== false} onChange={(e) => set("active", e.target.checked)} className="h-4 w-4" />
-                On — eligible before the deadline
+                On — show when its schedule allows
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 Order
@@ -389,9 +394,9 @@ export default function ListingBannersAdminPage() {
                       <p className="truncate text-sm font-semibold text-gray-900">{banner.title || 'Photo-only poster'}</p>
                       <p className="truncate text-xs text-gray-500">
                         {BANNER_PLACEMENT_LABELS[banner.placement]} · {banner.scope || "all audiences"} ·{" "}
-                        {!banner.active ? 'Off' : bannerIsVisible(banner) ? 'Eligible' : 'Expired — hidden'}
+                        {bannerVisibilityStatus(banner, now)}
                       </p>
-                      <p className="text-xs text-gray-500">{banner.expiresAt ? `Deadline: ${new Date(banner.expiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST` : 'Deadline: Never'}</p>
+                      <p className="text-xs text-gray-500">{bannerScheduleSummary(banner)}</p>
                     </div>
                     <button
                       type="button"

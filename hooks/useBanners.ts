@@ -3,7 +3,7 @@
 import useSWR from "swr"
 import { z } from "zod"
 import { useEffect, useState } from "react"
-import { BANNER_UPDATE_KEY, selectVisibleBanners } from "@/lib/banner-schedule"
+import { BANNER_UPDATE_KEY, BannerScheduleFields, nextBannerTransition, selectVisibleBanners } from "@/lib/banner-schedule"
 
 export const BANNER_PLACEMENTS = [
   "hero",
@@ -53,7 +53,9 @@ export const siteBannerResponseSchema = z.object({
   bullets: z.array(z.string()).optional(),
   order: z.number().optional(),
   active: z.boolean().optional(),
-  expiresAt: z.string().datetime({ offset: true }).nullish(),
+  startsAt: BannerScheduleFields.startsAt.removeDefault(),
+  expiresAt: BannerScheduleFields.expiresAt.removeDefault(),
+  weekdays: BannerScheduleFields.weekdays.removeDefault(),
 })
 export type SiteBanner = z.infer<typeof siteBannerResponseSchema>
 export const siteBannerListResponseSchema = z.array(siteBannerResponseSchema)
@@ -70,7 +72,7 @@ const fetcher = async (url: string): Promise<SiteBanner[]> => {
  * the caller's context (e.g. the active category on a listing page).
  */
 export function useBanners(placement: BannerPlacement, scope?: string): SiteBanner[] {
-  const { data, mutate } = useSWR<SiteBanner[]>(`/api/listing-banners?placement=${placement}`, fetcher, {
+  const { data, mutate } = useSWR<SiteBanner[]>(`/api/listing-banners?placement=${placement}&schedule=1`, fetcher, {
     revalidateOnFocus: true,
     refreshInterval: 30000,
     onError: (error: unknown) => console.error("[Banners] Loading failed:", error),
@@ -88,9 +90,9 @@ export function useBanners(placement: BannerPlacement, scope?: string): SiteBann
 export function useBannerClock(data: SiteBanner[]) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
-    const deadlines = (data || []).filter(banner => banner.active).map(banner => Date.parse(banner.expiresAt || '')).filter(time => time > now)
-    if (!deadlines.length) return
-    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(Math.max(1, Math.min(...deadlines) - Date.now() + 1), 2_147_483_000))
+    const transition = nextBannerTransition(data || [], Date.now())
+    if (transition === null) return
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(Math.max(1, transition - Date.now() + 1), 2_147_483_000))
     return () => window.clearTimeout(timer)
   }, [data, now])
   return Math.max(now, Date.now())

@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
+import type { Document } from "mongodb"
 import { requireAdmin } from "@/lib/auth"
 import { getCollection, normalizeId, createObjectId } from "@/lib/db-service"
 import { handleApiError } from "@/lib/api-error"
+import { BannerScheduleFields, BannerScheduleSchema, bannerIsVisible, type ScheduledBanner } from "@/lib/banner-schedule"
 
 const COLLECTION = "listing_banners"
 
@@ -44,7 +46,7 @@ const BannerSchema = z.object({
   bullets: z.array(z.string().max(60)).max(6).optional().default([]),
   order: z.number().int().min(0).max(999).optional().default(0),
   active: z.boolean().optional().default(false),
-  expiresAt: z.string().datetime({ offset: true }).transform(value => new Date(value).toISOString()).nullable().optional().default(null),
+  ...BannerScheduleFields,
 })
 
 export async function GET(request: NextRequest) {
@@ -52,6 +54,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const placement = searchParams.get("placement")
     const includeInactive = searchParams.get("all") === "1"
+    // Storefront hooks need future candidates to reveal them locally at their
+    // start time or IST midnight, without waiting for another network response.
+    const includeScheduled = searchParams.get("schedule") === "1"
     if (includeInactive) {
       const guard = await requireAdmin()
       if (!guard.ok) return guard.response
@@ -64,10 +69,12 @@ export async function GET(request: NextRequest) {
       filter.$or = [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: new Date().toISOString() } }]
     }
 
-    const collection = await getCollection(COLLECTION)
+    const collection = await getCollection<ScheduledBanner & Document>(COLLECTION)
     const docs = await collection.find(filter).sort({ order: 1, createdAt: 1 }).toArray()
 
-    return NextResponse.json(docs.map(normalizeId), { headers: { "Cache-Control": "no-store" } })
+    const now = Date.now()
+    const visible = includeInactive || includeScheduled ? docs : docs.filter(banner => bannerIsVisible(banner, now))
+    return NextResponse.json(visible.map(normalizeId), { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     return handleApiError(error, "Failed to fetch listing banners")
   }
@@ -82,6 +89,9 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message || "Invalid banner" }, { status: 400 })
     }
+
+    const schedule = BannerScheduleSchema.safeParse(parsed.data)
+    if (!schedule.success) return NextResponse.json({ error: schedule.error.issues[0]?.message || "Invalid visibility schedule" }, { status: 400 })
 
     const collection = await getCollection(COLLECTION)
     const now = new Date()
@@ -109,6 +119,12 @@ export async function PUT(request: NextRequest) {
     }
 
     const collection = await getCollection(COLLECTION)
+    if (['startsAt', 'expiresAt', 'weekdays'].some(key => Object.hasOwn(parsed.data, key))) {
+      const current = await collection.findOne({ _id: createObjectId(id) })
+      if (!current) return NextResponse.json({ error: "Banner not found" }, { status: 404 })
+      const schedule = BannerScheduleSchema.safeParse({ ...current, ...parsed.data })
+      if (!schedule.success) return NextResponse.json({ error: schedule.error.issues[0]?.message || "Invalid visibility schedule" }, { status: 400 })
+    }
     const result = await collection.updateOne(
       { _id: createObjectId(id) },
       { $set: { ...parsed.data, updatedAt: new Date() } },
