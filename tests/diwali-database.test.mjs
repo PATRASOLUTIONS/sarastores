@@ -54,21 +54,28 @@ test('Diwali transactional integration on an isolated synthetic MongoDB database
       await assert.rejects(service.verifyOtp(locked, correct), /expired|attempts/)
     })
     await t.test('registration is persistent, idempotent, and duplicate invoice races produce one claim', async () => {
-      payload = RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', address: 'Synthetic address 123', city: 'Test city', district: 'Test district', pincode: '560001', storeCode: 'TEST-A', invoice: ' test / 001 ', enteredValue: 55000, language: 'en', accuracy: true, whatsappConsent: true, consentVersion: config.consentVersion })
+      payload = RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', email: 'synthetic@example.invalid', address: 'Synthetic address 123', city: 'Test city', district: 'Test district', pincode: '560001', storeCode: 'TEST-A', invoice: ' test / 001 ', enteredValue: 55000, language: 'en', accuracy: true, whatsappConsent: true, consentVersion: config.consentVersion })
       await assert.rejects(service.register(undefined, payload), /Verify your mobile/)
       const first = await service.register(token, payload), second = await service.register(token, payload)
       assert.equal(first.reference, second.reference)
       const claim = await db.collection(service.COLLECTIONS.claims).findOne({ reference: first.reference }); claimId = claim._id
       assert.equal(claim.mobile, '9000000001'); assert.equal(claim.invoice, 'TEST/001'); assert.equal(claim.status, 'pending')
-      await assert.rejects(service.register(token, { ...payload, requestId: randomUUID() }), /already has a claim/)
-      const concurrent = await Promise.allSettled([service.register(token, { ...payload, invoice: 'RACE-001', requestId: randomUUID() }), service.register(token, { ...payload, invoice: 'RACE-001', requestId: randomUUID() })])
+      await assert.rejects(service.register(token, { ...payload, requestId: randomUUID() }), /already has a Diwali registration/)
+      const raceTokens = []
+      for (const mobile of ['9000000003', '9000000004']) {
+        const challenge = await service.sendOtp(mobile, 'en')
+        raceTokens.push((await service.verifyOtp(challenge, lastOtp)).token)
+      }
+      const concurrent = await Promise.allSettled(raceTokens.map((raceToken, index) => service.register(raceToken, { ...payload, email: `race-${index}@example.invalid`, invoice: 'RACE-001', requestId: randomUUID() })))
       assert.equal(concurrent.filter(result => result.status === 'fulfilled').length, 1)
       assert.equal(await db.collection(service.COLLECTIONS.claims).countDocuments({ invoice: 'RACE-001' }), 1)
       assert.equal(await db.collection(service.COLLECTIONS.messages).countDocuments({ claimId }), 0)
     })
     const approval = { action: 'approve', version: 0, verifiedValue: 26000, invoiceDate: '2026-11-05', storeCode: 'TEST-A', note: 'Synthetic POS verification', invoiceValid: true, notRefunded: true }
     await t.test('store filters cannot broaden staff access and pending corrections preserve unique invoices', async () => {
-      const registered = await service.register(token, { ...payload, requestId: randomUUID(), invoice: 'CORRECTION-001', whatsappConsent: false })
+      const challenge = await service.sendOtp('9000000005', 'en')
+      const correctionToken = (await service.verifyOtp(challenge, lastOtp)).token
+      const registered = await service.register(correctionToken, { ...payload, email: 'correction@example.invalid', requestId: randomUUID(), invoice: 'CORRECTION-001', whatsappConsent: false })
       const original = await db.collection(service.COLLECTIONS.claims).findOne({ reference: registered.reference })
       await assert.rejects(service.actOnClaim(verifier, original._id, ActionSchema.parse({ action: 'correct', version: 0, invoice: 'CORRECTION-002', storeCode: 'TEST-B', note: 'Synthetic store correction' })), /permission/)
       await assert.rejects(service.actOnClaim(admin, original._id, ActionSchema.parse({ action: 'correct', version: 0, invoice: 'TEST/001', storeCode: 'TEST-A', note: 'Synthetic duplicate correction' })))

@@ -11,12 +11,15 @@ import { GIFTS, giftForRupees, normalizeInvoice, deliveryDueAt, indiaDate, safeC
 import { ONLINE_STORE, onlineOrderPaymentState, onlineOrderGiftError, type OnlineOrderState } from './online-rules'
 import { validateCampaignStaff, readStoreReferral, resolveStoreLink } from './store-links'
 import { staffCanAccessPage } from '@/lib/admin-access'
+import { assertDiwaliCustomerAllowed } from './blocklist'
+import { assertNewDiwaliRegistration, reserveDiwaliRegistrationIdentity, DUPLICATE_REGISTRATION_MESSAGE } from './registration-identity'
+import { queueRegistrationEmails } from './registration-notifications'
 
 export const COLLECTIONS = { config: 'diwali_config', claims: 'diwali_claims', audit: 'diwali_audit', otp: 'diwali_otp', sessions: 'diwali_sessions', messages: 'diwali_messages', stock: 'diwali_stock', receipts: 'diwali_message_receipts' } as const
 export type StringRecord = Document & { _id: string; resends?: Array<{ actor: string; note: string; confirmedNotSent: boolean; at: Date }> }
 type User = AuthSession['user']
 export type Claim = Document & {
-  _id: string; reference: string; mobile: string; name: string; address: string; city: string; district: string; pincode: string;
+  _id: string; reference: string; mobile: string; email?: string; name: string; address: string; city: string; district: string; pincode: string;
   storeCode: string; invoice: string; enteredValue: number; language: 'en' | 'kn'; whatsappConsent: boolean;
   status: 'pending' | 'approved' | 'rejected'; fulfilment: 'pending' | 'packed' | 'dispatched' | 'delivered' | 'exception';
   version: number; createdAt: Date; updatedAt: Date; giftCode?: GiftCode; verifiedValue?: number; dueAt?: Date; deliveredAt?: Date;
@@ -40,6 +43,7 @@ export function initializeDiwali() {
     await (await getCollection<StringRecord>(COLLECTIONS.messages)).createIndexes([{ key: { eventKey: 1 }, unique: true }, { key: { providerId: 1 }, sparse: true, unique: true }, { key: { status: 1, nextAt: 1 } }])
     for (const name of [COLLECTIONS.otp, COLLECTIONS.sessions, COLLECTIONS.receipts]) await (await getCollection(name)).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     await (await getCollection(COLLECTIONS.audit)).createIndex({ claimId: 1, at: -1 })
+    await (await getCollection('diwali_registration_emails')).createIndexes([{ key: { status: 1, createdAt: 1 } }, { key: { reference: 1, status: 1 } }])
   })().catch(error => { initialized = undefined; throw error })
   return initialized
 }
@@ -93,9 +97,11 @@ function registrationOpen(config: CampaignConfig) {
   const today = indiaDate(new Date())
   if (!config.enabled || today < config.registrationStart || today > config.registrationEnd) throw new DiwaliError('Registration is currently closed', 409)
 }
-export async function sendOtp(mobile: string, language: 'en' | 'kn', purpose: 'register' | 'status' = 'register') {
+export async function sendOtp(mobile: string, language: 'en' | 'kn', purpose: 'register' | 'status' = 'register', email?: string) {
   await initializeDiwali()
   if (purpose === 'register') registrationOpen(await getConfig())
+  if (purpose === 'register') await assertDiwaliCustomerAllowed({ mobile, email })
+  if (purpose === 'register') await assertNewDiwaliRegistration(mobile, email)
   if (process.env.DIWALI_MESSAGING_ENABLED !== 'true' || !process.env.DIWALI_OTP_TEMPLATE) throw new DiwaliError('Mobile verification is not configured', 503)
   // A shared authentication template may be approved in only one language.
   // This override affects OTPs, not the customer's approval/dispatch language.
@@ -131,6 +137,7 @@ export async function customerSession(token: string | undefined) {
 }
 export async function register(token: string | undefined, input: z.infer<typeof RegistrationSchema>, referralCookie?: string) {
   const verified = await customerSession(token), config = await getConfig()
+  await assertDiwaliCustomerAllowed({ mobile: verified.mobile, email: input.email })
   const requestKey = hash(`${verified.mobile}:${input.requestId}`)
   const collection = await getCollection<Claim>(COLLECTIONS.claims)
   const prior = await collection.findOne({ requestKey, mobile: verified.mobile })
@@ -149,11 +156,24 @@ export async function register(token: string | undefined, input: z.infer<typeof 
     consent: { version: config.consentVersion, whatsapp: input.whatsappConsent, accuracy: true, at: new Date(), language: input.language, wording: input.language === 'kn' ? 'ನನ್ನ ನೋಂದಣಿ ಮತ್ತು ಉಡುಗೊರೆ ವಿತರಣೆ ಕುರಿತು WhatsApp ಸಂದೇಶಗಳನ್ನು ಸ್ವೀಕರಿಸಲು ನಾನು ಒಪ್ಪುತ್ತೇನೆ.' : 'I agree to receive WhatsApp updates about my registration and gift delivery.' },
     verifiedMobileAt: verified.verifiedAt, status: 'pending', fulfilment: 'pending', version: 0, createdAt: new Date(), updatedAt: new Date() }
   try {
-    await transaction(async session => { await collection.insertOne(claim, { session }); await audit(session, `customer:${hash(verified.mobile)}`, 'register', claim._id) })
+    const registered = await transaction(async session => {
+      const existingRequest = await collection.findOne({ requestKey, mobile: verified.mobile }, { session })
+      if (existingRequest) return existingRequest
+      await assertDiwaliCustomerAllowed({ mobile: verified.mobile, email: input.email }, session)
+      await assertNewDiwaliRegistration(verified.mobile, input.email, session)
+      await reserveDiwaliRegistrationIdentity(claim._id, verified.mobile, input.email, session)
+      await collection.insertOne(claim, { session })
+      await audit(session, `customer:${hash(verified.mobile)}`, 'register', claim._id)
+      await queueRegistrationEmails(claim, session)
+      return claim
+    })
+    return customerClaim(registered)
   } catch (error) {
     if ((error as { code?: number }).code !== 11000) throw error
     const repeated = await collection.findOne({ requestKey, mobile: verified.mobile })
     if (repeated) return customerClaim(repeated)
+    await assertNewDiwaliRegistration(verified.mobile, input.email)
+    if (/^2026:(mobile|email):/.test(String((error as { keyValue?: { _id?: unknown } }).keyValue?._id || ''))) throw new DiwaliError(DUPLICATE_REGISTRATION_MESSAGE, 409)
     throw new DiwaliError('This invoice already has a claim. Contact SARA support if it needs correction.', 409)
   }
   return customerClaim(claim)
@@ -235,6 +255,7 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
     const collection = await getCollection<Claim>(COLLECTIONS.claims)
     const claim = await collection.findOne({ $and: [{ _id: id }, scopeFilter(user, config)] }, { session })
     if (!claim) throw new DiwaliError('Claim not found', 404)
+    if (['approve', 'pack', 'dispatch'].includes(action.action)) await assertDiwaliCustomerAllowed({ mobile: claim.mobile, email: claim.email, accountEmail: claim.accountEmail, accountMobile: claim.accountMobile }, session)
     if (claim.version !== action.version) throw new DiwaliError('Another operator updated this claim. Refresh before continuing.', 409)
     const patch: Document = { updatedAt: new Date() }
     if (claim.source === 'online' && ['approve', 'pack', 'dispatch'].includes(action.action)) {

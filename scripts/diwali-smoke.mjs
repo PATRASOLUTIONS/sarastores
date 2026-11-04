@@ -56,6 +56,7 @@ try {
   // The storefront consent banner is outside the campaign; dismiss if presented.
   const essential = page.getByRole('button', { name: /essential only|reject optional|necessary only|reject all/i })
   if (await essential.count()) await essential.first().click()
+  await page.getByLabel('Email address', { exact: true }).fill('synthetic@example.invalid')
   await page.getByLabel('Mobile number', { exact: true }).fill('9000000099')
   await page.getByRole('button', { name: 'Send verification code', exact: true }).click()
   await page.getByLabel('Six-digit code sent on WhatsApp').fill(code)

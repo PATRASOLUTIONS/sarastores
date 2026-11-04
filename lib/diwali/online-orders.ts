@@ -4,17 +4,20 @@ import { getCollection } from '@/lib/db-service'
 import { COLLECTIONS, getConfig, initializeDiwali, type Claim } from './service'
 import { onlineGift, ONLINE_STORE, type OnlineGift } from './online-rules'
 import { indiaDate, normalizeInvoice } from './rules'
+import { assertDiwaliCustomerAllowed, isDiwaliCustomerBlocked } from './blocklist'
 
 type Customer = { name: string; phone: string | null; address: string; city: string; state: string; zipCode: string; email: string }
 export type OnlineDiwaliOrder = {
   orderId: string; userId: string | null; paymentMethod: string; total: number; shipping: number;
   customer: Customer; createdAt: Date; diwaliGift?: OnlineGift | null;
+  accountEmail?: string; accountMobile?: string | null;
   shippingAddress?: { street: string; city: string; state: string; zip: string };
   fulfilment?: { method: string; storeName?: string };
 }
 export async function prepareOnlineDiwaliOrder(order: OnlineDiwaliOrder) {
   if (order.paymentMethod === 'instore') return null
   const gift = onlineGift(await getConfig(), order.total, order.shipping, order.createdAt)
+  if (gift && await isDiwaliCustomerBlocked({ email: order.customer.email, mobile: order.customer.phone, accountEmail: order.accountEmail, accountMobile: order.accountMobile })) return null
   if (gift) await initializeDiwali()
   return gift
 }
@@ -22,6 +25,7 @@ export async function prepareOnlineDiwaliOrder(order: OnlineDiwaliOrder) {
 export async function recordOnlineDiwaliOrder(order: OnlineDiwaliOrder, session: ClientSession) {
   const gift = order.diwaliGift
   if (!gift) return
+  await assertDiwaliCustomerAllowed({ email: order.customer.email, mobile: order.customer.phone, accountEmail: order.accountEmail, accountMobile: order.accountMobile }, session)
   const id = `online:${order.orderId}`
   const requestKey = createHash('sha256').update(id).digest('hex')
   const invoice = normalizeInvoice(order.orderId)
@@ -30,6 +34,7 @@ export async function recordOnlineDiwaliOrder(order: OnlineDiwaliOrder, session:
     source: 'online', orderId: order.orderId, userId: order.userId, invoice,
     invoiceKey: `${ONLINE_STORE}:${invoice}`, requestKey, storeCode: ONLINE_STORE,
     name: order.customer.name, mobile: order.customer.phone || '', email: order.customer.email,
+    ...(order.accountEmail ? { accountEmail: order.accountEmail } : {}), ...(order.accountMobile ? { accountMobile: order.accountMobile } : {}),
     address: order.shippingAddress?.street || order.customer.address, city: order.shippingAddress?.city || order.customer.city,
     district: '', state: order.shippingAddress?.state || order.customer.state,
     pincode: order.shippingAddress?.zip || order.customer.zipCode, enteredValue: gift.eligibleValue, giftCode: gift.giftCode,
