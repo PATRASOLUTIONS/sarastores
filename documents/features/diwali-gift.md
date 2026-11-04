@@ -47,6 +47,7 @@ Configure secrets in the hosting environment, never in public code:
 - `DIWALI_DISPATCH_TEMPLATE_EN`, `DIWALI_DISPATCH_TEMPLATE_KN`: approved templates with ordered body parameters: name, reference, courier, AWB, tracking URL.
 - `DIWALI_WEBHOOK_SECRET`: provider's HMAC signing secret. Callback uses `X-Hub-Signature-256` over the raw body and Meta-compatible entry/changes/statuses payloads. Confirm AskEva's callback contract; adapt the signed provider transport if its format differs.
 - `DIWALI_WEBHOOK_VERIFY_TOKEN`: private subscription challenge token.
+- `DIWALI_OTP_LANGUAGE`: optional `en` or `kn` override for an authentication template approved in only one language. When absent, OTPs use the customer's chosen language. Approval and dispatch messages always keep the customer's chosen language. The approved generic `spin_win_auth` template can be used with `DIWALI_OTP_LANGUAGE=en` until the Diwali OTP template has bilingual approval.
 - `CRON_SECRET`: existing service authentication secret.
 
 Configure a managed scheduler to call `GET /api/cron/diwali` with `Authorization: Bearer CRON_SECRET`, typically every minute. This endpoint is not automatically scheduled by the existing daily cron jobs. Each run processes at most 15 messages; assess throughput and provider limits against expected campaign volume. Production registration opening checks configured required template names but provider approval must be independently evidenced.
