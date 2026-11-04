@@ -142,7 +142,8 @@ test('submitted registrations retain only signed store attribution and remain id
       async findOne(filter) {
         if (name === 'diwali_config') return { _id: '2026', ...config }
         if (name === 'diwali_sessions') return { mobile: '9000000099', verifiedAt: new Date() }
-        if (name === 'diwali_claims') return claims.find(claim => claim.requestKey === filter.requestKey) || null
+        if (name === 'diwali_blocklist') return null
+        if (name === 'diwali_claims') return claims.find(claim => filter.$or ? filter.$or.some(match => match.mobile === claim.mobile || match.email && new RegExp(match.email.$regex, match.email.$options).test(claim.email)) : claim.requestKey === filter.requestKey) || null
         if (name === 'store_locations') return { _id: 'one', shopName: 'QR branch', storeCode: 'ONE', isActive: true }
         throw new Error(`Unexpected lookup: ${name}`)
       },
@@ -153,7 +154,7 @@ test('submitted registrations retain only signed store attribution and remain id
   const { createStoreReferral } = loader.load('lib/diwali/store-links.ts')
   const { register } = loader.load('lib/diwali/service.ts')
   const { RegistrationSchema } = loader.load('lib/diwali/schemas.ts')
-  const input = { requestId: randomUUID(), name: 'Synthetic Customer', address: 'Synthetic Street 123', city: 'Bengaluru', district: 'Bengaluru', pincode: '560001', storeCode: 'ONE', invoice: 'SYNTH-1', enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }
+  const input = { requestId: randomUUID(), email: 'synthetic@example.invalid', name: 'Synthetic Customer', address: 'Synthetic Street 123', city: 'Bengaluru', district: 'Bengaluru', pincode: '560001', storeCode: 'ONE', invoice: 'SYNTH-1', enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }
   assert.equal(RegistrationSchema.safeParse({ ...input, referralStoreId: token('spoofed') }).success, false)
   const result = await register('verified-session', input, createStoreReferral(token('one')))
   assert.equal(claims[0].referralStoreId, token('one'))
@@ -162,6 +163,6 @@ test('submitted registrations retain only signed store attribution and remain id
   assert.equal(result.referralStoreId, undefined)
   await register('verified-session', input, 'spoofed-cookie')
   assert.equal(claims.length, 1)
-  await register('verified-session', { ...input, requestId: randomUUID(), invoice: 'SYNTH-2' }, 'spoofed-cookie')
-  assert.equal(claims[1].referralStoreId, undefined)
+  await assert.rejects(register('verified-session', { ...input, requestId: randomUUID(), invoice: 'SYNTH-2' }, 'spoofed-cookie'), /already has a Diwali registration/)
+  assert.equal(claims.length, 1)
 })

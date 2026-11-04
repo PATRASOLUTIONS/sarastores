@@ -7,13 +7,13 @@ import { z } from 'zod'
 import { apiFetchJson } from '@/lib/api-client'
 import { onlineCampaignOpen, onlineGift, type OnlineGift } from '@/lib/diwali/online-rules'
 
-const CampaignSchema = z.object({ enabled: z.boolean(), campaignStart: z.string(), campaignEnd: z.string(), registrationStart: z.string(), registrationEnd: z.string(), consentVersion: z.string() })
+const CampaignSchema = z.object({ enabled: z.boolean(), campaignStart: z.string(), campaignEnd: z.string(), registrationStart: z.string(), registrationEnd: z.string(), consentVersion: z.string(), customerAllowed: z.boolean().optional() })
 const loadCampaign = (url: string) => apiFetchJson(url, {}, value => CampaignSchema.parse(value))
 export default function CartDiwaliGift({ total, shipping = 0, checkout = false, confirmedGift }: {
   total: number; shipping?: number; checkout?: boolean; confirmedGift?: OnlineGift | null;
 }) {
   const { data: config } = useSWR('/api/diwali/config', loadCampaign, { refreshInterval: 30_000, revalidateOnFocus: true })
-  if (!config || !onlineCampaignOpen(config)) return null
+  if (!config || config.customerAllowed === false || !onlineCampaignOpen(config)) return null
   const gift = confirmedGift === undefined ? onlineGift(config, total, shipping) : confirmedGift
   const eligibleValue = Math.max(0, Math.round((total - shipping) * 100) / 100)
   return <section aria-label="Diwali gift" className="overflow-hidden rounded-xl border border-amber-200 bg-[#fff8e8]">

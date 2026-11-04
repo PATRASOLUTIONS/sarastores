@@ -731,8 +731,9 @@ async function createOrder(request: NextRequest) {
       updatedAt: new Date(),
     }
 
-    const diwaliGift = await prepareOnlineDiwaliOrder(newOrder)
-    const diwaliOrder = { ...newOrder, diwaliGift }
+    const diwaliAccount = { accountEmail: session?.user.email, accountMobile: session?.user.phone }
+    const diwaliGift = await prepareOnlineDiwaliOrder({ ...newOrder, ...diwaliAccount })
+    const diwaliOrder = { ...newOrder, diwaliGift, ...diwaliAccount }
     Object.assign(newOrder, { diwaliGift })
 
     const orderNotes = generateOrderNotes({

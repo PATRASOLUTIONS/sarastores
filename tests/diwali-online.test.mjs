@@ -44,6 +44,7 @@ test('automatic registration is idempotent and rolls back with a failed order tr
   }, async endSession() {} }
   const loader = sourceLoader({
     '@/lib/db-service': { getCollection: async name => ({
+      async findOne() { return null },
       async updateOne(filter, update, options) {
         assert.equal(name, 'diwali_claims'); assert.equal(options.session, session)
         if (claims.has(filter._id)) return { upsertedCount: 0 }
@@ -162,6 +163,7 @@ test('placing an order registers its server-priced gift and session identity in 
 test('pickup gifts retain the trusted pickup destination even when contact-only checkout has no address', async () => {
   let claim
   const loader = sourceLoader({ '@/lib/db-service': { getCollection: async () => ({
+    findOne: async () => null,
     updateOne: async (_filter, update) => { claim = update.$setOnInsert; return { upsertedCount: 0 } },
   }) } })
   const diwaliGift = loader.load('lib/diwali/online-rules.ts').onlineGift(config, order.total, order.shipping, at)
