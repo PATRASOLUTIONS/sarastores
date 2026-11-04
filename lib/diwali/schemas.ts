@@ -14,7 +14,7 @@ export const ConfigSchema = z.object({
   registrationStart: DateOnly,
   registrationEnd: DateOnly,
   workingDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
-  holidays: z.array(DateOnly).max(100),
+  holidays: z.array(DateOnly).max(100).refine(days => new Set(days).size === days.length, 'Each holiday date should appear only once.'),
   termsEn: z.string().max(20000), termsKn: z.string().max(20000),
   privacyEn: z.string().max(20000), privacyKn: z.string().max(20000),
   consentVersion: z.string().trim().min(1).max(100),

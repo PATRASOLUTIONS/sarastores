@@ -11,7 +11,7 @@ type Props = {
   verified: boolean; busy: boolean; onSendCode: () => void; onVerifyCode: () => void; onChangeMobile: () => void
   amount: string; onAmount: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void; onReset: () => void
-  open: boolean; today: string; error: string
+  open: boolean; today: string; error: string; initialStoreCode?: string
 }
 const input = 'mt-1.5 block w-full min-w-0 rounded-[9px] border border-[#d9dbe2] bg-white px-3 py-2.5 text-sm text-[#20212a] outline-none focus:border-[#b21a23] focus:ring-2 focus:ring-red-100 disabled:bg-gray-100'
 const label = 'block text-xs font-semibold text-[#4c5260]'
@@ -42,7 +42,7 @@ export default function GiftRegistration(props: Props) {
             <label className={`${label} sm:col-span-2`}>{t('Complete delivery address', 'ಸಂಪೂರ್ಣ ವಿತರಣಾ ವಿಳಾಸ')} *<textarea name="address" aria-label={t('Complete delivery address', 'ಸಂಪೂರ್ಣ ವಿತರಣಾ ವಿಳಾಸ')} className={`${input} min-h-[74px] resize-y`} required minLength={10} maxLength={800} autoComplete="street-address" rows={2} placeholder={t('House / flat, street and area', 'ಮನೆ / ಫ್ಲಾಟ್, ರಸ್ತೆ ಮತ್ತು ಪ್ರದೇಶ')} /></label>
             {([['city', t('City', 'ನಗರ')], ['district', t('District', 'ಜಿಲ್ಲೆ')]] as const).map(([name, text]) => <label key={name} className={label}>{text} *<input name={name} aria-label={text} className={input} required minLength={2} maxLength={100} /></label>)}
             <label className={label}>{t('PIN code', 'ಪಿನ್ ಕೋಡ್')} *<input name="pincode" aria-label={t('PIN code', 'ಪಿನ್ ಕೋಡ್')} className={input} required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" autoComplete="postal-code" placeholder={t('6-digit PIN code', '6 ಅಂಕಿಯ ಪಿನ್ ಕೋಡ್')} /></label>
-            <label className={label}>{t('Invoice store', 'ಬಿಲ್‌ನ ಅಂಗಡಿ')} *<select name="storeCode" aria-label={t('Invoice store', 'ಬಿಲ್‌ನ ಅಂಗಡಿ')} className={input} required defaultValue=""><option value="">{t('Select the store on your invoice', 'ನಿಮ್ಮ ಬಿಲ್‌ನ ಅಂಗಡಿಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ')}</option>{config.stores.map(store => <option key={store.code} value={store.code}>{store.name} · {store.code}</option>)}</select></label>
+            <label className={label}>{t('Invoice store', 'ಬಿಲ್‌ನ ಅಂಗಡಿ')} *<select name="storeCode" aria-label={t('Invoice store', 'ಬಿಲ್‌ನ ಅಂಗಡಿ')} className={input} required defaultValue={config.stores.some(store => store.code === props.initialStoreCode) ? props.initialStoreCode : ''}><option value="">{t('Select the store on your invoice', 'ನಿಮ್ಮ ಬಿಲ್‌ನ ಅಂಗಡಿಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ')}</option>{config.stores.map(store => <option key={store.code} value={store.code}>{store.name} · {store.code}</option>)}</select></label>
             <label className={label}>{t('Invoice number', 'ಬಿಲ್ ಸಂಖ್ಯೆ')} *<input name="invoice" aria-label={t('Invoice number', 'ಬಿಲ್ ಸಂಖ್ಯೆ')} className={input} required maxLength={100} placeholder={t('Enter invoice number', 'ಬಿಲ್ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ')} /></label>
             <label className={label}>{t('Invoice value in rupees', 'ರೂಪಾಯಿಗಳಲ್ಲಿ ಬಿಲ್ ಮೊತ್ತ')} *<input type="number" aria-label={t('Invoice value in rupees', 'ರೂಪಾಯಿಗಳಲ್ಲಿ ಬಿಲ್ ಮೊತ್ತ')} className={input} required min={15000} max={100000000} step={1} value={amount} onChange={event => props.onAmount(event.target.value)} placeholder={t('Enter invoice value', 'ಬಿಲ್ ಮೊತ್ತ ನಮೂದಿಸಿ')} /></label>
           </div>

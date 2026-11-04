@@ -198,12 +198,13 @@ test('customers can enter gift details before OTP verification but cannot submit
 test('campaign permissions separate verification, fulfilment, management and export', () => {
   const { authorize } = sourceLoader().load('lib/diwali/service.ts')
   const config = { staff: [{ userId: 'v', role: 'verifier', export: false, stores: ['A'] }, { userId: 'f', role: 'fulfilment', export: false, stores: [] }, { userId: 'm', role: 'management', export: false, stores: [] }] }
-  const user = id => ({ id, role: 'user', dashboardAccess: true })
+  const user = id => ({ id, role: 'user', dashboardAccess: true, allowedPages: ['/admin/diwali'] })
   assert.equal(authorize(user('v'), config, 'verify').role, 'verifier')
   assert.throws(() => authorize(user('v'), config, 'fulfil'), /permission/)
   assert.throws(() => authorize(user('m'), config, 'verify'), /permission/)
   assert.throws(() => authorize(user('m'), config, 'export'), /permission/)
   assert.throws(() => authorize(user('unknown'), config, 'view'), /access denied/)
+  assert.throws(() => authorize({ ...user('v'), allowedPages: ['/admin/orders'] }, config, 'view'), /access denied/)
 })
 test('customer registration rejects cross-site requests before reading any credentials', async () => {
   const { POST } = sourceLoader().load('app/api/diwali/register/route.ts')

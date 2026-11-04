@@ -9,6 +9,8 @@ import { ConfigSchema, DEFAULT_CONFIG, type CampaignConfig, type ClaimAction, ty
 import type { z } from 'zod'
 import { GIFTS, giftForRupees, normalizeInvoice, deliveryDueAt, indiaDate, safeCsv, isRealDate, type GiftCode } from './rules'
 import { ONLINE_STORE, onlineOrderPaymentState, onlineOrderGiftError, type OnlineOrderState } from './online-rules'
+import { validateCampaignStaff, readStoreReferral, resolveStoreLink } from './store-links'
+import { staffCanAccessPage } from '@/lib/admin-access'
 
 export const COLLECTIONS = { config: 'diwali_config', claims: 'diwali_claims', audit: 'diwali_audit', otp: 'diwali_otp', sessions: 'diwali_sessions', messages: 'diwali_messages', stock: 'diwali_stock', receipts: 'diwali_message_receipts' } as const
 export type StringRecord = Document & { _id: string; resends?: Array<{ actor: string; note: string; confirmedNotSent: boolean; at: Date }> }
@@ -33,6 +35,7 @@ export function initializeDiwali() {
       { key: { invoiceKey: 1 }, unique: true }, { key: { requestKey: 1 }, unique: true },
       { key: { reference: 1 }, unique: true }, { key: { mobile: 1, createdAt: -1 } },
       { key: { status: 1, storeCode: 1, createdAt: -1 } }, { key: { fulfilment: 1, dueAt: 1 } },
+      { key: { referralStoreId: 1, storeCode: 1, status: 1 } },
     ])
     await (await getCollection<StringRecord>(COLLECTIONS.messages)).createIndexes([{ key: { eventKey: 1 }, unique: true }, { key: { providerId: 1 }, sparse: true, unique: true }, { key: { status: 1, nextAt: 1 } }])
     for (const name of [COLLECTIONS.otp, COLLECTIONS.sessions, COLLECTIONS.receipts]) await (await getCollection(name)).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
@@ -48,7 +51,7 @@ export async function getConfig(): Promise<CampaignConfig> {
 }
 export function accessFor(user: User, config: CampaignConfig) {
   if (user.role === 'admin' || user.role === 'superadmin') return { role: 'superadmin' as const, export: true, stores: [] as string[] }
-  if (!user.dashboardAccess) throw new DiwaliError('Campaign access denied', 403)
+  if (!staffCanAccessPage(user, '/admin/diwali')) throw new DiwaliError('Campaign access denied', 403)
   const assignment = config.staff.find(staff => staff.userId === user.id)
   if (!assignment) throw new DiwaliError('Campaign access denied', 403)
   return assignment
@@ -73,6 +76,7 @@ async function audit(session: ClientSession | undefined, actor: string, action: 
 }
 export async function saveConfig(user: User, config: CampaignConfig) {
   authorize(user, await getConfig(), 'settings')
+  await validateCampaignStaff(config)
   if (config.enabled && (!process.env.DIWALI_OTP_TEMPLATE || process.env.DIWALI_MESSAGING_ENABLED !== 'true' || !process.env.ASKEVA_API_KEY || !process.env.ASKEVA_API_URL || !process.env.DIWALI_APPROVED_TEMPLATE_EN || !process.env.DIWALI_APPROVED_TEMPLATE_KN || !process.env.DIWALI_DISPATCH_TEMPLATE_EN || !process.env.DIWALI_DISPATCH_TEMPLATE_KN)) throw new DiwaliError('Configure OTP and bilingual approval/dispatch messaging before opening registration', 400, 'enabled')
   await transaction(async session => {
     const collection = await getCollection<StringRecord>(COLLECTIONS.config)
@@ -121,7 +125,7 @@ export async function customerSession(token: string | undefined) {
   if (!session) throw new DiwaliError('Mobile verification expired. Please verify again.', 401)
   return session
 }
-export async function register(token: string | undefined, input: z.infer<typeof RegistrationSchema>) {
+export async function register(token: string | undefined, input: z.infer<typeof RegistrationSchema>, referralCookie?: string) {
   const verified = await customerSession(token), config = await getConfig()
   const requestKey = hash(`${verified.mobile}:${input.requestId}`)
   const collection = await getCollection<Claim>(COLLECTIONS.claims)
@@ -133,7 +137,10 @@ export async function register(token: string | undefined, input: z.infer<typeof 
   if (!config.stores.some(store => store.code === input.storeCode)) throw new DiwaliError('Select a valid store')
   const normalized = normalizeInvoice(input.invoice)
   if (!normalized) throw new DiwaliError('Enter a valid invoice number')
+  const referral = readStoreReferral(referralCookie)
+  const referralStore = referral ? await resolveStoreLink(referral.id, config) : null
   const claim: Claim = { ...input, _id: randomUUID(), reference: `SARA-DIW-${randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase()}`, mobile: verified.mobile,
+    ...(referralStore ? { referralStoreId: referralStore.id, referralStoreCode: referralStore.code, referralStoreName: referralStore.name, referralOpenedAt: referral?.at } : {}),
     invoice: normalized, invoiceKey: `${input.storeCode}:${normalized}`, requestKey,
     consent: { version: config.consentVersion, whatsapp: input.whatsappConsent, accuracy: true, at: new Date(), language: input.language, wording: input.language === 'kn' ? 'ನನ್ನ ನೋಂದಣಿ ಮತ್ತು ಉಡುಗೊರೆ ವಿತರಣೆ ಕುರಿತು WhatsApp ಸಂದೇಶಗಳನ್ನು ಸ್ವೀಕರಿಸಲು ನಾನು ಒಪ್ಪುತ್ತೇನೆ.' : 'I agree to receive WhatsApp updates about my registration and gift delivery.' },
     verifiedMobileAt: verified.verifiedAt, status: 'pending', fulfilment: 'pending', version: 0, createdAt: new Date(), updatedAt: new Date() }
@@ -323,7 +330,7 @@ export async function exportClaims(user: User, params = new URLSearchParams()) {
   const collection = await getCollection<Claim>(COLLECTIONS.claims), match = reportFilter(user, config, params)
   if (await collection.countDocuments(match) > 10000) throw new DiwaliError('Export exceeds 10,000 records. Use a narrower reporting scope.', 413)
   const rows = await collection.find(match).sort({ createdAt: -1 }).limit(10000).toArray()
-  const fields = ['reference', 'source', 'orderId', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
+  const fields = ['reference', 'source', 'orderId', 'referralStoreCode', 'referralStoreName', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
   await audit(undefined, user.id, 'export', 'campaign', { count: rows.length })
   return [fields.map(safeCsv).join(','), ...rows.map(row => fields.map(field => safeCsv(row[field] instanceof Date ? row[field].toISOString() : row[field])).join(','))].join('\r\n')
 }
