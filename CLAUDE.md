@@ -336,6 +336,7 @@ Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Polic
 | Image allowlist | **Closed.** The catch-all `hostname: "**"` is gone from [next.config.mjs](next.config.mjs). |
 | Firebase | Referenced in CSP and preconnects, but no Firebase SDK is installed and no upload route exists. |
 
+----
 
 ## 12. Corrections to older docs
 

@@ -1,6 +1,8 @@
 "use client"
 
 
+
+import SiteImage from "@/components/SiteImage"
 import { apiFetch } from "@/lib/api-client"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
@@ -352,7 +354,7 @@ export default function OrdersPage() {
                     {order.items.slice(0, 3).map((item) => (
                       <li key={`${order.id}-${item.id}`} className="flex gap-3">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <SiteImage
                           src={item.image || "/placeholder.svg"}
                           alt=""
                           className="h-16 w-16 flex-shrink-0 rounded-lg bg-gray-50 object-contain p-1"
@@ -488,7 +490,7 @@ export default function OrdersPage() {
                 <Heart className="absolute right-3 top-3 h-4 w-4 text-gray-300" strokeWidth={1.6} />
                 <Link href={`/product/${product.slug || product.id}`} className="block">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imageOf(product)} alt="" className="mx-auto h-20 w-full object-contain" />
+                  <SiteImage src={imageOf(product)} alt="" className="mx-auto h-20 w-full object-contain" />
                   <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-snug text-[#0F2557]">
                     {product.name}
                   </p>

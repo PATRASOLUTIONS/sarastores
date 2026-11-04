@@ -26,7 +26,7 @@ function GoogleStoreCard({ store, result }: { store: GoogleStoreSummary; result?
   useEffect(() => { setPhotoFailed(false) }, [business?.photoUrl])
   return <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
     <div className="relative flex h-52 items-center justify-center bg-gray-100">
-      {business?.photoUrl && !photoFailed ? <SiteImage unoptimized src={business.photoUrl} alt={`Google listing: ${business.name}`} loading="lazy" className="h-full w-full object-cover" onError={() => setPhotoFailed(true)} /> :
+      {business?.photoUrl && !photoFailed ? <SiteImage src={business.photoUrl} alt={`Google listing: ${business.name}`} loading="lazy" className="h-full w-full object-cover" onError={() => setPhotoFailed(true)} /> :
       <div className="flex flex-col items-center gap-2 px-5 text-center text-xs text-gray-500"><ImageIcon size={30} /><span>{status === "pending" ? "Waiting for Google photo" : photoFailed ? "Photo unavailable; refresh to try again" : business?.photoMessage || "No Google photo fetched"}</span></div>}
       <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-medium ${connected ? "bg-green-100 text-green-800" : status === "pending" ? "bg-white text-gray-600" : "bg-amber-100 text-amber-800"}`}>{connected ? "Google connected" : status === "pending" ? result?.stage === "loading" ? "Fetching..." : "Queued" : status === "failed" ? "Fetch failed" : "Not configured"}</span>
     </div>

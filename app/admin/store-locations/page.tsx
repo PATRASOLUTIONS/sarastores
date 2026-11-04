@@ -225,7 +225,7 @@ const StoreForm = ({
           />
           {store.shopImage && (
             <div className="mt-3 relative">
-              <SiteImage unoptimized
+              <SiteImage
                 src={store.shopImage} 
                 alt="Shop preview" 
                 className="w-full h-40 object-cover rounded-xl border"
@@ -731,7 +731,7 @@ export default function StoreLocationsPage() {
               {/* Store Image */}
               <div className="relative h-48 bg-gradient-to-br from-blue-100 to-purple-100">
                 {store.shopImage ? (
-                  <SiteImage unoptimized
+                  <SiteImage
                     src={store.shopImage}
                     alt={store.shopName}
                     className="w-full h-full object-cover"

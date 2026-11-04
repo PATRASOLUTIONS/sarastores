@@ -358,7 +358,7 @@ export default function AdminComplaints() {
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {selectedComplaint.images.map((image, index) => (
                       <div key={index} className="relative group">
-                        <SiteImage unoptimized
+                        <SiteImage
                           src={image}
                           alt={`Complaint image ${index + 1}`}
                           className="w-full h-48 object-cover rounded-lg border-2 border-purple-200 cursor-pointer hover:border-purple-400 transition-all"

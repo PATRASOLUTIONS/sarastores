@@ -656,7 +656,7 @@ export default function PromotionsAdminPage() {
                                 className="w-4 h-4 text-blue-600 rounded"
                               />
                               {product.image && (
-                                <SiteImage unoptimized
+                                <SiteImage
                                   src={product.image}
                                   alt={product.name}
                                   className="w-10 h-10 object-cover rounded"

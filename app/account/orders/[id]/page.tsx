@@ -1,3 +1,5 @@
+
+import SiteImage from "@/components/SiteImage"
 import { redirect } from "next/navigation"
 
 /**
@@ -215,7 +217,7 @@ export default async function AccountOrderDetailPage(context: { params: Promise<
 //                   <ul className="divide-y divide-gray-200">
 //                     {order.items.map((item: any) => (
 //                       <li key={item.id} className="py-4 flex">
-//                         <img
+//                         <SiteImage
 //                           src={item.image || "/placeholder.svg?height=80&width=80"}
 //                           alt={item.name}
 //                           className="h-20 w-20 object-cover rounded"

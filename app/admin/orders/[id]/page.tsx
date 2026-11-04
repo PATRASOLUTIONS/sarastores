@@ -940,7 +940,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                       <div key={index} className="flex items-center justify-between">
                         <div className="flex items-center">
                           <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border border-gray-200">
-                            <SiteImage unoptimized
+                            <SiteImage
                               src={item.image || "/placeholder.svg?height=80&width=80"}
                               alt={item.name}
                               className="h-full w-full object-cover object-center"

@@ -11,7 +11,7 @@ type SiteImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "alt" | "src" | 
 
 /** Next images with native sizing and caller-owned error handling preserved. */
 export default function SiteImage({
-  src, width, height, sizes, className, style, onError, loading, fetchPriority,
+  src, width, height, sizes, className, style, onError, loading, fetchPriority, referrerPolicy,
   unoptimized = false, priority = false, ref, ...props
 }: SiteImageProps) {
   const source = src?.trim() || "/placeholder.svg"
@@ -28,6 +28,7 @@ export default function SiteImage({
     data-site-auto-height={nativeHeight === undefined ? "" : undefined}
     data-site-auto-ratio={nativeWidth === undefined || nativeHeight === undefined ? "" : undefined}
     sizes={resolvedSizes} className={className} style={style}
+    referrerPolicy={referrerPolicy || (/^https?:\/\//i.test(current) ? 'no-referrer' : undefined)}
     unoptimized={!optimized}
     loading={loading || (priority || fetchPriority === "high" ? "eager" : "lazy")}
     fetchPriority={fetchPriority} priority={priority && loading !== "lazy"}
@@ -39,10 +40,11 @@ export default function SiteImage({
         return
       }
       // A failed placeholder must not restart the same request repeatedly.
-      if (!onError || isReplacement && current !== source) return
+      if (isReplacement && current !== source) return
       const image = event.currentTarget
       const before = image.getAttribute("src")
-      onError(event)
+      if (onError) onError(event)
+      else if (current !== '/placeholder.svg') image.src = '/placeholder.svg'
       const after = image.getAttribute("src")
       if (after && after !== before) {
         image.removeAttribute("srcset")

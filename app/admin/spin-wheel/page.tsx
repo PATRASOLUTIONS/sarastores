@@ -621,7 +621,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-2xl overflow-hidden">
                     {item.productImage ? (
-                      <SiteImage unoptimized src={item.productImage} alt={item.prizeName} className="w-full h-full object-cover" />
+                      <SiteImage src={item.productImage} alt={item.prizeName} className="w-full h-full object-cover" />
                     ) : (
                       item.emoji || "🎁"
                     )}
@@ -744,7 +744,7 @@ function InventoryTab({ campaignSlug }: { campaignSlug: string }) {
                         <p className="text-[10px] text-amber-700 mt-2 font-medium">💡 Please remove the background of the image before uploading</p>
                         {editingItem.productImage && (
                           <div className="mt-3 flex items-center gap-2">
-                            <SiteImage unoptimized src={editingItem.productImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-amber-200" />
+                            <SiteImage src={editingItem.productImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-amber-200" />
                             <button
                               onClick={() => setEditingItem({ ...editingItem, productImage: "" })}
                               className="p-1 text-red-500 hover:bg-red-50 rounded text-xs font-bold"
@@ -1556,7 +1556,7 @@ function StoresTab({ campaignSlug }: { campaignSlug: string }) {
             <p className="text-xs text-gray-500 mb-6 px-4">Print this and display it at the billing counter.</p>
 
             <div className="border border-gray-200 p-2 rounded-2xl mx-auto inline-block bg-white shadow-sm mb-6">
-              <SiteImage unoptimized src={qrCodeDataUrl} alt={`${showQrModal.store} QR Code`} className="w-48 h-48" />
+              <SiteImage src={qrCodeDataUrl} alt={`${showQrModal.store} QR Code`} className="w-48 h-48" />
             </div>
 
             <div className="text-left bg-gray-50 p-3 rounded-xl border border-gray-100 mb-6 truncate">

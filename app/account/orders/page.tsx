@@ -1,3 +1,5 @@
+
+import SiteImage from "@/components/SiteImage"
 import { redirect } from "next/navigation"
 
 /**
@@ -192,7 +194,7 @@ export default function AccountOrdersPage() {
 //                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
 //                       {order.items.map((item) => (
 //                         <div key={item.id} className="flex items-center space-x-4">
-//                           <img
+//                           <SiteImage
 //                             src={item.image || "/placeholder.svg?height=60&width=60"}
 //                             alt={item.name}
 //                             className="w-16 h-16 object-cover rounded"

@@ -300,7 +300,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
                     <div className="flex items-start justify-between mb-2">
                       <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {product.images?.[0] ? (
-                          <SiteImage unoptimized src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                          <SiteImage src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="h-6 w-6 text-gray-400" />
@@ -359,7 +359,7 @@ export default function PartnerProductsPage({ params }: { params: Promise<{ part
                     <div className="flex items-start justify-between mb-2">
                       <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {product.images?.[0] ? (
-                          <SiteImage unoptimized src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                          <SiteImage src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="h-6 w-6 text-gray-400" />

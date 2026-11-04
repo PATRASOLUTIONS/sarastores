@@ -297,7 +297,7 @@ export default function NewProduct() {
               />
               {product.image && (
                 <div className="mt-2 border rounded p-2">
-                  <SiteImage unoptimized
+                  <SiteImage
                     src={product.image || "/placeholder.svg?height=200&width=200"}
                     alt={product.name}
                     className="h-40 object-contain mx-auto"
@@ -430,7 +430,7 @@ export default function NewProduct() {
                     className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm"
                   />
                   <div className="mt-2 border rounded p-2 h-28 flex items-center justify-center bg-gray-50">
-                    <SiteImage unoptimized
+                    <SiteImage
                       src={(product.images && product.images[i]) || "/placeholder.svg?height=100&width=100"}
                       alt={`Preview ${i + 1}`}
                       className="h-24 object-contain"

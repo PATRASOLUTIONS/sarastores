@@ -560,7 +560,7 @@ export default function StoreQRPage() {
                 <div className="p-4">
                   {qr.qrDataUrl ? (
                     <div className="flex justify-center mb-3">
-                      <SiteImage unoptimized
+                      <SiteImage
                         src={qr.qrDataUrl}
                         alt={`QR - ${config.label}`}
                         className="w-36 h-36 border border-gray-100 rounded-lg"

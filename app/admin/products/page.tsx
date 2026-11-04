@@ -1479,7 +1479,7 @@ export default function AdminProducts() {
                       <tr key={product.id} className="align-top hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-3">
-                            <SiteImage unoptimized
+                            <SiteImage
                               className="h-10 w-10 shrink-0 rounded object-cover"
                               src={product.image || "/placeholder.svg?height=40&width=40"}
                               alt={product.name}

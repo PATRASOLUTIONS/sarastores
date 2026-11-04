@@ -967,7 +967,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ partne
                     <div className="flex items-start gap-3">
                       <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                         {product.images?.[0] ? (
-                          <SiteImage unoptimized
+                          <SiteImage
                             src={product.images[0]}
                             alt={product.name}
                             className="w-full h-full object-cover"

@@ -1,5 +1,7 @@
 "use client"
 
+
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useRef, useState } from "react"
 import { ArrowDown, ArrowUp, Eye, EyeOff, ImagePlus, Loader2, Trash2, Upload, X } from "lucide-react"
 import { toast } from "react-hot-toast"
@@ -166,7 +168,7 @@ export default function HeroSlidesManager() {
             >
               {draft.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={draft.image} alt="Uploaded slide preview" className="h-full w-full object-cover" />
+                <SiteImage src={draft.image} alt="Uploaded slide preview" className="h-full w-full object-cover" />
               ) : (
                 <span className="inline-flex items-center gap-2"><Upload className="h-5 w-5" /> Choose banner photo</span>
               )}
@@ -195,7 +197,7 @@ export default function HeroSlidesManager() {
         ) : slides.map((slide, index) => (
           <div key={slide.id} className={`flex flex-wrap items-center gap-4 rounded-lg border p-3 ${slide.active ? "border-gray-200" : "border-gray-100 bg-gray-50 opacity-70"}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={slide.image} alt={slide.title || "Hero slide"} className="h-20 w-56 max-w-full rounded-md object-cover" />
+            <SiteImage src={slide.image} alt={slide.title || "Hero slide"} className="h-20 w-56 max-w-full rounded-md object-cover" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-gray-900">{slide.title || "Untitled slide"}</p>
               <p className="truncate text-xs text-gray-500">{slide.link || "/products"}</p>
