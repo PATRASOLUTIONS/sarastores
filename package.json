@@ -28,6 +28,8 @@
     "indexes:retention": "node --env-file=.env.local scripts/create-retention-indexes.mjs",
     "test:diwali": "node --test tests/diwali.test.mjs tests/route-guards.test.mjs",
     "test:diwali:database": "node --env-file=.env.diwali-test.local --test tests/diwali-database.test.mjs",
+    "setup:indexnow": "node scripts/setup-indexnow.mjs",
+    "test:indexnow": "node --test tests/indexnow.test.mjs tests/seo-regression.test.mjs tests/route-guards.test.mjs",
     "test:diwali:browser": "node --env-file=.env.diwali-test.local scripts/diwali-smoke.mjs"
   },
   "dependencies": {

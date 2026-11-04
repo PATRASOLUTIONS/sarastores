@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next"
+import { STATIC_SITEMAP_PATHS } from "@/lib/sitemap-paths"
 import { getCollection } from "@/lib/db-service"
 import { publicCatalogueFilter } from "@/lib/public-catalogue"
 import { getAllStoreLocations } from "@/lib/store-locations"
@@ -8,14 +9,7 @@ import { productImageUrls } from "@/lib/product-images"
 
 export const revalidate = 3600
 
-const STATIC_PATHS = [
-  "/", "/products", "/brands", "/about", "/contact", "/careers", "/press",
-  "/returns", "/shipping-policy", "/warranty", "/installation", "/emi", "/sara-care",
-  "/business-enquiries", "/corporate-information", "/disclaimer", "/sitemap",
-  "/privacy-policy", "/terms-and-conditions", "/cancellation-policy", "/complaints",
-  "/store-locator", "/stores", "/offers", "/ganesh", "/blog", "/faq", "/rewards",
-  "/software", "/brand-guidelines", "/bosch", "/haier", "/lg", "/tcl", "/epic-sale",
-]
+
 
 function modifiedAt(value: unknown): Date | undefined {
   if (!(typeof value === "string" || typeof value === "number" || value instanceof Date)) return undefined
@@ -25,7 +19,7 @@ function modifiedAt(value: unknown): Date | undefined {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = await getOriginFromHeaders()
-  const entries: MetadataRoute.Sitemap = STATIC_PATHS.map(path => ({
+  const entries: MetadataRoute.Sitemap = STATIC_SITEMAP_PATHS.map(path => ({
     url: new URL(path, origin).href,
     changeFrequency: path === "/" || path === "/products" ? "daily" : "monthly",
     priority: path === "/" ? 1 : path === "/products" ? 0.9 : 0.5,
@@ -89,10 +83,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const stores = await getAllStoreLocations({ strict: true })
     return [
       ...Array.from(new Set(stores.map(store => store.citySlug)), city => ({
-        url: `${origin}/stores/${city}`, changeFrequency: "monthly" as const, priority: 0.7,
+        url: `${origin}/stores/${city}`, lastModified: stores.filter(store => store.citySlug === city).map(store => modifiedAt(store.updatedAt || store.createdAt)).filter((value): value is Date => !!value).sort((a, b) => b.getTime() - a.getTime())[0], changeFrequency: "monthly" as const, priority: 0.7,
       })),
       ...stores.map(store => ({
         url: `${origin}/stores/${store.citySlug}/${store.slug}`,
+        lastModified: modifiedAt(store.updatedAt || store.createdAt),
         changeFrequency: "monthly" as const, priority: 0.6,
       })),
     ]

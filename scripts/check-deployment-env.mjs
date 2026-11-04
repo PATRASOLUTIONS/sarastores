@@ -56,6 +56,16 @@ export function checkDeploymentEnvironment(env) {
   const origins = ["NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_APP_URL", "NEXTAUTH_URL"].map(httpsOrigin)
   if (origins.every(Boolean) && new Set(origins).size !== 1) errors.push("Site URL variables: all three origins must match")
 
+  const indexNowEnabled = read("INDEXNOW_ENABLED")
+  if (indexNowEnabled && indexNowEnabled !== "true" && indexNowEnabled !== "false") errors.push("INDEXNOW_ENABLED: use true or false")
+  if (indexNowEnabled === "true") {
+    if (!/^[a-zA-Z0-9-]{8,128}$/.test(read("INDEXNOW_KEY"))) errors.push("INDEXNOW_KEY: use 8–128 letters, digits or hyphens")
+    if (read("INDEXNOW_SITE_URL")) {
+      const indexOrigin = httpsOrigin("INDEXNOW_SITE_URL")
+      if (indexOrigin && origins[0] && indexOrigin !== origins[0]) errors.push("INDEXNOW_SITE_URL: must match NEXT_PUBLIC_SITE_URL")
+    }
+  }
+
   for (const name of ["DPDP_LEGAL_ENTITY", "DPDP_REGISTERED_ADDRESS", "DPDP_GRIEVANCE_OFFICER_NAME"]) configured(name)
   if (configured("DPDP_GRIEVANCE_OFFICER_EMAIL") && !email.safeParse(read("DPDP_GRIEVANCE_OFFICER_EMAIL")).success) {
     errors.push("DPDP_GRIEVANCE_OFFICER_EMAIL: configure a valid email address")
