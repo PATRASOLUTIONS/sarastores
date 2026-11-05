@@ -778,6 +778,7 @@ function priceDownloadHarness(records, failure = false) {
         return [state[index], value => { state[index] = typeof value === "function" ? value(state[index]) : value }]
       },
       useEffect: () => {},
+      useMemo: factory => factory(),
     },
     "@/contexts/AuthContext": { useAuth: () => ({ user: { id: "fixture-admin" }, isLoading: false, canAccessAdmin: true }) },
     "@/components/ExcelUpload": () => null,
@@ -829,7 +830,7 @@ test("actual Bulk Price download exports every customer-visible product, not jus
   const book = XLSX.read(harness.files[0].bytes, { type: "array" })
   const sheet = book.Sheets["Active Products"]
   const values = XLSX.utils.sheet_to_json(sheet)
-  assert.deepEqual(XLSX.utils.sheet_to_json(sheet, { header: 1 })[0], ["itemno", "price", "mrp"])
+  assert.deepEqual(XLSX.utils.sheet_to_json(sheet, { header: 1 })[0], ["itemno", "mrp", "price"])
   assert.equal(values.length, 603)
   assert.deepEqual(values[0], { itemno: "000000", price: 10, mrp: 100 })
   assert.equal(values.at(-1).itemno, "001204")
@@ -850,7 +851,7 @@ test("active price export preserves actual zero/missing values and legacy item n
   assert.equal(rows[0].itemno, "000001")
   assert.equal(rows[0].price, 0)
   assert.equal(rows[0].mrp, 0)
-  assert.deepEqual(Object.keys(rows[0]), ["itemno", "price", "mrp"])
+  assert.deepEqual(Object.keys(rows[0]), ["itemno", "mrp", "price"])
   assert.equal(rows[1].price, "")
   assert.equal(Object.hasOwn(rows[1], "stock"), false)
   assert.equal(rows[1].mrp, "")

@@ -76,6 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const authEpoch = useRef(0)
+  const sessionRequest = useRef<{ epoch: number; promise: Promise<User | null> } | null>(null)
   const loginInProgress = useRef(false)
   const loginGraceUntil = useRef(0)
   const logoutRequest = useRef<AbortController | null>(null)
@@ -138,13 +139,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   const persistClientUser = useCallback((nextUser: User | null) => {
-    // Skip if the user data is actually the same to avoid unnecessary
-    // localStorage writes and state updates that cascade into cart re-loads.
+    // Compare rendered identity separately from the device's cosmetic hint.
+    // A matching legacy full-user hint must not skip initial hydration.
+    setUser(previous => JSON.stringify(previous) === JSON.stringify(nextUser) ? previous : nextUser)
     const current = localStorage.getItem("user")
-    const next = nextUser ? JSON.stringify(nextUser) : null
+    const next = nextUser ? JSON.stringify({ id: nextUser.id, role: nextUser.role }) : null
     if (current === next) return
 
-    setUser(nextUser)
     if (nextUser) {
       localStorage.setItem("user", JSON.stringify({
         id: nextUser.id,
@@ -252,32 +253,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchSessionUser = useCallback(async (): Promise<User | null> => {
     const epoch = authEpoch.current
-    try {
-      const response = await fetch("/api/auth/session", {
-        cache: "no-store",
-        credentials: "same-origin",
-      })
-      if (!response.ok) {
-        return null
-      }
+    if (sessionRequest.current?.epoch === epoch) return sessionRequest.current.promise
+    const work = (async (): Promise<User | null> => {
+      try {
+        const response = await fetch("/api/auth/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+        })
+        if (!response.ok) {
+          return null
+        }
 
-      const data = await response.json().catch(() => null)
-      if (epoch !== authEpoch.current) return null
-      if (!data?.user) {
-        clearClientAuthState(true)
-        return null
-      }
+        const data = await response.json().catch(() => null)
+        if (epoch !== authEpoch.current) return null
+        if (!data?.user) {
+          clearClientAuthState(true)
+          return null
+        }
 
-      const invalidReason = getSessionInvalidReason()
-      if (invalidReason) {
-        invalidateSession(invalidReason, true)
+        const invalidReason = getSessionInvalidReason()
+        if (invalidReason) {
+          invalidateSession(invalidReason, true)
+          return null
+        }
+        persistClientUser(data.user)
+        return data.user
+      } catch (error) {
+        console.warn("Failed to hydrate auth session", error)
         return null
       }
-      persistClientUser(data.user)
-      return data.user
-    } catch (error) {
-      console.warn("Failed to hydrate auth session", error)
-      return null
+    })()
+    sessionRequest.current = { epoch, promise: work }
+    try { return await work } finally {
+      if (sessionRequest.current?.promise === work) sessionRequest.current = null
     }
   }, [clearClientAuthState, getSessionInvalidReason, invalidateSession, persistClientUser])
 

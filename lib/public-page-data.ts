@@ -21,7 +21,7 @@ function publicFields(record: Record<string, unknown>) {
     brand: catalogueBrand(record), price: Number(record.price), mrp: getCatalogMRP(record), stock: record.stock == null ? undefined : Number(record.stock) || 0 }))
 }
 
-const readPublicPageProducts = cachePublicData(async () => {
+function listingProjection() {
   // Listing pages need the complete catalogue, but not each item's full detail
   // blobs. Fetch those only on the product page, rather than transferring them
   // from MongoDB and serializing them into every listing's hydration payload.
@@ -44,9 +44,48 @@ const readPublicPageProducts = cachePublicData(async () => {
   projection["technical_details.First Image"] = 1
   projection["reviews.average"] = 1
   projection["reviews.count"] = 1
-  const records = await (await getCollection("products")).find(await publicCatalogueFilter(), { projection, batchSize: 100 }).sort({ _id: 1 }).toArray()
+  return projection
+}
+
+const readPublicPageProducts = cachePublicData(async () => {
+  const records = await (await getCollection("products")).find(await publicCatalogueFilter(), { projection: listingProjection(), batchSize: 100 }).sort({ _id: 1 }).toArray()
   return productListingListResponseSchema.parse(records.map(record => publicFields(normalizeId(record))))
 }, 60_000)
+
+// Sample a bounded pool rather than reading the entire catalogue for the home page.
+// Numeric strings occur in imported stock/price, so use the same conversion as listings.
+export const getHomepageCatalogueFilter = cache(() => publicCatalogueFilter())
+
+function homepageProjection() {
+  return Object.fromEntries(Object.entries(listingProjection()).map(([key, value]) => [key,
+    typeof value === "object" ? { $slice: [{ $cond: [{ $isArray: "$" + key }, "$" + key,
+      { $cond: [{ $eq: [{ $type: "$" + key }, "string"] }, ["$" + key], []] }] }, value.$slice] } : value]))
+}
+
+export const getHomepageProductPool = cachePublicData(async () => {
+  const available = { $expr: { $and: ["stock", "price"].map(field => ({
+    $gt: [{ $convert: { input: "$" + field, to: "double", onError: 0, onNull: 0 } }, 0],
+  })) } }
+  const records = await (await getCollection("products")).aggregate([
+    { $match: { $and: [await getHomepageCatalogueFilter(), available] } },
+    { $sample: { size: 120 } },
+    { $project: homepageProjection() },
+  ]).toArray()
+  return productListingListResponseSchema.parse(records.map(record => publicFields(normalizeId(record))))
+}, 60_000)
+
+/** Preserve the text hero's advertised starting price without shipping the catalogue. */
+export async function getHomepageHeroProducts() {
+  const records = await (await getCollection("products")).aggregate([
+    { $match: { $and: [await getHomepageCatalogueFilter(), { name: /iphone\s*16\b/i, $expr: {
+      $gt: [{ $convert: { input: "$stock", to: "double", onError: 0, onNull: 0 } }, 0],
+    } }] } },
+    { $set: { homepagePrice: { $convert: { input: "$price", to: "double", onError: 0, onNull: 0 } } } },
+    { $match: { homepagePrice: { $gt: 0 } } },
+    { $sort: { homepagePrice: 1, _id: 1 } }, { $limit: 1 }, { $project: homepageProjection() },
+  ]).toArray()
+  return productListingListResponseSchema.parse(records.map(record => publicFields(normalizeId(record))))
+}
 
 // Only public display data is shared across requests; checkout still reads
 // current prices and stock directly from the database.

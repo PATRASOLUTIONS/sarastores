@@ -35,6 +35,7 @@ const API_PAGE_ACCESS: [string, string | string[]][] = [
   ["/api/admin/sara-care", "/admin/sara-care"],
   ["/api/admin/store-locations", "/admin/store-locations"],
   ["/api/admin/store-stock", "/admin/stock-check"],
+  ["/api/admin/product-email-automation", "/admin/products"],
   ["/api/admin/store-qr", "/admin/store-qr"],
   ["/api/admin/lucky-draw", "/admin/lucky-draw"],
   ["/api/spin-wheel/admin", "/admin/spin-wheel"],

@@ -34,6 +34,7 @@ function harness({ stored = user, session = null, deferSession = false, logoutSt
   const document = { hidden: false, visibilityState: "visible",
     addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) }
   const react = {
+    useCallback: callback => callback,
     createContext: () => ({ Provider: "context" }),
     useContext: () => undefined,
     useState: initial => {
@@ -167,7 +168,7 @@ test("login keeps the new session when a follow-up request is unauthorized", asy
     removeEventListener: name => listeners.delete(name),
   }
   const react = {
-    createContext: () => ({ Provider: "context" }),
+    useCallback: callback => callback,    createContext: () => ({ Provider: "context" }),
     useContext: () => undefined,
     useState: initial => {
       const slot = index++
@@ -358,3 +359,27 @@ for (const name of ["asdfghjkl", "qwertyuiop", "zxcvbnm", "sdfksfgksjfygdkfgh", 
     assert.ok(form.render().find(node => node.type === "p" && node.props.id === "name-error"))
   })
 }
+
+test("overlapping hydration, focus and visibility checks share one session request without caching identity", async () => {
+  const app = harness({ deferSession: true })
+  app.listeners.get("focus")()
+  app.listeners.get("visibilitychange")()
+  assert.equal(app.sessionCalls(), 1)
+  app.setSession(user)
+  app.completeSession(user)
+  await flush()
+  assert.equal(app.render().user.id, user.id)
+  app.listeners.get("focus")()
+  assert.equal(app.sessionCalls(), 2)
+  app.completeSession(null)
+  await flush()
+  assert.equal(app.render().user, null)
+})
+
+test("a matching legacy user hint never suppresses server-verified identity hydration", async () => {
+  const app = harness({ stored: user, session: user })
+  await flush()
+  assert.equal(app.render().isAuthenticated, true)
+  assert.equal(app.render().user.id, user.id)
+  assert.deepEqual(JSON.parse(app.storage.get("user")), { id: user.id, role: user.role })
+})

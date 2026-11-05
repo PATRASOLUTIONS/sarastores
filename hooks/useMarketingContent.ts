@@ -1,6 +1,6 @@
 "use client"
 
-import useSWR from "swr"
+import useSWR, { useSWRConfig } from "swr"
 import { defaultMarketingContent, marketingDefinition, marketingResponseSchema, type MarketingPage, type MarketingResponse } from "@/lib/marketing-content"
 
 const URL = "/api/marketing-content"
@@ -11,8 +11,11 @@ async function fetchContent(url: string): Promise<MarketingResponse> {
 }
 
 export function useMarketingContent(page: MarketingPage, enabled = true) {
+  const { fallback } = useSWRConfig()
+  const seeded = fallback?.[URL] !== undefined
   const { data, error, mutate } = useSWR<MarketingResponse>(enabled ? URL : null, fetchContent, {
-    refreshInterval: 30000, revalidateOnFocus: true, shouldRetryOnError: false,
+    refreshInterval: seeded ? 60000 : 30000, revalidateOnMount: !seeded,
+    revalidateOnFocus: true, shouldRetryOnError: false,
     onError: (cause: unknown) => console.error("[Marketing] Content loading failed:", cause),
   })
   const section = (key: string) => {

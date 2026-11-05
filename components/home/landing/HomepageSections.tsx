@@ -16,6 +16,7 @@ import { cleanProductName } from "@/utils/cleanProductName"
 import styles from "./homepage.module.css"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { isProductUnavailable } from "@/lib/product-availability"
+import { useNearViewport } from "@/hooks/useNearViewport"
 
 export interface HomeProduct {
   id: string
@@ -66,13 +67,17 @@ export const HOME_CATEGORIES: HomeCategory[] = [
   { label: "Accessories", image: "accessories", match: /accessor|cable|charger/i, href: "/products?q=accessories" },
 ].map((item) => ({ ...item, image: `/homepage/category-${item.image}.webp` }))
 
-export const HOME_BRANDS: HomeBrand[] = ["Apple", "Samsung", "OnePlus", "Xiaomi", "Vivo", "OPPO", "realme", "Lenovo", "Dell", "HP"].map(
-  (name) => ({
-    name,
-    logo: `/homepage/brand-${name.toLowerCase()}.webp`,
-    href: `/products?brand=${encodeURIComponent(name)}`,
-  }),
-)
+export const HOME_BRANDS: HomeBrand[] = [
+  { name: "realme", key: "REALME", logo: "realme" },
+  { name: "OPPO", key: "OPPO", logo: "oppo" },
+  { name: "Mi", key: "MI", logo: "xiaomi" },
+  { name: "Samsung", key: "SAMSUNG", logo: "samsung" },
+  { name: "Vivo", key: "VIVO", logo: "vivo" },
+  { name: "Apple", key: "APPLE", logo: "apple" },
+].map(({ name, key, logo }) => ({
+  name, logo: "/homepage/brand-" + logo + ".webp",
+  href: "/products?" + new URLSearchParams({ brand: key, availability: "in" }).toString(),
+}))
 
 function restoreReferenceImage(event: SyntheticEvent<HTMLImageElement>, fallback?: string) {
   const image = event.currentTarget
@@ -84,7 +89,7 @@ export function HomepageHeading({ title, href, ctaText = "View All" }: { title: 
   return (
     <div className={styles.sectionHeading}>
       <h2>{title}</h2>
-      <Link href={href}>{ctaText} <ArrowRight size={14} aria-hidden /></Link>
+      <Link href={href} prefetch={false}>{ctaText} <ArrowRight size={14} aria-hidden /></Link>
     </div>
   )
 }
@@ -203,14 +208,14 @@ export function HomeProductCard({ product, warrantyLabel = "Brand warranty inclu
   const name = cleanProductName(product.name)
   return (
     <article className={styles.productCard}>
-      <Link href={`/product/${product.slug || product.id}`} className={styles.productImage} aria-label={name}>
+      <Link href={`/product/${product.slug || product.id}`} className={styles.productImage} prefetch={false} aria-label={discount > 0 ? `${name}, ${discount}% OFF` : name}>
         {discount > 0 && <span className={styles.discount}>{discount}% OFF</span>}
         <SiteImage sizes="(min-width: 1280px) 240px, (min-width: 768px) 33vw, 50vw" src={product.image} alt={name} loading="lazy" onError={(event) => {
           event.currentTarget.onerror = null
           event.currentTarget.src = "/placeholder.svg"
         }} />
       </Link>
-      <Link href={`/product/${product.slug || product.id}`} className={styles.productName}>{name}</Link>
+      <Link href={`/product/${product.slug || product.id}`} className={styles.productName} prefetch={false}>{name}</Link>
       {unavailable ? <p className="text-sm font-semibold text-red-700">Currently unavailable</p> : <p className={styles.price}>
         <strong>₹{product.price.toLocaleString("en-IN")}</strong>
         {mrp && <del>₹{mrp.toLocaleString("en-IN")}</del>}
@@ -249,7 +254,7 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
     <section className={styles.promotions} style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }} aria-label="Exchange, EMI and special offers">
       {cards.map((card) => bannerIsPhotoOnly(card) ? (
         <article key={card.id} className={`${styles.promoCard} ${styles.promoPhotoCard}`}>
-          {card.ctaLink ? <Link href={card.ctaLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} alt="" className={styles.promoPhoto} loading="lazy" />}
+          {card.ctaLink ? <Link href={card.ctaLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} width={card.imageWidth} height={card.imageHeight} alt="" className={styles.promoPhoto} loading="lazy" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={card.image} width={card.imageWidth} height={card.imageHeight} alt="" className={styles.promoPhoto} loading="lazy" />}
         </article>
       ) : (
         <article key={card.id} className={`${styles.promoCard} ${!card.image ? styles.emiCard : ""}`} style={bannerGradient(card)}>
@@ -258,23 +263,22 @@ export function HomepagePromotions({ banners }: { banners: SiteBanner[] }) {
             <p>{card.subtitle}</p>
             {card.ctaText && <Link href={card.ctaLink || "/offers"} className={styles.shopButton}>{card.ctaText} <ArrowRight size={14} aria-hidden /></Link>}
           </div>
-          {card.image && <SiteImage sizes="(min-width: 1024px) 200px, 40vw" src={card.image} alt="" className={styles.promoImage} loading="lazy" />}
+          {card.image && <SiteImage sizes="(min-width: 1024px) 200px, 40vw" src={card.image} width={card.imageWidth} height={card.imageHeight} alt="" className={styles.promoImage} loading="lazy" />}
         </article>
       ))}
     </section>
   )
 }
 
-export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
-  const marketing = useMarketingContent("home")
+export function HomepageBrands({ brands = HOME_BRANDS }: { brands?: HomeBrand[] } = {}) {
   if (brands.length === 0) return null
 
   return (
     <section className={styles.brands} aria-label="Top Brands">
-      <HomepageHeading title="Top Brands" href={marketing.text("brands", "ctaLink")} ctaText={marketing.text("brands", "ctaText")} />
+      <div className={styles.sectionHeading}><h2>Top Brands</h2></div>
       <div className={styles.circleRail}>
         {brands.map(({ name, logo, href }) => (
-          <Link key={name} href={href} className={styles.circleItem}>
+          <Link key={name} href={href} prefetch={true} className={styles.circleItem}>
             <span className={styles.brandCircle}>
               {logo ? <SiteImage sizes="65px" src={logo} alt="" loading="lazy" onError={(event) => restoreReferenceImage(event, HOME_BRANDS.find((item) => item.name === name)?.logo)} /> : <strong>{name}</strong>}
             </span>
@@ -288,7 +292,8 @@ export function HomepageBrands({ brands }: { brands: HomeBrand[] }) {
 
 export function HomepageStores({ storeCount }: { storeCount?: number }) {
   const marketing = useMarketingContent("home")
-  const { storefront } = useBrandImages()
+  const { ref, visible } = useNearViewport<HTMLElement>()
+  const { storefront } = useBrandImages(visible)
   const reasons = marketing.items("stores", [
     { icon: MapPin, title: `${storeNetworkCount(storeCount)} Stores`, subtitle: "Across Karnataka" },
     { icon: Users, title: "Happy Customers", subtitle: "Our SARA Family" },
@@ -298,7 +303,7 @@ export function HomepageStores({ storeCount }: { storeCount?: number }) {
   ].map(item => ({ ...item, detail: item.subtitle }))).map((item, index) =>
     index === 0 ? { ...item, title: `${storeNetworkCount(storeCount)} Stores` } : item)
   return (
-    <section className={styles.stores} aria-label="Find a store and why choose SARA">
+    <section ref={ref} className={styles.stores} aria-label="Find a store and why choose SARA">
       <div className={styles.storeCard}>
         <div>
           <h2>{marketing.text("stores", "title")}</h2>

@@ -14,7 +14,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { loginHref } from "@/lib/return-path"
 import { useAuth } from "@/contexts/AuthContext"
 import { useProductSpecImages } from '@/hooks/useProductSpecImages'
-import { motion, AnimatePresence } from 'framer-motion'
+import { m as motion, AnimatePresence } from 'framer-motion'
 import { durations } from '@/lib/animations'
 import { useScrollState } from '@/hooks/useAnimations'
 import DeliverToPincode from '@/components/DeliverToPincode'
@@ -545,7 +545,7 @@ export default function Header({ staticContent = false }: { staticContent?: bool
           {/* Logo */}
           <Link href="/" className="min-w-0 flex-shrink md:flex-shrink-0 flex items-center gap-3" aria-label="Sara Mobiles and Electronics - Home">
             <div className="text-lg md:text-2xl font-heading font-bold">
-              {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-7 sm:h-9 md:h-12 max-w-full w-auto object-contain" priority unoptimized />}
+              {marketing.enabled("brand") && <Image src={staticContent ? "/sara-logo.webp" : marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-7 sm:h-9 md:h-12 max-w-full w-auto object-contain" priority unoptimized />}
             </div>
           </Link>
 
@@ -936,7 +936,7 @@ export default function Header({ staticContent = false }: { staticContent?: bool
             {/* Drawer header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <Link href="/" onClick={() => setIsMenuOpen(false)} aria-label="Home">
-                {marketing.enabled("brand") && <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-9 w-auto object-contain brightness-0 invert" unoptimized />}
+                {marketing.enabled("brand") && <Image src={staticContent ? "/sara-logo.webp" : marketing.text("brand", "image")} alt="SARA" width={374} height={100} className="h-9 w-auto object-contain brightness-0 invert" unoptimized />}
               </Link>
               <button
                 onClick={() => setIsMenuOpen(false)}

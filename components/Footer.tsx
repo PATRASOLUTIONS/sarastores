@@ -83,7 +83,7 @@ function FooterColumn({ title, links, legal = false }: { title: string; links: L
     <nav className={styles.column} aria-label={title}>
       <h3>{title}</h3>
       <ul>
-        {links.map((link) => <li key={`${link.href}-${link.label}`}><Link href={link.href}>{link.label}</Link></li>)}
+        {links.map((link) => <li key={`${link.href}-${link.label}`}><Link href={link.href} prefetch={false}>{link.label}</Link></li>)}
         {legal && <li><CookiePreferencesLink className={styles.cookieLink} /></li>}
       </ul>
     </nav>
@@ -184,7 +184,7 @@ export default function Footer({ staticContent = false }: { staticContent?: bool
           <MarketingSection staticContent={staticContent} page="footer" section="brand">
           <div className={styles.brand}>
             <Link href={marketing.text("brand", "ctaLink")} aria-label={companyName} className={styles.logo}>
-              <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} unoptimized />
+              <Image src={staticContent ? "/sara-logo.webp" : marketing.text("brand", "image")} alt="SARA" width={374} height={100} unoptimized />
             </Link>
             <p className={styles.tagline}>{marketing.text("brand", "tagline")}</p>
             <p className={`${styles.brandCopy} whitespace-pre-line`}>{marketing.text("brand", "description")}</p>

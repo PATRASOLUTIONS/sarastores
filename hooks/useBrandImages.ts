@@ -9,8 +9,8 @@ import { useSettingsData } from "@/hooks/useSettingsData"
  * Upload real photographs in Admin → Settings → Branding; the bundled SVG
  * illustrations are only placeholders until then.
  */
-export function useBrandImages() {
-  const { data } = useSettingsData()
+export function useBrandImages(enabled = true) {
+  const { data } = useSettingsData(enabled)
 
   return {
     storefront: data?.storefrontImage || "/images/about-sara-store.png",

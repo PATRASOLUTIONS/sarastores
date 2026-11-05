@@ -12,8 +12,7 @@ import ReportWebVitals from "@/components/ReportWebVitals"
 import MarketingTags from "@/components/MarketingTags"
 import ConsentBanner from "@/components/ConsentBanner"
 import ConsentGate from "@/components/ConsentGate"
-import ThemeEffects from "@/components/theme/ThemeEffects"
-import GaneshBlessing from "@/components/theme/GaneshBlessing"
+import DeferredThemeEffects from "@/components/theme/DeferredThemeEffects"
 import AnnouncementBar from "@/components/theme/AnnouncementBar"
 import { getActiveTheme } from "@/lib/theme/service"
 import { themeToCssVars } from "@/lib/theme"
@@ -21,6 +20,7 @@ import { themeToCssVars } from "@/lib/theme"
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-body",
+  display: "swap",
 })
 
 const poppins = Poppins({
@@ -35,6 +35,7 @@ const caveat = Caveat({
   weight: ["600"],
   variable: "--font-script",
   display: "swap",
+  preload: false,
 })
 
 
@@ -161,8 +162,7 @@ export default async function RootLayout({
         </a>
         {/* Site-wide JSON-LD: Organization + WebSite (sitelinks search box) + LocalBusiness */}
         <SiteJsonLd />
-        <ThemeEffects effect={theme.effect} />
-        <GaneshBlessing active={theme.id === "ganesh" && theme.blessing} />
+        <DeferredThemeEffects effect={theme.effect} blessing={theme.id === "ganesh" && theme.blessing} />
         <AnnouncementBar message={theme.announcement} href={theme.announcementLink} />
         <Providers>{children}</Providers>
         {/*
