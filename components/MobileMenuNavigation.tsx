@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, Gift, Headphones, Home, Info, LayoutGrid, MapPin, Tags } from "lucide-react"
 import CategoryGlyph from "@/components/CategoryGlyph"
+import { HOME_HEADER_BRANDS } from "@/lib/homepage-chrome"
 import { fetchActiveProductBrands, selectHeaderBrands, type ActiveProductBrand } from "@/lib/active-brand-client"
 
 type MenuLink = { href: string; label: string }
@@ -35,14 +36,15 @@ function MenuSection({ label, icon, children, onToggle }: { label: string; icon:
   </details>
 }
 
-export default function MobileMenuNavigation({ categories, onNavigate }: { categories: CategoryLink[]; onNavigate: () => void }) {
+export default function MobileMenuNavigation({ categories, onNavigate, staticContent = false }: { categories: CategoryLink[]; onNavigate: () => void; staticContent?: boolean }) {
   const [brandsOpen, setBrandsOpen] = useState(false)
-  const [brands, setBrands] = useState<ActiveProductBrand[]>([])
+  const [brands, setBrands] = useState<ActiveProductBrand[]>(staticContent ? HOME_HEADER_BRANDS : [])
   const [brandsLoading, setBrandsLoading] = useState(false)
   const [brandsError, setBrandsError] = useState("")
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    if (staticContent) { setBrands(HOME_HEADER_BRANDS); setBrandsLoading(false); setBrandsError(""); return }
     if (!brandsOpen) return
     let cancelled = false
     setBrandsLoading(true)
@@ -58,7 +60,7 @@ export default function MobileMenuNavigation({ categories, onNavigate }: { categ
         setBrandsLoading(false)
       })
     return () => { cancelled = true }
-  }, [brandsOpen, attempt])
+  }, [brandsOpen, attempt, staticContent])
 
   const links = (items: MenuLink[]) => items.map(item => <Link key={item.href} href={item.href} className={childClass} onClick={onNavigate}>{item.label}</Link>)
   return <div aria-label="Shopping and information">

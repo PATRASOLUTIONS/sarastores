@@ -36,6 +36,7 @@ const GUARDS = [
 
 /** route -> why it is reachable without an identified caller. */
 const INTENTIONALLY_PUBLIC = {
+  "/api/diwali/registration-check": "public registration availability check; validates both identifiers, checks blocklist and duplicates, rate limits, and issues a signed submission-only receipt; grants no status access",
   "/api/diwali/otp/send": "public mobile verification entry; same-origin, shared per-address/per-mobile rate limits",
   "/api/diwali/otp/verify": "OTP is the credential; expiring, five attempts, one-use and shared request limits",
   "/api/sara-care/quote": "read-only catalogue protection quote for guest carts; validated and rate limited; no account data",

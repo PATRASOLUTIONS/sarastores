@@ -9,6 +9,7 @@ export function normalizeBlocklistMobile(value: unknown): string | null {
   return /^[6-9]\d{9}$/.test(digits) ? digits : null
 }
 export const DiwaliEmailSchema = z.string().trim().toLowerCase().pipe(emailSchema)
+export const OptionalDiwaliEmailSchema = z.string().trim().pipe(z.union([z.literal(''), DiwaliEmailSchema])).optional().default('')
 export const BlocklistInputSchema = z.object({
   email: z.union([z.literal(''), DiwaliEmailSchema]).default(''),
   mobile: z.string().trim().max(40).refine(value => !value || !!normalizeBlocklistMobile(value), 'Enter a valid Indian mobile number.')

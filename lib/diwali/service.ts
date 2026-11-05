@@ -16,6 +16,7 @@ import { assertDiwaliCustomerAllowed } from './blocklist'
 import { assertNewDiwaliRegistration, reserveDiwaliRegistrationIdentity, DUPLICATE_REGISTRATION_MESSAGE } from './registration-identity'
 import { queueRegistrationEmails } from './registration-notifications'
 import { sendImmediateDiwaliMessage } from './immediate-messages'
+import { createRegistrationCheck, readRegistrationCheck, type RegistrationCheckSchema } from './registration-check'
 
 export const COLLECTIONS = { config: 'diwali_config', claims: 'diwali_claims', audit: 'diwali_audit', otp: 'diwali_otp', sessions: 'diwali_sessions', messages: 'diwali_messages', stock: 'diwali_stock', receipts: 'diwali_message_receipts' } as const
 export type StringRecord = Document & { _id: string; resends?: Array<{ actor: string; note: string; confirmedNotSent: boolean; at: Date }> }
@@ -140,8 +141,17 @@ export async function customerSession(token: string | undefined) {
   if (!session) throw new DiwaliError('Mobile verification expired. Please verify again.', 401)
   return session
 }
-export async function register(token: string | undefined, input: z.infer<typeof RegistrationSchema>, referralCookie?: string) {
-  const verified = await customerSession(token), config = await getConfig()
+export async function checkRegistrationDetails(input: z.infer<typeof RegistrationCheckSchema>) {
+  registrationOpen(await getConfig())
+  await assertDiwaliCustomerAllowed(input)
+  try { await assertNewDiwaliRegistration(input.mobile, input.email) } catch (error) {
+    if (error instanceof DiwaliError && error.status === 409) throw new DiwaliError('This number or email ID is already used.', 409)
+    throw error
+  }
+  return createRegistrationCheck(input)
+}
+export async function register(token: string | undefined, input: z.infer<typeof RegistrationSchema>, referralCookie?: string, registrationCheck?: string) {
+  const verified = registrationCheck ? readRegistrationCheck(registrationCheck, input.mobile, input.email) : await customerSession(token), config = await getConfig()
   await assertDiwaliCustomerAllowed({ mobile: verified.mobile, email: input.email })
   const requestKey = hash(`${verified.mobile}:${input.requestId}`)
   const collection = await getCollection<Claim>(COLLECTIONS.claims)
@@ -160,7 +170,8 @@ export async function register(token: string | undefined, input: z.infer<typeof 
     ...(referralStore ? { referralStoreId: referralStore.id, referralStoreCode: referralStore.code, referralStoreName: referralStore.name, referralOpenedAt: referral?.at } : {}),
     invoice: normalized, invoiceKey: `${input.storeCode}:${normalized}`, requestKey,
     consent: { version: config.consentVersion, whatsapp: input.whatsappConsent, accuracy: true, at: new Date(), language: input.language, wording: input.language === 'kn' ? 'ನನ್ನ ನೋಂದಣಿ ಮತ್ತು ಉಡುಗೊರೆ ವಿತರಣೆ ಕುರಿತು WhatsApp ಸಂದೇಶಗಳನ್ನು ಸ್ವೀಕರಿಸಲು ನಾನು ಒಪ್ಪುತ್ತೇನೆ.' : 'I agree to receive WhatsApp updates about my registration and gift delivery.' },
-    verifiedMobileAt: verified.verifiedAt, status: 'pending', fulfilment: 'pending', version: 0, createdAt: new Date(), updatedAt: new Date() }
+    ...(verified.verifiedAt ? { verifiedMobileAt: verified.verifiedAt } : {}),
+    ...(registrationCheck ? { registrationCheckAt: verified.checkedAt } : {}), status: 'pending', fulfilment: 'pending', version: 0, createdAt: new Date(), updatedAt: new Date() }
   try {
     const registered = await transaction(async session => {
       const existingRequest = await collection.findOne({ requestKey, mobile: verified.mobile }, { session })

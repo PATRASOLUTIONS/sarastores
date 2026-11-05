@@ -192,7 +192,7 @@ test('administrator deletion removes the registration from listings and exports,
   assert.equal((await f.service.listClaims(admin, new URLSearchParams())).total, 0)
   assert.doesNotMatch(await f.service.exportClaims(admin), /FIXTURE-CLAIM/)
   await assert.rejects(f.service.getClaim(admin, 'claim'), /not found/)
-  await assert.rejects(f.loader.load('lib/diwali/registration-identity.ts').assertNewDiwaliRegistration('9876543210'), /already has a Diwali registration/)
+  await assert.doesNotReject(f.loader.load('lib/diwali/registration-identity.ts').assertNewDiwaliRegistration('9876543210'))
 })
 
 test('deletion checks administrator access, version and notifications in progress before changing the claim', async () => {

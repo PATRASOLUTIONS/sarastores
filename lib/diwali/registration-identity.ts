@@ -15,7 +15,7 @@ export async function assertNewDiwaliRegistration(mobile: string, email?: string
   if (identity.mobile) matches.push({ mobile: identity.mobile })
   if (identity.email) matches.push({ email: { $regex: `^\\s*${identity.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, $options: 'i' } })
   if (!matches.length) return
-  const existing = await (await getCollection('diwali_claims')).findOne({ $or: matches }, { projection: { _id: 1 }, ...(session ? { session } : {}) })
+  const existing = await (await getCollection('diwali_claims')).findOne({ deletedAt: { $exists: false }, $or: matches }, { projection: { _id: 1 }, ...(session ? { session } : {}) })
   if (existing) throw new DiwaliError(DUPLICATE_REGISTRATION_MESSAGE, 409)
 }
 
@@ -26,6 +26,12 @@ export async function reserveDiwaliRegistrationIdentity(claimId: string, mobile:
   for (const [kind, value] of Object.entries(identity)) {
     if (!value) continue
     const digest = createHash('sha256').update(value).digest('hex')
-    await collection.insertOne({ _id: `2026:${kind}:${digest}`, claimId, createdAt: new Date() }, { session })
+    const id = `2026:${kind}:${digest}`
+    const reservation = await collection.findOne({ _id: id }, { session, projection: { claimId: 1 } })
+    if (reservation && reservation.claimId !== claimId) {
+      const deletedClaim = await (await getCollection('diwali_claims')).findOne({ _id: reservation.claimId, deletedAt: { $exists: true } }, { session, projection: { _id: 1 } })
+      if (deletedClaim) await collection.deleteOne({ _id: id, claimId: reservation.claimId }, { session })
+    }
+    await collection.insertOne({ _id: id, claimId, createdAt: new Date() }, { session })
   }
 }

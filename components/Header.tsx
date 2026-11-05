@@ -25,6 +25,7 @@ import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { useHeaderPromotion } from "@/hooks/useHeaderPromotion"
 import CategoryGlyph from '@/components/CategoryGlyph'
 import { taxonomyHref, type TaxonomyDivision } from "@/lib/product-taxonomy"
+import { HOME_CHROME_SETTINGS, HOME_HEADER_CATEGORIES } from "@/lib/homepage-chrome"
 import { fetchTaxonomy } from "@/lib/taxonomy-client"
 import { titleCaseLabel } from "@/lib/product-display"
 import { z } from "zod"
@@ -75,20 +76,21 @@ const TRENDING_SEARCHES = [
 
 const RECENT_SEARCHES_KEY = "recentSearches"
 
-export default function Header() {
+export default function Header({ staticContent = false }: { staticContent?: boolean }) {
   const pathname = usePathname()
   const [returnLoginHref, setReturnLoginHref] = useState("/login")
   const { cart } = useCart()
   const { wishlist } = useWishlist()
   const wishlistCount = new Set(wishlist.map(item => item.id)).size
   const { openCart } = useCartUI()
-  const { data: siteSettings } = useSettingsData()
-  const marketing = useMarketingContent("header")
-  const headerPromotion = useHeaderPromotion()
+  const { data: fetchedSettings } = useSettingsData(!staticContent)
+  const siteSettings = staticContent ? HOME_CHROME_SETTINGS : fetchedSettings
+  const marketing = useMarketingContent("header", !staticContent)
+  const headerPromotion = useHeaderPromotion(staticContent)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [divisions, setDivisions] = useState<TaxonomyDivision[]>([])
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [categories, setCategories] = useState<Category[]>(staticContent ? HOME_HEADER_CATEGORIES : [])
   const router = useRouter()
   const { user, logout, isAdmin, isVendor } = useAuth()
 
@@ -122,6 +124,7 @@ export default function Header() {
 
   // Load real trending terms from popular/featured products (falls back to curated list)
   useEffect(() => {
+    if (staticContent) { setTrendingTerms(TRENDING_SEARCHES); return }
     let ignore = false
     const loadTrending = async () => {
       try {
@@ -153,7 +156,7 @@ export default function Header() {
     }
     loadTrending()
     return () => { ignore = true }
-  }, [])
+  }, [staticContent])
 
   // Reset keyboard highlight whenever the suggestion list changes
   useEffect(() => {
@@ -255,6 +258,7 @@ export default function Header() {
   const cartItemsCount = cart?.reduce((total, item) => total + (item.quantity || 0), 0) || 0
 
   useEffect(() => {
+    if (staticContent) { setCategories(HOME_HEADER_CATEGORIES); setDivisions([]); return }
     const fetchCategories = async () => {
       try {
         const response = await fetch("/api/categories")
@@ -278,7 +282,7 @@ export default function Header() {
     fetchTaxonomy()
       .then(setDivisions)
       .catch((error: unknown) => console.error("Error fetching catalogue navigation:", error))
-  }, [])
+  }, [staticContent])
 
   const handleCartClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -900,7 +904,7 @@ export default function Header() {
         <DeliverToPincode variant="light" />
         <span className="text-right text-[11px] text-gray-500">Choose your delivery area</span>
       </div>
-      <MegaMenu />
+      <MegaMenu staticContent={staticContent} />
     </motion.header>
 
     {/* Mobile Slide Drawer Menu */}
@@ -946,6 +950,7 @@ export default function Header() {
             {/* Scrollable nav content */}
             <nav className="flex-1 overflow-y-auto py-4 px-3">
               <MobileMenuNavigation
+                staticContent={staticContent}
                 onNavigate={() => setIsMenuOpen(false)}
                 categories={divisions.length > 0
                   ? divisions.map(division => ({

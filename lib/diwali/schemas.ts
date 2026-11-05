@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { phoneSchema, pincodeSchema } from '@/lib/validation'
 import { isRealDate } from './rules'
-import { DiwaliEmailSchema } from './blocklist-types'
+import { DiwaliEmailSchema, OptionalDiwaliEmailSchema } from './blocklist-types'
 
 export const Language = z.enum(['en', 'kn'])
 export const DateOnly = z.string().refine(isRealDate, 'Enter a valid date')
@@ -47,7 +47,8 @@ export const OtpSendSchema = z.object({ mobile: phoneSchema, email: DiwaliEmailS
 export const OtpVerifySchema = z.object({ challenge: z.string().uuid(), otp: z.string().regex(/^\d{6}$/) }).strict()
 export const RegistrationSchema = z.object({
   requestId: z.string().uuid(), name: z.string().trim().min(2).max(150),
-  email: DiwaliEmailSchema,
+  email: OptionalDiwaliEmailSchema,
+  mobile: phoneSchema.optional(),
   address: z.string().trim().min(10).max(800), city: z.string().trim().min(2).max(100), state: z.string().trim().min(2).max(100),
   pincode: pincodeSchema, storeCode: z.string().trim().min(1).max(40), invoice: z.string().trim().min(1).max(100),
   enteredValue: z.number().int().min(15000).max(100000000), language: Language,

@@ -208,7 +208,7 @@ export default function SaraLanding({ launch = null, initialProducts }: { launch
 
   return (
     <div className="flex min-h-screen flex-col bg-brand-surface-raised">
-      <Header />
+      <Header staticContent />
       <main id="main-content" className={styles.homepage}>
         {!marketing.enabled("hero") && <h1 className="sr-only">SARA Electronics</h1>}
         {launch ? <EcommerceLaunch launch={launch} /> : null}
@@ -224,7 +224,7 @@ export default function SaraLanding({ launch = null, initialProducts }: { launch
           <MarketingSection page="home" section="stores"><HomepageStores storeCount={storeCount} /></MarketingSection>
         </MarketingSections>
       </main>
-      <Footer />
+      <Footer staticContent />
     </div>
   )
 }
