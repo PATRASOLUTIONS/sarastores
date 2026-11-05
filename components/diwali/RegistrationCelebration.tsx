@@ -21,6 +21,7 @@ export default function RegistrationCelebration({ language, children }: { langua
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100"><CheckCircle2 className="h-10 w-10 text-green-700" aria-hidden="true" /></div>
       <h1 ref={heading} tabIndex={-1} className="scroll-mt-24 text-3xl font-bold text-red-900 outline-none sm:text-4xl">{t('Congratulations!', 'ಅಭಿನಂದನೆಗಳು!')}</h1>
       <p className="text-lg font-semibold" role="status">{t('Your Diwali gift registration was received successfully.', 'ನಿಮ್ಮ ದೀಪಾವಳಿ ಉಡುಗೊರೆ ನೋಂದಣಿ ಯಶಸ್ವಿಯಾಗಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ.')}</p>
+      <p className="text-sm font-semibold text-green-800">{t('Your registration is already submitted. You do not need to fill in this form again.', 'ನಿಮ್ಮ ನೋಂದಣಿ ಈಗಾಗಲೇ ಸಲ್ಲಿಸಲಾಗಿದೆ. ಈ ಫಾರ್ಮ್ ಅನ್ನು ಮತ್ತೆ ಭರ್ತಿ ಮಾಡುವ ಅಗತ್ಯವಿಲ್ಲ.')}</p>
       <p className="text-sm leading-relaxed text-stone-600">{t('Save your reference below. Your gift will be confirmed after SARA verifies your invoice.', 'ಕೆಳಗಿನ ನೋಂದಣಿ ಸಂಖ್ಯೆಯನ್ನು ಉಳಿಸಿ. SARA ಬಿಲ್ ಪರಿಶೀಲಿಸಿದ ನಂತರ ನಿಮ್ಮ ಉಡುಗೊರೆಯನ್ನು ದೃಢೀಕರಿಸಲಾಗುತ್ತದೆ.')}</p>
       {children}
     </section>

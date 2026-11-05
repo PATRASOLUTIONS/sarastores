@@ -9,9 +9,10 @@ import GiftRegistration from '@/components/diwali/GiftRegistration'
 import RegistrationCelebration from '@/components/diwali/RegistrationCelebration'
 
 type Config = { enabled: boolean; campaignStart: string; campaignEnd: string; registrationStart: string; registrationEnd: string; stores: { code: string; name: string }[]; termsEn: string; termsKn: string; privacyEn: string; privacyKn: string; consentVersion: string }
-type Status = { reference: string; status: string; fulfilment: string | null; gift: string | null; dueAt?: string; courier?: string; awb?: string; trackingUrl?: string; deliveredAt?: string }
+type Status = { reference: string; status: string; fulfilment: string | null; gift: string | null; dueAt?: string; courier?: string; awb?: string; trackingUrl?: string; deliveredAt?: string; whatsappStatus?: string }
 const field = 'mt-2 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-stone-900 outline-none focus:border-red-700 focus:ring-2 focus:ring-red-100 disabled:bg-stone-100'
 const button = 'rounded-xl bg-red-800 px-6 py-3 font-semibold text-white hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-50'
+const SUBMITTED_KEY = 'sara-diwali-2026-registration-submitted'
 const deliveryLabels: Record<string, string> = { pending: 'ಪ್ಯಾಕಿಂಗ್ ಬಾಕಿ', packed: 'ಪ್ಯಾಕ್ ಮಾಡಲಾಗಿದೆ', dispatched: 'ರವಾನಿಸಲಾಗಿದೆ', delivered: 'ವಿತರಿಸಲಾಗಿದೆ', exception: 'ವಿತರಣಾ ಸಮಸ್ಯೆ — SARA ಅನ್ನು ಸಂಪರ್ಕಿಸಿ' }
 async function api<T>(url: string, input?: unknown): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', ...(input === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }) })
@@ -28,8 +29,24 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
   const [requestId, setRequestId] = useState('')
   const [referringStore, setReferringStore] = useState('')
   const [email, setEmail] = useState('')
+  const [checkingRegistration, setCheckingRegistration] = useState(mode === 'register')
+  const [previouslySubmitted, setPreviouslySubmitted] = useState(false)
   const t = (english: string, kannada: string) => language === 'kn' ? kannada : english
-  const loadStatus = async () => { const response = await api<{ items: Status[] }>('/api/diwali/status'); setStatuses(response.items); setVerified(true) }
+  const rememberSubmission = () => {
+    setPreviouslySubmitted(true)
+    // A presentation hint only. The server enforces uniqueness by mobile/email.
+    try { window.localStorage.setItem(SUBMITTED_KEY, 'true') } catch { /* Status lookup still restores verified submissions. */ }
+  }
+  const registerAnotherCustomer = () => {
+    try { window.localStorage.removeItem(SUBMITTED_KEY) } catch { /* The current page can still reset. */ }
+    setPreviouslySubmitted(false); setResult(null); setVerified(false); setMobile(''); setEmail(''); setAmount(''); setChallenge(''); setOtp(''); setError(''); setRequestId(crypto.randomUUID())
+  }
+  const loadStatus = async () => {
+    const response = await api<{ items: Status[] }>('/api/diwali/status')
+    setStatuses(response.items)
+    if (mode !== 'register' || response.items.length) setVerified(true)
+    if (mode === 'register' && response.items[0]) { setResult(response.items[0]); rememberSubmission() }
+  }
   useEffect(() => {
     let active = true
     const refreshConfig = () => {
@@ -37,11 +54,16 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
       api<Config>('/api/diwali/config').then(value => { if (active) setConfig(value) }).catch(error => { if (active) setError(error.message) })
     }
     setRequestId(crypto.randomUUID())
+    if (mode === 'register') {
+      try { setPreviouslySubmitted(window.localStorage.getItem(SUBMITTED_KEY) === 'true') } catch { /* Storage may be unavailable. */ }
+    }
     if (mode === 'register') setReferringStore((new URLSearchParams(window.location.search).get('store') || '').slice(0, 40))
     refreshConfig()
     window.addEventListener('focus', refreshConfig)
     const timer = window.setInterval(refreshConfig, 60_000)
-    if (mode === 'status' || mode === 'confirmation') loadStatus().catch(() => {})
+    if (mode === 'register' || mode === 'status' || mode === 'confirmation') {
+      loadStatus().catch(() => {}).finally(() => { if (active) setCheckingRegistration(false) })
+    }
     return () => { active = false; window.removeEventListener('focus', refreshConfig); window.clearInterval(timer) }
   }, [mode])
   useEffect(() => {
@@ -50,11 +72,13 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
   async function task(work: () => Promise<void>) { setBusy(true); setError(''); try { await work() } catch (error) { setError(error instanceof Error ? error.message : 'Please try again') } finally { setBusy(false) } }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (busy || result || previouslySubmitted || checkingRegistration) return
     if (!verified) { setError(t('Verify your mobile number before submitting registration.', 'ನೋಂದಣಿ ಸಲ್ಲಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.')); return }
     const data = new FormData(event.currentTarget)
     await task(async () => {
       const claim = await api<Status>('/api/diwali/register', { requestId, name: data.get('name'), email, address: data.get('address'), city: data.get('city'), state: data.get('state'), pincode: data.get('pincode'), storeCode: data.get('storeCode'), invoice: data.get('invoice'), enteredValue: Number(amount), language, accuracy: data.get('accuracy') === 'on', whatsappConsent: data.get('consent') === 'on', consentVersion: config?.consentVersion })
       setResult(claim)
+      rememberSubmission()
     })
   }
   const now = indiaDate(new Date())
@@ -74,8 +98,10 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
       <nav className="mb-6 flex flex-wrap gap-5 text-sm font-medium"><Link href="/diwali-gift">{t('Register', 'ನೋಂದಣಿ')}</Link><Link href="/diwali-gift/status">{t('Check gift status', 'ಉಡುಗೊರೆಯ ಸ್ಥಿತಿ')}</Link><a href="tel:+919071002220">{t('Help', 'ಸಹಾಯ')}: +91 90710 02220</a></nav></>}
       {error && (mode !== 'register' || !config || result) && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900">{error}</div>}
       {!config ? <p role="status">{t('Loading campaign…', 'ಮಾಹಿತಿಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ…')}</p> : mode === 'terms' || mode === 'privacy' ? <section className="rounded-2xl bg-white p-6 sm:p-10"><h1 className="mb-5 text-3xl font-bold">{mode === 'terms' ? t('Campaign terms', 'ಅಭಿಯಾನದ ನಿಯಮಗಳು') : t('Privacy notice', 'ಗೌಪ್ಯತೆ ಸೂಚನೆ')}</h1><MarkdownContent content={(mode === 'terms' ? language === 'en' ? config.termsEn : config.termsKn : language === 'en' ? config.privacyEn : config.privacyKn) || t('Registration will open after SARA publishes the approved notice.', 'SARA ಅನುಮೋದಿತ ಸೂಚನೆಯನ್ನು ಪ್ರಕಟಿಸಿದ ನಂತರ ನೋಂದಣಿ ತೆರೆಯುತ್ತದೆ.')} /></section> : <>
-        {mode === 'register' && !result && <GiftRegistration config={config} language={language} onLanguage={setLanguage} email={email} onEmail={setEmail} mobile={mobile} onMobile={value => { setMobile(value); setChallenge(''); setOtp(''); setVerified(false) }} challenge={challenge} otp={otp} onOtp={setOtp} verified={verified} busy={busy} onChangeMobile={() => { setVerified(false); setChallenge(''); setOtp('') }} onSendCode={() => task(async () => { const response = await api<{ challenge: string }>('/api/diwali/otp/send', { mobile, email, language, purpose: 'register' }); setChallenge(response.challenge) })} onVerifyCode={() => task(async () => { await api('/api/diwali/otp/verify', { challenge, otp }); setVerified(true) })} amount={amount} onAmount={setAmount} onSubmit={submit} onReset={() => { setEmail(''); setAmount(''); setMobile(''); setChallenge(''); setOtp(''); setVerified(false); setLanguage('en'); setError(''); setRequestId(crypto.randomUUID()) }} open={open} today={now} error={error} initialStoreCode={referringStore} />}
-        {result && <RegistrationCelebration key={result.reference} language={language}>{statusCards([result])}<Link className="inline-block font-semibold text-red-800 underline" href="/diwali-gift/status">{t('Check status', 'ಸ್ಥಿತಿಯನ್ನು ಪರಿಶೀಲಿಸಿ')}</Link></RegistrationCelebration>}
+        {mode === 'register' && checkingRegistration && !result && <p role="status">{t('Checking your registration...', 'ನಿಮ್ಮ ನೋಂದಣಿಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...')}</p>}
+        {mode === 'register' && !checkingRegistration && previouslySubmitted && !result && <section className="mx-auto max-w-2xl space-y-4 rounded-3xl border border-green-200 bg-white p-6"><h1 className="text-2xl font-bold text-green-800">{t('Your registration is already submitted.', 'ನಿಮ್ಮ ನೋಂದಣಿ ಈಗಾಗಲೇ ಸಲ್ಲಿಸಲಾಗಿದೆ.')}</h1><p>{t('You do not need to fill in this form again. Verify your mobile on the status page to view your registration.', 'ಈ ಫಾರ್ಮ್ ಅನ್ನು ಮತ್ತೆ ಭರ್ತಿ ಮಾಡುವ ಅಗತ್ಯವಿಲ್ಲ. ನೋಂದಣಿಯನ್ನು ನೋಡಲು ಸ್ಥಿತಿ ಪುಟದಲ್ಲಿ ನಿಮ್ಮ ಮೊಬೈಲ್ ಅನ್ನು ಪರಿಶೀಲಿಸಿ.')}</p><Link href="/diwali-gift/status" className="inline-block font-semibold text-red-800 underline">{t('Check gift status', 'ಉಡುಗೊರೆಯ ಸ್ಥಿತಿ')}</Link><button type="button" className="block text-sm text-stone-600 underline" onClick={registerAnotherCustomer}>{t('Register a different customer', 'ಬೇರೆ ಗ್ರಾಹಕರ ನೋಂದಣಿ')}</button></section>}
+        {mode === 'register' && !checkingRegistration && !previouslySubmitted && !result && <GiftRegistration config={config} language={language} onLanguage={setLanguage} email={email} onEmail={setEmail} mobile={mobile} onMobile={value => { setMobile(value); setChallenge(''); setOtp(''); setVerified(false) }} challenge={challenge} otp={otp} onOtp={setOtp} verified={verified} busy={busy} onChangeMobile={() => { setVerified(false); setChallenge(''); setOtp('') }} onSendCode={() => task(async () => { const response = await api<{ challenge: string }>('/api/diwali/otp/send', { mobile, email, language, purpose: 'register' }); setChallenge(response.challenge) })} onVerifyCode={() => task(async () => { await api('/api/diwali/otp/verify', { challenge, otp }); setVerified(true); await loadStatus() })} amount={amount} onAmount={setAmount} onSubmit={submit} onReset={() => { setEmail(''); setAmount(''); setMobile(''); setChallenge(''); setOtp(''); setVerified(false); setLanguage('en'); setError(''); setRequestId(crypto.randomUUID()) }} open={open} today={now} error={error} initialStoreCode={referringStore} />}
+        {result && <RegistrationCelebration key={result.reference} language={language}>{statusCards([result])}{result.whatsappStatus && ['accepted', 'sent', 'delivered', 'read'].includes(result.whatsappStatus) && <p role="status" className="text-sm font-semibold text-green-800">{t('Your registration confirmation has been sent on WhatsApp.', 'ನಿಮ್ಮ ನೋಂದಣಿ ದೃಢೀಕರಣವನ್ನು WhatsApp ನಲ್ಲಿ ಕಳುಹಿಸಲಾಗಿದೆ.')}</p>}<Link className="inline-block font-semibold text-red-800 underline" href="/diwali-gift/status">{t('Check status', 'ಸ್ಥಿತಿಯನ್ನು ಪರಿಶೀಲಿಸಿ')}</Link></RegistrationCelebration>}
         {(mode === 'status' || mode === 'confirmation') && <section className="mx-auto max-w-2xl space-y-6 rounded-3xl bg-white p-6 sm:p-8"><Gift className="h-10 w-10 text-red-800" /><h1 className="text-3xl font-bold">{t('Your gift status', 'ನಿಮ್ಮ ಉಡುಗೊರೆಯ ಸ್ಥಿತಿ')}</h1>{verified ? <>{statuses.length ? statusCards(statuses) : <p>{t('No registrations found for this verified mobile.', 'ಈ ಮೊಬೈಲ್‌ಗೆ ಯಾವುದೇ ನೋಂದಣಿ ಕಂಡುಬಂದಿಲ್ಲ.')}</p>}<button className={button} disabled={busy} onClick={() => task(loadStatus)}>{t('Refresh status', 'ಸ್ಥಿತಿಯನ್ನು ನವೀಕರಿಸಿ')}</button></> : <><p>{t('Verify the mobile used for registration to view your claims.', 'ನೋಂದಣಿಗೆ ಬಳಸಿದ ಮೊಬೈಲ್ ಅನ್ನು ಪರಿಶೀಲಿಸಿ.')}</p><label className="block">{t('Mobile number', 'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ')}<input className={field} type="tel" value={mobile} onChange={event => { setMobile(event.target.value); setChallenge('') }} maxLength={10} inputMode="numeric" /></label><button className={button} disabled={busy || !/^[6-9]\d{9}$/.test(mobile)} onClick={() => task(async () => { const response = await api<{ challenge: string }>('/api/diwali/otp/send', { mobile, language, purpose: 'status' }); setChallenge(response.challenge) })}>{t('Send verification code', 'ಪರಿಶೀಲನೆ ಕೋಡ್ ಕಳುಹಿಸಿ')}</button>{challenge && <><label className="block">{t('Verification code', 'ಪರಿಶೀಲನೆ ಕೋಡ್')}<input className={field} value={otp} onChange={event => setOtp(event.target.value)} maxLength={6} inputMode="numeric" autoComplete="one-time-code" /></label><button className={button} disabled={busy || !/^\d{6}$/.test(otp)} onClick={() => task(async () => { await api('/api/diwali/otp/verify', { challenge, otp }); await loadStatus() })}>{t('View status', 'ಸ್ಥಿತಿಯನ್ನು ನೋಡಿ')}</button></>}</>}</section>}
       </>}
       {mode !== 'register' && <footer className="mt-10 flex flex-wrap gap-5 border-t border-stone-200 pt-6 text-sm text-stone-600"><Link href="/diwali-gift/terms">{t('Campaign terms', 'ಅಭಿಯಾನದ ನಿಯಮಗಳು')}</Link><Link href="/diwali-gift/privacy">{t('Privacy notice', 'ಗೌಪ್ಯತೆ ಸೂಚನೆ')}</Link><a href="tel:+919071002220">+91 90710 02220</a></footer>}

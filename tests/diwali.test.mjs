@@ -168,7 +168,7 @@ test('customers can enter gift details before OTP verification but cannot submit
     useEffect() {},
     useState(initial) {
       const current = index++
-      return [current === 1 ? { ...DEFAULT_CONFIG, enabled: true, registrationStart: '2000-01-01', registrationEnd: '2099-12-31' } : initial, value => { if (current === 2) error = value }]
+      return [current === 1 ? { ...DEFAULT_CONFIG, enabled: true, registrationStart: '2000-01-01', registrationEnd: '2099-12-31' } : current === 14 ? false : initial, value => { if (current === 2) error = value }]
     },
   }
   const loader = sourceLoader({ react })
@@ -216,4 +216,79 @@ test('unsigned WhatsApp callbacks cannot mutate message status', async () => {
   const { POST } = loader.load('app/api/webhooks/diwali/whatsapp/route.ts')
   const result = await POST(new Request('https://sara.test/api/webhooks/diwali/whatsapp', { method: 'POST', body: JSON.stringify({ entry: [] }) }))
   assert.equal(result.status, 401)
+})
+
+function submittedFormFixture({ items = [], remembered = false, statusCode = 200, whatsappStatus = 'accepted' } = {}) {
+  const state = [], effects = [], calls = [], storage = new Map()
+  const key = 'sara-diwali-2026-registration-submitted'
+  if (remembered) storage.set(key, 'true')
+  let index = 0
+  const config = { ...sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG, enabled: true, registrationStart: '2000-01-01', registrationEnd: '2099-12-31' }
+  const loader = sourceLoader({ react: {
+    useEffect(callback) { effects.push(callback) },
+    useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] },
+  } }, { fetch: async (url, options) => {
+    calls.push({ url, options })
+    if (url.endsWith('/config')) return Response.json(config)
+    if (url.endsWith('/status')) return Response.json(statusCode === 200 ? { items } : { error: 'Verify your mobile' }, { status: statusCode })
+    if (url.endsWith('/register')) return Response.json({ reference: 'FIXTURE-SUBMITTED', status: 'pending', fulfilment: null, gift: null, whatsappStatus })
+    throw new Error(`Unexpected fixture request ${url}`)
+  }, context: {
+    window: { location: { search: '' }, addEventListener() {}, removeEventListener() {}, setInterval() { return 1 }, clearInterval() {}, localStorage: {
+      getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key),
+    } },
+    document: { visibilityState: 'visible', getElementById() { return null } },
+    FormData: class { constructor(form) { this.form = form } get(key) { return this.form[key] ?? null } },
+  } })
+  const Component = loader.load('components/diwali/PublicGift.tsx').default
+  const GiftRegistration = loader.load('components/diwali/GiftRegistration.tsx').default
+  const Celebration = loader.load('components/diwali/RegistrationCelebration.tsx').default
+  const render = () => {
+    index = 0
+    const nodes = []
+    function visit(node) { if (Array.isArray(node)) return node.forEach(visit); if (!node?.props) return; nodes.push(node); visit(node.props.children) }
+    visit(Component({ mode: 'register' }))
+    return nodes
+  }
+  return { state, calls, storage, key, GiftRegistration, Celebration, render, async mount() { render(); effects[0](); await new Promise(resolve => setImmediate(resolve)) } }
+}
+
+test('returning verified customers see their existing registration instead of a fresh form', async () => {
+  const f = submittedFormFixture({ items: [{ reference: 'FIXTURE-EXISTING', status: 'pending', gift: null, fulfilment: null }] })
+  assert.equal(f.render().some(node => node.type === f.GiftRegistration), false, 'Do not flash the form while checking existing registration')
+  await f.mount()
+  const nodes = f.render()
+  assert.equal(nodes.some(node => node.type === f.GiftRegistration), false)
+  assert.ok(nodes.find(node => node.type === f.Celebration))
+  assert.equal(f.storage.get(f.key), 'true')
+  assert.equal(f.calls.filter(call => call.url.endsWith('/register')).length, 0)
+})
+
+test('completed registration stays hidden after verification expires without storing customer details', async () => {
+  const f = submittedFormFixture({ remembered: true, statusCode: 401 })
+  await f.mount()
+  const nodes = f.render()
+  assert.equal(nodes.some(node => node.type === f.GiftRegistration), false)
+  assert.ok(nodes.find(node => node.type === 'h1' && node.props.children === 'Your registration is already submitted.'))
+  assert.ok(nodes.find(node => node.props.href === '/diwali-gift/status'))
+  assert.deepEqual([...f.storage], [[f.key, 'true']])
+})
+
+test('new customers keep the form, while a completed submission shows only its confirmation and true WhatsApp result', async () => {
+  for (const whatsappStatus of ['accepted', 'unknown']) {
+    const f = submittedFormFixture({ whatsappStatus })
+    await f.mount()
+    f.state[7] = true // The customer's OTP has been verified.
+    f.state[8] = '26000'
+    f.state[13] = 'fixture@example.invalid'
+    const form = f.render().find(node => node.type === f.GiftRegistration)
+    assert.ok(form)
+    await form.props.onSubmit({ preventDefault() {}, currentTarget: { name: 'Fixture customer', address: 'Fixture street 123', city: 'Bengaluru', state: 'Karnataka', pincode: '560001', storeCode: 'A', invoice: 'FIXTURE-1', accuracy: 'on', consent: 'on' } })
+    const nodes = f.render()
+    assert.equal(nodes.some(node => node.type === f.GiftRegistration), false)
+    assert.ok(nodes.find(node => node.type === f.Celebration))
+    assert.equal(nodes.some(node => node.props.children === 'Your registration confirmation has been sent on WhatsApp.'), whatsappStatus === 'accepted')
+    assert.equal(f.storage.get(f.key), 'true')
+    assert.equal(f.calls.filter(call => call.url.endsWith('/register')).length, 1)
+  }
 })
