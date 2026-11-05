@@ -23,7 +23,7 @@ test('public terms and privacy use the exact saved Markdown for the selected lan
   const config = { ...DEFAULT_CONFIG, termsEn: '## English terms\n\n**Approved terms**', termsKn: '## ನಿಯಮಗಳು\n\n**ಅನುಮೋದಿಸಲಾಗಿದೆ**', privacyEn: '## English privacy\n\n- Data notice', privacyKn: '## ಗೌಪ್ಯತೆ\n\n- ಮಾಹಿತಿ' }
   for (const [mode, language, key] of [['terms', 'en', 'termsEn'], ['terms', 'kn', 'termsKn'], ['privacy', 'en', 'privacyEn'], ['privacy', 'kn', 'privacyKn']]) {
     let index = 0
-    const loader = sourceLoader({ react: { useEffect() {}, useState(initial) { const current = index++; return [current === 0 ? language : current === 1 ? config : initial, () => {}] } } })
+    const loader = sourceLoader({ react: { useCallback: callback => callback, useRef: initial => ({ current: initial }), useEffect() {}, useState(initial) { const current = index++; return [current === 0 ? language : current === 1 ? config : initial, () => {}] } } })
     const MarkdownContent = loader.load('components/ui/MarkdownContent.tsx').default
     const tree = loader.load('components/diwali/PublicGift.tsx').default({ mode })
     let renderedNotice
@@ -107,7 +107,7 @@ test('settings save highlights missing fields, focuses the first error and suppo
   state[0] = { ...DEFAULT_CONFIG, enabled: true }
   state[1] = { role: 'superadmin', export: true, stores: [] }
   const loader = sourceLoader({
-    react: { useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
+    react: { useCallback: callback => callback, useRef: initial => ({ current: initial }), useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
     'next/navigation': { useRouter() { return {} } },
     '@/lib/api-client': { async apiFetch(url, options) { requests.push({ url, options }); return Response.json({ saved: true }) } },
   }, { context: {
@@ -165,6 +165,7 @@ test('customers can enter gift details before the database check but cannot subm
   const { DEFAULT_CONFIG } = sourceLoader().load('lib/diwali/schemas.ts')
   let index = 0, error = ''
   const react = {
+    useCallback: callback => callback,
     useEffect() {},
     useState(initial) {
       const current = index++
@@ -224,7 +225,7 @@ function submittedFormFixture({ items = [], remembered = false, statusCode = 200
   if (remembered) storage.set(key, 'true')
   let index = 0
   const config = { ...sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG, enabled: true, registrationStart: '2000-01-01', registrationEnd: '2099-12-31' }
-  const loader = sourceLoader({ react: {
+  const loader = sourceLoader({ react: { useCallback: callback => callback, useRef: initial => ({ current: initial }),
     useEffect(callback) { effects.push(callback) },
     useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] },
   } }, { fetch: async (url, options) => {

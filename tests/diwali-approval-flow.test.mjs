@@ -122,7 +122,7 @@ test('approval shows the amount-based gift live, defaults to today and matched i
   let index = 0
   const config = sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG
   const loader = sourceLoader({
-    react: {
+    react: { useCallback: callback => callback, useRef: initial => ({ current: initial }),
       useEffect(callback) { effects.push(callback) },
       useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] },
     },
@@ -131,7 +131,7 @@ test('approval shows the amount-based gift live, defaults to today and matched i
   })
   const Component = loader.load('components/diwali/AdminGift.tsx').default
   Component({ section: 'detail', claimId: 'claim' })
-  await effects[0]()
+  for (const effect of effects) await effect()
   // The effect delegates to an async task; wait for its chained API reads.
   await new Promise(resolve => setImmediate(resolve))
   index = 0
@@ -253,7 +253,7 @@ test('registration Delete button confirms the target, sends its version and refr
   state[3] = [{ id: 'claim', reference: 'FIXTURE-CLAIM', enteredValue: 26000, createdAt: new Date().toISOString(), version: 3, status: 'pending' }]
   state[4] = 1
   const loader = sourceLoader({
-    react: { useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
+    react: { useCallback: callback => callback, useRef: initial => ({ current: initial }), useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
     'next/navigation': { useRouter: () => ({}) },
     '@/lib/api-client': { apiFetch: async (url, options) => { calls.push({ url, options }); return Response.json(options.method === 'DELETE' ? { deleted: true } : { items: [], total: 0 }) } },
   }, { context: { window: { confirm(text) { assert.match(text, /FIXTURE-CLAIM/); return confirmed } } } })

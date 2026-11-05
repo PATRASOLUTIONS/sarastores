@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { Gift } from 'lucide-react'
 import { GIFTS, indiaDate } from '@/lib/diwali/rules'
@@ -32,21 +32,21 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
   const [checkingRegistration, setCheckingRegistration] = useState(mode === 'register')
   const [previouslySubmitted, setPreviouslySubmitted] = useState(false)
   const t = (english: string, kannada: string) => language === 'kn' ? kannada : english
-  const rememberSubmission = () => {
+  const rememberSubmission = useCallback(() => {
     setPreviouslySubmitted(true)
     // A presentation hint only. The server enforces uniqueness by mobile/email.
     try { window.localStorage.setItem(SUBMITTED_KEY, 'true') } catch { /* Status lookup still restores verified submissions. */ }
-  }
+  }, [])
   const registerAnotherCustomer = () => {
     try { window.localStorage.removeItem(SUBMITTED_KEY) } catch { /* The current page can still reset. */ }
     setPreviouslySubmitted(false); setResult(null); setVerified(false); setMobile(''); setEmail(''); setAmount(''); setChallenge(''); setOtp(''); setError(''); setRequestId(crypto.randomUUID())
   }
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     const response = await api<{ items: Status[] }>('/api/diwali/status')
     setStatuses(response.items)
     if (mode !== 'register' || response.items.length) setVerified(true)
     if (mode === 'register' && response.items[0]) { setResult(response.items[0]); rememberSubmission() }
-  }
+  }, [mode, rememberSubmission])
   useEffect(() => {
     let active = true
     const refreshConfig = () => {
@@ -65,7 +65,7 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
       loadStatus().catch(() => {}).finally(() => { if (active) setCheckingRegistration(false) })
     }
     return () => { active = false; window.removeEventListener('focus', refreshConfig); window.clearInterval(timer) }
-  }, [mode])
+  }, [mode, loadStatus])
   useEffect(() => {
     if (error && mode === 'register') document.getElementById('gift-registration-error')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [error, mode])
