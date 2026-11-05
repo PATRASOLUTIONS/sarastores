@@ -4,6 +4,8 @@ import NextImage from "next/image"
 import { useState, type ImgHTMLAttributes, type Ref } from "react"
 import { canOptimizeImage } from "@/lib/image-sources.mjs"
 import { imageDimension, imageSizes } from "@/lib/image-sizing"
+import { bannerImageSources } from "@/lib/banner-image-sources"
+import { preload } from "react-dom"
 
 type SiteImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "alt" | "src" | "srcSet"> & {
   alt: string; src?: string; ref?: Ref<HTMLImageElement>; unoptimized?: boolean; priority?: boolean;
@@ -21,6 +23,22 @@ export default function SiteImage({
   const nativeWidth = imageDimension(width)
   const nativeHeight = imageDimension(height)
   const resolvedSizes = imageSizes({ sizes, className, width, style })
+  const banner = !isReplacement ? bannerImageSources(current, nativeWidth) : null
+  if (banner && priority) preload(banner.src, {
+    as: "image", imageSrcSet: banner.srcSet, imageSizes: resolvedSizes || "100vw", fetchPriority: "high",
+  })
+  if (banner) return <img {...props} ref={ref} src={banner.src} srcSet={banner.srcSet}
+    width={nativeWidth || 1600} height={nativeHeight || 900} sizes={resolvedSizes || "100vw"}
+    data-site-auto-width={nativeWidth === undefined ? "" : undefined}
+    data-site-auto-height={nativeHeight === undefined ? "" : undefined}
+    data-site-auto-ratio={nativeWidth === undefined || nativeHeight === undefined ? "" : undefined}
+    className={className} style={style} decoding="async"
+    loading={loading || (priority || fetchPriority === "high" ? "eager" : "lazy")}
+    fetchPriority={fetchPriority || (priority ? "high" : undefined)}
+    onError={event => {
+      event.currentTarget.removeAttribute("srcset")
+      setReplacement({ source, src: source })
+    }} />
   const optimized = !unoptimized && !isReplacement && Boolean(resolvedSizes) && canOptimizeImage(current)
   return <NextImage {...props} ref={ref} src={current}
     width={nativeWidth || 1600} height={nativeHeight || 900}

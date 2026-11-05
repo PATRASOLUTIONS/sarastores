@@ -11,8 +11,8 @@ import styles from "./homepage.module.css"
 
 const ICONS = [Cpu, Smartphone, Camera, BatteryCharging]
 
-export default function LandingHero({ products = [], sideBanners = [], previewBanners }: { products?: HomeProduct[]; sideBanners?: SiteBanner[]; previewBanners?: SiteBanner[] }) {
-  const banners = useBanners("home-hero")
+export default function LandingHero({ products = [], sideBanners = [], previewBanners, initialBanners, initialNow }: { products?: HomeProduct[]; sideBanners?: SiteBanner[]; previewBanners?: SiteBanner[]; initialBanners?: SiteBanner[]; initialNow?: number }) {
+  const banners = useBanners("home-hero", undefined, initialBanners, initialNow)
   const slides = previewBanners ?? banners
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -31,7 +31,7 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
 
   const pairedSideBanners = sideBanners.length >= 2 ? sideBanners.slice(0, 2) : []
   const photoHero = !!slide && bannerIsPhotoOnly(slide)
-  if (!slide && pairedSideBanners.length === 0) return <h1 className="sr-only">SARA Electronics — Mobiles and Home Appliances</h1>
+  if (!slide && pairedSideBanners.length === 0) return <section className={`${styles.heroGrid} ${styles.heroSingle}`} aria-label="Featured offers"><div className={styles.hero}><h1 className="sr-only">SARA Electronics</h1></div></section>
 
   return (
     <section className={`${styles.heroGrid} ${!slide || pairedSideBanners.length === 0 || photoHero ? styles.heroSingle : ""}`} aria-label="Featured offers">
@@ -41,8 +41,8 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
       }} aria-roledescription={slides.length > 1 ? "carousel" : undefined}>
         {photoHero && <h1 className="sr-only">{slide.title || "SARA Electronics — Mobiles and Home Appliances"}</h1>}
         {photoHero ? (
-          slide.ctaLink ? <Link href={slide.ctaLink} className={styles.heroPhotoLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={slide.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
-        ) : slide.image && <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={slide.image} alt="" className={styles.heroArt} fetchPriority="high" />}
+          slide.ctaLink ? <Link href={slide.ctaLink} className={styles.heroPhotoLink} aria-label={slide.title || "Shop featured offers"} prefetch={false}><SiteImage sizes="(min-width: 1280px) 1216px, calc(100vw - 32px)" src={slide.image} alt="" className={styles.heroPhoto} width={slide.imageWidth} height={slide.imageHeight} priority={current === 0} fetchPriority={current === 0 ? "high" : "auto"} /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, calc(100vw - 32px)" src={slide.image} alt="" className={styles.heroPhoto} width={slide.imageWidth} height={slide.imageHeight} priority={current === 0} fetchPriority={current === 0 ? "high" : "auto"} />
+        ) : slide.image && <SiteImage sizes="(min-width: 1280px) 1216px, calc(100vw - 32px)" src={slide.image} alt="" className={styles.heroArt} width={slide.imageWidth} height={slide.imageHeight} priority={current === 0} fetchPriority={current === 0 ? "high" : "auto"} />}
         {!photoHero && <div className={styles.heroCopy}>
           <div className={styles.heroTitle}>
             {isIphone && <FaApple className={styles.appleMark} aria-hidden />}
@@ -61,7 +61,7 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
         {slides.length > 1 && <>
           <button type="button" className={`${styles.slideArrow} ${styles.previous}`} onClick={() => go(-1)} aria-label="Previous slide"><ChevronLeft size={20} /></button>
           <button type="button" className={`${styles.slideArrow} ${styles.next}`} onClick={() => go(1)} aria-label="Next slide"><ChevronRight size={20} /></button>
-          <div className={styles.slideDots}>{slides.map((item, i) => <button key={item.id} type="button" onClick={() => setIndex(i)} aria-label={`Show slide ${i + 1}: ${item.title}`} aria-current={i === current} />)}</div>
+          <div className={styles.slideDots}>{slides.map((item, i) => <button key={item.id} type="button" onClick={() => setIndex(i)} aria-label={`Show slide ${i + 1}: ${item.title || "Featured offer"}`} aria-current={i === current} />)}</div>
         </>}
       </div>}
       {!photoHero && pairedSideBanners.length > 0 && <div className={styles.heroSide} style={{ gridTemplateRows: `repeat(${pairedSideBanners.length}, minmax(0, 1fr))` }}>
@@ -69,8 +69,8 @@ export default function LandingHero({ products = [], sideBanners = [], previewBa
           const photo = bannerIsPhotoOnly(banner)
           return <article key={banner.id} className={styles.sideCard} style={photo ? undefined : { ...bannerGradient(banner), color: banner.dark ? "var(--brand-text-primary)" : "#fff" }}>
             {photo ? (
-              banner.ctaLink ? <Link href={banner.ctaLink} className={styles.heroPhotoLink}><SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={banner.image} alt="" className={styles.heroPhoto} fetchPriority="high" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, 100vw" src={banner.image} alt="" className={styles.heroPhoto} fetchPriority="high" />
-            ) : banner.image && <SiteImage sizes="(min-width: 1024px) 320px, 50vw" src={banner.image} alt="" className={styles.sideImage} fetchPriority="high" />}
+              banner.ctaLink ? <Link href={banner.ctaLink} className={styles.heroPhotoLink} aria-label={banner.title || "Shop featured offers"} prefetch={false}><SiteImage sizes="(min-width: 1280px) 1216px, calc(100vw - 32px)" src={banner.image} alt="" className={styles.heroPhoto} width={banner.imageWidth} height={banner.imageHeight} loading="lazy" /></Link> : <SiteImage sizes="(min-width: 1280px) 1216px, calc(100vw - 32px)" src={banner.image} alt="" className={styles.heroPhoto} width={banner.imageWidth} height={banner.imageHeight} loading="lazy" />
+            ) : banner.image && <SiteImage sizes="(min-width: 1024px) 320px, 50vw" src={banner.image} alt="" className={styles.sideImage} width={banner.imageWidth} height={banner.imageHeight} loading="lazy" />}
             {!photo && <div className={styles.sideCopy}>
               <h2 style={{ whiteSpace: "pre-line" }}>{banner.title}</h2>
               {banner.subtitle && <p>{banner.subtitle}</p>}

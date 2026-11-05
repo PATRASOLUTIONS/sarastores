@@ -9,6 +9,7 @@ import { Search, Edit, Trash, Eye, ArrowDown, ArrowUp, ArrowUpDown, Database, Al
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
 import ExcelUpload from "@/components/ExcelUpload"
+import ProductEmailAutomation from "@/components/admin/ProductEmailAutomation"
 import { normalizeProductForSchema } from "@/lib/product-schema"
 import { adminProductNameKey, groupAdminProductNames, selectAdminNameRows } from "@/lib/admin-product-name-groups"
 import { stockItemAliases } from "@/lib/stock-item-code"
@@ -1107,6 +1108,7 @@ export default function AdminProducts() {
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 w-full">
+          <ProductEmailAutomation />
           {/* <div className="w-full">
             <Link href="/admin/products/new" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center w-40 min-w-[8rem]">
               <Plus className="h-4 w-4 mr-2" />

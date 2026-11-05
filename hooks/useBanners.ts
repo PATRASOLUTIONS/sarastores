@@ -1,64 +1,11 @@
 "use client"
 
 import useSWR from "swr"
-import { z } from "zod"
 import { useEffect, useState } from "react"
-import { BANNER_UPDATE_KEY, BannerScheduleFields, nextBannerTransition, selectVisibleBanners } from "@/lib/banner-schedule"
-
-export const BANNER_PLACEMENTS = [
-  "hero",
-  "promo",
-  "home-hero",
-  "home-strip",
-  "home-duo",
-  "home-card",
-  "home-statement",
-  "pdp-offer",
-  "pdp-rail",
-  "brands-hero",
-  "cart-promo",
-] as const
-
-export type BannerPlacement = (typeof BANNER_PLACEMENTS)[number]
-
-export const BANNER_PLACEMENT_LABELS: Record<BannerPlacement, string> = {
-  hero: "Listing page — hero",
-  promo: "Listing page — promo tile",
-  "home-hero": "Home — main poster carousel",
-  "home-strip": "Home — below-deals row (strip artwork)",
-  "home-duo": "Home — side / sub banners",
-  "home-card": "Home — below-deals banners",
-  "home-statement": "Home — below-deals row (statement artwork)",
-  "pdp-offer": "Product page — offer cards above detail tabs",
-  "pdp-rail": "Product page — side rail card",
-  "brands-hero": "Brands page — hero",
-  "cart-promo": "Cart — promotional banner",
-}
-
-const optionalText = z.string().nullish().transform(value => value ?? undefined)
-export const siteBannerResponseSchema = z.object({
-  id: z.string().min(1),
-  placement: z.enum(BANNER_PLACEMENTS),
-  scope: optionalText,
-  title: z.string(),
-  subtitle: optionalText,
-  script: optionalText,
-  ctaText: optionalText,
-  ctaLink: optionalText,
-  image: optionalText,
-  bgFrom: optionalText,
-  bgTo: optionalText,
-  accent: optionalText,
-  dark: z.boolean().optional(),
-  bullets: z.array(z.string()).optional(),
-  order: z.number().optional(),
-  active: z.boolean().optional(),
-  startsAt: BannerScheduleFields.startsAt.removeDefault(),
-  expiresAt: BannerScheduleFields.expiresAt.removeDefault(),
-  weekdays: BannerScheduleFields.weekdays.removeDefault(),
-})
-export type SiteBanner = z.infer<typeof siteBannerResponseSchema>
-export const siteBannerListResponseSchema = z.array(siteBannerResponseSchema)
+import { BANNER_UPDATE_KEY, nextBannerTransition, selectVisibleBanners } from "@/lib/banner-schedule"
+import { siteBannerListResponseSchema, type SiteBanner, type BannerPlacement } from "@/lib/site-banners"
+export { BANNER_PLACEMENTS, BANNER_PLACEMENT_LABELS, siteBannerResponseSchema, siteBannerListResponseSchema } from "@/lib/site-banners"
+export type { SiteBanner, BannerPlacement } from "@/lib/site-banners"
 
 const fetcher = async (url: string): Promise<SiteBanner[]> => {
   const response = await fetch(url, { cache: "no-store" })
@@ -66,19 +13,22 @@ const fetcher = async (url: string): Promise<SiteBanner[]> => {
   const data: unknown = await response.json()
   return siteBannerListResponseSchema.parse(data)
 }
+const EMPTY_BANNERS: SiteBanner[] = []
 
 /**
  * Banners with an empty `scope` show everywhere; otherwise the scope must match
  * the caller's context (e.g. the active category on a listing page).
  */
-export function useBanners(placement: BannerPlacement, scope?: string): SiteBanner[] {
+export function useBanners(placement: BannerPlacement, scope?: string, initialData?: SiteBanner[], initialNow?: number): SiteBanner[] {
   const { data, mutate } = useSWR<SiteBanner[]>(`/api/listing-banners?placement=${placement}&schedule=1`, fetcher, {
+    fallbackData: initialData,
+    revalidateOnMount: initialData === undefined,
     revalidateOnFocus: true,
-    refreshInterval: 30000,
+    refreshInterval: initialData === undefined ? 30000 : 60000,
     onError: (error: unknown) => console.error("[Banners] Loading failed:", error),
   })
 
-  const now = useBannerClock(data || [])
+  const now = useBannerClock(data || EMPTY_BANNERS, initialNow)
   useEffect(() => {
     const refresh = (event: StorageEvent) => { if (event.key === BANNER_UPDATE_KEY) void mutate() }
     window.addEventListener('storage', refresh)
@@ -87,15 +37,16 @@ export function useBanners(placement: BannerPlacement, scope?: string): SiteBann
   return selectVisibleBanners(Array.isArray(data) ? data : [], scope, now)
 }
 
-export function useBannerClock(data: SiteBanner[]) {
-  const [now, setNow] = useState(Date.now)
+export function useBannerClock(data: SiteBanner[], initialNow?: number) {
+  const [now, setNow] = useState(initialNow ?? Date.now)
+  useEffect(() => { setNow(Date.now()) }, [data])
   useEffect(() => {
     const transition = nextBannerTransition(data || [], Date.now())
     if (transition === null) return
     const timer = window.setTimeout(() => setNow(Date.now()), Math.min(Math.max(1, transition - Date.now() + 1), 2_147_483_000))
     return () => window.clearTimeout(timer)
   }, [data, now])
-  return Math.max(now, Date.now())
+  return now
 }
 
 export function bannerIsPhotoOnly(banner: Pick<SiteBanner, "title" | "subtitle" | "script" | "ctaText" | "bullets" | "image">) {

@@ -1,5 +1,5 @@
 import SaraLanding from "@/components/home/SaraLanding"
-import { getPublicPageProducts } from "@/lib/public-page-data"
+import { getHomepageContent, getHomepageDeals } from "@/lib/homepage-data"
 import { buildHomepageMetadata, getOriginFromHeaders, getSiteSettings } from "@/lib/seo-metadata"
 import { getHomepageBannerImage } from "@/lib/homepage-banner"
 
@@ -40,10 +40,10 @@ export async function generateMetadata() {
  * left in place, so restoring the ceremony is one prop away.
  */
 export default async function Home() {
-  const products = (await getPublicPageProducts()).filter(product => product.stock > 0 && product.price > 0)
+  const [products, content] = await Promise.all([getHomepageDeals(), getHomepageContent()])
   return (
     <div className="flex min-h-screen flex-col bg-[#EEF2F7]">
-      <SaraLanding initialProducts={products} />
+      <SaraLanding initialProducts={products} initialContent={content} initialNow={Date.now()} />
     </div>
   )
 }

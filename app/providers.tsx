@@ -9,10 +9,11 @@ import { CartUIProvider } from "@/contexts/CartUIContext"
 import { CartProvider } from "@/contexts/CartContext"
 import { Toaster } from "react-hot-toast"
 import CompareFloating from "@/components/CompareFloating"
-import CartSidebar from "@/components/CartSidebar"
-import CartQuickAccess from "@/components/CartQuickAccess"
+import LazyCartChrome from "@/components/LazyCartChrome"
 import AntiInspect from "@/components/AntiInspect"
-import { MotionConfig } from "framer-motion"
+import { LazyMotion, MotionConfig } from "framer-motion"
+
+const loadMotionFeatures = () => import("@/components/animation-features").then(module => module.default)
 
 interface ProvidersProps {
   children: ReactNode
@@ -21,7 +22,7 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange forcedTheme="light">
-      <MotionConfig reducedMotion="user">
+      <LazyMotion features={loadMotionFeatures}><MotionConfig reducedMotion="user">
         <AuthProvider>
           <Suspense fallback={null}>
             <LoginReturnTracker />
@@ -31,8 +32,7 @@ export function Providers({ children }: ProvidersProps) {
             <CartUIProvider>
               {children}
               <CompareFloating />
-              <CartQuickAccess />
-              <CartSidebar />
+              <LazyCartChrome />
               {/*
                 A toast grows to fit its message, and dismissal pauses while
                 one is hovered. An over-long message therefore covers the
@@ -47,7 +47,7 @@ export function Providers({ children }: ProvidersProps) {
             </CartUIProvider>
           </CartProvider>
         </AuthProvider>
-      </MotionConfig>
+      </MotionConfig></LazyMotion>
     </ThemeProvider>
   )
 }

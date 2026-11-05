@@ -13,7 +13,7 @@ function fixture() {
       useState(initial) { const slot = index++; if (!(slot in state)) state[slot] = typeof initial === 'function' ? initial() : initial; return [state[slot], value => { state[slot] = typeof value === 'function' ? value(state[slot]) : value }] },
       useRef: value => ({ current: value }), useCallback: callback => callback,
     },
-    swr: key => { keys.push(key); return { data: undefined, mutate() {} } },
+    swr: Object.assign(key => { keys.push(key); return { data: undefined, mutate() {} } }, { useSWRConfig: () => ({}) }),
     'next/navigation': { usePathname: () => '/', useRouter: () => ({ push() {} }) },
     '@/hooks/useCart': { useCart: () => ({ cart: [{ id: 'fixture-product', quantity: 2 }] }) },
     '@/hooks/useWishlist': { useWishlist: () => ({ wishlist: [{ id: 'fixture-product' }] }) },

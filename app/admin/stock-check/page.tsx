@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import * as XLSX from "xlsx"
+import { buildStockCheckTemplateRows } from "@/lib/stock-check-template"
 import { toast } from "react-hot-toast"
 import { AlertTriangle, Download, FileSpreadsheet, RefreshCw, Search, Upload } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
@@ -81,11 +82,7 @@ export default function StockCheckPage() {
   useEffect(() => { void loadSummary() }, [])
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([
-      { CODE: "T000946", WhsCode: "BLR001", Total: 5 },
-      { CODE: "T000909", WhsCode: "BLR001", Total: 2 },
-      { CODE: "T000946", WhsCode: "BLR002", Total: 3 },
-    ])
+    const ws = XLSX.utils.json_to_sheet(buildStockCheckTemplateRows())
     ws["!cols"] = [{ wch: 18 }, { wch: 15 }, { wch: 12 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Store Stock")

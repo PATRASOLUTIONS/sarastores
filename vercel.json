@@ -129,6 +129,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/product-email-automation",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/daily/maintenance",
       "schedule": "0 1 * * *"
     },

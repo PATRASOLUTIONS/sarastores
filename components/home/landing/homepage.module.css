@@ -30,12 +30,13 @@
 .heroPhotoLink { position: absolute; inset: 0; display: block; }
 .heroPhoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .hero .shopButton { margin-top: 10px; min-width: 127px; background: #fff; color: #0f172a; }
-.slideArrow { position: absolute; top: 50%; z-index: 3; display: grid; width: 28px; height: 28px; place-items: center; transform: translateY(-50%); border: 0; border-radius: 50%; background: white; color: #0f172a; }
+.slideArrow { position: absolute; top: 50%; z-index: 3; display: grid; width: 44px; height: 44px; place-items: center; transform: translateY(-50%); border: 0; border-radius: 50%; background: white; color: #0f172a; }
 .previous { left: 14px; }
 .next { right: 14px; }
 .slideDots { position: absolute; bottom: 8px; left: 50%; z-index: 3; display: flex; gap: 5px; transform: translateX(-50%); }
-.slideDots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #8794a4; }
-.slideDots button[aria-current="true"] { background: white; }
+.slideDots button { position: relative; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.slideDots button::after { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: #8794a4; }
+.slideDots button[aria-current="true"]::after { background: white; }
 .heroSide { display: grid; height: 270px; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; min-width: 0; }
 .sideCard { position: relative; display: flex; align-items: center; overflow: hidden; border-radius: 6px; background: linear-gradient(110deg, #edf5ff, #dce9ff); }
 .sideCard:last-child { background: linear-gradient(110deg, #ffdcc0, #ffb58e); }
@@ -76,7 +77,7 @@
 .circleItem:hover .categoryCircle, .circleItem:hover .brandCircle { transform: translateY(-3px); }
 .deals { padding: 14px 0 12px; border-top: 1px solid #edf0f5; }
 .productGrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-.productCard { display: flex; min-width: 0; flex-direction: column; padding: 8px 12px 12px; overflow: hidden; border: 1px solid #dfe6f0; border-radius: 6px; background: white; }
+.productCard { min-height: 260px; display: flex; min-width: 0; flex-direction: column; padding: 8px 12px 12px; overflow: hidden; border: 1px solid #dfe6f0; border-radius: 6px; background: white; }
 .productImage { position: relative; display: flex; height: 84px; align-items: center; justify-content: center; margin: 0 -4px 8px; }
 .productImage img { max-width: 100%; height: 100%; object-fit: contain; transition: transform .2s; }
 .productImage:hover img { transform: scale(1.04); }
@@ -91,7 +92,7 @@
 .cartButton { width: 100%; min-height: 29px; margin-top: auto; padding: 5px 3px !important; border: 1px solid var(--home-action) !important; border-radius: 4px !important; background: white !important; color: var(--home-action) !important; font-size: 11px !important; line-height: 16px !important; }
 .cartButton svg { width: 12px; height: 12px; }
 .cartButton:hover { background: #edf4ff !important; }
-.skeleton { min-height: 218px; border: 1px solid #e2e8f0; border-radius: 6px; background: linear-gradient(#f3f5f8 60%, #fff 60%); }
+.skeleton { min-height: 260px; border: 1px solid #e2e8f0; border-radius: 6px; background: linear-gradient(#f3f5f8 60%, #fff 60%); }
 .catalogueMessage { display: flex; min-height: 218px; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #475569; font-size: 14px; }
 .catalogueMessage button, .catalogueMessage a { display: inline-flex; align-items: center; gap: 6px; color: var(--home-action); font-weight: 600; }
 .promotions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -180,7 +181,7 @@
   .heroPrice { font-size: 17px; }
   .previous { left: 7px; }
   .next { right: 7px; }
-  .slideArrow { width: 23px; height: 23px; }
+  .slideArrow { width: 44px; height: 44px; }
   .heroSide { height: auto; grid-template-columns: 1fr 1fr; grid-template-rows: auto !important; gap: 8px; }
   .sideCard { min-height: 130px; }
   .sideCopy { width: 78%; padding: 12px 10px; }
@@ -199,6 +200,7 @@
   .circleItem { width: 70px; font-size: 10px; }
   .productGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .productCard { padding: 8px 10px 10px; }
+  .productCard, .skeleton { min-height: 292px; }
   .productImage { height: 116px; }
   .productName { font-size: 11px; }
   .price { gap: 5px; }

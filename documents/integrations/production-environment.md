@@ -64,3 +64,10 @@ The public Diwali registration form now uses a database availability check for p
 
 
 Email is optional on the public Diwali form and the Verify endpoint. A missing or blank email is normalized to an empty value, is not checked as a duplicate identifier and does not receive an identity reservation or email rate-limit bucket. A supplied email must still be valid. Deleted registrations no longer block mobile/email availability; old reservations linked to deleted claims are reclaimed within the new registration transaction. Historical claims and their invoice/audit records remain intact.
+
+
+## Daily product email automation
+
+The Daily Email option in `/admin/products` reuses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, optional `SMTP_SECURE`, `EMAIL_FROM`, and `CRON_SECRET` (at least 16 characters). No new variable is required. Recipients and the enable switch are stored in MongoDB. Local runtime settings belong only in `.env.local`; configure the same names in the hosting environment.
+
+The daily cron `/api/cron/product-email-automation` uses `0 6 * * *` in UTC, corresponding to 11:30 AM India time. Precise execution depends on the hosting scheduler and plan; Vercel Hobby daily cron execution can vary within the hour. Use a supported plan or an authenticated external scheduler for minute-level timing. See [the feature guide](../features/product-email-automation.md) for attachment formats and delivery behavior.

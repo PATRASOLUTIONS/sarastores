@@ -14,7 +14,7 @@ export default function CompareProductButton({ productId, name, variant = "butto
 
   return <button
     type="button"
-    aria-label={`${selected ? "Remove" : "Add"} ${name} ${selected ? "from" : "to"} comparison`}
+    aria-label={`${variant === "checkbox" ? "Add to Compare" : selected ? "Added to Compare" : "Compare"}: ${name}. ${selected ? "Remove from comparison" : "Add to comparison"}`}
     aria-pressed={selected}
     onClick={(event) => {
       event.preventDefault()
