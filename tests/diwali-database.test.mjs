@@ -54,7 +54,7 @@ test('Diwali transactional integration on an isolated synthetic MongoDB database
       await assert.rejects(service.verifyOtp(locked, correct), /expired|attempts/)
     })
     await t.test('registration is persistent, idempotent, and duplicate invoice races produce one claim', async () => {
-      payload = RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', email: 'synthetic@example.invalid', address: 'Synthetic address 123', city: 'Test city', district: 'Test district', pincode: '560001', storeCode: 'TEST-A', invoice: ' test / 001 ', enteredValue: 55000, language: 'en', accuracy: true, whatsappConsent: true, consentVersion: config.consentVersion })
+      payload = RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', email: 'synthetic@example.invalid', address: 'Synthetic address 123', city: 'Test city', state: 'Test district', pincode: '560001', storeCode: 'TEST-A', invoice: ' test / 001 ', enteredValue: 55000, language: 'en', accuracy: true, whatsappConsent: true, consentVersion: config.consentVersion })
       await assert.rejects(service.register(undefined, payload), /Verify your mobile/)
       const first = await service.register(token, payload), second = await service.register(token, payload)
       assert.equal(first.reference, second.reference)
@@ -69,7 +69,7 @@ test('Diwali transactional integration on an isolated synthetic MongoDB database
       const concurrent = await Promise.allSettled(raceTokens.map((raceToken, index) => service.register(raceToken, { ...payload, email: `race-${index}@example.invalid`, invoice: 'RACE-001', requestId: randomUUID() })))
       assert.equal(concurrent.filter(result => result.status === 'fulfilled').length, 1)
       assert.equal(await db.collection(service.COLLECTIONS.claims).countDocuments({ invoice: 'RACE-001' }), 1)
-      assert.equal(await db.collection(service.COLLECTIONS.messages).countDocuments({ claimId }), 0)
+      assert.equal(await db.collection(service.COLLECTIONS.messages).countDocuments({ claimId, event: 'registered' }), 1)
     })
     const approval = { action: 'approve', version: 0, verifiedValue: 26000, invoiceDate: '2026-11-05', storeCode: 'TEST-A', note: 'Synthetic POS verification', invoiceValid: true, notRefunded: true }
     await t.test('store filters cannot broaden staff access and pending corrections preserve unique invoices', async () => {
@@ -109,7 +109,7 @@ test('Diwali transactional integration on an isolated synthetic MongoDB database
       await service.actOnClaim(fulfilment, claimId, ActionSchema.parse({ action: 'exception', version: 2, note: 'Synthetic address issue', nextAction: 'Call synthetic customer' }))
       await service.actOnClaim(fulfilment, claimId, ActionSchema.parse({ action: 'resume', version: 3, note: 'Synthetic issue resolved' }))
       await service.actOnClaim(fulfilment, claimId, ActionSchema.parse({ action: 'dispatch', version: 4, courier: 'Synthetic courier', awb: 'TEST-AWB-001', trackingUrl: 'https://courier.fixture.invalid/TEST-AWB-001' }))
-      assert.equal(await db.collection(service.COLLECTIONS.messages).countDocuments({ claimId }), 2)
+      assert.equal(await db.collection(service.COLLECTIONS.messages).countDocuments({ claimId }), 3)
       await service.actOnClaim(fulfilment, claimId, ActionSchema.parse({ action: 'deliver', version: 5, proof: 'Synthetic proof reference' }))
       const stock = await db.collection(service.COLLECTIONS.stock).findOne({ _id: 'silver10' })
       assert.equal(stock.available, 1); assert.equal(stock.reserved, 0); assert.equal(stock.dispatched, 1)
@@ -149,14 +149,14 @@ test('Diwali transactional integration on an isolated synthetic MongoDB database
       const receipt = await db.collection(service.COLLECTIONS.receipts).findOne({ _id: 'synthetic-early-callback' })
       assert.equal(receipt.status, 'read')
       const race = await db.collection(service.COLLECTIONS.claims).findOne({ invoice: 'RACE-001' })
+      providerMode = 'timeout'
       await service.actOnClaim(admin, race._id, ActionSchema.parse(approval))
-      providerMode = 'timeout'; await messages.processMessages()
-      const ambiguous = await db.collection(service.COLLECTIONS.messages).findOne({ claimId: race._id })
+      const ambiguous = await db.collection(service.COLLECTIONS.messages).findOne({ claimId: race._id, event: 'approved' })
       assert.equal(ambiguous.status, 'unknown')
       assert.equal((await messages.processMessages()).processed, 0)
       await assert.rejects(messages.retryMessage(admin, ambiguous._id, 'Synthetic reason', false), /Confirm/)
+      providerMode = 'accepted'
       await messages.retryMessage(admin, ambiguous._id, 'Provider confirmed no send', true)
-      providerMode = 'accepted'; await messages.processMessages()
       assert.equal((await db.collection(service.COLLECTIONS.messages).findOne({ _id: ambiguous._id })).status, 'accepted')
     })
     await t.test('status OTP remains available after registration closes', async () => {

@@ -1,6 +1,7 @@
 "use client"
 
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
+import { uniquePublicProductNames } from "@/lib/public-product-names"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Header from "@/components/Header"
 import Footer from "@/components/Footer"
@@ -8,7 +9,7 @@ import { fetchWithCache, getCached, setCached } from "@/utils/cache"
 import { useBanners } from "@/hooks/useBanners"
 import LandingHero from "@/components/home/landing/LandingHero"
 import {
-  HOME_BRANDS, HOME_CATEGORIES, HomepageBenefits, HomepageBrandPedestals, HomepageBrands,
+  HOME_BRANDS, HomepageBenefits, HomepageBrandPedestals, HomepageBrands,
   HomepageDeals, HomepageProductRail, HomepagePromotions, HomepageStores, type HomeBrand, type HomeProduct,
 } from "@/components/home/landing/HomepageSections"
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed"
@@ -66,6 +67,7 @@ function parseProducts(data: unknown): HomeProduct[] {
 export default function SaraLanding({ launch = null, initialProducts }: { launch?: HandshakeLaunch | null; initialProducts?: HomeProduct[] }) {
   const marketing = useMarketingContent("home")
   const [products, setProducts] = useState<HomeProduct[]>(initialProducts || [])
+  const [deals, setDeals] = useState<HomeProduct[] | null>(null)
   const [stockedBrands, setStockedBrands] = useState<{ name: string; count: number }[]>([])
   const [brandDocs, setBrandDocs] = useState<Record<string, unknown>[]>([])
   const [brandImages, setBrandImages] = useState<Record<string, string>>({})
@@ -157,18 +159,17 @@ export default function SaraLanding({ launch = null, initialProducts }: { launch
   void HomepageBenefits
   void HomepageBrandPedestals
 
-  const deals = useMemo(() => {
-    const available = products.filter((product) => product.stock > 0)
-    const discounted = available.filter((product) => product.mrp && product.mrp > product.price)
-      .sort((a, b) => ((b.mrp || b.price) - b.price) / (b.mrp || b.price) - ((a.mrp || a.price) - a.price) / (a.mrp || a.price))
-    const candidates = discounted.length ? discounted : available
-    const selected: HomeProduct[] = []
-    for (const category of HOME_CATEGORIES) {
-      const product = candidates.find((item) => !selected.includes(item) && category.match?.test(`${item.subCategory || ""} ${item.category || ""} ${item.name}`))
-      if (product) selected.push(product)
-      if (selected.length === 6) break
+  useEffect(() => {
+    // Pick after hydration so server and client render the same loading state.
+    const candidates = uniquePublicProductNames(products.filter((product) => product.stock > 0))
+    const count = Math.min(6, candidates.length)
+    for (let index = 0; index < count; index++) {
+      const randomIndex = index + Math.floor(Math.random() * (candidates.length - index))
+      const product = candidates[index]
+      candidates[index] = candidates[randomIndex]
+      candidates[randomIndex] = product
     }
-    return [...selected, ...candidates.filter((item) => !selected.includes(item))].slice(0, 6)
+    setDeals(candidates.slice(0, count))
   }, [products])
 
   const { products: viewed } = useRecentlyViewed()
@@ -218,7 +219,7 @@ export default function SaraLanding({ launch = null, initialProducts }: { launch
         <MarketingSections page="home">
           {/* <MarketingSection page="home" section="benefits"><HomepageBenefits storeCount={storeCount} /></MarketingSection> */}
           {/* <MarketingSection page="home" section="categories"><HomepageBrandPedestals brands={shopBrands} /></MarketingSection> */}
-          <MarketingSection page="home" section="deals"><HomepageDeals products={deals} loading={loading} error={catalogueError} retry={() => void loadProducts(true)} /></MarketingSection>
+          <MarketingSection page="home" section="deals"><HomepageDeals products={deals || []} loading={loading || deals === null} error={catalogueError} retry={() => void loadProducts(true)} /></MarketingSection>
           <MarketingSection page="home" section="promotions"><HomepagePromotions banners={[...cardBanners, ...stripBanners, ...statementBanners].sort((a, b) => (a.order || 0) - (b.order || 0))} /></MarketingSection>
           <MarketingSection page="home" section="stores"><HomepageStores storeCount={storeCount} /></MarketingSection>
         </MarketingSections>

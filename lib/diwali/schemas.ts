@@ -48,14 +48,14 @@ export const OtpVerifySchema = z.object({ challenge: z.string().uuid(), otp: z.s
 export const RegistrationSchema = z.object({
   requestId: z.string().uuid(), name: z.string().trim().min(2).max(150),
   email: DiwaliEmailSchema,
-  address: z.string().trim().min(10).max(800), city: z.string().trim().min(2).max(100), district: z.string().trim().min(2).max(100),
+  address: z.string().trim().min(10).max(800), city: z.string().trim().min(2).max(100), state: z.string().trim().min(2).max(100),
   pincode: pincodeSchema, storeCode: z.string().trim().min(1).max(40), invoice: z.string().trim().min(1).max(100),
   enteredValue: z.number().int().min(15000).max(100000000), language: Language,
   accuracy: z.literal(true), whatsappConsent: z.boolean(), consentVersion: z.string().max(100),
 }).strict()
 export const ActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('correct'), version: z.number().int().nonnegative(), invoice: z.string().trim().min(1).max(100), storeCode: z.string().trim().min(1).max(40), note: z.string().trim().min(3).max(1000) }).strict(),
-  z.object({ action: z.literal('approve'), version: z.number().int().nonnegative(), verifiedValue: z.number().int().min(15000).max(100000000), invoiceDate: DateOnly, storeCode: z.string().min(1).max(40), note: z.string().trim().min(3).max(1000), invoiceValid: z.literal(true), notRefunded: z.literal(true) }).strict(),
+  z.object({ action: z.literal('approve'), version: z.number().int().nonnegative(), verifiedValue: z.number().int().min(15000).max(100000000), invoiceDate: DateOnly, storeCode: z.string().min(1).max(40), note: z.string().trim().max(1000).default(''), invoiceValid: z.literal(true), notRefunded: z.literal(true) }).strict(),
   z.object({ action: z.literal('reject'), version: z.number().int().nonnegative(), note: z.string().trim().min(3).max(1000) }).strict(),
   z.object({ action: z.literal('pack'), version: z.number().int().nonnegative(), note: z.string().trim().max(1000).default('') }).strict(),
   z.object({ action: z.literal('dispatch'), version: z.number().int().nonnegative(), courier: z.string().trim().min(2).max(100), awb: z.string().trim().min(2).max(100), trackingUrl: z.union([z.literal(''), z.string().url().max(500).refine(value => new URL(value).protocol === 'https:', 'Use an HTTPS tracking URL')]) }).strict(),

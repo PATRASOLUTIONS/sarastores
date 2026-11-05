@@ -45,3 +45,11 @@ PAYTM_MERCHANT_KEY=
 `npm run test:diwali:database` and `npm run test:diwali:browser` load `.env.local` and use only `DIWALI_TEST_MONGODB_URI` for their synthetic databases. They refuse/skip when the dedicated test configuration is unavailable. The browser QA server receives that dedicated URI explicitly. These commands require an operator-authorized isolated test cluster; they do not fall back to the app URI. Do not copy `DIWALI_TEST_*` settings into Vercel Production.
 
 `npm run setup:indexnow` now adds missing IndexNow settings directly to `.env.local` and preserves existing settings. It never creates another environment file.
+
+### Diwali registration and approval confirmations
+
+Customer registration and approval WhatsApp messages send during the request after the claim transaction commits. They do not enter the background queue. Provider failures and uncertain outcomes remain in the message report; reconcile uncertain acceptance before an explicit retry. Dispatch messages retain the existing worker.
+
+Configure `DIWALI_REGISTERED_TEMPLATE_EN` and `DIWALI_REGISTERED_TEMPLATE_KN` in `.env.local` and in the hosted runtime with approved template names. Registration templates take three body parameters in this order: customer name, registration reference, invoice number. Suggested English wording: "Hello {{1}}, SARA has received your Diwali gift registration {{2}} for invoice {{3}}. Your invoice is pending verification. We will notify you after review." The customer must opt in to WhatsApp updates. These template slots are blank until approved names are provided.
+
+Approval uses the existing `DIWALI_APPROVED_TEMPLATE_EN` / `DIWALI_APPROVED_TEMPLATE_KN` settings and parameter order. Report exports include the approving employee name, account ID and approval timestamp. A fulfilment rejection releases packed gift reservations; it does not return dispatched gifts to available stock. Delivered gifts cannot be rejected through this action.

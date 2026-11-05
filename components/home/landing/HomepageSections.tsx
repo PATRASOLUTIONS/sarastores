@@ -50,11 +50,8 @@ export type HomeCategory = {
 export type HomeBrand = { name: string; logo?: string; href: string }
 
 /**
- * Reference aisles, kept for two jobs the live sub-categories cannot do.
- *
- * `match` spreads the deals row across different kinds of product instead of
- * showing six televisions, and the illustrations are the last fallback for a
- * tile whose sub-category has no photographed stock.
+ * Reference aisles and fallback illustrations for category tiles whose
+ * sub-category has no photographed stock.
  */
 export const HOME_CATEGORIES: HomeCategory[] = [
   { label: "Mobiles", image: "mobiles", match: /mobile|smartphone|iphone/i, href: "/products?subCategory=Mobile&availability=in" },

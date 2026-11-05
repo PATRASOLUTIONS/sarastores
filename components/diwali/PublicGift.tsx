@@ -53,7 +53,7 @@ export default function PublicGift({ mode = 'register' }: { mode?: 'register' | 
     if (!verified) { setError(t('Verify your mobile number before submitting registration.', 'ನೋಂದಣಿ ಸಲ್ಲಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.')); return }
     const data = new FormData(event.currentTarget)
     await task(async () => {
-      const claim = await api<Status>('/api/diwali/register', { requestId, name: data.get('name'), email, address: data.get('address'), city: data.get('city'), district: data.get('district'), pincode: data.get('pincode'), storeCode: data.get('storeCode'), invoice: data.get('invoice'), enteredValue: Number(amount), language, accuracy: data.get('accuracy') === 'on', whatsappConsent: data.get('consent') === 'on', consentVersion: config?.consentVersion })
+      const claim = await api<Status>('/api/diwali/register', { requestId, name: data.get('name'), email, address: data.get('address'), city: data.get('city'), state: data.get('state'), pincode: data.get('pincode'), storeCode: data.get('storeCode'), invoice: data.get('invoice'), enteredValue: Number(amount), language, accuracy: data.get('accuracy') === 'on', whatsappConsent: data.get('consent') === 'on', consentVersion: config?.consentVersion })
       setResult(claim)
     })
   }

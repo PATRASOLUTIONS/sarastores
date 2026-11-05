@@ -185,7 +185,7 @@ test('customers can enter gift details before OTP verification but cannot submit
   }
   visit(tree)
   assert.equal(nodes.find(node => node.type === 'fieldset').props.disabled, false)
-  for (const name of ['name', 'email', 'address', 'city', 'district', 'pincode', 'storeCode', 'invoice', 'accuracy']) {
+  for (const name of ['name', 'email', 'address', 'city', 'state', 'pincode', 'storeCode', 'invoice', 'accuracy']) {
     assert.equal(nodes.find(node => node.props.name === name)?.props.required, true, `${name} must remain required`)
   }
   assert.equal(nodes.filter(node => node.type === 'nav' || node.type === 'footer').length, 0)

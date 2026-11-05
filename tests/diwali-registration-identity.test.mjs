@@ -38,11 +38,12 @@ function fixture(notificationSettings = null, failQueue = false) {
       }, async updateOne() {}, async deleteOne() {},
     }) },
     '@/lib/whatsapp-template': { sendWhatsAppTemplate: async () => { sent.push(true); return { success: true } } },
+    '@/lib/diwali/immediate-messages': { sendImmediateDiwaliMessage: async key => { sent.push(key); return 'accepted' } },
   }, { env: { DIWALI_MESSAGING_ENABLED: 'true', DIWALI_OTP_TEMPLATE: 'synthetic-auth' } })
   return { service: loader.load('lib/diwali/service.ts'), loader, sent, writes, rows: () => rows,
     token(mobile) { const token = randomUUID(); tokens.set(createHash('sha256').update(token).digest('hex'), { mobile, verifiedAt: new Date() }); return token },
     seed(row) { rows.push(row) },
-    input(email = 'shopper@example.com') { return loader.load('lib/diwali/schemas.ts').RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', email, address: 'Synthetic Street 123', city: 'Bengaluru', district: 'Bengaluru', pincode: '560001', storeCode: 'A', invoice: randomUUID(), enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }) },
+    input(email = 'shopper@example.com') { return loader.load('lib/diwali/schemas.ts').RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', email, address: 'Synthetic Street 123', city: 'Bengaluru', state: 'Bengaluru', pincode: '560001', storeCode: 'A', invoice: randomUUID(), enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }) },
   }
 }
 
@@ -71,6 +72,21 @@ test('retrying the same request returns its saved reference without creating ano
   assert.equal(results[0].reference, results[1].reference)
   assert.equal(f.rows().length, 1)
   assert.ok(f.writes.every(write => write.options.session))
+})
+
+test('consenting registration records a confirmation and sends immediately after commit only once', async () => {
+  const f = fixture(), token = f.token('9876543210'), input = { ...f.input(), whatsappConsent: true }
+  const first = await f.service.register(token, input)
+  assert.equal(first.whatsappStatus, 'accepted')
+  assert.equal(f.sent.length, 1)
+  assert.match(f.sent[0], /:registered$/)
+  const message = f.writes.find(write => write.name === 'diwali_messages')
+  assert.equal(message.row.event, 'registered')
+  assert.equal(message.row.status, 'ready')
+  assert.deepEqual(Array.from(message.row.values), [input.name, first.reference, f.rows()[0].invoice])
+  const repeated = await f.service.register(token, input)
+  assert.equal(repeated.reference, first.reference)
+  assert.equal(f.sent.length, 1)
 })
 
 test('historical rejected and online claims also prevent repeat form registrations', async () => {
