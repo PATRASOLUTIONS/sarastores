@@ -117,7 +117,7 @@ test('downloaded Excel report identifies the approver by name and account ID', a
   assert.ok(rows[0].approvedAt)
 })
 
-test('approval defaults to today in India, matched invoice, green approval and a reason required only for rejection', async () => {
+test('approval shows the amount-based gift live, defaults to today and matched invoice, and needs a reason only for rejection', async () => {
   const state = [], effects = []
   let index = 0
   const config = sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG
@@ -145,6 +145,15 @@ test('approval defaults to today in India, matched invoice, green approval and a
   assert.match(approve.props.className, /bg-green-/)
   assert.equal(approve.props.disabled, false)
   assert.equal(nodes.find(node => node.type === 'button' && node.props.children === 'Reject').props.disabled, true)
+  assert.ok(nodes.some(node => node.type === 'dd' && node.props.children === '10 Gram Silver (pending approval)'))
+  for (const [amount, gift] of [[15000, '5 Gram Silver'], [26000, '10 Gram Silver'], [50001, '15 Gram Silver'], [80001, '20 Gram Silver'], [100001, '1 Gram Gold'], [14999, null], ['', null], [25999.5, null]]) {
+    nodes.find(node => node.type === 'input' && node.props.type === 'number').props.onChange({ target: { value: String(amount) } })
+    index = 0; nodes.length = 0
+    visit(Component({ section: 'detail', claimId: 'claim' }))
+    assert.ok(nodes.some(node => node.type === 'dd' && node.props.children === (gift ? `${gift} (pending approval)` : 'No eligible gift')))
+    const preview = nodes.find(node => node.props.role === 'status' && node.props.className?.includes('rounded-lg'))
+    assert.equal(preview.props.children[0].props.children[1], gift || 'No eligible gift')
+  }
 })
 
 test('fulfilment rejection releases packed stock and suppresses unsent notifications', async () => {
