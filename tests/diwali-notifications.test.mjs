@@ -104,7 +104,8 @@ test('notification status counts all pending emails and exposes no customer cont
 test('notification endpoint denies non-admins and cross-origin writes before performing any action', async () => {
   let allowed = false, calls = 0
   const api = sourceLoader({
-    '@/lib/auth': { requireFullAdmin: async () => allowed ? { ok: true, user: { id: 'trusted-admin' } } : { ok: false, response: Response.json({ error: 'Forbidden' }, { status: 403 }) } },
+    '@/lib/diwali/service': { authorize() {}, getConfig: async () => ({}) },
+    '@/lib/auth': { requireUser: async () => allowed ? { ok: true, user: { id: 'trusted-admin' } } : { ok: false, response: Response.json({ error: 'Forbidden' }, { status: 403 }) } },
     '@/lib/diwali/registration-notifications': { getRegistrationNotifications: async () => { calls++ }, saveRegistrationNotifications: async () => { calls++ }, processRegistrationEmails: async () => { calls++ } },
   }).load('app/api/admin/diwali/notifications/route.ts')
   for (const method of ['GET', 'PUT', 'POST']) assert.equal((await api[method](new Request('https://sara.test/api/admin/diwali/notifications', { method }))).status, 403)

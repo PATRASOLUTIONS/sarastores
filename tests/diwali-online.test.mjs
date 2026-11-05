@@ -37,10 +37,10 @@ test('online gift allocation blocks unpaid, refunded, cancelled, reviewed and ch
 })
 
 test('automatic registration is idempotent and rolls back with a failed order transaction', async () => {
-  let claims = new Map(), audits = [], orders = [], failInsert = true
+  let claims = new Map(), audits = [], messages = [], orders = [], failInsert = true
   const session = { async withTransaction(work) {
-    const before = [new Map(claims), [...audits], [...orders]]
-    try { return await work() } catch (error) { [claims, audits, orders] = before; throw error }
+    const before = [new Map(claims), [...audits], [...orders], [...messages]]
+    try { return await work() } catch (error) { [claims, audits, orders, messages] = before; throw error }
   }, async endSession() {} }
   const loader = sourceLoader({
     '@/lib/db-service': { getCollection: async name => ({
@@ -50,7 +50,7 @@ test('automatic registration is idempotent and rolls back with a failed order tr
         if (claims.has(filter._id)) return { upsertedCount: 0 }
         claims.set(filter._id, update.$setOnInsert); return { upsertedCount: 1 }
       },
-      async insertOne(row, options) { assert.equal(name, 'diwali_audit'); assert.equal(options.session, session); audits.push(row) },
+      async insertOne(row, options) { assert.equal(options.session, session); if (name === 'diwali_messages') messages.push(row); else { assert.equal(name, 'diwali_audit'); audits.push(row) } },
     }) },
     '@/lib/mongodb': { connectToDatabase: async () => ({ client: { startSession: () => session }, db: { collection: name => ({
       async insertOne(row, options) { assert.equal(name, 'orders'); assert.equal(options.session, session); if (failInsert) throw new Error('Synthetic order failure'); orders.push(row) },
@@ -61,7 +61,7 @@ test('automatic registration is idempotent and rolls back with a failed order tr
   const persist = loader.load('lib/checkout-payment.ts').persistCheckoutOrder
   const checkout = { ...order, diwaliGift: gift }
   await assert.rejects(persist(checkout, null, tx => record(checkout, tx)), /Synthetic order failure/)
-  assert.equal(claims.size, 0); assert.equal(audits.length, 0)
+  assert.equal(claims.size, 0); assert.equal(audits.length, 0); assert.equal(messages.length, 0)
   failInsert = false
   await persist(checkout, null, tx => record(checkout, tx))
   await record(checkout, session)
@@ -71,7 +71,10 @@ test('automatic registration is idempotent and rolls back with a failed order tr
   assert.equal(claim.mobile, order.customer.phone); assert.equal(claim.address, order.customer.address)
   assert.equal(claim.storeCode, 'ONLINE'); assert.equal(claim.enteredValue, 26000)
   assert.equal(claim.status, 'pending'); assert.equal(claim.giftCode, 'silver10')
-  assert.equal(claim.whatsappConsent, false); assert.equal(claim.verifiedMobileAt, undefined)
+  assert.equal(claim.whatsappConsent, true); assert.equal(claim.verifiedMobileAt, undefined)
+  assert.equal(messages.length, 1); assert.equal(messages[0].eventKey, `${claim._id}:registered`)
+  assert.equal(messages[0].language, 'en'); assert.equal(messages[0].status, 'ready')
+  assert.deepEqual(Array.from(messages[0].values), [claim.name, claim.reference, claim.invoice])
   assert.equal(claims.size, 1)
 })
 
@@ -123,7 +126,7 @@ test('checkout validation returns server-calculated Diwali eligibility, ignoring
 })
 
 test('placing an order registers its server-priced gift and session identity in the order transaction', async () => {
-  let persisted, registered
+  let persisted, registered, notification
   const session = { synthetic: true }
   const pricing = { ok: true, items: [{ id: 'synthetic-product', name: 'Synthetic Product', type: 'hardware', quantity: 1, price: 26000 }], subtotal: 22033.9, tax: 3966.1, shipping: 99, total: 26099, coupon: null, couponDiscount: 0 }
   const loader = sourceLoader({
@@ -134,6 +137,7 @@ test('placing an order registers its server-priced gift and session identity in 
     '@/lib/order-id': { generateOrderId: async () => order.orderId },
     '@/lib/gift-promotions': { quoteGiftPromotions: async () => [], consumeGiftPromotions: async () => {} },
     '@/lib/order-notifications': { notifyAdminOrder: async () => {} },
+    '@/lib/diwali/immediate-messages': { sendImmediateDiwaliMessage: async id => { assert.ok(persisted); assert.ok(registered); notification = id; return 'accepted' } },
     '@/lib/emailTemplates': { emailTemplates: { ORDER_PENDING: { subject: 'Synthetic', html: () => '<p>Synthetic</p>' } } },
     '@/lib/checkout-payment': {
       checkoutFingerprint: () => 'synthetic-fingerprint',
@@ -158,6 +162,7 @@ test('placing an order registers its server-priced gift and session identity in 
   assert.equal(persisted.diwaliGift.giftCode, 'silver10'); assert.equal(persisted.diwaliGift.eligibleValue, 26000)
   assert.equal(registered.orderId, persisted.orderId); assert.equal(registered.userId, 'session-customer')
   assert.equal(registered.status, 'pending'); assert.equal(registered.mobile, order.customer.phone)
+  assert.equal(notification, `online:${persisted.orderId}:registered`)
 })
 
 test('pickup gifts retain the trusted pickup destination even when contact-only checkout has no address', async () => {
@@ -185,4 +190,38 @@ test('manual registration cannot reserve the online invoice namespace', async ()
   const { register, publicConfig } = loader.load('lib/diwali/service.ts')
   await assert.rejects(register('synthetic-token', { requestId: 'synthetic-request', storeCode: 'ONLINE', invoice: order.orderId, consentVersion: config.consentVersion }), /automatically at checkout/)
   assert.equal(publicConfig(currentConfig).stores.some(store => store.code === 'ONLINE'), false)
+})
+
+
+test('online registration sends the English registered template immediately and only once', async () => {
+  let message, claim, requests = 0
+  const loader = sourceLoader({ '@/lib/db-service': { getCollection: async name => ({
+    findOne: async () => name === 'diwali_claims' ? claim : null,
+    updateOne: async (_filter, update) => { if (update.$setOnInsert) { claim = update.$setOnInsert; return { upsertedCount: 1 } } Object.assign(message, update.$set); return { modifiedCount: 1 } },
+    insertOne: async row => { if (name === 'diwali_messages') message = row },
+    findOneAndUpdate: async (filter, update) => { if (!message || message.status !== filter.status) return null; Object.assign(message, update.$set); message.attempts += update.$inc.attempts; return message },
+  }) } }, { env: { DIWALI_MESSAGING_ENABLED: 'true', ASKEVA_API_KEY: 'synthetic-key', ASKEVA_API_URL: 'https://provider.invalid/messages', DIWALI_REGISTERED_TEMPLATE_EN: 'sara_diwali_registered_en' },
+    fetch: async (_url, options) => {
+      requests++
+      const body = JSON.parse(options.body)
+      assert.equal(body.to, '919000000099'); assert.equal(body.template.name, 'sara_diwali_registered_en')
+      assert.equal(body.template.language.code, 'en')
+      assert.deepEqual(body.template.components[0].parameters.map(item => item.text), [claim.name, claim.reference, claim.invoice])
+      return Response.json({ messages: [{ id: 'synthetic-provider-id' }] })
+    } })
+  const { recordOnlineDiwaliOrder, notifyOnlineDiwaliRegistered } = loader.load('lib/diwali/online-orders.ts')
+  const checkout = { ...order, customer: { ...order.customer, phone: '+91 9000000099' }, diwaliGift: loader.load('lib/diwali/online-rules.ts').onlineGift(config, order.total, order.shipping, at) }
+  await recordOnlineDiwaliOrder(checkout, {})
+  assert.equal(requests, 0); assert.equal(message.status, 'ready')
+  assert.equal(await notifyOnlineDiwaliRegistered(checkout), 'accepted')
+  await notifyOnlineDiwaliRegistered(checkout)
+  assert.equal(requests, 1); assert.equal(message.status, 'accepted'); assert.equal(message.attempts, 1)
+  await notifyOnlineDiwaliRegistered({ ...checkout, diwaliGift: null })
+  assert.equal(requests, 1)
+})
+
+test('online notification failure does not fail an already saved order', async () => {
+  const loader = sourceLoader({ '@/lib/diwali/immediate-messages': { sendImmediateDiwaliMessage: async () => { throw new Error('Synthetic database outage') } } })
+  const notify = loader.load('lib/diwali/online-orders.ts').notifyOnlineDiwaliRegistered
+  assert.equal(await notify({ ...order, diwaliGift: { giftCode: 'silver10' } }), 'unknown')
 })

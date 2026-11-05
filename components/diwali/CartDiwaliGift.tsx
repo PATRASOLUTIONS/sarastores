@@ -21,7 +21,7 @@ export default function CartDiwaliGift({ total, shipping = 0, checkout = false, 
     <div className="space-y-2 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold text-red-900">Your Diwali gift</h2>{gift && <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">{checkout ? 'Auto applied' : 'Included at checkout'}</span>}</div>
       <p className="text-lg font-bold text-[#8d5500]">{gift ? gift.label : eligibleValue < 15000 ? `Add ₹${(15000 - eligibleValue).toLocaleString('en-IN', { maximumFractionDigits: 2 })} to qualify` : 'Whole-rupee invoice value required'}</p>
-      <p className="text-xs leading-5 text-stone-600">{gift ? 'Your order and delivery details register automatically. No separate gift form is needed. Gift approval follows payment confirmation and SARA verification.' : 'Eligible purchases start at ₹15,000. Gift eligibility uses the amount after discounts, including GST and excluding delivery charges.'}</p>
+      <p className="text-xs leading-5 text-stone-600">{gift ? 'Your order and delivery details register automatically. No separate gift form is needed. An English registration confirmation is sent to your order WhatsApp number. Gift approval follows payment confirmation and SARA verification.' : 'Eligible purchases start at ₹15,000. Gift eligibility uses the amount after discounts, including GST and excluding delivery charges.'}</p>
       <p className="text-xs text-stone-600"><Link className="underline" href="/diwali-gift/terms" target="_blank">Campaign terms</Link> · <Link className="underline" href="/diwali-gift/privacy" target="_blank">Privacy notice</Link></p>
     </div>
   </section>

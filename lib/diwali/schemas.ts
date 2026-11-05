@@ -5,7 +5,7 @@ import { DiwaliEmailSchema } from './blocklist-types'
 
 export const Language = z.enum(['en', 'kn'])
 export const DateOnly = z.string().refine(isRealDate, 'Enter a valid date')
-export const Role = z.enum(['verifier', 'fulfilment', 'management'])
+export const Role = z.enum(['verifier', 'fulfilment', 'management', 'full_access'])
 export const ConfigSchema = z.object({
   enabled: z.boolean(),
   rulesConfirmed: z.boolean(),

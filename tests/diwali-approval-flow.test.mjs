@@ -9,7 +9,7 @@ function fixture({ stage = 'pending', status = 'pending', consent = true, provid
     registrationStart: '2000-01-01', registrationEnd: '2099-12-31', consentVersion: 'fixture-v1',
     termsEn: 'Fixture terms', termsKn: 'Fixture terms', privacyEn: 'Fixture privacy', privacyKn: 'Fixture privacy',
     workingDays: [1, 2, 3, 4, 5, 6], holidays: [], stores: [{ code: 'A', name: 'Fixture store' }],
-    staff: [{ userId: 'f', role: 'fulfilment', stores: ['A'], export: false }, { userId: 'v', role: 'verifier', stores: ['A'], export: false }] }
+    staff: [{ userId: 'full', role: 'full_access', stores: [], export: true }, { userId: 'f', role: 'fulfilment', stores: ['A'], export: false }, { userId: 'v', role: 'verifier', stores: ['A'], export: false }] }
   records.set('diwali_config', [{ _id: '2026', ...config }])
   records.set('diwali_claims', [{ _id: 'claim', reference: 'FIXTURE-CLAIM', name: 'Fixture customer', mobile: '9876543210', email: 'fixture@example.invalid', storeCode: 'A', invoice: 'FIXTURE-1',
     enteredValue: 26000, status, fulfilment: stage, version: 0, whatsappConsent: consent, language: 'en', giftCode: 'silver10', createdAt: new Date() }])
@@ -215,11 +215,11 @@ test('deleting dispatched registrations does not return shipped gifts to availab
   assert.equal(f.records.get('diwali_stock')[0].dispatched, 1)
 })
 
-test('DELETE API verifies origin, full administrator credentials, strict input and session-derived actor', async () => {
+test('DELETE API verifies origin, authenticated credentials, strict input and session-derived actor', async () => {
   let checks = 0, deletes = 0, actor
   let allowed = false
   const route = sourceLoader({
-    '@/lib/auth': { requireFullAdmin: async () => { checks++; return allowed ? { ok: true, user: admin } : { ok: false, response: Response.json({ error: 'Forbidden' }, { status: 403 }) } } },
+    '@/lib/auth': { requireUser: async () => { checks++; return allowed ? { ok: true, user: admin } : { ok: false, response: Response.json({ error: 'Forbidden' }, { status: 403 }) } } },
     '@/lib/diwali/service': { deleteClaim: async (user, id, version) => { actor = user.id; deletes++; assert.equal(id, 'claim'); assert.equal(version, 3); return { deleted: true } } },
   }).load('app/api/admin/diwali/registrations/[id]/route.ts')
   const context = { params: Promise.resolve({ id: 'claim' }) }
@@ -261,4 +261,14 @@ test('registration Delete button confirms the target, sends its version and refr
   assert.equal(render().some(node => node.type === 'button' && node.props.children === 'Delete'), false)
   state[1] = { role: 'verifier' }; state[3] = [{ id: 'claim', enteredValue: 26000 }]
   assert.equal(render().some(node => node.type === 'button' && node.props.children === 'Delete'), false)
+})
+
+
+test('full campaign staff can delete registrations with the same audited stock release as administrators', async () => {
+  const f = fixture({ status: 'approved', stage: 'packed' })
+  const user = { id: 'full', role: 'user', dashboardAccess: true, allowedPages: ['/admin/diwali'] }
+  await f.service.deleteClaim(user, 'claim', 0)
+  assert.equal(f.records.get('diwali_claims')[0].deletedBy, 'full')
+  assert.equal(f.records.get('diwali_stock')[0].reserved, 0)
+  assert.equal(f.records.get('diwali_audit').some(row => row.action === 'delete' && row.actor === 'full'), true)
 })

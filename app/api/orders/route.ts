@@ -31,7 +31,7 @@ import { idempotentCheckout } from "@/lib/checkout-idempotency"
 import { handleApiError } from "@/lib/api-error"
 import { DeclinedGiftPromotionsSchema, SelectedGiftPromotionsSchema, ExpectedGiftsSchema, giftSelectionSignature } from "@/lib/gift-validation"
 import { quoteGiftPromotions, consumeGiftPromotions } from "@/lib/gift-promotions"
-import { prepareOnlineDiwaliOrder, recordOnlineDiwaliOrder } from "@/lib/diwali/online-orders"
+import { prepareOnlineDiwaliOrder, recordOnlineDiwaliOrder, notifyOnlineDiwaliRegistered } from "@/lib/diwali/online-orders"
 import type { OnlineGift } from "@/lib/diwali/online-rules"
 
 export const dynamic = "force-dynamic"
@@ -796,6 +796,7 @@ async function createOrder(request: NextRequest) {
       }
     })
     const result = { insertedId }
+    if (diwaliGift) await notifyOnlineDiwaliRegistered(diwaliOrder)
 
     if (hostedCheckout) {
       if (guestAccessToken) notifyHostedGuestOrder(orderId, newOrder.customer.email, guestAccessToken)
