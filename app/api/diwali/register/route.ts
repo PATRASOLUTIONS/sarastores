@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try {
     requireSameOrigin(request); await limit(request, 'registration', '', 30)
     const input = await body(request, RegistrationSchema)
-    const result = await register((await cookies()).get('diwali_verified')?.value, input, (await cookies()).get(STORE_REFERRAL_COOKIE)?.value)
+    const result = await register((await cookies()).get('diwali_verified')?.value, input, (await cookies()).get(STORE_REFERRAL_COOKIE)?.value, (await cookies()).get('diwali_registration_check')?.value)
     after(() => processRegistrationEmails(result.reference).then(() => {}).catch(() => { console.error('[diwali] Registration email processing failed; review notification status.') }))
     return json(result, 201)
   } catch (error) { return errorResponse(error) }

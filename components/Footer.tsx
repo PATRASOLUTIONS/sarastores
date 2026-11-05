@@ -7,6 +7,7 @@ import { Facebook, Globe, Heart, Instagram, Linkedin, Loader2, Youtube } from "l
 import toast from "react-hot-toast"
 import CookiePreferencesLink from "@/components/CookiePreferencesLink"
 import { useSettingsData } from "@/hooks/useSettingsData"
+import { HOME_CHROME_SETTINGS } from "@/lib/homepage-chrome"
 import styles from "./Footer.module.css"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { MarketingSection, MarketingSections, MarketingStatus } from "@/components/marketing/MarketingSections"
@@ -89,12 +90,12 @@ function FooterColumn({ title, links, legal = false }: { title: string; links: L
   )
 }
 
-export default function Footer() {
-  const marketing = useMarketingContent("footer")
+export default function Footer({ staticContent = false }: { staticContent?: boolean }) {
+  const marketing = useMarketingContent("footer", !staticContent)
   const linksFor = (section: string, links: LinkItem[]) => marketing.items(section, links.map(item => ({ ...item, title: item.label })))
     .map(item => ({ href: item.href, label: item.title }))
-  const { data } = useSettingsData()
-  const settings = data as Record<string, unknown> | undefined
+  const { data } = useSettingsData(!staticContent)
+  const settings = (staticContent ? HOME_CHROME_SETTINGS : data) as Record<string, unknown> | undefined
   const settingUrl = (key: string) => {
     const value = settings?.[key]
     return typeof value === "string" && /^https?:\/\//i.test(value.trim()) ? value.trim() : undefined
@@ -157,8 +158,8 @@ export default function Footer() {
 
   return (
     <footer className={styles.footer}>
-      <MarketingStatus page="footer" />
-      <MarketingSection page="footer" section="newsletter">
+      <MarketingStatus staticContent={staticContent} page="footer" />
+      <MarketingSection staticContent={staticContent} page="footer" section="newsletter">
       <section className={styles.newsletter} aria-labelledby="footer-newsletter-heading">
         <div className={styles.newsletterInner}>
           <div className={styles.newsletterCopy}>
@@ -179,8 +180,8 @@ export default function Footer() {
 
       <div className={styles.container}>
         <div className={styles.columns}>
-          <MarketingSections page="footer" showStatus={false}>
-          <MarketingSection page="footer" section="brand">
+          <MarketingSections staticContent={staticContent} page="footer" showStatus={false}>
+          <MarketingSection staticContent={staticContent} page="footer" section="brand">
           <div className={styles.brand}>
             <Link href={marketing.text("brand", "ctaLink")} aria-label={companyName} className={styles.logo}>
               <Image src={marketing.text("brand", "image")} alt="SARA" width={374} height={100} unoptimized />
@@ -190,10 +191,10 @@ export default function Footer() {
             <div className={styles.brandSocials}>{socialLinks(false)}</div>
           </div>
           </MarketingSection>
-          <MarketingSection page="footer" section="shop"><FooterColumn title={marketing.text("shop", "title")} links={linksFor("shop", SHOP_LINKS)} /></MarketingSection>
-          <MarketingSection page="footer" section="service"><FooterColumn title={marketing.text("service", "title")} links={linksFor("service", SERVICE_LINKS)} /></MarketingSection>
-          <MarketingSection page="footer" section="about"><FooterColumn title={marketing.text("about", "title")} links={linksFor("about", ABOUT_LINKS)} /></MarketingSection>
-          <MarketingSection page="footer" section="legal"><FooterColumn title={marketing.text("legal", "title")} links={linksFor("legal", LEGAL_LINKS)} legal /></MarketingSection>
+          <MarketingSection staticContent={staticContent} page="footer" section="shop"><FooterColumn title={marketing.text("shop", "title")} links={linksFor("shop", SHOP_LINKS)} /></MarketingSection>
+          <MarketingSection staticContent={staticContent} page="footer" section="service"><FooterColumn title={marketing.text("service", "title")} links={linksFor("service", SERVICE_LINKS)} /></MarketingSection>
+          <MarketingSection staticContent={staticContent} page="footer" section="about"><FooterColumn title={marketing.text("about", "title")} links={linksFor("about", ABOUT_LINKS)} /></MarketingSection>
+          <MarketingSection staticContent={staticContent} page="footer" section="legal"><FooterColumn title={marketing.text("legal", "title")} links={linksFor("legal", LEGAL_LINKS)} legal /></MarketingSection>
           </MarketingSections>
         </div>
         {!marketing.enabled("legal") && <CookiePreferencesLink className={styles.cookieLink} />}

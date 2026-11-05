@@ -10,8 +10,8 @@ async function fetchContent(url: string): Promise<MarketingResponse> {
   return marketingResponseSchema.parse(await response.json())
 }
 
-export function useMarketingContent(page: MarketingPage) {
-  const { data, error, mutate } = useSWR<MarketingResponse>(URL, fetchContent, {
+export function useMarketingContent(page: MarketingPage, enabled = true) {
+  const { data, error, mutate } = useSWR<MarketingResponse>(enabled ? URL : null, fetchContent, {
     refreshInterval: 30000, revalidateOnFocus: true, shouldRetryOnError: false,
     onError: (cause: unknown) => console.error("[Marketing] Content loading failed:", cause),
   })

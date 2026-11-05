@@ -24,8 +24,14 @@ function fixture(notificationSettings = null, failQueue = false) {
         if (name === 'diwali_config') return { _id: '2026', ...config }
         if (name === 'diwali_sessions') return tokens.get(query._id) || null
         if (name === 'diwali_notification_settings') return notificationSettings
+        if (name === 'diwali_registration_identities') return reservations.get(query._id) || null
         if (name !== 'diwali_claims') return null
-        return rows.find(row => query.$or ? query.$or.some(match => match.mobile ? row.mobile === match.mobile : new RegExp(match.email.$regex, match.email.$options).test(row.email || '')) : row.requestKey === query.requestKey && row.mobile === query.mobile) || null
+        return rows.find(row => {
+          if (query.deletedAt && (row.deletedAt !== undefined) !== query.deletedAt.$exists) return false
+          if (query.$or) return query.$or.some(match => match.mobile ? row.mobile === match.mobile : new RegExp(match.email.$regex, match.email.$options).test(row.email || ''))
+          if (query._id) return row._id === query._id
+          return row.requestKey === query.requestKey && row.mobile === query.mobile
+        }) || null
       },
       async insertOne(row, options) {
         if (name === 'diwali_registration_emails' && failQueue) throw new Error('Synthetic email queue failure')
@@ -35,12 +41,16 @@ function fixture(notificationSettings = null, failQueue = false) {
         }
         if (name === 'diwali_claims') rows.push(row)
         writes.push({ name, row, options })
-      }, async updateOne() {}, async deleteOne() {},
+      }, async updateOne() {}, async deleteOne(query) {
+        const row = reservations.get(query._id)
+        if (name === 'diwali_registration_identities' && row?.claimId === query.claimId) { reservations.delete(query._id); return { deletedCount: 1 } }
+        return { deletedCount: 0 }
+      },
     }) },
     '@/lib/whatsapp-template': { sendWhatsAppTemplate: async () => { sent.push(true); return { success: true } } },
     '@/lib/diwali/immediate-messages': { sendImmediateDiwaliMessage: async key => { sent.push(key); return 'accepted' } },
   }, { env: { DIWALI_MESSAGING_ENABLED: 'true', DIWALI_OTP_TEMPLATE: 'synthetic-auth' } })
-  return { service: loader.load('lib/diwali/service.ts'), loader, sent, writes, rows: () => rows,
+  return { service: loader.load('lib/diwali/service.ts'), loader, sent, writes, rows: () => rows, reservations: () => new Map(reservations),
     token(mobile) { const token = randomUUID(); tokens.set(createHash('sha256').update(token).digest('hex'), { mobile, verifiedAt: new Date() }); return token },
     seed(row) { rows.push(row) },
     input(email = 'shopper@example.com') { return loader.load('lib/diwali/schemas.ts').RegistrationSchema.parse({ requestId: randomUUID(), name: 'Synthetic customer', email, address: 'Synthetic Street 123', city: 'Bengaluru', state: 'Bengaluru', pincode: '560001', storeCode: 'A', invoice: randomUUID(), enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }) },
@@ -129,4 +139,69 @@ test('a queue persistence failure rolls back the claim and identities so the sam
   await assert.rejects(f.service.register(f.token('9876543210'), f.input()), /email queue failure/)
   assert.equal(f.rows().length, 0)
   assert.equal(f.writes.length, 0)
+})
+
+
+test('database-checked identities register without an OTP and do not gain mobile ownership or status access', async () => {
+  const f = fixture(), input = { ...f.input(), mobile: '9876543210' }
+  const receipt = await f.service.checkRegistrationDetails({ mobile: input.mobile, email: input.email })
+  const saved = await f.service.register(undefined, input, undefined, receipt)
+  assert.ok(saved.reference)
+  assert.equal(f.rows()[0].mobile, input.mobile)
+  assert.equal(f.rows()[0].verifiedMobileAt, undefined)
+  assert.ok(f.rows()[0].registrationCheckAt)
+  await assert.rejects(f.service.customerSession(receipt), error => error.status === 401)
+  await assert.rejects(f.service.checkRegistrationDetails({ mobile: input.mobile, email: 'other@example.com' }), /This number or email ID is already used/)
+  await assert.rejects(f.service.checkRegistrationDetails({ mobile: '9123456789', email: input.email }), /This number or email ID is already used/)
+  assert.equal((await f.service.register(undefined, input, undefined, receipt)).reference, saved.reference)
+})
+
+test('a successful database check cannot bypass duplicate checks at submission or racing reservations', async () => {
+  const f = fixture()
+  const first = { ...f.input(), mobile: '9876543210' }, second = { ...f.input('other@example.com'), mobile: first.mobile }
+  const firstCheck = await f.service.checkRegistrationDetails({ mobile: first.mobile, email: first.email })
+  const secondCheck = await f.service.checkRegistrationDetails({ mobile: second.mobile, email: second.email })
+  const results = await Promise.allSettled([f.service.register(undefined, first, undefined, firstCheck), f.service.register(undefined, second, undefined, secondCheck)])
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
+  assert.equal(results.find(result => result.status === 'rejected').reason.status, 409)
+  assert.equal(f.rows().length, 1)
+})
+
+
+test('phone-only registrations allow missing email without sharing an empty-email reservation', async () => {
+  const f = fixture()
+  for (const mobile of ['9876543210', '9123456789']) {
+    const input = { ...f.input(''), mobile }
+    const identity = f.loader.load('lib/diwali/registration-check.ts').RegistrationCheckSchema.parse({ mobile })
+    const receipt = await f.service.checkRegistrationDetails(identity)
+    await f.service.register(undefined, input, undefined, receipt)
+  }
+  assert.equal(f.rows().length, 2)
+  assert.ok(f.rows().every(row => row.email === ''))
+  assert.equal(f.reservations().size, 2)
+  assert.ok([...f.reservations().keys()].every(key => key.startsWith('2026:mobile:')))
+})
+
+test('deleted registrations no longer block Verify and their old identity reservations are reclaimed at submission', async () => {
+  const f = fixture(), old = 'synthetic-deleted', input = { ...f.input(), mobile: '9876543210' }
+  f.seed({ _id: old, mobile: input.mobile, email: input.email, status: 'approved', deletedAt: new Date() })
+  await f.loader.load('lib/diwali/registration-identity.ts').reserveDiwaliRegistrationIdentity(old, input.mobile, input.email, {})
+  const receipt = await f.service.checkRegistrationDetails({ mobile: input.mobile, email: input.email })
+  await f.service.register(undefined, input, undefined, receipt)
+  const active = f.rows().filter(row => !row.deletedAt)
+  assert.equal(active.length, 1)
+  assert.ok([...f.reservations().values()].every(row => row.claimId === active[0]._id))
+  assert.ok(f.rows().find(row => row._id === old).deletedAt)
+  await assert.rejects(f.service.checkRegistrationDetails({ mobile: input.mobile, email: input.email }), /already used/)
+})
+
+test('reclaiming deleted identity reservations rolls back if registration persistence fails', async () => {
+  const f = fixture({ enabled: true, recipients: ['first@example.com'] }, true), old = 'synthetic-deleted'
+  const input = { ...f.input(), mobile: '9876543210' }
+  f.seed({ _id: old, mobile: input.mobile, email: input.email, deletedAt: new Date() })
+  await f.loader.load('lib/diwali/registration-identity.ts').reserveDiwaliRegistrationIdentity(old, input.mobile, input.email, {})
+  const receipt = await f.service.checkRegistrationDetails({ mobile: input.mobile, email: input.email })
+  await assert.rejects(f.service.register(undefined, input, undefined, receipt), /email queue failure/)
+  assert.equal(f.rows().filter(row => !row.deletedAt).length, 0)
+  assert.ok([...f.reservations().values()].every(row => row.claimId === old))
 })

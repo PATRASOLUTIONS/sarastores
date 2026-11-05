@@ -6,7 +6,7 @@ const fetcher = (url: string) => fetch(url).then(res => {
   return res.json()
 })
 
-export function useSettingsData() {
-  const { data, error, mutate, isLoading } = useSWR("/api/settings", fetcher, { revalidateOnFocus: false })
+export function useSettingsData(enabled = true) {
+  const { data, error, mutate, isLoading } = useSWR(enabled ? "/api/settings" : null, fetcher, { revalidateOnFocus: false })
   return { data, error, mutate, isLoading }
 }

@@ -161,7 +161,7 @@ test('gift stock accepts a quantity without a procurement reference and still va
   for (const quantity of [0, -1, 1.5, 100001]) assert.equal(StockSchema.safeParse({ giftCode: 'silver5', quantity }).success, false)
 })
 
-test('customers can enter gift details before OTP verification but cannot submit them', async () => {
+test('customers can enter gift details before the database check but cannot submit them', async () => {
   const { DEFAULT_CONFIG } = sourceLoader().load('lib/diwali/schemas.ts')
   let index = 0, error = ''
   const react = {
@@ -185,7 +185,7 @@ test('customers can enter gift details before OTP verification but cannot submit
   }
   visit(tree)
   assert.equal(nodes.find(node => node.type === 'fieldset').props.disabled, false)
-  for (const name of ['name', 'email', 'address', 'city', 'state', 'pincode', 'storeCode', 'invoice', 'accuracy']) {
+  for (const name of ['name', 'address', 'city', 'state', 'pincode', 'storeCode', 'invoice', 'accuracy']) {
     assert.equal(nodes.find(node => node.props.name === name)?.props.required, true, `${name} must remain required`)
   }
   assert.equal(nodes.filter(node => node.type === 'nav' || node.type === 'footer').length, 0)
@@ -193,7 +193,7 @@ test('customers can enter gift details before OTP verification but cannot submit
   let prevented = false
   await nodes.find(node => node.type === 'form').props.onSubmit({ preventDefault() { prevented = true } })
   assert.equal(prevented, true)
-  assert.match(error, /Verify your mobile number/)
+  assert.match(error, /Verify your details/)
 })
 test('campaign permissions separate verification, fulfilment, management and export', () => {
   const { authorize } = sourceLoader().load('lib/diwali/service.ts')
@@ -231,6 +231,7 @@ function submittedFormFixture({ items = [], remembered = false, statusCode = 200
     calls.push({ url, options })
     if (url.endsWith('/config')) return Response.json(config)
     if (url.endsWith('/status')) return Response.json(statusCode === 200 ? { items } : { error: 'Verify your mobile' }, { status: statusCode })
+    if (url.endsWith('/registration-check')) return Response.json({ available: true })
     if (url.endsWith('/register')) return Response.json({ reference: 'FIXTURE-SUBMITTED', status: 'pending', fulfilment: null, gift: null, whatsappStatus })
     throw new Error(`Unexpected fixture request ${url}`)
   }, context: {
@@ -332,4 +333,23 @@ test('full-access staff can open Diwali notification and blocklist endpoints whi
   assert.equal((await blocklist.GET(new Request('https://sara.test/api/admin/diwali/blocklist'))).status, 403)
   assert.equal((await notifications.GET()).status, 403)
   assert.equal(reads, 2)
+})
+
+
+test('Verify checks both identifiers without OTP and changing either identity requires another check', async () => {
+  const f = submittedFormFixture(); await f.mount()
+  let form = f.render().find(node => node.type === f.GiftRegistration)
+  form.props.onMobile('9876543210'); form.props.onEmail('shopper@example.com')
+  form = f.render().find(node => node.type === f.GiftRegistration)
+  await form.props.onVerify()
+  const check = f.calls.find(call => call.url.endsWith('/registration-check'))
+  assert.deepEqual(JSON.parse(check.options.body), { mobile: '9876543210', email: 'shopper@example.com' })
+  assert.equal(f.calls.some(call => call.url.includes('/otp/')), false)
+  assert.equal(f.render().find(node => node.type === f.GiftRegistration).props.verified, true)
+  form.props.onEmail('other@example.com')
+  assert.equal(f.render().find(node => node.type === f.GiftRegistration).props.verified, false)
+  await f.render().find(node => node.type === f.GiftRegistration).props.onVerify()
+  assert.equal(f.render().find(node => node.type === f.GiftRegistration).props.verified, true)
+  form.props.onMobile('9123456789')
+  assert.equal(f.render().find(node => node.type === f.GiftRegistration).props.verified, false)
 })

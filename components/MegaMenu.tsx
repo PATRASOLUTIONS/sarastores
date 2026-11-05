@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useMarketingContent } from "@/hooks/useMarketingContent"
 import { useHeaderPromotion } from "@/hooks/useHeaderPromotion"
+import { HOME_HEADER_BRANDS } from "@/lib/homepage-chrome"
 import { fetchActiveProductBrands, selectHeaderBrands, type ActiveProductBrand } from "@/lib/active-brand-client"
 
 const STATIC_LINKS = [
@@ -12,16 +13,17 @@ const STATIC_LINKS = [
 ]
 
 // Show the same featured, in-stock brands as the mobile menu.
-export default function MegaMenu() {
-  const marketing = useMarketingContent("header")
-  const headerPromotion = useHeaderPromotion()
+export default function MegaMenu({ staticContent = false }: { staticContent?: boolean }) {
+  const marketing = useMarketingContent("header", !staticContent)
+  const headerPromotion = useHeaderPromotion(staticContent)
   const links = marketing.items("navigation", STATIC_LINKS.map(item => ({ ...item, title: item.label })))
-  const [brands, setBrands] = useState<ActiveProductBrand[]>([])
+  const [brands, setBrands] = useState<ActiveProductBrand[]>(staticContent ? HOME_HEADER_BRANDS : [])
   const [error, setError] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!staticContent)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    if (staticContent) { setBrands(HOME_HEADER_BRANDS); setLoading(false); setError(false); return }
     let cancelled = false
     setError(false)
     setLoading(true)
@@ -33,7 +35,7 @@ export default function MegaMenu() {
       if (!cancelled) setLoading(false)
     })
     return () => { cancelled = true }
-  }, [attempt])
+  }, [attempt, staticContent])
 
   return (
     <div className="hidden border-t border-gray-200 bg-white lg:block">

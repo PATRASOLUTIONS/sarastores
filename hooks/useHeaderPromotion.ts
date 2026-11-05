@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { homepageHeaderPromotion } from "@/lib/homepage-chrome"
 
 export interface ActiveHeaderPromotion {
   title: string
@@ -8,10 +9,16 @@ export interface ActiveHeaderPromotion {
   description: string
 }
 
-export function useHeaderPromotion() {
-  const [promotion, setPromotion] = useState<ActiveHeaderPromotion | null>(null)
+export function useHeaderPromotion(staticContent = false) {
+  const [promotion, setPromotion] = useState<ActiveHeaderPromotion | null>(() => staticContent ? homepageHeaderPromotion() : null)
 
   useEffect(() => {
+    if (staticContent) {
+      const sync = () => setPromotion(homepageHeaderPromotion())
+      sync()
+      const timer = setInterval(sync, 60_000)
+      return () => clearInterval(timer)
+    }
     let active = true
     fetch("/api/header-promotions")
       .then(response => response.ok ? response.json() : null)
@@ -22,7 +29,7 @@ export function useHeaderPromotion() {
         if (active) setPromotion(null)
       })
     return () => { active = false }
-  }, [])
+  }, [staticContent])
 
   return promotion
 }
