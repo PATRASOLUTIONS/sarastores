@@ -50,7 +50,7 @@ export async function listStoreLinks(config: CampaignConfig, scope: string[], or
   const ids = stores.map(store => store.id)
   const metrics = ids.length ? await (await getCollection<Document & { _id: string }>(METRICS)).find({ _id: { $in: ids } }).toArray() : []
   const registrations = ids.length ? await (await getCollection('diwali_claims')).aggregate([
-    { $match: { $and: [claimScope, { referralStoreId: { $in: ids } }] } }, { $group: { _id: '$referralStoreId', count: { $sum: 1 } } },
+    { $match: { $and: [claimScope, { referralStoreId: { $in: ids }, deletedAt: { $exists: false } }] } }, { $group: { _id: '$referralStoreId', count: { $sum: 1 } } },
   ]).toArray() : []
   return stores.map(store => {
     const metric = metrics.find(row => row._id.toString() === store.id)

@@ -72,7 +72,7 @@ export async function processRegistrationEmails(reference?: string) {
       const config = await settings()
       if (!config.enabled || !config.recipients.includes(row.recipient)) status = 'failed'
       else {
-        const claim = await (await getCollection<Registration>('diwali_claims')).findOne({ _id: row.claimId })
+        const claim = await (await getCollection<Registration>('diwali_claims')).findOne({ _id: row.claimId, deletedAt: { $exists: false } })
         if (!claim) status = 'failed'
         else {
           const outcome = await sendEmail({ to: row.recipient, ...buildRegistrationEmployeeEmail(claim) })
