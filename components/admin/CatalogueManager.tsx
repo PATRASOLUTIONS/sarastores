@@ -1,5 +1,7 @@
 "use client"
 
+
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import CategoryGlyph from "@/components/CategoryGlyph"
@@ -62,7 +64,7 @@ function ItemVisual({ image, icon, name }: { image?: string; icon?: string; name
     <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-gray-50">
       {isImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={value} alt="" className="h-full w-full object-cover" />
+        <SiteImage src={value} alt="" className="h-full w-full object-cover" />
       ) : (
         <CategoryGlyph label={name} className="h-6 w-6 text-black" />
       )}

@@ -2519,7 +2519,7 @@ Please go to the Products page and create this product manually first, then come
                     <div className="flex flex-wrap gap-3">
                       {(editForm.images || []).map((img: string, idx) => (
                         <div key={idx} className="relative">
-                          <SiteImage unoptimized src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
+                          <SiteImage src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
                           <button
                             onClick={() => setEditForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
                             className="absolute -top-2 -right-2 bg-white rounded-full shadow text-red-600 p-1"
@@ -2815,7 +2815,7 @@ Please go to the Products page and create this product manually first, then come
                       <div className="flex flex-wrap gap-3">
                         {(createForm.images || []).map((img: string, idx) => (
                           <div key={idx} className="relative">
-                            <SiteImage unoptimized src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
+                            <SiteImage src={img} alt={`img-${idx}`} className="h-16 w-16 object-cover rounded-md border" />
                             <button
                               onClick={() => setCreateForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
                               className="absolute -top-2 -right-2 bg-white rounded-full shadow text-red-600 p-1"

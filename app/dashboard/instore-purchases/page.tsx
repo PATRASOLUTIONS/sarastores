@@ -372,7 +372,7 @@ export default function InstorePurchasesPage() {
                     {order.items.map((item, index) => (
                       <div key={`${item.id}-${index}`} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
                         <div className="w-16 h-16 bg-white rounded overflow-hidden flex-shrink-0 border">
-                          <SiteImage unoptimized
+                          <SiteImage
                             src={item.image || "/placeholder.svg?height=64&width=64"}
                             alt={item.name}
                             className="w-full h-full object-cover"

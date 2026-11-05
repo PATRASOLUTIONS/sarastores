@@ -823,7 +823,7 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
               {product.images && product.images.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
                   {product.images.slice(0, 5).map((u, i) => (
-                    <SiteImage unoptimized
+                    <SiteImage
                       key={i}
                       src={u || "/placeholder.svg?height=120&width=120"}
                       alt={`Preview ${i + 1}`}
@@ -856,7 +856,7 @@ export default function EditProduct({ params }: { params: Promise<{ id: string }
               />
               {product.image && (
                 <div className="mt-2 border rounded p-2">
-                  <SiteImage unoptimized
+                  <SiteImage
                     src={product.image || "/placeholder.svg?height=200&width=200"}
                     alt={product.name}
                     className="h-40 object-contain mx-auto"

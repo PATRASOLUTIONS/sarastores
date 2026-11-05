@@ -1,5 +1,7 @@
 "use client"
 
+
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
@@ -658,7 +660,7 @@ export default function AdminScraperPage() {
               <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
                 {product.images.map((src) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <SiteImage
                     key={src}
                     src={src}
                     alt=""

@@ -113,7 +113,7 @@ export default function KGenProductsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             {p.attachments && p.attachments[0] ? (
-                              <SiteImage unoptimized src={p.attachments[0]} alt={p.productDisplayName || "Product"} className="w-full h-36 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                              <SiteImage src={p.attachments[0]} alt={p.productDisplayName || "Product"} className="w-full h-36 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                             ) : (
                               <div className="w-full h-36 bg-gray-100 rounded flex items-center justify-center text-gray-400">No image</div>
                             )}

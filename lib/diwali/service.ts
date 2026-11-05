@@ -1,5 +1,6 @@
 import { randomUUID, randomInt, createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { ClientSession, Document, Filter } from 'mongodb'
+import { ObjectId } from 'mongodb'
 import { getCollection, normalizeId } from '@/lib/db-service'
 import { connectToDatabase } from '@/lib/mongodb'
 import type { AuthSession } from '@/lib/auth'
@@ -14,14 +15,15 @@ import { staffCanAccessPage } from '@/lib/admin-access'
 import { assertDiwaliCustomerAllowed } from './blocklist'
 import { assertNewDiwaliRegistration, reserveDiwaliRegistrationIdentity, DUPLICATE_REGISTRATION_MESSAGE } from './registration-identity'
 import { queueRegistrationEmails } from './registration-notifications'
+import { sendImmediateDiwaliMessage } from './immediate-messages'
 
 export const COLLECTIONS = { config: 'diwali_config', claims: 'diwali_claims', audit: 'diwali_audit', otp: 'diwali_otp', sessions: 'diwali_sessions', messages: 'diwali_messages', stock: 'diwali_stock', receipts: 'diwali_message_receipts' } as const
 export type StringRecord = Document & { _id: string; resends?: Array<{ actor: string; note: string; confirmedNotSent: boolean; at: Date }> }
 type User = AuthSession['user']
 export type Claim = Document & {
-  _id: string; reference: string; mobile: string; email?: string; name: string; address: string; city: string; district: string; pincode: string;
+  _id: string; reference: string; mobile: string; email?: string; name: string; address: string; city: string; state?: string; district?: string; pincode: string;
   storeCode: string; invoice: string; enteredValue: number; language: 'en' | 'kn'; whatsappConsent: boolean;
-  status: 'pending' | 'approved' | 'rejected'; fulfilment: 'pending' | 'packed' | 'dispatched' | 'delivered' | 'exception';
+  status: 'pending' | 'approved' | 'rejected'; fulfilment: 'pending' | 'packed' | 'dispatched' | 'delivered' | 'exception' | 'rejected';
   version: number; createdAt: Date; updatedAt: Date; giftCode?: GiftCode; verifiedValue?: number; dueAt?: Date; deliveredAt?: Date;
 }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -165,9 +167,11 @@ export async function register(token: string | undefined, input: z.infer<typeof 
       await collection.insertOne(claim, { session })
       await audit(session, `customer:${hash(verified.mobile)}`, 'register', claim._id)
       await queueRegistrationEmails(claim, session)
+      await enqueue(session, claim, 'registered')
       return claim
     })
-    return customerClaim(registered)
+    const whatsappStatus = registered.whatsappConsent ? await sendImmediateDiwaliMessage(`${registered._id}:registered`) : undefined
+    return { ...customerClaim(registered), ...(whatsappStatus ? { whatsappStatus } : {}) }
   } catch (error) {
     if ((error as { code?: number }).code !== 11000) throw error
     const repeated = await collection.findOne({ requestKey, mobile: verified.mobile })
@@ -240,18 +244,19 @@ export async function getClaim(user: User, id: string) {
   const history = await (await getCollection(COLLECTIONS.audit)).find({ claimId: id }).sort({ at: -1 }).limit(100).toArray()
   return { claim: normalizeId(claim), history: history.map(normalizeId) }
 }
-async function enqueue(session: ClientSession, claim: Claim, event: 'approved' | 'dispatch') {
+async function enqueue(session: ClientSession, claim: Claim, event: 'registered' | 'approved' | 'dispatch') {
   if (!claim.whatsappConsent) return
-  const language = claim.language.toUpperCase(), template = process.env[`DIWALI_${event === 'approved' ? 'APPROVED' : 'DISPATCH'}_TEMPLATE_${language}`]
+  const language = claim.language.toUpperCase(), template = process.env[`DIWALI_${event.toUpperCase()}_TEMPLATE_${language}`]
   const gift = GIFTS.find(item => item.code === claim.giftCode)
   const giftLabel = claim.language === 'kn' ? gift?.kannada : gift?.label
-  const values = event === 'approved' ? [claim.name, giftLabel || '', claim.invoice, String(claim.verifiedValue), indiaDate(claim.dueAt!)] : [claim.name, claim.reference, String(claim.courier), String(claim.awb), String(claim.trackingUrl || 'https://www.sarastores.com/diwali-gift/status')]
-  await (await getCollection<StringRecord>(COLLECTIONS.messages)).insertOne({ _id: randomUUID(), claimId: claim._id, storeCode: claim.storeCode, eventKey: `${claim._id}:${event}`, event, mobile: claim.mobile, template: template || null, language: claim.language, values, status: 'queued', attempts: 0, nextAt: new Date(), createdAt: new Date() } as StringRecord, { session })
+  const values = event === 'registered' ? [claim.name, claim.reference, claim.invoice] : event === 'approved' ? [claim.name, giftLabel || '', claim.invoice, String(claim.verifiedValue), indiaDate(claim.dueAt!)] : [claim.name, claim.reference, String(claim.courier), String(claim.awb), String(claim.trackingUrl || 'https://www.sarastores.com/diwali-gift/status')]
+  await (await getCollection<StringRecord>(COLLECTIONS.messages)).insertOne({ _id: randomUUID(), claimId: claim._id, storeCode: claim.storeCode, eventKey: `${claim._id}:${event}`, event, mobile: claim.mobile, template: template || null, language: claim.language, values, status: event === 'dispatch' ? 'queued' : 'ready', attempts: 0, nextAt: new Date(), createdAt: new Date() } as StringRecord, { session })
 }
 export async function actOnClaim(user: User, id: string, action: ClaimAction) {
   const config = await getConfig(), verification = action.action === 'approve' || action.action === 'reject'
-  const access = authorize(user, config, action.action === 'correct' ? 'settings' : verification ? 'verify' : 'fulfil')
-  return transaction(async session => {
+  const fulfilmentReject = action.action === 'reject' && accessFor(user, config).role === 'fulfilment'
+  const access = authorize(user, config, action.action === 'correct' ? 'settings' : fulfilmentReject ? 'fulfil' : verification ? 'verify' : 'fulfil')
+  const updatedClaim = await transaction(async session => {
     const collection = await getCollection<Claim>(COLLECTIONS.claims)
     const claim = await collection.findOne({ $and: [{ _id: id }, scopeFilter(user, config)] }, { session })
     if (!claim) throw new DiwaliError('Claim not found', 404)
@@ -274,16 +279,28 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
       if (!invoice) throw new DiwaliError('Enter a valid invoice number')
       Object.assign(patch, { invoice, storeCode: action.storeCode, invoiceKey: `${action.storeCode}:${invoice}`, correctionNote: action.note })
     } else if (verification) {
-      if (claim.status !== 'pending') throw new DiwaliError('This claim has already been reviewed', 409)
-      if (action.action === 'approve') {
-        if (!config.rulesConfirmed || !config.calendarConfirmed) throw new DiwaliError('Campaign rules and working-day calendar must be confirmed first', 409)
-        if (action.invoiceDate < config.campaignStart || action.invoiceDate > config.campaignEnd) throw new DiwaliError('Invoice is outside the eligible purchase dates')
-        const onlineStore = claim.source === 'online' && action.storeCode === ONLINE_STORE
-        if ((!onlineStore && !config.stores.some(store => store.code === action.storeCode)) || action.storeCode !== claim.storeCode || access.stores.length && !access.stores.includes(action.storeCode)) throw new DiwaliError('Invoice store must match the registered store; request an audited correction if incorrect')
-        const gift = giftForRupees(action.verifiedValue)
-        if (!gift) throw new DiwaliError('Invoice is ineligible')
-        Object.assign(patch, { status: 'approved', verifiedValue: action.verifiedValue, invoiceDate: action.invoiceDate, giftCode: gift.code, approvedAt: patch.updatedAt, approvedBy: user.id, dueAt: deliveryDueAt(patch.updatedAt, config.workingDays, config.holidays), calendar: { workingDays: config.workingDays, holidays: config.holidays }, verificationNote: action.note })
-      } else Object.assign(patch, { status: 'rejected', rejectionReason: action.note, rejectedBy: user.id, rejectedAt: patch.updatedAt })
+      if (action.action === 'reject' && claim.status === 'approved') {
+        authorize(user, config, 'fulfil')
+        if (claim.fulfilment === 'delivered') throw new DiwaliError('Delivered gifts cannot be rejected', 409)
+        const stage = claim.fulfilment === 'exception' ? claim.previousFulfilment : claim.fulfilment
+        if (stage === 'packed') {
+          const released = await (await getCollection<StringRecord>(COLLECTIONS.stock)).updateOne({ _id: claim.giftCode, reserved: { $gte: 1 } } as Filter<StringRecord>, { $inc: { available: 1, reserved: -1 } }, { session })
+          if (!released.modifiedCount) throw new DiwaliError('Reserved stock changed; reconcile before rejecting', 409)
+        }
+        Object.assign(patch, { status: 'rejected', fulfilment: 'rejected', previousFulfilment: claim.fulfilment, rejectionReason: action.note, rejectedBy: user.id, rejectedAt: patch.updatedAt })
+        await (await getCollection<StringRecord>(COLLECTIONS.messages)).updateMany({ claimId: id, status: { $in: ['queued', 'ready'] } }, { $set: { status: 'suppressed', failure: 'Claim rejected during fulfilment' } }, { session })
+      } else {
+        if (claim.status !== 'pending') throw new DiwaliError('This claim has already been reviewed', 409)
+        if (action.action === 'approve') {
+          if (!config.rulesConfirmed || !config.calendarConfirmed) throw new DiwaliError('Campaign rules and working-day calendar must be confirmed first', 409)
+          if (action.invoiceDate < config.campaignStart || action.invoiceDate > config.campaignEnd) throw new DiwaliError('Invoice is outside the eligible purchase dates')
+          const onlineStore = claim.source === 'online' && action.storeCode === ONLINE_STORE
+          if ((!onlineStore && !config.stores.some(store => store.code === action.storeCode)) || action.storeCode !== claim.storeCode || access.stores.length && !access.stores.includes(action.storeCode)) throw new DiwaliError('Invoice store must match the registered store; request an audited correction if incorrect')
+          const gift = giftForRupees(action.verifiedValue)
+          if (!gift) throw new DiwaliError('Invoice is ineligible')
+          Object.assign(patch, { status: 'approved', verifiedValue: action.verifiedValue, invoiceDate: action.invoiceDate, giftCode: gift.code, approvedAt: patch.updatedAt, approvedBy: user.id, approvedByName: user.name || user.email || user.id, dueAt: deliveryDueAt(patch.updatedAt, config.workingDays, config.holidays), calendar: { workingDays: config.workingDays, holidays: config.holidays }, verificationNote: action.note })
+        } else Object.assign(patch, { status: 'rejected', rejectionReason: action.note, rejectedBy: user.id, rejectedAt: patch.updatedAt })
+      }
     } else {
       if (claim.status !== 'approved') throw new DiwaliError('Only approved claims may be fulfilled', 409)
       if (action.action === 'pack') {
@@ -312,8 +329,12 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
     await audit(session, user.id, action.action, id, { before: { invoice: claim.invoice, storeCode: claim.storeCode, status: claim.status, fulfilment: claim.fulfilment, verifiedValue: claim.verifiedValue, version: claim.version }, after: patch, input: action })
     if (action.action === 'approve') await enqueue(session, updated, 'approved')
     if (action.action === 'dispatch') await enqueue(session, updated, 'dispatch')
-    return normalizeId(updated)
+    return updated
   })
+  const whatsappStatus = action.action === 'approve' && updatedClaim.whatsappConsent
+    ? await sendImmediateDiwaliMessage(`${id}:approved`)
+    : undefined
+  return { ...normalizeId(updatedClaim), ...(whatsappStatus ? { whatsappStatus } : {}) }
 }
 export async function addStock(user: User, giftCode: GiftCode, quantity: number, note = '') {
   authorize(user, await getConfig(), 'settings')
@@ -355,7 +376,19 @@ export async function exportClaims(user: User, params = new URLSearchParams()) {
   const collection = await getCollection<Claim>(COLLECTIONS.claims), match = reportFilter(user, config, params)
   if (await collection.countDocuments(match) > 10000) throw new DiwaliError('Export exceeds 10,000 records. Use a narrower reporting scope.', 413)
   const rows = await collection.find(match).sort({ createdAt: -1 }).limit(10000).toArray()
-  const fields = ['reference', 'source', 'orderId', 'referralStoreCode', 'referralStoreName', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
+  const approverIds = [...new Set(rows.flatMap(row => row.approvedBy && !row.approvedByName ? [String(row.approvedBy)] : []))]
+  const approvers = new Map<string, string>()
+  if (approverIds.length) {
+    const objectIds = approverIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id))
+    const users = await (await getCollection<Document & { _id: string | ObjectId }>('users')).find({ $or: [{ _id: { $in: [...approverIds, ...objectIds] } }, { id: { $in: approverIds } }] }, { projection: { _id: 1, id: 1, name: 1, email: 1 } }).toArray()
+    for (const account of users) {
+      const accountId = String(account._id)
+      if (approverIds.includes(accountId)) approvers.set(accountId, String(account.name || account.email || accountId))
+      if (account.id && approverIds.includes(String(account.id))) approvers.set(String(account.id), String(account.name || account.email || account.id))
+    }
+  }
+  for (const row of rows) row.approvedByName ||= approvers.get(String(row.approvedBy)) || row.approvedBy || ''
+  const fields = ['reference', 'source', 'orderId', 'referralStoreCode', 'referralStoreName', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'approvedByName', 'approvedBy', 'approvedAt', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
   await audit(undefined, user.id, 'export', 'campaign', { count: rows.length })
   return [fields.map(safeCsv).join(','), ...rows.map(row => fields.map(field => safeCsv(row[field] instanceof Date ? row[field].toISOString() : row[field])).join(','))].join('\r\n')
 }

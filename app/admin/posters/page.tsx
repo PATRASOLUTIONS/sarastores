@@ -1,5 +1,7 @@
 "use client"
 
+
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Images, Loader2, Plus, Save, Trash2, Upload, Wand2, X } from "lucide-react"
 import { toast } from "react-hot-toast"
@@ -332,7 +334,7 @@ export default function AdminPostersPage() {
 
           {previewSrc && (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img
+            <SiteImage
               src={previewSrc}
               alt="Poster preview"
               className="mt-3 block aspect-[16/5] w-full rounded-lg border border-gray-200 object-cover"
@@ -511,7 +513,7 @@ export default function AdminPostersPage() {
                       className="block w-full text-left"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <SiteImage
                         src={poster.url}
                         alt={poster.headline}
                         className="block aspect-[16/5] w-full object-cover"

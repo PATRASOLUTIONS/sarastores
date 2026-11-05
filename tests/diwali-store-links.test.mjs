@@ -155,7 +155,7 @@ test('submitted registrations retain only signed store attribution and remain id
   const { createStoreReferral } = loader.load('lib/diwali/store-links.ts')
   const { register } = loader.load('lib/diwali/service.ts')
   const { RegistrationSchema } = loader.load('lib/diwali/schemas.ts')
-  const input = { requestId: randomUUID(), email: 'synthetic@example.invalid', name: 'Synthetic Customer', address: 'Synthetic Street 123', city: 'Bengaluru', district: 'Bengaluru', pincode: '560001', storeCode: 'ONE', invoice: 'SYNTH-1', enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }
+  const input = { requestId: randomUUID(), email: 'synthetic@example.invalid', name: 'Synthetic Customer', address: 'Synthetic Street 123', city: 'Bengaluru', state: 'Bengaluru', pincode: '560001', storeCode: 'ONE', invoice: 'SYNTH-1', enteredValue: 26000, language: 'en', accuracy: true, whatsappConsent: false, consentVersion: config.consentVersion }
   assert.equal(RegistrationSchema.safeParse({ ...input, referralStoreId: token('spoofed') }).success, false)
   const result = await register('verified-session', input, createStoreReferral(token('one')))
   assert.equal(claims[0].referralStoreId, token('one'))

@@ -4,6 +4,7 @@ import { getCollection, normalizeId } from '@/lib/db-service'
 import type { AuthSession } from '@/lib/auth'
 import { COLLECTIONS, authorize, getConfig, type StringRecord, type Claim } from './service'
 import { DiwaliError } from './http'
+import { sendImmediateDiwaliMessage } from './immediate-messages'
 
 export async function listMessages(user: AuthSession['user']) {
   const config = await getConfig(), access = authorize(user, config, 'view')
@@ -20,11 +21,14 @@ export async function retryMessage(user: AuthSession['user'], id: string, note: 
   const messages = await getCollection<StringRecord>(COLLECTIONS.messages)
   const row = await messages.findOne(filter)
   if (!row) throw new DiwaliError('Message not found', 404)
-  if (!['failed', 'unknown'].includes(row.status)) throw new DiwaliError('Only failed or reconciled messages can be resent', 409)
+  if (!['failed', 'unknown', 'ready'].includes(row.status)) throw new DiwaliError('Only failed or reconciled messages can be resent', 409)
   if (row.providerId || row.status === 'unknown' && !confirmedNotSent) throw new DiwaliError('Confirm with the provider that this message was not sent before retrying', 409)
   // One atomic document update records the operator evidence before making the event runnable.
-  const result = await messages.updateOne({ ...filter, status: row.status, providerId: { $exists: false } }, { $set: { status: 'queued', attempts: 0, nextAt: new Date(), resends: [...(row.resends || []), { actor: user.id, note, confirmedNotSent, at: new Date() }] } })
+  const immediate = row.event === 'approved' || row.event === 'registered'
+  const result = await messages.updateOne({ ...filter, status: row.status, providerId: { $exists: false } }, { $set: { status: immediate ? 'ready' : 'queued', attempts: 0, nextAt: new Date(), resends: [...(row.resends || []), { actor: user.id, note, confirmedNotSent, at: new Date() }] } })
   if (!result.modifiedCount) throw new DiwaliError('Message status changed. Refresh before retrying.', 409)
+  if (immediate) return { status: await sendImmediateDiwaliMessage(id) }
+  return { status: 'queued' }
 }
 export async function processMessages() {
   if (process.env.DIWALI_MESSAGING_ENABLED !== 'true' || !process.env.ASKEVA_API_KEY || !process.env.ASKEVA_API_URL) throw new DiwaliError('Diwali messaging is disabled or not configured', 503)

@@ -1,5 +1,7 @@
 "use client"
 
+
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSWRConfig } from "swr"
@@ -245,7 +247,7 @@ function SlotFields({ slot, onChange, onUpload }: {
       </label>
       {slot.image && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={slot.image} alt="" className="h-28 w-full rounded-lg bg-gray-50 object-contain" />
+        <SiteImage src={slot.image} alt="" className="h-28 w-full rounded-lg bg-gray-50 object-contain" />
       )}
       <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">
         Title <span className="font-normal normal-case tracking-normal text-gray-400">optional</span>

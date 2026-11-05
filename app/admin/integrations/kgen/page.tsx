@@ -421,7 +421,7 @@ export default function KGenIntegrationPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="md:col-span-1">
             {img ? (
-              <SiteImage unoptimized
+              <SiteImage
                 src={img || "/placeholder.svg"}
                 alt={item.productDisplayName || item.productName || item.productID || "Product"}
                 className="w-full h-40 object-cover rounded-lg"

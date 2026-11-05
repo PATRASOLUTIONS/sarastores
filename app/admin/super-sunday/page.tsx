@@ -1,5 +1,7 @@
 "use client"
 
+
+import SiteImage from "@/components/SiteImage"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Check, ExternalLink, ImageIcon, Loader2, Save, Search, Trash2, Upload } from "lucide-react"
@@ -299,7 +301,7 @@ export default function SuperSundayAdminPage() {
         <div className="mt-4 overflow-hidden rounded-xl border bg-gray-50">
           {banner ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={banner} alt="Super Sunday banner preview" className="aspect-[16/5] w-full object-cover" />
+            <SiteImage src={banner} alt="Super Sunday banner preview" className="aspect-[16/5] w-full object-cover" />
           ) : (
             <div className="flex aspect-[16/5] items-center justify-center gap-2 text-sm text-gray-500">
               <ImageIcon className="h-5 w-5" />
@@ -373,7 +375,7 @@ export default function SuperSundayAdminPage() {
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={image} alt="" className="h-16 w-16 shrink-0 rounded-lg bg-gray-50 object-contain" />
+                  <SiteImage src={image} alt="" className="h-16 w-16 shrink-0 rounded-lg bg-gray-50 object-contain" />
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-sm font-semibold text-gray-900">{product.name || "Unnamed product"}</span>
                     <span className="mt-1 block text-xs text-gray-500">{product.sku || product.itemno || "No SKU"} · Stock {Number(product.stock || 0)}</span>

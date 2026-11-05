@@ -182,7 +182,7 @@ function ImageUpload({
       </div>
       {preview && (
         <div className="relative w-20 h-20 border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-          <SiteImage unoptimized src={preview} alt={label} className="w-full h-full object-contain" />
+          <SiteImage src={preview} alt={label} className="w-full h-full object-contain" />
         </div>
       )}
     </div>

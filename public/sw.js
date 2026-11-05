@@ -1,8 +1,8 @@
 // Service Worker for caching API responses and static assets
 // Uses Cache API with stale-while-revalidate strategy
 
-const CACHE_NAME = 'app-cache-v3'
-const API_CACHE_NAME = 'api-cache-v3'
+const CACHE_NAME = 'app-cache-v4'
+const API_CACHE_NAME = 'api-cache-v4'
 
 // Static assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -54,7 +54,6 @@ self.addEventListener('fetch', (event) => {
   // directly to avoid accidental blocking of external images (eg.
   // m.media-amazon.com).
   if (url.origin !== self.location.origin) {
-    event.respondWith(fetch(request).catch(() => new Response('Offline', { status: 503 })))
     return
   }
 

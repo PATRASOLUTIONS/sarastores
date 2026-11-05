@@ -4,6 +4,8 @@ import { createRequire } from "node:module"
 import config from "../next.config.mjs"
 import { canOptimizeImage, optimizedImageUrl, remoteImagePatterns } from "../lib/image-sources.mjs"
 import { sourceLoader } from "./source-loader.mjs"
+import fs from 'node:fs'
+import vm from 'node:vm'
 
 const require = createRequire(import.meta.url)
 const { matchRemotePattern } = require("next/dist/shared/lib/match-remote-pattern.js")
@@ -126,15 +128,54 @@ test("banner fallback does not replace the next uploaded image", () => {
   })
   const Banner = loader.load("components/ResponsiveBannerImage.tsx").default
   const first = { src: "https://www.lg.com/poster.jpg", alt: "Offer", sizes: "100vw" }
-  let image = Banner(first)
+  const render = props => { const image = Banner(props); return image.type(image.props) }
+  let image = render(first)
   assert.equal(image.props.src, first.src)
   assert.equal(image.props.unoptimized, false)
-  image.props.onError()
-  image = Banner(first)
+  const attributes = new Map([['src', '/_next/image?url=fixture'], ['srcset', 'fixture 640w']])
+  const element = { getAttribute: key => attributes.get(key), removeAttribute: key => attributes.delete(key), set src(value) { attributes.set('src', value) } }
+  image.props.onError({ currentTarget: element })
+  image = render(first)
+  assert.equal(image.props.src, first.src, 'Retry the original banner before replacing it')
+  assert.equal(image.props.unoptimized, true)
+  attributes.set('src', first.src)
+  image.props.onError({ currentTarget: element })
+  image = render(first)
   assert.equal(image.props.src, "/placeholder.svg")
   assert.equal(image.props.unoptimized, true)
   const replacement = { ...first, src: "https://other-supplier.example/poster.jpg" }
-  image = Banner(replacement)
+  image = render(replacement)
   assert.equal(image.props.src, replacement.src)
   assert.equal(image.props.unoptimized, true)
+})
+
+test('remote admin previews use the optimizer and avoid sending an admin referrer to suppliers', () => {
+  const Image = siteHarness()
+  const image = Image({ src: 'https://rukmini1.flixcart.com/image/product.jpeg', alt: 'Product', className: 'h-10 w-10' }).props
+  assert.equal(image.unoptimized, false)
+  assert.equal(image.sizes, '40px')
+  assert.equal(image.referrerPolicy, 'no-referrer')
+  assert.equal(Image({ src: '/api/banner-images/photo', alt: 'Poster', className: 'w-full' }).props.unoptimized, true)
+})
+
+test('missing images without a custom handler get one placeholder and recover when replaced', () => {
+  const Image = siteHarness(), attributes = new Map([['src', 'https://unsupported.example/missing.jpg']])
+  const element = { getAttribute: key => attributes.get(key), removeAttribute: key => attributes.delete(key), set src(value) { attributes.set('src', value) } }
+  const props = { src: 'https://unsupported.example/missing.jpg', alt: 'Product' }
+  Image(props).props.onError({ currentTarget: element })
+  assert.equal(Image(props).props.src, '/placeholder.svg')
+  Image(props).props.onError({ currentTarget: element })
+  assert.equal(Image(props).props.src, '/placeholder.svg')
+  assert.equal(Image({ ...props, src: 'https://unsupported.example/new.jpg' }).props.src, 'https://unsupported.example/new.jpg')
+})
+
+test('service worker leaves external image requests to the browser and replaces its old asset cache', () => {
+  const handlers = new Map()
+  let intercepted = false, fetched = false
+  const context = vm.createContext({ URL, self: { location: { origin: 'https://www.sarastores.com' }, addEventListener: (event, handler) => handlers.set(event, handler) }, fetch: () => { fetched = true } })
+  vm.runInContext(fs.readFileSync('public/sw.js', 'utf8'), context)
+  handlers.get('fetch')({ request: { method: 'GET', url: 'https://rukmini1.flixcart.com/image/product.jpeg' }, respondWith() { intercepted = true } })
+  assert.equal(intercepted, false)
+  assert.equal(fetched, false)
+  assert.equal(vm.runInContext('CACHE_NAME', context), 'app-cache-v4')
 })

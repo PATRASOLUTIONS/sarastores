@@ -388,7 +388,7 @@ export default function ListingBannersAdminPage() {
                     className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3"
                   >
                     <span className="flex h-12 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-md" style={{ backgroundImage: `linear-gradient(115deg, ${banner.bgFrom}, ${banner.bgTo})` }}>
-                      {banner.image && <SiteImage unoptimized src={banner.image} alt="" className="h-full w-full object-contain" />}
+                      {banner.image && <SiteImage src={banner.image} alt="" className="h-full w-full object-contain" />}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-gray-900">{banner.title || 'Photo-only poster'}</p>

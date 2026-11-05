@@ -256,7 +256,7 @@ export default function ProductAdvertisementsPage() {
                   />
                 </td>
                 <td className="px-6 py-4">
-                  <SiteImage unoptimized src={ad.image || "/placeholder.svg"} alt={ad.title} className="h-12 w-20 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
+                  <SiteImage src={ad.image || "/placeholder.svg"} alt={ad.title} className="h-12 w-20 object-cover rounded" onError={(e) => { e.currentTarget.src = '/placeholder.svg' }} />
                 </td>
                 <td className="px-6 py-4">
                   <div>

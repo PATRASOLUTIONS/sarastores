@@ -820,7 +820,7 @@ export default function AdminBrandEditorPage() {
                                     </div>
                                 </div>
                                 {banner.url && (
-                                    <SiteImage unoptimized
+                                    <SiteImage
                                         src={banner.url}
                                         alt={banner.alt}
                                         className="w-16 h-10 rounded object-cover flex-shrink-0"
@@ -1058,7 +1058,7 @@ export default function AdminBrandEditorPage() {
                                     </div>
                                 </div>
                                 {cat.url && (
-                                    <SiteImage unoptimized
+                                    <SiteImage
                                         src={cat.url}
                                         alt={cat.title}
                                         className="w-14 h-14 rounded object-cover flex-shrink-0"

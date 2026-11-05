@@ -56,7 +56,7 @@ export default function SettingsPage() {
     <form onSubmit={save}>
       <fieldset disabled={saving || uploading}>
         <div className={styles.photo}>
-          <SiteImage unoptimized src={draft.avatar || defaultProfileAvatar(user.id)} alt="Your profile photo" />
+          <SiteImage src={draft.avatar || defaultProfileAvatar(user.id)} alt="Your profile photo" />
           <div><label className={styles.upload}><Camera size={17} />{uploading ? "Processing photo..." : "Upload Photo"}
             <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload profile photo"
               onChange={event => { void upload(event.target.files?.[0]); event.target.value = "" }} /></label>
@@ -65,7 +65,7 @@ export default function SettingsPage() {
         <div role="group" aria-labelledby="avatar-label"><h2 id="avatar-label">Or choose an avatar</h2>
           <div className={styles.avatars}>{PROFILE_AVATARS.map((avatar, index) => <button type="button" key={avatar}
             aria-label={`Choose avatar ${index + 1}`} aria-pressed={draft.avatar === avatar}
-            onClick={() => setDraft(current => ({ ...current, avatar }))}><SiteImage unoptimized src={avatar} alt="" /></button>)}</div>
+            onClick={() => setDraft(current => ({ ...current, avatar }))}><SiteImage src={avatar} alt="" /></button>)}</div>
         </div>
         <div className={styles.fields}>
           <label>Full name<input name="name" required minLength={2} maxLength={100} autoComplete="name" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
