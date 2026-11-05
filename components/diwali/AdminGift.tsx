@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api-client'
@@ -66,15 +66,20 @@ export default function AdminGift({ section = 'dashboard', claimId }: { section?
       setSuccess('Registration deleted. Audit history retained.')
     })
   }
+  const initialLoader = useRef<() => void>(() => {})
   useEffect(() => {
-    task(async () => {
+    // Keep the latest filters available without making typing trigger a load.
+    initialLoader.current = () => { void task(async () => {
       const data = await api<{ config: CampaignConfig; access: Access }>('/api/admin/diwali/config'); setConfig(data.config); setAccess(data.access)
       if (section === 'dashboard' || section === 'reports' || section === 'settings') setReport(await api<Report>('/api/admin/diwali/reports'))
       if (section === 'registrations' || section === 'fulfilment') await loadClaims(1)
       if (section === 'messages') setMessages((await api<{ items: Message[] }>('/api/admin/diwali/messages')).items)
       if (claimId) await loadDetail()
-    })
+    }) }
+  })
+  useEffect(() => {
     // Filters are submitted explicitly to avoid requests on every keystroke.
+    initialLoader.current()
   }, [section, claimId])
   async function act(action: string) { if (!selected) return; await task(async () => { let payload: Record<string, unknown> = { action, version: selected.version };
     if (action === 'approve') payload = { ...payload, verifiedValue: Number(value), invoiceDate, storeCode: selected.storeCode, note, invoiceValid: checked, notRefunded: checked }

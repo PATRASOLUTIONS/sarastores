@@ -86,7 +86,7 @@ export default function ProductEmailAutomation() {
           <div className="my-5 flex flex-wrap gap-3">
             <button type="button" onClick={() => void save()} disabled={busy} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? "Please wait..." : "Save settings"}</button>
             <button type="button" onClick={() => void send()} disabled={busy || dirty || !data.smtp.ready || !data.settings.recipients.length}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50">Send today's email now</button>
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50">Send today&apos;s email now</button>
           </div>
           {dirty && <p className="mb-3 text-xs text-gray-500">Save changes before sending.</p>}
           <h3 className="mb-2 text-sm font-semibold">Recent delivery status</h3>
