@@ -41,7 +41,7 @@ export default function DiwaliEmailNotifications() {
     } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not process pending emails.') }
     finally { setBusy(false) }
   }
-  const labels = { queued: 'Pending', sending: 'Sending', accepted: 'Accepted by mail server', failed: 'Not sent / rejected', unknown: 'Needs delivery review' }
+  const labels = { queued: 'Pending', sending: 'Sending', accepted: 'Accepted by mail server', failed: 'Not sent / rejected', unknown: 'Needs delivery review', suppressed: 'Cancelled' }
   return <main className="mx-auto max-w-5xl p-4 sm:p-6">
     <Link href="/admin/diwali" className="text-sm font-semibold text-red-800 underline">← Diwali dashboard</Link>
     <h1 className="mt-5 text-2xl font-bold text-red-900">Registration email notifications</h1>

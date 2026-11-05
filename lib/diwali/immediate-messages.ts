@@ -14,7 +14,7 @@ export async function sendImmediateDiwaliMessage(id: string): Promise<string> {
   }, { returnDocument: 'after' })
   if (!row) return (await messages.findOne(identity))?.status || 'suppressed'
   id = row._id
-  const claim = await (await getCollection<Message>('diwali_claims')).findOne({ _id: row.claimId, whatsappConsent: true })
+  const claim = await (await getCollection<Message>('diwali_claims')).findOne({ _id: row.claimId, whatsappConsent: true, deletedAt: { $exists: false } })
   const template = row.template || process.env[`DIWALI_${String(row.event).toUpperCase()}_TEMPLATE_${String(row.language).toUpperCase()}`]
   let patch: Document
   if (!claim || claim.status === 'rejected' || row.event === 'approved' && claim.status !== 'approved') {

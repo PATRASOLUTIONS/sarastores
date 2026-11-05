@@ -40,7 +40,7 @@ export async function processMessages() {
     const lock = randomUUID()
     const row = await messages.findOneAndUpdate({ status: 'queued', nextAt: { $lte: new Date() }, attempts: { $lt: 5 } }, { $set: { status: 'sending', lock, lockedAt: new Date() }, $inc: { attempts: 1 } }, { returnDocument: 'after', sort: { createdAt: 1 } })
     if (!row) break
-    const claim = await (await getCollection<Claim>(COLLECTIONS.claims)).findOne({ _id: row.claimId, status: 'approved', whatsappConsent: true })
+    const claim = await (await getCollection<Claim>(COLLECTIONS.claims)).findOne({ _id: row.claimId, status: 'approved', whatsappConsent: true, deletedAt: { $exists: false } })
     if (!claim) { await messages.updateOne({ _id: row._id, lock }, { $set: { status: 'suppressed', failure: 'Claim or consent no longer permits sending' } }); continue }
     const template = row.template || process.env[`DIWALI_${row.event === 'approved' ? 'APPROVED' : 'DISPATCH'}_TEMPLATE_${String(row.language).toUpperCase()}`]
     if (!template) { await messages.updateOne({ _id: row._id, lock }, { $set: { status: 'failed', failure: 'Approved template is not configured' } }); continue }

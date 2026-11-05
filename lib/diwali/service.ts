@@ -113,8 +113,10 @@ export async function sendOtp(mobile: string, language: 'en' | 'kn', purpose: 'r
   const collection = await getCollection<StringRecord>(COLLECTIONS.otp)
   await collection.insertOne({ _id: challenge, mobile, otpHash: otpHash(challenge, otp), attempts: 0, ready: false, expiresAt: new Date(Date.now() + 5 * 60_000) } as StringRecord)
   const result = await sendWhatsAppTemplate(mobile, { name: process.env.DIWALI_OTP_TEMPLATE.trim(), language: { code: otpLanguage, policy: 'deterministic' }, components: [{ type: 'body', parameters: [{ type: 'text', text: otp }] }, { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] }] }, undefined, 'Diwali OTP')
-  if (!result.success) { await collection.deleteOne({ _id: challenge } as Filter<StringRecord>); throw new DiwaliError('Could not send verification code. Please try again.', 503) }
-  await collection.updateOne({ _id: challenge } as Filter<StringRecord>, { $set: { ready: true } })
+  if (!result.success && !result.deliveryUnknown) { await collection.deleteOne({ _id: challenge } as Filter<StringRecord>); throw new DiwaliError('Could not send verification code. Please try again.', 503) }
+  // A timeout or unfamiliar acknowledgement can happen after the OTP is sent.
+  // Keep that challenge verifiable; the private, expiring code is still required.
+  await collection.updateOne({ _id: challenge } as Filter<StringRecord>, { $set: { ready: true, deliveryStatus: result.success ? 'accepted' : 'unknown' } })
   return challenge
 }
 export async function verifyOtp(challenge: string, otp: string) {
@@ -143,6 +145,7 @@ export async function register(token: string | undefined, input: z.infer<typeof 
   const requestKey = hash(`${verified.mobile}:${input.requestId}`)
   const collection = await getCollection<Claim>(COLLECTIONS.claims)
   const prior = await collection.findOne({ requestKey, mobile: verified.mobile })
+  if (prior?.deletedAt) throw new DiwaliError('This registration was removed by SARA. Contact support for assistance.', 409)
   if (prior) return customerClaim(prior)
   registrationOpen(config)
   if (input.consentVersion !== config.consentVersion) throw new DiwaliError('The consent notice changed. Refresh the page and review it again.', 409)
@@ -160,6 +163,7 @@ export async function register(token: string | undefined, input: z.infer<typeof 
   try {
     const registered = await transaction(async session => {
       const existingRequest = await collection.findOne({ requestKey, mobile: verified.mobile }, { session })
+      if (existingRequest?.deletedAt) throw new DiwaliError('This registration was removed by SARA. Contact support for assistance.', 409)
       if (existingRequest) return existingRequest
       await assertDiwaliCustomerAllowed({ mobile: verified.mobile, email: input.email }, session)
       await assertNewDiwaliRegistration(verified.mobile, input.email, session)
@@ -175,6 +179,7 @@ export async function register(token: string | undefined, input: z.infer<typeof 
   } catch (error) {
     if ((error as { code?: number }).code !== 11000) throw error
     const repeated = await collection.findOne({ requestKey, mobile: verified.mobile })
+    if (repeated?.deletedAt) throw new DiwaliError('This registration was removed by SARA. Contact support for assistance.', 409)
     if (repeated) return customerClaim(repeated)
     await assertNewDiwaliRegistration(verified.mobile, input.email)
     if (/^2026:(mobile|email):/.test(String((error as { keyValue?: { _id?: unknown } }).keyValue?._id || ''))) throw new DiwaliError(DUPLICATE_REGISTRATION_MESSAGE, 409)
@@ -188,11 +193,11 @@ function customerClaim(claim: Claim) {
 }
 export async function customerClaims(token: string | undefined) {
   const session = await customerSession(token)
-  return (await (await getCollection<Claim>(COLLECTIONS.claims)).find({ mobile: session.mobile }).sort({ createdAt: -1 }).limit(100).toArray()).map(customerClaim)
+  return (await (await getCollection<Claim>(COLLECTIONS.claims)).find({ mobile: session.mobile, deletedAt: { $exists: false } }).sort({ createdAt: -1 }).limit(100).toArray()).map(customerClaim)
 }
 export function scopeFilter(user: User, config: CampaignConfig): Filter<Claim> {
   const access = authorize(user, config, 'view')
-  return { ...(access.stores.length ? { storeCode: { $in: access.stores } } : {}), ...(access.role === 'fulfilment' ? { status: 'approved' } : {}) }
+  return { deletedAt: { $exists: false }, ...(access.stores.length ? { storeCode: { $in: access.stores } } : {}), ...(access.role === 'fulfilment' ? { status: 'approved' } : {}) }
 }
 export async function listClaims(user: User, params: URLSearchParams) {
   const config = await getConfig(), filter = scopeFilter(user, config), access = accessFor(user, config)
@@ -228,6 +233,33 @@ export async function listClaims(user: User, params: URLSearchParams) {
     if (access.role === 'management') return { id: row._id, reference: row.reference, status: row.status, fulfilment: row.fulfilment, storeCode: row.storeCode, city: row.city, enteredValue: row.enteredValue, verifiedValue: row.verifiedValue, giftCode: row.giftCode, dueAt: row.dueAt, createdAt: row.createdAt, version: row.version, source: row.source, orderId: row.orderId, paymentState: row.paymentState, orderStatus: row.orderStatus }
     return normalizeId(row)
   }), total, page }
+}
+export async function deleteClaim(user: User, id: string, version: number) {
+  authorize(user, await getConfig(), 'settings')
+  return transaction(async session => {
+    const claims = await getCollection<Claim>(COLLECTIONS.claims)
+    const claim = await claims.findOne({ _id: id, deletedAt: { $exists: false } }, { session })
+    if (!claim) throw new DiwaliError('Registration not found', 404)
+    if (claim.version !== version) throw new DiwaliError('Another operator updated this registration. Refresh before deleting.', 409)
+    const messages = await getCollection<StringRecord>(COLLECTIONS.messages)
+    const emails = await getCollection<StringRecord>('diwali_registration_emails')
+    if (await messages.countDocuments({ claimId: id, status: 'sending' }, { session }) || await emails.countDocuments({ claimId: id, status: 'sending' }, { session })) {
+      throw new DiwaliError('A notification is being sent. Try deleting again shortly.', 409)
+    }
+    const stage = claim.fulfilment === 'exception' ? claim.previousFulfilment : claim.fulfilment
+    const releaseStock = claim.status === 'approved' && stage === 'packed'
+    if (releaseStock) {
+      const released = await (await getCollection<StringRecord>(COLLECTIONS.stock)).updateOne({ _id: claim.giftCode, reserved: { $gte: 1 } } as Filter<StringRecord>, { $inc: { available: 1, reserved: -1 } }, { session })
+      if (!released.modifiedCount) throw new DiwaliError('Reserved stock changed; reconcile before deleting.', 409)
+    }
+    const deletedAt = new Date()
+    const updated = await claims.updateOne({ _id: id, version, deletedAt: { $exists: false } }, { $set: { deletedAt, deletedBy: user.id, updatedAt: deletedAt }, $inc: { version: 1 } }, { session })
+    if (!updated.modifiedCount) throw new DiwaliError('Registration changed. Refresh before deleting.', 409)
+    await messages.updateMany({ claimId: id, status: { $in: ['queued', 'ready'] } }, { $set: { status: 'suppressed', failure: 'Registration deleted by administrator' } }, { session })
+    await emails.updateMany({ claimId: id, status: 'queued' }, { $set: { status: 'suppressed', updatedAt: deletedAt } }, { session })
+    await audit(session, user.id, 'delete', id, { reference: claim.reference, before: { status: claim.status, fulfilment: claim.fulfilment, version }, after: { deletedAt, deletedBy: user.id }, releasedStock: releaseStock ? claim.giftCode : null })
+    return { deleted: true, reference: claim.reference }
+  })
 }
 export async function getClaim(user: User, id: string) {
   const config = await getConfig(), access = accessFor(user, config)
