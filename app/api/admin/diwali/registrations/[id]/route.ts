@@ -1,4 +1,4 @@
-import { requireUser, requireFullAdmin } from '@/lib/auth'
+import { requireUser } from '@/lib/auth'
 import { json, body, requireSameOrigin, errorResponse } from '@/lib/diwali/http'
 export const dynamic = 'force-dynamic'
 import { getClaim, actOnClaim, deleteClaim } from '@/lib/diwali/service'
@@ -11,7 +11,7 @@ export async function POST(request: Request, context: Context) { try { requireSa
 export async function DELETE(request: Request, context: Context) {
   try {
     requireSameOrigin(request)
-    const guard = await requireFullAdmin()
+    const guard = await requireUser()
     if (!guard.ok) return guard.response
     const input = await body(request, DeleteSchema)
     return json(await deleteClaim(guard.user, (await context.params).id, input.version))

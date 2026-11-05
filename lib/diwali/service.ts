@@ -60,6 +60,7 @@ export function accessFor(user: User, config: CampaignConfig) {
   if (!staffCanAccessPage(user, '/admin/diwali')) throw new DiwaliError('Campaign access denied', 403)
   const assignment = config.staff.find(staff => staff.userId === user.id)
   if (!assignment) throw new DiwaliError('Campaign access denied', 403)
+  if (assignment.role === 'full_access') return { role: 'superadmin' as const, export: true, stores: [] as string[] }
   return assignment
 }
 export function authorize(user: User, config: CampaignConfig, capability: 'view' | 'verify' | 'fulfil' | 'settings' | 'export' | 'messages') {
@@ -276,7 +277,7 @@ export async function getClaim(user: User, id: string) {
   const history = await (await getCollection(COLLECTIONS.audit)).find({ claimId: id }).sort({ at: -1 }).limit(100).toArray()
   return { claim: normalizeId(claim), history: history.map(normalizeId) }
 }
-async function enqueue(session: ClientSession, claim: Claim, event: 'registered' | 'approved' | 'dispatch') {
+export async function enqueue(session: ClientSession, claim: Claim, event: 'registered' | 'approved' | 'dispatch') {
   if (!claim.whatsappConsent) return
   const language = claim.language.toUpperCase(), template = process.env[`DIWALI_${event.toUpperCase()}_TEMPLATE_${language}`]
   const gift = GIFTS.find(item => item.code === claim.giftCode)

@@ -182,7 +182,8 @@ test('blocked online customers lose gift eligibility without changing purchase a
 test('blocklist API rejects non-admins and cross-site writes before accessing records', async () => {
   let allowed = false, operations = 0
   const api = sourceLoader({
-    '@/lib/auth': { requireFullAdmin: async () => allowed ? { ok: true, user: { id: 'session-admin' } } : { ok: false, response: Response.json({ error: 'Forbidden' }, { status: 403 }) } },
+    '@/lib/diwali/service': { authorize() {}, getConfig: async () => ({}) },
+    '@/lib/auth': { requireUser: async () => allowed ? { ok: true, user: { id: 'session-admin' } } : { ok: false, response: Response.json({ error: 'Forbidden' }, { status: 403 }) } },
     '@/lib/diwali/blocklist': { listDiwaliBlocklist: async () => { operations++ }, addDiwaliBlocklist: async () => { operations++ }, updateDiwaliBlocklist: async () => { operations++ } },
   }).load('app/api/admin/diwali/blocklist/route.ts')
   for (const method of ['GET', 'POST', 'PUT']) {
@@ -198,7 +199,8 @@ test('blocklist API rejects non-admins and cross-site writes before accessing re
 test('blocklist API derives audit actor from the session and returns private uncached responses', async () => {
   let actor
   const api = sourceLoader({
-    '@/lib/auth': { requireFullAdmin: async () => ({ ok: true, user: { id: 'trusted-session-admin' } }) },
+    '@/lib/diwali/service': { authorize() {}, getConfig: async () => ({}) },
+    '@/lib/auth': { requireUser: async () => ({ ok: true, user: { id: 'trusted-session-admin' } }) },
     '@/lib/diwali/blocklist': { addDiwaliBlocklist: async (id, input) => { actor = id; return input } },
   }).load('app/api/admin/diwali/blocklist/route.ts')
   const request = value => new Request('https://sara.test/api/admin/diwali/blocklist', { method: 'POST', headers: { origin: 'https://sara.test', 'Content-Type': 'application/json' }, body: JSON.stringify(value) })

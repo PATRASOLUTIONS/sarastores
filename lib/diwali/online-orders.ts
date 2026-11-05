@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type { ClientSession } from 'mongodb'
 import { getCollection } from '@/lib/db-service'
-import { COLLECTIONS, getConfig, initializeDiwali, type Claim } from './service'
+import { COLLECTIONS, getConfig, initializeDiwali, enqueue, type Claim } from './service'
+import { sendImmediateDiwaliMessage } from './immediate-messages'
+import { normaliseIndianPhone } from '@/lib/marketing/whatsapp'
 import { onlineGift, ONLINE_STORE, type OnlineGift } from './online-rules'
 import { indiaDate, normalizeInvoice } from './rules'
 import { assertDiwaliCustomerAllowed, isDiwaliCustomerBlocked } from './blocklist'
@@ -29,25 +31,41 @@ export async function recordOnlineDiwaliOrder(order: OnlineDiwaliOrder, session:
   const id = `online:${order.orderId}`
   const requestKey = createHash('sha256').update(id).digest('hex')
   const invoice = normalizeInvoice(order.orderId)
+  const phone = normaliseIndianPhone(order.customer.phone || '')
+  const whatsappConsent = !!phone
   const claim: Claim = {
     _id: id, reference: `SARA-DIW-${randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase()}`,
     source: 'online', orderId: order.orderId, userId: order.userId, invoice,
     invoiceKey: `${ONLINE_STORE}:${invoice}`, requestKey, storeCode: ONLINE_STORE,
-    name: order.customer.name, mobile: order.customer.phone || '', email: order.customer.email,
+    name: order.customer.name, mobile: phone ? phone.slice(-10) : order.customer.phone || '', email: order.customer.email,
     ...(order.accountEmail ? { accountEmail: order.accountEmail } : {}), ...(order.accountMobile ? { accountMobile: order.accountMobile } : {}),
     address: order.shippingAddress?.street || order.customer.address, city: order.shippingAddress?.city || order.customer.city,
     district: '', state: order.shippingAddress?.state || order.customer.state,
     pincode: order.shippingAddress?.zip || order.customer.zipCode, enteredValue: gift.eligibleValue, giftCode: gift.giftCode,
     deliveryMethod: order.fulfilment?.method || 'delivery', pickupStoreName: order.fulfilment?.storeName || '',
-    invoiceDate: indiaDate(order.createdAt), language: 'en', whatsappConsent: false,
-    consent: { version: gift.consentVersion, whatsapp: false, at: order.createdAt, language: 'en', source: 'checkout' },
+    invoiceDate: indiaDate(order.createdAt), language: 'en', whatsappConsent,
+    consent: { version: gift.consentVersion, whatsapp: whatsappConsent, at: order.createdAt, language: 'en', source: 'checkout-order-notification' },
     status: 'pending', fulfilment: 'pending', version: 0, createdAt: order.createdAt, updatedAt: order.createdAt,
   }
   const result = await (await getCollection<Claim>(COLLECTIONS.claims)).updateOne(
     { _id: id }, { $setOnInsert: claim }, { session, upsert: true },
   )
-  if (result.upsertedCount) await (await getCollection(COLLECTIONS.audit)).insertOne({
+  if (!result.upsertedCount) return
+  await enqueue(session, claim, 'registered')
+  await (await getCollection(COLLECTIONS.audit)).insertOne({
     actor: 'system:online-checkout', action: 'online-register', claimId: id, orderId: order.orderId,
     eligibleValue: gift.eligibleValue, giftCode: gift.giftCode, at: order.createdAt,
   }, { session })
+}
+
+/** Called after the order transaction commits; checkout retries reuse the same event. */
+export async function notifyOnlineDiwaliRegistered(order: OnlineDiwaliOrder) {
+  if (!order.diwaliGift) return
+  try {
+    return await sendImmediateDiwaliMessage(`online:${order.orderId}:registered`)
+  } catch {
+    // A notification failure must never turn a saved order into a failed checkout.
+    console.error('[diwali] Online registration notification needs review')
+    return 'unknown'
+  }
 }

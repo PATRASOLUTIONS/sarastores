@@ -292,3 +292,44 @@ test('new customers keep the form, while a completed submission shows only its c
     assert.equal(f.calls.filter(call => call.url.endsWith('/register')).length, 1)
   }
 })
+
+
+test('full campaign access grants every Diwali capability without granting global admin access', () => {
+  const loader = sourceLoader()
+  const { authorize, scopeFilter } = loader.load('lib/diwali/service.ts')
+  const { ConfigSchema, DEFAULT_CONFIG } = loader.load('lib/diwali/schemas.ts')
+  const config = ConfigSchema.parse({ ...DEFAULT_CONFIG, stores: [{ code: 'A', name: 'Synthetic Store' }],
+    staff: [{ userId: 'full', role: 'full_access', export: false, stores: ['A'] }] })
+  const user = { id: 'full', role: 'user', dashboardAccess: true, allowedPages: ['/admin/diwali'] }
+  for (const capability of ['view', 'verify', 'fulfil', 'settings', 'export', 'messages']) {
+    const access = authorize(user, config, capability)
+    assert.equal(access.role, 'superadmin'); assert.equal(access.export, true); assert.equal(access.stores.length, 0)
+    assert.equal(scopeFilter(access).storeCode, undefined)
+  }
+  assert.equal(user.role, 'user')
+  assert.throws(() => authorize({ ...user, dashboardAccess: false }, config, 'settings'), /access denied/)
+  assert.throws(() => authorize({ ...user, allowedPages: ['/admin/orders'] }, config, 'settings'), /access denied/)
+  assert.throws(() => authorize({ ...user, id: 'unassigned' }, config, 'settings'), /access denied/)
+})
+
+
+test('full-access staff can open Diwali notification and blocklist endpoints while verifiers cannot', async () => {
+  const defaults = sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG
+  let role = 'full_access', reads = 0
+  const user = { id: 'full', role: 'user', dashboardAccess: true, allowedPages: ['/admin/diwali'] }
+  const loader = sourceLoader({
+    '@/lib/auth': { requireUser: async () => ({ ok: true, user }) },
+    '@/lib/db-service': { getCollection: async () => ({ findOne: async () => ({ ...defaults, _id: '2026', staff: [{ userId: 'full', role, export: false, stores: [] }] }) }) },
+    '@/lib/diwali/blocklist': { listDiwaliBlocklist: async () => { reads++; return { items: [] } } },
+    '@/lib/diwali/registration-notifications': { getRegistrationNotifications: async () => { reads++; return { settings: {} } } },
+  })
+  const blocklist = loader.load('app/api/admin/diwali/blocklist/route.ts')
+  const notifications = loader.load('app/api/admin/diwali/notifications/route.ts')
+  assert.equal((await blocklist.GET(new Request('https://sara.test/api/admin/diwali/blocklist'))).status, 200)
+  assert.equal((await notifications.GET()).status, 200)
+  assert.equal(reads, 2)
+  role = 'verifier'
+  assert.equal((await blocklist.GET(new Request('https://sara.test/api/admin/diwali/blocklist'))).status, 403)
+  assert.equal((await notifications.GET()).status, 403)
+  assert.equal(reads, 2)
+})
