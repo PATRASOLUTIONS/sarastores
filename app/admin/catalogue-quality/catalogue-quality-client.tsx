@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api-client"
 import { completeCatalogueReport, unpackQualityReport, type QualityReport } from "@/lib/catalogue-quality"
 import { catalogueReviewCsv, DEFAULT_REVIEW_FILTERS, filterReviewProducts, matchingReviewIssues, QUALITY_AREAS, reviewPriority, type ReviewFilters, type ReviewSort } from "@/lib/catalogue-review"
 import CatalogueReviewOverview from "./catalogue-review-overview"
+import GoogleMerchantPanel from "./google-merchant-panel"
 
 const severityLabel = { blocked: "Blocking issue", improve: "Improve", review: "Human review" }
 const severityClass = { blocked: "border-red-200 bg-red-50 text-red-800", improve: "border-amber-200 bg-amber-50 text-amber-900", review: "border-blue-200 bg-blue-50 text-blue-900" }
@@ -96,6 +97,7 @@ export default function CatalogueQualityClient() {
   ]
 
   return <div className="mx-auto max-w-7xl space-y-6">
+    <GoogleMerchantPanel />
     <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Catalogue standards</p><h1 className="mt-1 text-3xl font-bold text-gray-900">Catalogue quality</h1><p className="mt-2 max-w-3xl text-sm text-gray-600">Review products, missing metadata and catalogue issues here. The scan checks identity, classification, descriptions, identifiers, images, prices, stock, warranty and tax fields, with reasons and suggested actions. It never saves corrections.</p></div><button type="button" onClick={() => void scan()} disabled={scanning} className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}{scanning ? "Scanning catalogue…" : report ? "Rescan catalogue" : "Scan catalogue"}</button></div>
     <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" /><p>Scans read your store’s current product catalogue using the existing store connection. No clone setup or approval secret is required. Issues and suggested fixes are reported here; product changes need your approval before they are saved.</p></div>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}

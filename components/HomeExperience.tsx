@@ -29,7 +29,6 @@ import { z } from "zod"
 const DealsOfTheDay = dynamic(() => import("@/components/DealsOfTheDay"))
 const CategoryProductsSection = dynamic(() => import("@/components/CategoryProductsSection"))
 const RecentlyViewed = dynamic(() => import("@/components/RecentlyViewed"), { ssr: false })
-const DealOfTheDayPopup = dynamic(() => import("@/components/DealOfTheDayPopup"), { ssr: false })
 const ProductRail = dynamic(() => import("@/components/ProductRail"))
 const CategoryMosaic = dynamic(() => import("@/components/home/CategoryMosaic"))
 const BrandStrip = dynamic(() => import("@/components/home/BrandStrip"))
@@ -147,7 +146,6 @@ export default function HomeExperience() {
     <>
       <Header />
       <CategoryCircles />
-      <DealOfTheDayPopup />
 
       <main id="main-content" className="flex-grow relative z-10">
         <HeroSection />

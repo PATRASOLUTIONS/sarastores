@@ -13,6 +13,7 @@ import Header from "@/components/Header"
 import Footer from "@/components/Footer"
 import ProductLoading from "@/components/product/ProductLoading"
 import ProductSaraCare, { useProductSaraCare } from "@/components/product/ProductSaraCare"
+import ProductPromotions from "@/components/promotions/PromotionExperience"
 import type { SaraCareYears } from "@/lib/sara-care-types"
 import ProductSpecificationTabs from "@/components/ProductSpecificationTabs"
 import { OfferCards, RailCards, Stars } from "@/components/product/PdpBlocks"
@@ -272,10 +273,11 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
   const [careSelection, setCareSelection] = useState<SaraCareYears | null | undefined>(undefined)
   useEffect(() => { setCareSelection(undefined) }, [slug])
   const productCare = useProductSaraCare({ productId: !loading && product?.id ? String(product.id) : "", selection: careSelection, onSelect: setCareSelection })
-  const [reviewStats, setReviewStats] = useState<{ rating: number; count: number } | null>(null)
+  const [reviewStats, setReviewStats] = useState<{ productId: string; rating: number; count: number } | null>(null)
   const updateReviewStats = useCallback((next: { rating: number; count: number }) => {
-    setReviewStats(previous => previous?.rating === next.rating && previous.count === next.count ? previous : next)
-  }, [])
+    const productId = String(product?.id || "")
+    setReviewStats(previous => previous?.productId === productId && previous.rating === next.rating && previous.count === next.count ? previous : { ...next, productId })
+  }, [product?.id])
   const bankOffers = useRazorpayOffers()
   const liveOffers = applicableOffers(bankOffers.offers, Number(product?.price) || 0)
 
@@ -485,7 +487,14 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
   const reviewRating = recordedReviews.map((review) => Number.parseFloat(String(review.rating))).filter((value) => value >= 1 && value <= 5)
   const recordedRating = { rating: Number(product.rating || reviewSummary?.average) || (reviewRating.length ? reviewRating.reduce((sum: number, value: number) => sum + value, 0) / reviewRating.length : 0),
     count: Number(product.reviewsCount || reviewSummary?.count) || recordedReviews.length }
-  const rating = reviewStats || recordedRating
+  const rating = reviewStats?.productId === String(product.id) ? reviewStats : recordedRating
+  const visibleTabs = TABS.filter(item =>
+    (item.id !== "faqs" || marketing.enabled("faqs")) &&
+    (item.id !== "sara-care" || !!productCare.offer) &&
+    (item.id !== "offers" || liveOffers.some(offer => !isEmiOffer(offer))) &&
+    (item.id !== "emi" || liveOffers.some(isEmiOffer)) &&
+    (item.id !== "reviews" || rating.count > 0))
+  const activeTab = visibleTabs.some(item => item.id === tab) ? tab : "overview"
   const inStock = !isProductUnavailable(product)
   const wishlisted = isInWishlist(String(product.id))
   const freeShippingThreshold = Number(settings?.freeShippingThreshold ?? 10000)
@@ -635,13 +644,13 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
               </button>
 
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <div className="flex items-center gap-1.5">
+                {rating.count > 0 && <div className="flex items-center gap-1.5">
                   <Stars rating={rating.rating} />
-                  <span className="text-[13px] font-semibold text-gray-800">{rating.count > 0 ? rating.rating.toFixed(1) : "No reviews yet"}</span>
+                  <span className="text-[13px] font-semibold text-gray-800">{rating.rating.toFixed(1)}</span>
                   <span className="text-[12px] text-gray-500">
                     ({rating.count >= 1000 ? `${(rating.count / 1000).toFixed(1)}K` : rating.count} reviews)
                   </span>
-                </div>
+                </div>}
                 <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[#007a38]">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Genuine Product
@@ -846,6 +855,8 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
                     {adding === "buy" ? "Taking you to checkout…" : buyNowLabel}
                   </button>
 
+                  {inStock && <ProductPromotions key={String(product.id)} productId={String(product.id)} />}
+
                   {marketing.enabled("trust") && <ul className="grid grid-cols-4 gap-x-2 gap-y-3 border-t border-gray-100 pt-3.5">
                     {TRUST.map(({ icon: Icon, label }, index) => (
                       <li key={label} className="flex flex-col items-center gap-1 text-center">
@@ -863,16 +874,17 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
 
           {/* ── Tabs ─────────────────────────────────────────────── */}
           <OfferCards offers={offerCards} />
+          <ProductReviewsSection key={`review-stats:${product.id}`} statsOnly productId={String(product.id)} productName={name} productImage={images[0]} seedReviews={recordedReviews} average={recordedRating.count ? recordedRating.rating : undefined} count={recordedRating.count} onStatsChange={updateReviewStats} />
           <div id="product-details-tabs" className="min-w-0 scroll-mt-4 bg-white">
             <div className="flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Product details">
-              {TABS.filter(item => (item.id !== "faqs" || marketing.enabled("faqs")) && (item.id !== "sara-care" || !!productCare.offer)).map(({ id, label }) => (
+              {visibleTabs.map(({ id, label }) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setTab(id)}
-                  role="tab" aria-selected={tab === id} aria-controls={`product-panel-${id}`} id={`product-tab-${id}`}
+                  role="tab" aria-selected={activeTab === id} aria-controls={`product-panel-${id}`} id={`product-tab-${id}`}
                   className={`whitespace-nowrap border-b-2 px-4 py-3 text-[13px] font-semibold transition-colors ${
-                    tab === id
+                    activeTab === id
                       ? "border-[#1560BD] text-[#1560BD]"
                       : "border-transparent text-gray-500 hover:text-gray-800"
                   }`}
@@ -883,9 +895,9 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
               ))}
             </div>
 
-            <div className="py-5" role="tabpanel" id={`product-panel-${tab}`} aria-labelledby={`product-tab-${tab}`}>
+            <div className="py-5" role="tabpanel" id={`product-panel-${activeTab}`} aria-labelledby={`product-tab-${activeTab}`}>
               {specsError && <p role="alert" className="mb-4 text-sm text-amber-800">{specsError} <button type="button" className="underline" onClick={() => setAttempt(value => value + 1)}>Retry product details</button></p>}
-              {tab === "overview" && (
+              {activeTab === "overview" && (
                 <div className={`grid gap-5 ${railCards.length ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,240px)]" : ""}`}>
                   <div>
                     <h2 className="font-heading text-lg font-bold text-gray-900">{name}</h2>
@@ -933,10 +945,10 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
                 </div>
               )}
 
-              {(tab === "specifications" || tab === "product-images") && (
+              {(activeTab === "specifications" || activeTab === "product-images") && (
                 <ProductSpecificationTabs
                   key={`${product.id}-${tab}`}
-                  section={tab === "specifications" ? "specs" : "manufacturer"}
+                  section={activeTab === "specifications" ? "specs" : "manufacturer"}
                   technicalDetails={product.technical_details}
                   fromManufacturer={product.from_manufacturer}
                   specificationImages={product.specification_images}
@@ -953,7 +965,7 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
                 />
               )}
 
-              {tab === "in-the-box" && (
+              {activeTab === "in-the-box" && (
                 <ul className="space-y-2 text-[13px] text-gray-700">
                   {(Array.isArray(product.included_components) ? product.included_components :
                     String(product.technical_details?.["Included Components"] || "").split(",").filter(Boolean)).map((item: string) => (
@@ -966,7 +978,7 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
                 </ul>
               )}
 
-              {tab === "offers" && (
+              {activeTab === "offers" && (
                 <div className="space-y-4">
                   <RazorpayOffers offers={liveOffers} loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} />
                   <p className="text-[13px] text-gray-600">
@@ -979,16 +991,16 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
                 </div>
               )}
 
-              {tab === "emi" && (
+              {activeTab === "emi" && (
                 <RazorpayOffers offers={liveOffers} loading={bankOffers.isLoading} error={bankOffers.error} retry={bankOffers.retry} mode="emi" />
               )}
 
-              {tab === "reviews" && (
+              {activeTab === "reviews" && (
                 <ProductReviewsSection embedded productId={String(product.id)} productName={name} productImage={images[0]} seedReviews={recordedReviews} average={recordedRating.count ? recordedRating.rating : undefined} count={recordedRating.count} onStatsChange={updateReviewStats} />
               )}
 
-              {tab === "sara-care" && <ProductSaraCare productName={name} care={productCare} disabled={adding !== null} />}
-              {tab === "faqs" && marketing.enabled("faqs") && (
+              {activeTab === "sara-care" && <ProductSaraCare productName={name} care={productCare} disabled={adding !== null} />}
+              {activeTab === "faqs" && marketing.enabled("faqs") && (
                 <dl className="divide-y divide-gray-100">
                   {FAQS.map(({ q, a }, index) => (
                     <div key={q} className="py-4 first:pt-0 last:pb-0">
