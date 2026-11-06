@@ -43,6 +43,11 @@ export function giftQuantity(promotion: GiftPromotion, items: PricedItem[], user
 }
 
 export async function quoteGiftPromotions(items: PricedItem[], userId: string | null, declined: string[] = [], session?: ClientSession, selected: string[] = [], includeAvailable = false): Promise<GiftAward[]> {
+  return (await quoteGiftPromotionPreview(items, userId, declined, session, selected, includeAvailable)).map(({ expiresAt: _expiresAt, ...award }) => award)
+}
+
+/** Same eligibility as checkout, with the real deadline for storefront previews. */
+export async function quoteGiftPromotionPreview(items: PricedItem[], userId: string | null, declined: string[] = [], session?: ClientSession, selected: string[] = [], includeAvailable = true): Promise<(GiftAward & { expiresAt: string | null })[]> {
   if (!items.length) return []
   const promotions = await (await getCollection<GiftPromotion>("coupons")).find({ type: "buy_get_product", active: true }, { session }).sort({ createdAt: 1, _id: 1 }).limit(100).toArray()
   const qualifying = promotions.map(promotion => ({ promotion, quantity: giftQuantity(promotion, items, userId) }))
@@ -54,7 +59,7 @@ export async function quoteGiftPromotions(items: PricedItem[], userId: string | 
     if (!gift) return []
     const parsed = GiftAwardSchema.safeParse({ ...gift, giftId: gift._id, promotionId: promotion._id.toString(), code: promotion.code, promotionName: promotion.name, quantity,
       giftAutoAdd: promotion.giftAutoAdd ?? true, giftRemovable: promotion.giftRemovable ?? true })
-    return parsed.success ? [parsed.data] : []
+    return parsed.success ? [{ ...parsed.data, expiresAt: promotion.noEndDate ? null : new Date(promotion.endDate!).toISOString() }] : []
   })
 }
 

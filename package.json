@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:promotions": "node --test tests/storefront-promotions.test.mjs tests/product-presentation.test.mjs tests/gift-promotions.test.mjs tests/diwali-online.test.mjs tests/seo-public-promotions.test.mjs tests/route-guards.test.mjs",
+    "test:merchant": "node --test tests/google-merchant.test.mjs tests/product-metadata-brand.test.mjs tests/route-guards.test.mjs",
     "test:seo": "node --test tests/seo-regression.test.mjs tests/product-metadata-brand.test.mjs tests/seo-build-guard.test.mjs tests/seo-server-pages.test.mjs tests/site-origin.test.mjs tests/seo-manufacturer-pages.test.mjs tests/seo-public-metadata.test.mjs tests/seo-public-promotions.test.mjs tests/seo-public-catalogue.test.mjs tests/image-optimization.test.mjs tests/homepage-performance.test.mjs",
     "seo:skills": "python scripts/seo/validate-install.py",
     "seo:fixtures": "node scripts/seo/fixtures.mjs",

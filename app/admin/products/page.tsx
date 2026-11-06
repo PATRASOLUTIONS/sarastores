@@ -1952,7 +1952,7 @@ export default function AdminProducts() {
               </div>
 
               <p className="text-sm text-gray-600 mb-4">
-                Upload an Excel file (.xlsx) containing updated metadata for products.
+                Upload an Excel file (.xlsx) containing updated metadata for products. Names are formatted automatically: APPLE IPHONE 15 (128GB) BLACK becomes Apple iPhone 15 (128GB) Black. Review the formatted names before confirming the upload.
               </p>
 
               <div className="bg-white border border-green-200 rounded-lg p-3 mb-4 text-xs text-green-800 shadow-sm">

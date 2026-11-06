@@ -238,7 +238,8 @@ function inScope(product: PricingCatalogueProduct | undefined, coupon: PricingCo
   return false
 }
 
-async function computeCouponDiscount(
+/** Server-only: callers must supply items and catalogue from priceCatalogueCart. */
+export async function computeCouponDiscount(
   code: string,
   pricedItems: PricedItem[],
   catalogue: Map<string, PricingCatalogueProduct>,

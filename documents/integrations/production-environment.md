@@ -6,6 +6,8 @@ The 2026-11-04 consolidation preserved all 56 existing `.env.local` assignments 
 
 ## Audit
 
+Marketing setup: run `node --env-file=.env.local scripts/check-marketing-setup.mjs`. This reports configuration names and syntax/status only; it does not contact Google, change settings or print values. Choose `NEXT_PUBLIC_GTM_ID` **or** `NEXT_PUBLIC_GA_ID`, and configure GA4 within GTM when using GTM. Existing consent controls gate analytics, Meta and Clarity tags. Account claiming, Search Console verification, Merchant shipping/returns, Ads conversion validation and Business Profile ownership still require the authorized account operator. See `documents/marketing/BYTEWISE-SARA-GROWTH-PLAN.md` for the launch gates and rollout.
+
 Run `node scripts/check-env-completeness.mjs --report`. It reports names, assignment counts, empty settings, and production configuration issues; it never contacts MongoDB/providers or prints credential values. The sanitized report is `documents/integrations/environment-audit.json`. Unconfigured optional integrations, fallback aliases and platform-provided variables are not all required.
 
 The former `.env.production.local` contained zero active assignments. The local 56-variable list cannot certify the 56 variables hosted in Vercel; compare the required names below with Vercel Production settings without exporting values into chat or Git.
@@ -71,3 +73,6 @@ Email is optional on the public Diwali form and the Verify endpoint. A missing o
 The Daily Email option in `/admin/products` reuses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, optional `SMTP_SECURE`, `EMAIL_FROM`, and `CRON_SECRET` (at least 16 characters). No new variable is required. Recipients and the enable switch are stored in MongoDB. Local runtime settings belong only in `.env.local`; configure the same names in the hosting environment.
 
 The daily cron `/api/cron/product-email-automation` uses `0 6 * * *` in UTC, corresponding to 11:30 AM India time. Precise execution depends on the hosting scheduler and plan; Vercel Hobby daily cron execution can vary within the hour. Use a supported plan or an authenticated external scheduler for minute-level timing. See [the feature guide](../features/product-email-automation.md) for attachment formats and delivery behavior.
+# Google Merchant API
+
+The optional manual integration at `/admin/catalogue-quality` requires server-only `GOOGLE_MERCHANT_ACCOUNT_ID`, `GOOGLE_MERCHANT_DATA_SOURCE_ID`, `GOOGLE_MERCHANT_CLIENT_ID`, `GOOGLE_MERCHANT_CLIENT_SECRET` and `GOOGLE_MERCHANT_REFRESH_TOKEN`. `GOOGLE_MERCHANT_FEED_LABEL` defaults to `IN`; the existing `NEXT_PUBLIC_SITE_URL` and session secret must be valid. See [google-merchant-api.md](google-merchant-api.md) for account, API-source, OAuth and review requirements. No values are included here; local runtime configuration belongs only in `.env.local`.

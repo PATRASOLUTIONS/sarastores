@@ -1080,14 +1080,14 @@ test("warehouse metadata headers are read one level up, at the merchandising lev
   assert.equal(shadowed.division, "Home Electronics")
 })
 
-test("a downloaded metadata sheet re-uploads unchanged through its own six column names", () => {
+test("a downloaded metadata sheet preserves classification and formats its name when re-uploaded", () => {
   const { extractMetadataSheetRow, metadataSheetRowFromProduct, METADATA_SHEET_COLUMNS, METADATA_SHEET_FIELDS } = metadataSheet()
   const clean = extractMetadataSheetRow({
     itemno: "SKU1", Name: "Bosch 7kg washer", Division: "Appliances",
     Category: "Washing Machines", Segment: "Front Load", Brand: "Bosch",
   })
   assert.equal(clean.itemno, "SKU1")
-  assert.equal(clean.name, "Bosch 7kg washer")
+  assert.equal(clean.name, "Bosch 7kg Washer")
   assert.equal(clean.division, "Appliances")
   assert.equal(clean.category, "Washing Machines")
   assert.equal(clean.segment, "Front Load")
@@ -1100,7 +1100,7 @@ test("a downloaded metadata sheet re-uploads unchanged through its own six colum
   const workbook = {}
   for (const field of METADATA_SHEET_FIELDS) workbook[METADATA_SHEET_COLUMNS[field]] = download[field]
   const reread = extractMetadataSheetRow(workbook)
-  for (const field of METADATA_SHEET_FIELDS) assert.equal(reread[field], download[field], field)
+  for (const field of METADATA_SHEET_FIELDS) assert.equal(reread[field], field === "name" ? "Bosch 7kg Washer" : download[field], field)
   assert.equal(reread.category, "Washing Machines")
   assert.equal(reread.division, "Appliances")
   assert.equal(reread.brand, "Bosch")
@@ -1157,7 +1157,7 @@ test("metadata writes set every corrected level and an empty cell leaves stored 
     Category: "Washing Machines", Segment: "Front Load", Brand: "Bosch",
   })
   const updates = metadataDocumentUpdates(full)
-  assert.equal(updates.name, "Bosch 7kg washer")
+  assert.equal(updates.name, "Bosch 7kg Washer")
   assert.equal(updates.division, "Appliances")
   assert.equal(updates.category, "Washing Machines")
   assert.equal(updates.groupName, "Washing Machines", "parts of the storefront still read groupName")
@@ -1232,7 +1232,7 @@ test("the metadata upload writes the merchandising hierarchy and stops brand inh
   const preview = await (await post(sheet, true)).json()
   assert.equal(preview.preview[0].status, "found")
   assert.equal(preview.preview[0].itemno, "SKU-1")
-  assert.equal(preview.preview[0].name, "Anker 65W charger")
+  assert.equal(preview.preview[0].name, "Anker 65W Charger")
   assert.equal(preview.preview[0].division, "Electronics")
   assert.equal(preview.preview[0].category, "Mobile Accessories")
   assert.equal(preview.preview[0].segment, "Chargers & Adapters")
@@ -1254,7 +1254,7 @@ test("the metadata upload writes the merchandising hierarchy and stops brand inh
   assert.equal(written.groupName, "Mobile Accessories")
   assert.equal(written.segment, "Chargers & Adapters")
   assert.equal(written.brand, "Anker", "brand comes from the manufacturer column, never the category")
-  assert.equal(written.name, "Anker 65W charger")
+  assert.equal(written.name, "Anker 65W Charger")
   assert.equal(Object.prototype.toString.call(written.updatedAt), "[object Date]")
   assert.equal(
     Object.keys(written).filter(key => key === "raw" || key.startsWith("raw.")).join(","), "",

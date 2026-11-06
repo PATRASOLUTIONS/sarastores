@@ -56,6 +56,8 @@ interface ProductReviewsSectionProps {
   /** Drop the outer card chrome when rendered inside a panel that already has it. */
   embedded?: boolean
   preview?: boolean
+  /** Fetch review statistics for page controls without rendering an empty section. */
+  statsOnly?: boolean
   onViewAll?: () => void
   onStatsChange?: (stats: { rating: number; count: number }) => void
 }
@@ -86,6 +88,7 @@ export default function ProductReviewsSection({
   count,
   embedded = false,
   preview = false,
+  statsOnly = false,
   onViewAll,
   onStatsChange,
 }: ProductReviewsSectionProps) {
@@ -230,6 +233,8 @@ export default function ProductReviewsSection({
     else if (positivePct < 30) label = "Customers are critical"
     return { positivePct, criticalPct, label }
   }, [seed])
+
+  if (statsOnly) return null
 
   if (preview) return (
     <section id="reviews" className="mt-6 border-t border-gray-100 pt-5">

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { Suspense } from "react"
+import dynamic from "next/dynamic"
 import LoginReturnTracker from "@/components/LoginReturnTracker"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
@@ -14,6 +15,7 @@ import AntiInspect from "@/components/AntiInspect"
 import { LazyMotion, MotionConfig } from "framer-motion"
 
 const loadMotionFeatures = () => import("@/components/animation-features").then(module => module.default)
+const StorefrontPromotionEntry = dynamic(() => import("@/components/promotions/StorefrontPromotionEntry"), { ssr: false })
 
 interface ProvidersProps {
   children: ReactNode
@@ -33,6 +35,7 @@ export function Providers({ children }: ProvidersProps) {
               {children}
               <CompareFloating />
               <LazyCartChrome />
+              <Suspense fallback={null}><StorefrontPromotionEntry /></Suspense>
               {/*
                 A toast grows to fit its message, and dismissal pauses while
                 one is hovered. An over-long message therefore covers the

@@ -15,6 +15,8 @@
  * break them. This one describes a single spreadsheet.
  */
 
+import { formatProductName } from "@/lib/product-name-format"
+
 export const METADATA_SHEET_COLUMNS = {
   itemno: "itemno",
   name: "Name",
@@ -162,6 +164,7 @@ export function extractMetadataSheetRow(row: Record<string, unknown>): MetadataS
       ...COLUMN_ALIASES[field].map((alias) => byKey.get(headerKey(alias))),
     )
   }
+  result.name = formatProductName(result.name)
   return result
 }
 
@@ -261,7 +264,7 @@ export function metadataSheetRowFromProduct(product: unknown): MetadataSheetRow 
 export function metadataDocumentUpdates(row: MetadataSheetRow): Record<string, string> {
   const updates: Record<string, string> = {}
 
-  if (row.name) updates.name = row.name
+  if (row.name) updates.name = formatProductName(row.name)
   if (row.division) updates.division = row.division
   if (row.category) {
     updates.category = row.category

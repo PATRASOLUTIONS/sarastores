@@ -9,6 +9,7 @@ const ALLOWED_EVENTS = new Set([
   "view_item", "add_to_cart", "remove_from_cart", "view_cart",
   "begin_checkout", "add_payment_info", "purchase",
   "search", "generate_lead", "sign_up", "login",
+  "view_promotion", "select_promotion",
 ])
 
 /** Funnel event sink. Public by design, so it is rate limited and allow-listed. */
