@@ -10,6 +10,62 @@ const product = (extra = {}) => ({ id: "phone-1", sku: "PHONE-1", slug: "apple-p
   price: 19499.25, stock: 2, active: true, image: "/images/phone.jpg", gtin: "4006381333931", ...extra })
 const module = () => sourceLoader().load("lib/google-merchant-products.ts")
 
+test("retailer sales copy is removed while product facts and legitimate Amazon branding remain", () => {
+  const description = "Buy APPLE online at best price with offers in India. Apple iPhone 15 has 128GB storage. Compare iPhone by price and performance to shop at Flipkart"
+  const before = product({ description })
+  const item = module().merchantPreviewItem(before, "https://www.sarastores.com", "IN")
+  assert.equal(item.input.productAttributes.description, "Apple iPhone 15 has 128GB storage.")
+  assert.equal(before.description, description)
+  assert.ok(module().merchantPreviewItem(product({ description: "Amazon Fire TV supports Alexa." }), "https://www.sarastores.com", "IN").input)
+  assert.equal(module().merchantPreviewItem(product({ description: "Buy APPLE online at best price with offers in India." }), "https://www.sarastores.com", "IN").input, null)
+})
+
+test("known zero stock can remain in the feed but unknown stock and price above MRP stay blocked", () => {
+  const preview = module().merchantPreviewItem
+  assert.equal(preview(product({ stock: 0 }), "https://www.sarastores.com", "IN", true).input.productAttributes.availability, "OUT_OF_STOCK")
+  for (const extra of [{ stock: undefined }, { stock: " " }, { disabled: true }, { mrp: 19000 }]) {
+    assert.equal(preview(product(extra), "https://www.sarastores.com", "IN", true).input, null)
+  }
+  assert.ok(preview(product({ gtin: undefined, "EAN Number": "4006381333931" }), "https://www.sarastores.com", "IN").input)
+})
+
+test("XML feed and Merchant API share facts; an unverified catalogue returns a non-destructive 503", async () => {
+  let current = product()
+  const loader = sourceLoader({
+    "@/lib/public-catalogue": { publicCatalogueFilter: async () => ({}) },
+    "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: () => ({ find: () => {
+      const cursor = { sort: () => cursor, limit: () => cursor, toArray: async () => [current] }; return cursor
+    } }) } }) },
+  }, { env })
+  const route = loader.load("app/feed/google-merchant.xml/route.ts")
+  const response = await route.GET()
+  assert.equal(response.status, 200)
+  const xml = await response.text()
+  assert.ok(xml.includes("<g:title>Apple iPhone 15 (128GB) Black</g:title>"))
+  assert.ok(xml.includes("<g:price>19499.25 INR</g:price>"))
+  assert.ok(xml.includes("<g:gtin>4006381333931</g:gtin>"))
+  assert.ok(!xml.includes("<g:mpn>") && !xml.includes("<g:shipping>") && !xml.includes("g:tax_category"))
+  current = product({ gtin: undefined })
+  const blocked = await route.GET()
+  assert.equal(blocked.status, 503)
+  assert.equal(blocked.headers.get("Cache-Control"), "no-store")
+})
+
+test("full audit returns review fields without a Google write token", async () => {
+  const loader = sourceLoader({
+    "@/lib/auth": { requireFullAdmin: async () => ({ ok: true, user: { id: "admin-1" } }) },
+    "@/lib/public-catalogue": { publicCatalogueFilter: async filter => filter },
+    "@/lib/db-service": { normalizeId: values => values, getCollection: async () => ({ countDocuments: async () => 1,
+      find: () => { const cursor = { sort: () => cursor, skip: () => cursor, limit: () => cursor, toArray: async () => [product()] }; return cursor } }) },
+  }, { env })
+  const response = await loader.load("app/api/admin/google-merchant/route.ts").GET(new Request("https://www.sarastores.com/api/admin/google-merchant?view=audit"))
+  const data = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(data.token, null)
+  assert.equal(data.batchSize, 100)
+  assert.equal(data.items[0].fields.gtin, "4006381333931")
+})
+
 test("metadata preview and saved names retain iPhone styling, storage, units and model codes", () => {
   const loader = sourceLoader()
   const formatter = loader.load("lib/product-name-format.ts").formatProductName

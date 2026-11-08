@@ -7,6 +7,7 @@ const metadata = sourceLoader().load("lib/product-metadata-sheet.ts")
 function fixture(extra = {}) {
   return { _id: "phone-1", id: "phone-1", sku: "PHONE-1", name: "Nokia mobile phone blue variant",
     active: true, stock: 2, price: 100, mrp: 120, image: "/phone.png",
+    gtin: "4006381333931", description: "Synthetic Nokia phone in a blue finish.",
     manufacturerName: "HMD", raw: { Brand: "Old raw brand", "Manufacturer Name": "HMD" },
     ...metadata.metadataDocumentUpdates(metadata.extractMetadataSheetRow({ itemno: "PHONE-1", Brand: "NOKIA" })),
     ...extra }
@@ -39,7 +40,7 @@ function readers(product) {
       },
     }) } }) },
     "@/lib/seo-metadata": { seoText: value => String(value || "") },
-  })
+  }, { env: { NEXT_PUBLIC_SITE_URL: "https://fixture.sara.invalid" } })
 }
 
 test("uploaded metadata brand is used by SEO and Merchant feed even when the manufacturer differs", async () => {

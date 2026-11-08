@@ -24,7 +24,7 @@ export type ScraperImportRow = z.infer<typeof ScraperImportRowSchema>
 
 const COLUMN_FIELDS: Record<string, keyof ScraperImportRow> = {
   itemno: "itemno", itemnumber: "itemno", sku: "itemno",
-  name: "name", category: "category", subcategory: "subCategory",
+  name: "name", title: "name", category: "category", subcategory: "subCategory",
   chardesc: "charDesc", brand: "brand", productlink: "url", url: "url",
   shortlink: "url", link: "url",
 }
@@ -61,7 +61,7 @@ export function scraperRowValues(row: Record<string, unknown>): ScraperImportRow
   const fields = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeColumn(key), value == null ? "" : String(value).trim()]))
   return {
     itemno: fields.itemno || fields.itemnumber || fields.sku || "",
-    name: fields.name || "", category: fields.category || "", subCategory: fields.subcategory || "",
+    name: fields.name || fields.title || "", category: fields.category || "", subCategory: fields.subcategory || "",
     charDesc: fields.chardesc || "", brand: fields.brand || "",
     url: normalizeScraperUrl(fields.productlink || fields.url || fields.shortlink || fields.link || ""),
   }

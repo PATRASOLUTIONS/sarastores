@@ -15,6 +15,43 @@ export default function GoogleMerchantPanel() {
   const [confirmed, setConfirmed] = useState(false)
   const [error, setError] = useState("")
   const [results, setResults] = useState<MerchantSubmissionResult[] | null>(null)
+  const [audit, setAudit] = useState<MerchantPreviewItem[] | null>(null)
+  const [auditProgress, setAuditProgress] = useState("")
+  const auditAll = async () => {
+    if (busy) return
+    setBusy(true); setError(""); setAudit(null)
+    try {
+      const items: MerchantPreviewItem[] = []
+      let offset: number | null = 0
+      let total: number | null = null
+      while (offset !== null) {
+        const response = await apiFetch(`/api/admin/google-merchant?view=audit&offset=${offset}`, { cache: "no-store" })
+        const page: Preview & { error?: string } = await response.json()
+        if (!response.ok) throw new Error(page.error || "Catalogue audit failed")
+        if (total !== null && page.total !== total) throw new Error("Catalogue changed during the audit. Run it again.")
+        total = page.total
+        if (page.offset !== offset || (page.nextOffset !== null && page.nextOffset <= offset)) throw new Error("Invalid audit page. Run it again.")
+        items.push(...page.items)
+        setAuditProgress(`Checked ${items.length} of ${total} active, in-stock products`)
+        offset = page.nextOffset
+      }
+      if (new Set(items.map(item => item.id)).size !== items.length || items.length !== total) throw new Error("Catalogue changed during the audit. Run it again.")
+      setAudit(items)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Catalogue audit failed"); setAuditProgress("") }
+    finally { setBusy(false) }
+  }
+  const downloadAudit = () => {
+    if (!audit) return
+    const cell = (value: unknown) => {
+      const text = String(value ?? "")
+      return `"${(/^[\s]*[=+\-@]/.test(text) ? "'" + text : text).replace(/"/g, '""')}"`
+    }
+    const rows: unknown[][] = [["Product record ID", "Offer ID", "Formatted title", "Brand", "GTIN (text)", "Manufacturer MPN", "Description preview", "Image URL", "Price INR", "Stock", "Readiness issues", "Verified manufacturer/supplier source"]]
+    for (const item of audit) rows.push([item.id, item.offerId, item.title, item.fields.brand, item.fields.gtin, item.fields.mpn,
+      item.fields.description, item.fields.imageLink, item.price, item.stock, item.errors.join("; "), ""])
+    const url = URL.createObjectURL(new Blob(["\ufeff" + rows.map(row => row.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }))
+    const link = document.createElement("a"); link.href = url; link.download = "sara-merchant-supplier-verification.csv"; link.click(); URL.revokeObjectURL(url)
+  }
   const load = async (offset = 0) => {
     if (busy) return
     setBusy(true); setError(""); setConfirmed(false); setResults(null); setPreview(null)
@@ -50,8 +87,14 @@ export default function GoogleMerchantPanel() {
   return <section className="space-y-4 rounded-xl border border-blue-200 bg-white p-5">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-bold text-gray-900">Google Merchant Center</h2><p className="mt-1 text-sm text-gray-600">Start with active, in-stock products. Review product data in batches of five before sending it to Google for India in English.</p></div><a href="https://merchants.google.com/" target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-800 underline">Open Merchant Center</a></div>
     <p className="text-sm text-gray-600">Configure an online primary API data source, verify your website, and review shipping and returns in Merchant Center. Submitting product data starts Google’s processing; it does not guarantee listing approval.</p>
+    <a href="/admin/scraper" className="block text-sm font-semibold text-blue-800 underline">Collect missing product details with the Merchant bulk scraper</a>
     <button type="button" disabled={busy} onClick={() => void load()} className="rounded-lg bg-blue-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working…" : "Preview active, in-stock products"}</button>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+    <div className="space-y-2 rounded-lg border bg-gray-50 p-4">
+      <button type="button" disabled={busy} onClick={() => void auditAll()} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50">Check the full active, in-stock catalogue</button>
+      {auditProgress && <p role="status" className="text-sm text-gray-700">{auditProgress}</p>}
+      {audit && <><p className="text-sm text-gray-700">{audit.filter(item => item.input).length} ready; {audit.filter(item => !item.input).length} need verified facts.</p><button type="button" onClick={downloadAudit} className="text-sm font-semibold text-blue-800 underline">Download supplier verification sheet</button><p className="text-xs text-gray-600">Import GTIN columns as text to preserve leading zeros. Verify identifiers against the exact model, colour and storage variant using manufacturer or supplier records. This sheet does not update products or send data to Google.</p></>}
+    </div>
     {preview && <>
       <p aria-live="polite" className="text-sm text-gray-700">{preview.total} active, in-stock catalogue items · {ready.length} ready in this batch · {preview.items.length - ready.length} need attention.</p>
       <p className="text-sm text-gray-600">Account: {preview.accountId || "Not configured"} · API data source: {preview.dataSourceId || "Not configured"} · Feed label: {preview.feedLabel}</p>

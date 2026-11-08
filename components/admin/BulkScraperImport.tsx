@@ -217,7 +217,7 @@ export default function BulkScraperImport({ fetchProduct, supportedUrl }: {
   const failed = items.filter(item => item.status === "error").length
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="text-lg font-bold">Bulk import from Excel</h2>
+      <h2 className="text-lg font-bold">Create new products from Excel</h2>
       <p className="text-sm text-gray-600">
         Upload only <strong>itemno</strong> and <strong>product link</strong>.
         Up to 500 rows / 3 MB. Upload checks item numbers and prepares the queue; Run Scraper processes new items and automatically approves their specifications.

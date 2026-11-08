@@ -57,6 +57,7 @@ export interface SapFieldSuggestions {
 }
 
 export interface ScrapedProduct {
+  merchantFacts?: import("./merchant-facts").ScrapedMerchantFacts
   source: ScraperSource
   sourceUrl: string
   /** ASIN, FSN, site SKU or model code — whatever identifies it upstream. */

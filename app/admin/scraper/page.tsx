@@ -22,6 +22,7 @@ import { toast } from "react-hot-toast"
 import { apiFetch } from "@/lib/api-client"
 import SelectWithAdd from "@/components/admin/SelectWithAdd"
 import BulkScraperImport from "@/components/admin/BulkScraperImport"
+import MerchantBulkScraper from "@/components/admin/MerchantBulkScraper"
 import { SAP_OWNED_FIELDS, SCRAPER_LABELS, type ScraperSource } from "@/lib/scrapers/types"
 import { normalizeScraperUrl, scraperItemNumberKey } from "@/lib/scrapers/bulk-import"
 import { checkScraperItemNumbers } from "@/lib/scrapers/check-items-client"
@@ -383,6 +384,7 @@ export default function AdminScraperPage() {
         </p>
       </div>
 
+      <MerchantBulkScraper />
       <BulkScraperImport fetchProduct={fetchScrapedProduct} supportedUrl={url => detectSource(url) !== null} />
 
       {step !== "done" && checkedItemno && <p role="status" className="rounded-lg border bg-white p-3 text-sm">
