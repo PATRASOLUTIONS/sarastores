@@ -24,7 +24,7 @@ const PRIVATE_PAGES='^/(admin|api|account|dashboard|vendor|orders?|users?|custom
 const METRICS=['totalUsers','screenPageViews','sessions','engagementRate']
 const numeric=z.string().refine(s=>s.trim()!=='' && Number.isFinite(Number(s)) && Number(s)>=0,'Invalid GA4 metric')
 const metadata=z.object({timeZone:z.string().optional(),currencyCode:z.string().optional(),subjectToThresholding:z.boolean().optional(),dataLossFromOtherRow:z.boolean().optional(),samplingMetadatas:z.array(z.object({samplesReadCount:z.string(),samplingSpaceSize:z.string()})).optional(),emptyReason:z.string().optional()}).passthrough()
-const reportSchema=z.object({dimensionHeaders:z.array(z.object({name:z.string()})).default([]),metricHeaders:z.array(z.object({name:z.string()})),
+const reportSchema=z.object({dimensionHeaders:z.array(z.object({name:z.string()})).default([]),metricHeaders:z.array(z.object({name:z.string()})).default([]),kind:z.string().optional(),
   rows:z.array(z.object({dimensionValues:z.array(z.object({value:z.string()})).default([]),metricValues:z.array(z.object({value:numeric}))})).default([]),
   rowCount:z.number().int().nonnegative().default(0),metadata:metadata.default({}),propertyQuota:z.object({tokensPerHour:z.object({remaining:z.number().optional()}).optional()}).optional(),
 })
@@ -68,6 +68,9 @@ function parseReport(raw:unknown,dimensions:string[],metrics:string[]):Report {
   const parsed=reportSchema.safeParse(raw)
   if(!parsed.success)throw new Ga4Error('GA4 returned an unexpected report format. No counts were substituted.',503,'GA4_RESPONSE_INVALID')
   const r=parsed.data
+  // Google's empty dimensionless report omits repeated headers as well as rows.
+  // Accept that specific API response without relaxing validation of data rows.
+  if(r.kind==='analyticsData#runReport' && dimensions.length===0 && r.dimensionHeaders.length===0 && r.metricHeaders.length===0 && r.rows.length===0 && r.rowCount===0)r.metricHeaders=metrics.map(name=>({name}))
   if(r.dimensionHeaders.length!==dimensions.length || r.dimensionHeaders.some((h,i)=>h.name!==dimensions[i]) || r.metricHeaders.length!==metrics.length || r.metricHeaders.some((h,i)=>h.name!==metrics[i]) || r.rows.some(row=>row.dimensionValues.length!==dimensions.length || row.metricValues.length!==metrics.length))throw new Ga4Error('GA4 report headers do not match the requested metrics.',503,'GA4_RESPONSE_INVALID')
   return r
 }

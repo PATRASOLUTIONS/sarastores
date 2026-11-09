@@ -28,7 +28,7 @@ function fixture(options={}) {
     const {requests}=JSON.parse(init.body)
     const reports=requests.map(request=>{
       const dims=request.dimensions.map(d=>d.name),names=request.metrics.map(m=>m.name)
-      if(!dims.length)return report(dims,names,[[[],[123,650,145]]])
+      if(!dims.length)return options.emptyOverview?{kind:'analyticsData#runReport',metadata:{timeZone:'Asia/Kolkata',currencyCode:'INR'}}:report(dims,names,[[[],[123,650,145]]])
       if(dims.includes('pageReferrer'))return report(dims,names,[
         [['/products','https://www.sarastores.com/?campaign=a'],[60,100]],
         [['/products','https://www.sarastores.com/?campaign=b'],[40,80]],
@@ -123,6 +123,24 @@ test('valid empty page reports remain distinguishable from missing reporting acc
   const f=fixture({empty:true}),result=await f.lib.getPageFlow(f.q)
   assert.equal(result.pages.length,0);assert.equal(result.pageCount,0)
   assert.ok(result.propertyId);assert.equal(result.timeZone,'Asia/Kolkata')
+})
+
+test('Google empty dimensionless reports may omit headers and rows without becoming a connection error',async()=>{
+  const f=fixture({empty:true,emptyOverview:true}),result=await f.lib.getPageFlow(f.q)
+  assert.deepEqual({...result.summary},{users:0,views:0,sessions:0})
+  assert.equal(result.pages.length,0)
+  assert.equal(result.pageCount,0)
+  assert.equal(result.timeZone,'Asia/Kolkata')
+  assert.equal(result.propertyId,env.GOOGLE_GA4_PROPERTY_ID)
+  const detail=await f.lib.getPageFlow({...f.q,mode:'detail',path:'/products'})
+  assert.equal(detail.summary.users,0)
+  const route=sourceLoader({
+    '@/lib/auth':{requireFullAdmin:async()=>({ok:true})},
+    '@/lib/google-ga4':f.client,'@/lib/page-flow-data':f.lib,
+  }).load('app/api/admin/page-flow/route.ts')
+  const response=await route.GET(new NextRequest('http://localhost/api/admin/page-flow'))
+  assert.equal(response.status,200)
+  assert.equal((await response.json()).summary.users,0)
 })
 test('thresholding, sampling and data loss are reported explicitly',async()=>{
   const f=fixture({threshold:true}),r=await f.lib.getPageFlow(f.q)
