@@ -9,6 +9,8 @@
  */
 
 import { hasConsent } from "@/lib/consent-client"
+import { trackMetaCommerce } from "@/lib/meta-commerce"
+import { sendGoogleTagEvent } from "@/lib/google-tag-client"
 
 type Money = number | string
 declare global {
@@ -64,10 +66,14 @@ function itemsValue(items: AnalyticsItem[]): number {
 export function track(event: string, params: Record<string, unknown> = {}): void {
   if (typeof window === "undefined") return
 
+  // Advertising and analytics decisions are independent. The pixel mapper
+  // accepts only approved commerce fields and enforces advertising consent.
+  try { trackMetaCommerce(event, params) }
+  catch { console.warn("[Analytics] Pixel dispatch failed") }
+
   /**
-   * DPDP: usage measurement is not necessary to operate the store, so nothing
-   * is emitted until the visitor has granted the analytics category. An
-   * undecided visitor counts as a refusal.
+   * GA4/internal usage measurement requires analytics consent independently
+   * of the advertising pixel above. An undecided visitor counts as a refusal.
    */
   if (!hasConsent("analytics")) return
   if(event === 'payment_failed') previousPaymentFailed = true
@@ -81,8 +87,9 @@ export function track(event: string, params: Record<string, unknown> = {}): void
   try {
     window.dataLayer = window.dataLayer || []
     window.dataLayer.push(payload)
-    // Fires only if a GA4/gtag tag is added later.
-    if (typeof window.gtag === "function") window.gtag("event", event, params)
+    // Direct mode queues genuine events even before the Google script loads.
+    // GTM mode receives only the data-layer event above.
+    sendGoogleTagEvent(event, params)
   } catch (error) {
     console.warn("[Analytics] Tag dispatch failed", error)
   }

@@ -2,14 +2,15 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import crypto from "node:crypto"
 import { ObjectId } from "mongodb"
-import { NextRequest } from "next/server.js"
+import * as NextServer from "next/server.js"
+const { NextRequest } = NextServer
 import { sourceLoader } from "./source-loader.mjs"
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 
 const id = new ObjectId().toString()
 const otherId = new ObjectId().toString()
-const user = { id, name: "Fixture", email: "fixture@example.invalid", role: "user", sessionVersion: 0 }
+const user = { id, name: "Fixture", email: "fixture@example.com", role: "user", sessionVersion: 0 }
 const request = (body, route = "/api/test", method = "POST") => new NextRequest(`http://localhost:3010${route}`, {
   method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 })
@@ -342,17 +343,18 @@ test("payment-provider failure cannot fall back to a client-supplied amount", as
 
 test("catalogue pricing ignores forged software type and upstream identifiers", async () => {
   const loader = sourceLoader({
+    "@/lib/store-stock": { storesHoldingStock: async () => new Set(["fixture-store"]) },
     "@/lib/db-service": {
       COLLECTIONS: { PRODUCTS: "products" },
       getCollection: async (name) => name === "settings"
         ? { findOne: async () => ({ shippingFee: 99, freeShippingThreshold: 1000 }) }
-        : { find: () => ({ toArray: async () => name === "products" ? [{ _id: new ObjectId(id), name: "Hardware", price: 100, stock: 1 }] : [] }) },
+        : { find: () => ({ toArray: async () => name === "products" ? [{ _id: new ObjectId(id), name: "Hardware", price: 100, stock: 1, active: true }] : [] }) },
     },
   })
   const result = await loader.load("lib/order-pricing.ts").priceOrder([{
     id, quantity: 1, type: "software", provider: "exlr8", kgenProductId: "attacker-choice", validityYears: 99,
   }], { userId: null })
-  assert.equal(result.ok, true)
+  assert.equal(result.ok, true, JSON.stringify(result))
   assert.equal(result.items[0].type, "hardware")
   assert.equal(result.items[0].provider, null)
   assert.equal(result.items[0].kgenProductId, null)
@@ -438,6 +440,9 @@ test("in-store approval validates its checkout challenge, not an email-only OTP"
   assert.equal(result.status, 400)
 })
 
+const fixturePickupStoreId = new ObjectId().toString()
+const fixturePickup = { method: "pickup", storeId: fixturePickupStoreId }
+
 function orderLoader({ intent = null, verified = true, account = user, priced = price, couponResult = { ok: true }, reusedTransaction = false, env = {} } = {}) {
   let writes = 0
   let persisted
@@ -450,10 +455,14 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
     consumeOrderCoupon: async (...args) => { consumptions.push(args); return couponResult },
   }
   const loader = sourceLoader({
+    "next/server": { ...NextServer, after() {} },
+    "@/lib/store-stock": { storesHoldingStock: async () => new Set([fixturePickupStoreId]) },
     "@/lib/auth": auth(account),
     "@/lib/diwali/online-orders": { prepareOnlineDiwaliOrder: async () => null, recordOnlineDiwaliOrder: async () => {} },
     "@/lib/rate-limit": { checkRateLimit: async () => ({ success: true }), RATE_LIMITS: { ORDERS: {} } },
     "@/lib/order-pricing": orderPricing,
+    "@/lib/gift-promotions": { quoteGiftPromotions: async () => [], consumeGiftPromotions: async () => {} },
+    "@/lib/pincode-store": { getPincodeRestrictions: async () => ({ mode: "all", blockedPincodes: [], allowedPincodes: [] }) },
     "@/lib/order-id": { generateOrderId: async () => "FIXTURE-ORDER" },
     "@/lib/loyalty": { ...noRewards, reverseOrderPoints: async () => {}, redeemPoints: async () => ({ ok: true }) },
     "@/lib/software-fulfillment": { fulfillSoftwareOrder: async () => { throw new Error("Fulfillment must not execute in this test") } },
@@ -471,7 +480,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
     "@/lib/db-service": {
       ...mockDb({}),
       getCollection: async (name) => ({
-        findOne: async (filter) => filter?.["storePayment.transactionId"]
+        findOne: async (filter) => name === "store_locations" ? { _id: new ObjectId(fixturePickupStoreId), shopName: "Fixture Store", storeCode: "FIXTURE", mobileNo: "9000000000" } : filter?.["storePayment.transactionId"]
           ? (reusedTransaction ? { _id: new ObjectId() } : null)
           : ({ employeeId: "fixture", email: user.email }),
         find: () => ({ toArray: async () => [] }),
@@ -485,7 +494,7 @@ function orderLoader({ intent = null, verified = true, account = user, priced = 
 
 const orderBody = {
   items: [{ id, quantity: 1 }],
-  customer: { email: user.email, name: "Fixture", phone: "0000000000" },
+  customer: { email: user.email, name: "Fixture", firstName: "Fixture", lastName: "Customer", phone: "9000000000", address: "123 Synthetic Test Street", city: "Bengaluru", state: "Karnataka", zipCode: "560001", country: "India" },
 }
 
 test("standard checkout rejects reusable payment references without a verified bound intent", async () => {
@@ -536,7 +545,7 @@ test("a consumed payment intent cannot create another order", async () => {
 test("authenticated cash checkout persists server pricing as unpaid and clears the real cart collection", async () => {
   const fixture = orderLoader()
   const response = await fixture.route.POST(request({ ...orderBody, paymentMethod: "cash", total: 1 }))
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200, await response.clone().text())
   assert.equal(fixture.writes(), 1)
   assert.equal(fixture.persisted().total, 100)
   assert.equal(fixture.persisted().status, "pending")
@@ -604,15 +613,15 @@ for (const method of ["razorpay", "instore"]) {
 
 const storeIntent = (fingerprint, overrides = {}) => ({
   _id: "SARAECOM-777001", method: "store-payment", status: "created", amount: 10000, fingerprint,
-  store: { id: "store-1", name: "Fixture Store", phone: "9876543210", email: "store@example.invalid" }, ...overrides,
+  store: { id: fixturePickupStoreId, name: "Fixture Store", phone: "9876543210", email: "store@example.invalid" }, ...overrides,
 })
 const storeDetails = { requestId: "SARAECOM-777001", requestToken: "x".repeat(43), platform: "phonepe", transactionId: "T2410231234" }
 
 test("pay at store creates a pending order under the reference the store was already sent", async () => {
-  const fingerprint = sourceLoader().load("lib/checkout-payment.ts").checkoutFingerprint(price, {}, 100)
+  const fingerprint = sourceLoader().load("lib/checkout-payment.ts").checkoutFingerprint(price, { fulfilment: fixturePickup }, 100)
   const fixture = orderLoader({ intent: storeIntent(fingerprint) })
-  const response = await fixture.route.POST(request({ ...orderBody, paymentMethod: "store-payment", paymentDetails: storeDetails }))
-  assert.equal(response.status, 200)
+  const response = await fixture.route.POST(request({ ...orderBody, fulfilment: fixturePickup, paymentMethod: "store-payment", paymentDetails: storeDetails }))
+  assert.equal(response.status, 200, await response.clone().text())
   const order = fixture.persisted()
   assert.equal(order.orderId, "SARAECOM-777001")
   assert.equal(order.status, "pending")
@@ -625,7 +634,7 @@ test("pay at store creates a pending order under the reference the store was alr
 })
 
 test("pay at store refuses bad transaction details, changed carts, spent requests, reused IDs and the disabled flag", async () => {
-  const fingerprint = sourceLoader().load("lib/checkout-payment.ts").checkoutFingerprint(price, {}, 100)
+  const fingerprint = sourceLoader().load("lib/checkout-payment.ts").checkoutFingerprint(price, { fulfilment: fixturePickup }, 100)
   for (const [details, status, options] of [
     [{ ...storeDetails, transactionId: "" }, 400, {}],
     [{ ...storeDetails, transactionId: "T24 1023; DROP" }, 400, {}],
@@ -638,7 +647,7 @@ test("pay at store refuses bad transaction details, changed carts, spent request
     [storeDetails, 403, { env: { PAY_AT_STORE_ENABLED: "false" } }],
   ]) {
     const fixture = orderLoader({ intent: storeIntent(fingerprint), ...options })
-    const response = await fixture.route.POST(request({ ...orderBody, paymentMethod: "store-payment", paymentDetails: details }))
+    const response = await fixture.route.POST(request({ ...orderBody, fulfilment: fixturePickup, paymentMethod: "store-payment", paymentDetails: details }))
     assert.equal(response.status, status, JSON.stringify(details))
     assert.equal(fixture.writes(), 0)
   }
@@ -800,9 +809,9 @@ test("failed consent ledger requests are handled and explicitly reported", async
 
 for (const [analytics, advertising, expected] of [
   [false, false, []],
-  [true, false, ["ga4-src", "ga4-init", "ms-clarity"]],
+  [true, false, ["sara-google-tag", "ms-clarity"]],
   [false, true, ["meta-pixel"]],
-  [true, true, ["ga4-src", "ga4-init", "meta-pixel", "ms-clarity"]],
+  [true, true, ["sara-google-tag", "meta-pixel", "ms-clarity"]],
 ]) {
   test(`marketing tags respect granular consent analytics=${analytics}, advertising=${advertising}`, () => {
     const loader = sourceLoader({
@@ -810,7 +819,7 @@ for (const [analytics, advertising, expected] of [
       "@/components/ConsentGate": ({ category, children }) => ({ analytics, advertising })[category] ? children : null,
     }, { env: { NEXT_PUBLIC_GA_ID: "G-FIXTURE", NEXT_PUBLIC_META_PIXEL_ID: "fixture", NEXT_PUBLIC_CLARITY_ID: "fixture" } })
     const markup = renderToStaticMarkup(React.createElement(loader.load("components/MarketingTags.tsx").default))
-    for (const tag of ["ga4-src", "ga4-init", "meta-pixel", "ms-clarity"]) {
+    for (const tag of ["sara-google-tag", "meta-pixel", "ms-clarity"]) {
       assert.equal(markup.includes(`id="${tag}"`), expected.includes(tag), tag)
     }
   })
@@ -821,10 +830,10 @@ test("a configurable GTM container requires both analytics and advertising conse
     const loader = sourceLoader({
       "next/script": (props) => React.createElement("script", { id: props.id }),
       "@/components/ConsentGate": ({ category, children }) => ({ analytics, advertising })[category] ? children : null,
-    }, { env: { NEXT_PUBLIC_GTM_ID: "GTM-FIXTURE", NEXT_PUBLIC_GA_ID: "G-FIXTURE" } })
+    }, { env: { NEXT_PUBLIC_GOOGLE_TAG_MODE: "gtm", NEXT_PUBLIC_GTM_ID: "GTM-FIXTURE", NEXT_PUBLIC_GA_ID: "G-FIXTURE" } })
     const markup = renderToStaticMarkup(React.createElement(loader.load("components/MarketingTags.tsx").default))
     assert.equal(markup.includes('id="gtm-init"'), analytics && advertising)
-    assert.equal(markup.includes('id="ga4-init"'), false)
+    assert.equal(markup.includes('id="sara-google-tag"'), false)
   }
 })
 
@@ -886,7 +895,7 @@ function exportFixture({ records = [], failure = null, consentFailure = false } 
   return sourceLoader({
     "@/lib/auth": auth(),
     "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: (name) => ({
-      findOne: async () => ({ _id: new ObjectId(id), email: user.email, password: "fixture-private" }),
+      findOne: async () => ({ _id: new ObjectId(id), email: user.email, emailVerified: true, password: "fixture-private" }),
       find: (filter) => {
         assert.equal(name === "leads" || name === "contact_inquiries" ? filter.email : filter.userId,
           name === "leads" || name === "contact_inquiries" ? user.email : id)

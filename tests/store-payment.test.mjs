@@ -11,7 +11,7 @@ const store = { id: storeId, name: "Fixture Store", phone: "9876543210", email: 
 const customer = { name: "Arun Kumar", email: "shopper@example.com", phone: "9123456780", address: "1 Fixture Street", city: "Bengaluru", state: "Karnataka", zipCode: "560001", country: "India" }
 const quote = {
   ok: true, amount: 1234, fingerprint: "fixture-fingerprint",
-  pricing: { items: [{ id: "p1", name: "Fixture TV", price: 1234, quantity: 1 }], total: 1234 },
+  pricing: { items: [{ id: "p1", name: "Fixture TV", price: 1234, quantity: 1, type: "hardware" }], total: 1234 },
 }
 const post = (body, path = "/api/payment/store-request") => new NextRequest(`https://fixture.invalid${path}`, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),

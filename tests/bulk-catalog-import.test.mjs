@@ -66,7 +66,7 @@ test("scraper rows require only itemno and product link while retaining legacy m
   for (const field of ["itemno", "url"]) {
     assert.throws(() => parseScraperRows([{ ...row, [field]: "" }]), /Row 2/)
   }
-  assert.throws(() => parseScraperRows([row, { ...row, itemno: row.itemno.toLowerCase() }]), /duplicate itemno/)
+  assert.equal(parseScraperRows([row, { ...row, itemno: row.itemno.toLowerCase() }]).length, 2, "queue preparation handles duplicate item numbers")
   assert.throws(() => parseScraperRows([]), /between 1 and 500/)
   const rows = Array.from({ length: 500 }, (_, i) => ({ ...row, itemno: `ITEM${i}` }))
   assert.equal(parseScraperRows(rows).length, 500)
@@ -183,21 +183,14 @@ test("two-column scraper rows publish with scraped metadata fallbacks", async ()
   assert.equal(specs[0].manufacturer_name, "Scraped brand")
 })
 
-test("retries update same product and preserve selling price, MRP, stock and slug", async () => {
-  const fixture = publishingFixture({ initial: [{
-    _id: new ObjectId(), itemno: row.itemno, price: 60, mrp: 120,
-    stock: 7, slug: "existing-slug", raw: { "CHAR DESC": "Old" },
-  }] })
-  await fixture.publish({ ...row, charDesc: "" }, productFixture())
-  await fixture.publish({ ...row, charDesc: "" }, productFixture())
-  const { products, specs } = fixture.state()
-  assert.equal(products.length, 1)
-  assert.equal(specs.length, 1)
-  assert.equal(products[0].price, 60)
-  assert.equal(products[0].mrp, 120)
-  assert.equal(products[0].stock, 7)
-  assert.equal(products[0].slug, "existing-slug")
-  assert.equal(products[0].raw["CHAR DESC"], "")
+test("repeated scraping skips an existing product without changing price, stock, slug or specifications", async () => {
+  const existing={_id:new ObjectId(),itemno:row.itemno,price:60,mrp:120,stock:7,slug:"existing-slug",raw:{"CHAR DESC":"Old"}}
+  const fixture=publishingFixture({initial:[existing]})
+  const before=JSON.stringify(fixture.state().products)
+  for(let i=0;i<2;i++)assert.equal((await fixture.publish({...row,charDesc:""},productFixture())).added,false)
+  assert.equal(JSON.stringify(fixture.state().products),before)
+  assert.equal(fixture.state().specs.length,0)
+  assert.equal(fixture.state().transactions,0)
 })
 
 test("missing source price does not invent stock or fail an otherwise usable specification", async () => {
@@ -210,17 +203,16 @@ test("missing source price does not invent stock or fail an otherwise usable spe
   assert.equal(fixture.state().products[0].price, 0)
 })
 
-test("locked/ambiguous products fail before mutation and all failures end sessions", async () => {
-  for (const options of [
-    { locked: true },
-    { initial: [{ _id: new ObjectId() }, { _id: new ObjectId() }] },
-    { initial: [{ _id: new ObjectId(), price: 150, mrp: 100 }] },
-  ]) {
-    const fixture = publishingFixture(options)
-    await assert.rejects(fixture.publish(row, productFixture()), /locked|Multiple products|Price exceeds/)
-    assert.equal(fixture.state().sessionsEnded, 1)
-    assert.equal(fixture.state().products.length, options.initial?.length ?? 0)
+test("locked specifications and invalid scraped prices fail before mutation; existing matches remain unchanged", async () => {
+  for(const locked of [true,false]){
+    const fixture=publishingFixture({locked})
+    const product=productFixture();if(!locked){product.sap.price=150;product.mrp=100}
+    await assert.rejects(fixture.publish(row,product),/locked|Price exceeds/)
+    assert.equal(fixture.state().sessionsEnded,1);assert.equal(fixture.state().products.length,0)
   }
+  const fixture=publishingFixture({initial:[{_id:new ObjectId(),itemno:row.itemno},{_id:new ObjectId(),sku:row.itemno}]})
+  assert.equal((await fixture.publish(row,productFixture())).added,false)
+  assert.equal(fixture.state().products.length,2);assert.equal(fixture.state().transactions,0)
 })
 
 test("specification failure or transaction commit failure leaves neither partial product nor partial approval", async () => {
@@ -236,11 +228,12 @@ test("specification failure or transaction commit failure leaves neither partial
 test("publish API guards first, validates source/payload and reports concurrent saves truthfully", async () => {
   let authorized = false, calls = 0, fail = false
   const loader = sourceLoader({
+    "@/lib/scrapers/item-numbers": { existingScraperItemNumbers: async () => new Set() },
     "@/lib/auth": { requireAdmin: async () => authorized ? { ok: true } : { ok: false, response: Response.json({ error: "Unauthorized" }, { status: 401 }) } },
     "@/lib/scrapers/publish": { publishScrapedProduct: async () => {
       calls++
       if (fail) throw { code: 11000 }
-      return { id: "fixture", slug: "fixture-product" }
+      return { added: true, itemno: row.itemno, product: { id: "fixture", slug: "fixture-product" } }
     } },
   })
   const route = loader.load("app/api/scrape/publish/route.ts")
@@ -343,6 +336,7 @@ function queueHarness(fetchProduct, supportedUrl = () => true) {
   const publishedRows = []
   const navigation = []
   const loader = sourceLoader({
+    "@/lib/scrapers/check-items-client": { checkScraperItemNumbers: async () => new Set() },
     react: {
       useState: initial => {
         const index = cursor++
@@ -362,7 +356,7 @@ function queueHarness(fetchProduct, supportedUrl = () => true) {
       assert.equal(url, "/api/scrape/publish")
       published.push(options.json.row.itemno)
       publishedRows.push(options.json.row)
-      return Response.json({ success: true })
+      return Response.json({ success: true, added: true })
     } },
     "next/navigation": { useRouter: () => ({ push: path => navigation.push(path) }) },
     "react-hot-toast": { toast: { error: message => { throw new Error(message) }, success: () => {} } },
@@ -431,7 +425,7 @@ test("actual queue processes every uploaded row, continues after failure and ret
   assert.equal(calls, 4)
   assert.deepEqual(queue.published, ["A", "C", "B"])
   assert.ok(queue.items().every(item => item.status === "success"))
-  assert.deepEqual(queue.navigation, ["/admin/products"])
+  assert.deepEqual(queue.navigation, [], "results remain available for reviewing skipped and failed rows")
 })
 
 test("actual queue stop waits for current row and a second run resumes pending rows without duplicates", async () => {
@@ -447,7 +441,7 @@ test("actual queue stop waits for current row and a second run resumes pending r
   assert.deepEqual(queue.navigation, [])
   await queue.button("Run Scraper").props.onClick()
   assert.deepEqual(queue.published, ["A", "B", "C"])
-  assert.deepEqual(queue.navigation, ["/admin/products"])
+  assert.deepEqual(queue.navigation, [], "results remain available for reviewing skipped and failed rows")
 })
 
 test("actual Excel upload accepts 500 rows but rejects truncated sheets instead of silently losing later items", async () => {
@@ -488,7 +482,8 @@ test("invalid Row 3 opens full editable Excel data and corrected cells populate 
   invalid.props.onChange({ target: { value: "https://www.lg.com/in/corrected" } })
   queue.field("Row 3, name").props.onChange({ target: { value: "Corrected name" } })
   assert.equal(queue.field("Row 3, product link").props["aria-invalid"], false)
-  queue.button("Validate & use sheet").props.onClick()
+  await queue.button("Validate & use sheet").props.onClick()
+  await new Promise(setImmediate)
   assert.equal(queue.editorOpen(), false)
   assert.equal(queue.items().length, 3)
   assert.equal(queue.items()[1].row.name, "Corrected name")
@@ -506,14 +501,15 @@ test("editor shows all issues, opens first invalid page and preserves drafts whe
     ...row, itemno: `ITEM${index}`, "product link": index === 30 ? "https://unsupported.example/item" : row.url,
     brand: index === 45 ? "" : row.brand,
   }))
-  rows[45].itemno = rows[30].itemno
+  rows[45].itemno = ""
   await queue.upload({ rows, expectError: true })
   assert.equal(queue.editorOpen(), true)
   assert.ok(queue.field("Row 32, product link"))
   assert.equal(queue.field("Row 2, name"), undefined)
   assert.equal(queue.field("Row 47, itemno").props["aria-invalid"], true)
   queue.field("Row 32, product link").props.onChange({ target: { value: row.url } })
-  queue.button("Validate & use sheet").props.onClick()
+  await queue.button("Validate & use sheet").props.onClick()
+  await new Promise(setImmediate)
   assert.equal(queue.editorOpen(), true)
   assert.equal(queue.items().length, 0)
   queue.button("Close editor").props.onClick()
@@ -528,7 +524,8 @@ test("editor shows all issues, opens first invalid page and preserves drafts whe
   queue.button("Next sheet page").props.onClick()
   queue.button("Next sheet page").props.onClick()
   assert.ok(queue.field("Row 56, name"))
-  queue.button("Validate & use sheet").props.onClick()
+  await queue.button("Validate & use sheet").props.onClick()
+  await new Promise(setImmediate)
   assert.equal(queue.editorOpen(), false)
   assert.equal(queue.items().length, 55)
 })
@@ -540,7 +537,8 @@ test("a two-column sheet queues successfully and changing a required key invalid
   queue.button("Edit uploaded sheet").props.onClick()
   queue.field("Row 2, itemno").props.onChange({ target: { value: "" } })
   assert.equal(queue.items().length, 0)
-  queue.button("Validate & use sheet").props.onClick()
+  await queue.button("Validate & use sheet").props.onClick()
+  await new Promise(setImmediate)
   assert.equal(queue.editorOpen(), true)
   assert.equal(queue.field("Row 2, itemno").props["aria-invalid"], true)
 })
@@ -562,7 +560,7 @@ test("shared validator reports every row and field without changing uploaded val
   const { validateScraperRows, scraperColumnField } = sourceLoader().load("lib/scrapers/bulk-import.ts")
   const data = [
     { ...row, name: "", url: "https://unsupported.example/path" },
-    { ...row, itemno: row.itemno.toLowerCase(), brand: "" },
+    { ...row, itemno: row.itemno.toLowerCase(), brand: "", url: "" },
   ]
   const copy = JSON.stringify(data)
   const result = validateScraperRows(data, url => !url.includes("unsupported"), [3, 7])
@@ -580,7 +578,7 @@ function adminCatalogFixture(records, { authorized = true, fullAdmin = true, fai
   const queries = []
   let guardCalls = 0
   let connections = 0
-  const matching = filter => records.filter(product => filter.active === undefined || product.active === filter.active)
+  const matching = filter => records.filter(product => { const active=filter.active ?? filter.$and?.find(part=>part.active!==undefined)?.active; return active === undefined || product.active === active })
   const collection = {
     find: (filter, options) => {
       let skip = 0, limit = 0, ordered
@@ -650,7 +648,7 @@ test("newly scraped product beyond the old 500-row list is visible through compl
     raw: { "Item No.": `EXISTING-${index}`, "ITEM CATEGORY": "Legacy category" },
   }))
   const published = publishingFixture()
-  const saved = await published.publish(row, productFixture())
+  const saved = (await published.publish(row, productFixture())).product
   records.push(published.state().products[0])
   const fixture = adminCatalogFixture(records)
   const legacy = await fixture.route.GET(new Request("https://fixture.invalid/api/products?include_inactive=true"))
@@ -674,7 +672,7 @@ test("newly scraped product beyond the old 500-row list is visible through compl
   assert.equal(all[0].description, undefined)
   assert.equal(all[0].raw["ITEM CATEGORY"], "Legacy category")
   assert.ok(all.every(item => !("_id" in item)))
-  assert.ok(fixture.queries.every(query => query.options.projection.raw === 1))
+  assert.ok(fixture.queries.filter(query => query.options?.projection).every(query => query.options.projection.raw === 1))
   const metadata = await fixture.client.fetchAllAdminProducts(true)
   assert.equal(metadata.length, 1206, "metadata template is no longer silently capped at 1,000")
   assert.equal(metadata[0].description, "Metadata description")
@@ -709,7 +707,7 @@ test("public product reads retain active filtering, default/max bounds, paging h
   assert.ok(firstData.every(product => product.active === true))
   assert.equal(first.headers.get("X-Total-Count"), "1250")
   assert.equal(first.headers.get("X-Has-More"), "true")
-  assert.match(first.headers.get("cache-control"), /^public,/)
+  assert.equal(first.headers.get("cache-control"), "no-store")
   const bounded = await fixture.route.GET(new Request("https://fixture.invalid/api/products?limit=100000"))
   assert.equal((await bounded.json()).length, 1000)
   const remaining = await fixture.route.GET(new Request("https://fixture.invalid/api/products?skip=1000&limit=1000"))
@@ -934,7 +932,7 @@ test("18,000 rows are matched and written in bounded batches without creating pr
   assert.equal(processed, 18000)
 })
 
-test("case-insensitive and legacy item numbers match; duplicates use last row and unknown numbers fail", async () => {
+test("case-insensitive and legacy item numbers match; duplicates use last row and unmatched master-sheet rows are ignored", async () => {
   const fixture = priceFixture([{ _id: new ObjectId(), raw: { "Item No.": "AbC" }, price: 50, mrp: 100 }])
   const result = await fixture.process([
     { itemno: "abc", price: 60, mrp: 120 },
@@ -942,10 +940,11 @@ test("case-insensitive and legacy item numbers match; duplicates use last row an
     { itemno: "UNKNOWN", price: 60, mrp: 120 },
   ], false)
   assert.equal(result.success, 1)
-  assert.equal(result.failed, 1)
+  assert.equal(result.failed, 0)
   assert.equal(result.ignoredDuplicates, 1)
   assert.equal(fixture.writes[0].update.$set.price, 70)
-  assert.match(result.errors[0], /Product not found/)
+  assert.equal(result.ignoredUnmatched,1)
+  assert.equal(result.errors.length,0)
 })
 
 test("concurrent price changes report unmatched writes accurately", async () => {

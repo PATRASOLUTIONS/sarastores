@@ -6,6 +6,7 @@ import path from "node:path"
 import PaytmChecksum from "paytmchecksum"
 import { NextRequest } from "next/server.js"
 import { sourceLoader } from "./source-loader.mjs"
+const { cartLineKey } = sourceLoader().load("lib/cart-line.ts")
 import { checkDeploymentEnvironment } from "../scripts/check-deployment-env.mjs"
 
 const key = crypto.randomBytes(8).toString("hex")
@@ -698,7 +699,7 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked", 
     "@/lib/checkout-recovery": { readHostedCheckout: () => null, readCheckoutRecovery: () => null },
     "@/hooks/useCart": { useCart: () => ({
       cart,
-      clearCart() {}, removeFromCart() {}, refreshItemPrices(prices) { cart = cart.map(item => ({ ...item, price: prices[item.id] ?? item.price })) }, isLoading: false,
+      clearCart() {}, removeFromCart() {}, refreshItemPrices(prices) { cart = cart.map(item => ({ ...item, price: prices[cartLineKey(item)] ?? prices[item.id] ?? item.price })) }, isLoading: false,
     }) },
     "@/hooks/useCartCoupon": { useCartCoupon: () => ({
       couponCode: "", setCouponCode() {}, appliedCoupon: selectedCoupon, couponDiscount: discount,

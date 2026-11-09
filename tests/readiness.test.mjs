@@ -925,6 +925,7 @@ test("public campaigns normalize native/legacy product IDs, hide disabled produc
   const doc = { _id: new ObjectId(), name: "Fixture", slug: "fixture", isActive: true, productIds: [productId.toString(), "legacy-id"] }
   let active = true
   const route = sourceLoader({
+    "@/lib/public-catalogue": { getPublicCatalogueSelection: async () => ({ representativeIds: new Map([[productId.toString(),[productId]],["legacy-id",["legacy-id"]]]) }) },
     "@/lib/db-service": {
       normalizeId: value => { const { _id, ...fields } = value; return { ...fields, id: _id.toString() } },
       getCollection: async name => name === "campaign_pages" ? { findOne: async query => {
@@ -932,8 +933,8 @@ test("public campaigns normalize native/legacy product IDs, hide disabled produc
         return active ? doc : null
       } } : { find: query => {
         assert.equal(query.active, true)
-        assert.ok(query.$or[0]._id.$in[0].equals(productId))
-        assert.ok(query.$or[1]._id.$in.includes("legacy-id"))
+        assert.ok(query._id.$in[0].equals(productId))
+        assert.ok(query._id.$in.includes("legacy-id"))
         return { toArray: async () => [
           { _id: productId, name: "Native", price: 100 }, { _id: "legacy-id", name: "Legacy", price: 200 },
         ] }
@@ -2217,12 +2218,13 @@ test("product feeds return uncached 503 instead of publishing an empty successfu
   }
 })
 
-test("merchant feed honors a legacy false shipping flag and retains real prices, identifiers and XML escaping", async () => {
+test("merchant feed retains verified selling prices, identifiers and XML escaping while account settings own shipping", async () => {
   const fixtures = [
-    { _id: new ObjectId(), name: "Fixture & <TV>", slug: "fixture-tv", price: 50, mrp: 60, image: "/fixture.png", stock: 2, sku: "FIXTURE-SKU", free_delivery: "false" },
-    { _id: new ObjectId(), name: "Free shipping", slug: "fixture-free", price: 70, image: "/fixture.png", stock: 0, free_delivery: "true" },
+    { _id: new ObjectId(), name: "Fixture & <TV>", slug: "fixture-tv", price: 50, mrp: 60, image: "/fixture.png", stock: 2, sku: "FIXTURE-SKU", free_delivery: "false", active: true, brand: "Fixture", taxonomySource: "metadata-sheet", gtin: "4006381333931", description: "Fixture television for isolated tests." },
+    { _id: new ObjectId(), name: "Free shipping", slug: "fixture-free", price: 70, image: "/fixture.png", stock: 0, free_delivery: "true", active: true, brand: "Fixture", taxonomySource: "metadata-sheet", sku: "FIXTURE-FREE", gtin: "4006381333931", description: "Fixture television with known stock." },
   ]
   const loader = sourceLoader({
+    "@/lib/public-catalogue": { publicCatalogueFilter: async () => ({ active: true }) },
     "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: name => {
       assert.equal(name, "products")
       const cursor = { sort: () => cursor, limit: () => cursor, toArray: async () => fixtures }
@@ -2235,12 +2237,12 @@ test("merchant feed honors a legacy false shipping flag and retains real prices,
   const items = xml.match(/<item>[\s\S]*?<\/item>/g)
   assert.equal(items.length, 2)
   assert.match(items[0], /&amp;/)
-  assert.match(items[0], /&lt;/)
-  assert.match(items[0], /<g:price>60\.00 INR<\/g:price>/)
-  assert.match(items[0], /<g:sale_price>50\.00 INR<\/g:sale_price>/)
+  assert.doesNotMatch(items[0], /<TV>/, "retailer HTML must not survive in Merchant titles")
+  assert.match(items[0], /<g:price>50\.00 INR<\/g:price>/)
+  assert.doesNotMatch(items[0], /<g:sale_price>/)
   assert.match(items[0], /<g:id>FIXTURE-SKU<\/g:id>/)
   assert.doesNotMatch(items[0], /<g:shipping>/)
-  assert.match(items[1], /<g:shipping>/)
+  assert.doesNotMatch(items[1], /<g:shipping>/)
   assert.match(items[1], /<g:availability>out_of_stock<\/g:availability>/)
 })
 
@@ -2249,7 +2251,7 @@ function couponFixture(overrides = {}) {
     { _id: new ObjectId(), sku: "FIXTURE-TV", price: 100, stock: 20, active: true, category: "fixture-category", brand: "Fixture" },
     { _id: "fixture-legacy", price: 50, stock: 20, active: true, category: "other-category", brand: "Other" },
   ]
-  const software = [{ _id: "fixture-software", price: 200, active: true, sku: "FIXTURE-SOFTWARE" }]
+  const software = [{ _id: "fixture-software", price: 200, active: true, trackInventory: false, sku: "FIXTURE-SOFTWARE" }]
   const coupon = { _id: new ObjectId(), code: "FIXTURE", name: "Fixture coupon", active: true, type: "percentage", value: 10,
     applyScope: "all", usageCount: 0, usageLimit: 0, perCustomerLimit: 0, usageByUser: [], ...overrides }
   let userId = null
@@ -2286,6 +2288,7 @@ function couponFixture(overrides = {}) {
     },
   }
   const loader = sourceLoader({
+    "@/lib/store-stock": { storesHoldingStock: async () => new Set(["fixture-store"]) },
     "@/lib/db-service": { COLLECTIONS: { PRODUCTS: "products", COUPONS: "coupons" }, getCollection: async name => {
       assert.ok(collections[name], `Unexpected collection ${name}`)
       return collections[name]
@@ -2381,8 +2384,8 @@ test("buy-get preserves cheapest-unit grouping without per-unit allocation", asy
   fixture.products[1].price = 0.0001
   fixture.products[1].stock = 1_000_000_000
   const large = await fixture.pricing.quoteCoupon([{ id: "fixture-legacy", quantity: 1_000_000_000 }], "FIXTURE", null)
-  assert.equal(large.ok, true)
-  assert.equal(large.coupon.discount, 33333)
+  assert.equal(large.ok, false)
+  assert.match(large.error, /quantity|purchasable/i)
 })
 
 test("coupon discounts never exceed the eligible fractional subtotal", async () => {
@@ -4120,7 +4123,8 @@ test("price imports share preview/execution validation, deduplicate consistently
   ]
   const preview = await importer.processProductPrices(rows, true)
   assert.equal(preview.ignoredDuplicates, 1)
-  assert.equal(preview.updates.length, 9)
+  assert.equal(preview.updates.length, 4)
+  assert.equal(preview.ignoredUnmatched,5)
   assert.equal(preview.updates.find(row => row.sku === "A").newPrice, 90)
   assert.equal(preview.updates.find(row => row.sku === "B").error, "Price > MRP")
   assert.equal(preview.updates.filter(row => row.status === "valid").length, 2)
@@ -4128,7 +4132,7 @@ test("price imports share preview/execution validation, deduplicate consistently
   const result = await importer.processProductPrices(rows, false)
   assert.equal(result.ignoredDuplicates, 1)
   assert.equal(result.success, 1)
-  assert.equal(result.failed, 8)
+  assert.equal(result.failed, 3)
   assert.equal(result.success + result.failed, preview.updates.length)
   assert.equal(writes.length, 2)
   assert.equal(writes[0].update.$set.price, 90)
@@ -4867,6 +4871,7 @@ test("server brand structured data uses the configured origin, safe serializatio
   const { renderToStaticMarkup } = await import("react-dom/server")
   const brand = { name: "Fixture </script> Brand", slug: "fixture-brand", description: "Fixture", productsSection: { manufacturerFilter: "fixture" } }
   const loader = sourceLoader({
+    "@/lib/public-catalogue": { publicCatalogueFilter: async () => ({active:true}) },
     "@/lib/seo-brand": { getSeoBrand: async () => brand },
     "@/lib/mongodb": { connectToDatabase: async () => ({ db: { collection: () => ({
       find: () => ({ project: () => ({ toArray: async () => [{ _id: new ObjectId(), slug: "fixture-product", name: "Fixture product", manufacturerName: "Fixture" }] }) }),
@@ -5985,7 +5990,7 @@ test("analytics keeps consent gating and retries a beacon that was not queued", 
   const { track, toAnalyticsItem } = sourceLoader({
     "@/lib/consent-client": { hasConsent: () => consent },
   }, {
-    context: { window, navigator: { sendBeacon: () => { beacons++; return false } }, Blob },
+    context: { window, document: { referrer: "" }, navigator: { sendBeacon: () => { beacons++; return false } }, Blob },
     fetch: async (url, init) => { requests.push({ url, init }); return { ok: true } },
   }).load("lib/analytics.ts")
   assert.equal(toAnalyticsItem({ id: "fixture", name: "Fixture", price: "100" }).quantity, 1)
@@ -6181,7 +6186,7 @@ test("partner payout history rejects an invalid status before querying data", as
 
 test("mail templates preserve escaping and pending payment state without real SMTP calls", async () => {
   const sent = []
-  const loader = sourceLoader({ nodemailer: { createTransport: () => ({ sendMail: async options => { sent.push(options); return { messageId: "fixture" } } }) } })
+  const loader = sourceLoader({ "@/lib/smtp": { getEmailTransport: () => ({ sendMail: async options => { sent.push(options); return { messageId: "fixture" } } }) } })
   const { getVendorOrderNotificationTemplate, getOrderConfirmationEmailTemplate, sendEmail } = loader.load("lib/email.ts")
   const order = {
     id: "FIXTURE", items: [{ name: "<Fixture item>", quantity: 2, price: 100, image: null }],
@@ -6194,7 +6199,7 @@ test("mail templates preserve escaping and pending payment state without real SM
   assert.ok(getOrderConfirmationEmailTemplate(order).includes("&lt;Fixture&gt;"))
   assert.equal(sent.length, 0)
   const attachment = { filename: "fixture.txt", content: "Synthetic fixture only" }
-  const result = await sendEmail({ to: "fixture@example.invalid", subject: "Fixture", html: vendor, attachments: [attachment] })
+  const result = await sendEmail({ to: "fixture@example.com", subject: "Fixture", html: vendor, attachments: [attachment] })
   assert.equal(result.success, true)
   assert.equal(sent[0].attachments[0], attachment)
 })

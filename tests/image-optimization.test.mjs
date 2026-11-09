@@ -174,8 +174,8 @@ test('service worker leaves external image requests to the browser and replaces 
   let intercepted = false, fetched = false
   const context = vm.createContext({ URL, self: { location: { origin: 'https://www.sarastores.com' }, addEventListener: (event, handler) => handlers.set(event, handler) }, fetch: () => { fetched = true } })
   vm.runInContext(fs.readFileSync('public/sw.js', 'utf8'), context)
-  handlers.get('fetch')({ request: { method: 'GET', url: 'https://rukmini1.flixcart.com/image/product.jpeg' }, respondWith() { intercepted = true } })
+  handlers.get('fetch')({ request: { method: 'GET', headers: new Headers(), cache: 'default', mode: 'cors', url: 'https://rukmini1.flixcart.com/image/product.jpeg' }, respondWith() { intercepted = true } })
   assert.equal(intercepted, false)
   assert.equal(fetched, false)
-  assert.equal(vm.runInContext('CACHE_NAME', context), 'app-cache-v4')
+  assert.equal(vm.runInContext('STATIC_CACHE', context), 'sara-static-v5')
 })

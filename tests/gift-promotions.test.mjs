@@ -203,7 +203,7 @@ test("cart renders manual Add free gift and hides removal controls for mandatory
   assert.match(renderToStaticMarkup(CartGifts({ quote })), /Add free gift/)
   assert.match(renderToStaticMarkup(CartGifts({ quote: { ...quote, selectedGiftPromotions: [String(promoId)] } })), /Remove gift/)
   const locked = renderToStaticMarkup(CartGifts({ quote: { ...quote, offers: [{ ...offer, giftAutoAdd: true, giftRemovable: false }], declinedGiftPromotions: [String(promoId)] } }))
-  assert.match(locked, /Cannot be removed/); assert.doesNotMatch(locked, /Remove gift|Add gift back/)
+  assert.match(locked, /Included automatically/); assert.doesNotMatch(locked, /Remove gift|Add gift back/)
 })
 
 test("validity dates include the final Indian day, and reject future, expired or malformed promotions", () => {

@@ -56,7 +56,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Database connection failed",
-          details: dbError instanceof Error ? dbError.message : "Unknown error",
         },
         { status: 500 },
       )
@@ -164,6 +163,10 @@ export async function GET(request: NextRequest) {
         "raw.Brand": 1, "raw.Division": 1, "raw.Manufacturer Name": 1, "raw.Manufacturer": 1,
       }
     }
+    if (fields === "search") {
+      // Header suggestions need no detail blobs, reviews or raw import fields.
+      options.projection = { slug: 1, name: 1, price: 1, image: 1, stock: 1, category: 1, brand: 1, sku: 1, SKU: 1 }
+    }
     if (adminListing) {
       options.projection = {
         slug: 1, sku: 1, itemno: 1, itemNo: 1, name: 1,
@@ -238,7 +241,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: "Failed to get products from database",
-        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )
@@ -258,7 +260,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Database connection failed",
-          details: dbError instanceof Error ? dbError.message : "Unknown error",
         },
         { status: 500 },
       )
@@ -376,7 +377,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: "Failed to create product in database",
-        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )

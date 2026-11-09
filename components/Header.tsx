@@ -133,8 +133,8 @@ export default function Header({ staticContent = false }: { staticContent?: bool
           if (!res.ok) throw new Error("Trending products could not be loaded")
           return parseSearchProducts(await res.json())
         }
-        let arr = await fetchArr("/api/products?featured=true&limit=12")
-        if (arr.length < 4) arr = await fetchArr("/api/products?limit=12")
+        let arr = await fetchArr("/api/products?featured=true&limit=12&fields=search")
+        if (arr.length < 4) arr = await fetchArr("/api/products?limit=12&fields=search")
 
         const terms: string[] = []
         const seen = new Set<string>()
@@ -385,7 +385,7 @@ export default function Header({ staticContent = false }: { staticContent?: bool
     const debounceTimer = setTimeout(async () => {
       try {
         // Use server-side search param + limit to avoid fetching entire catalog
-        const res = await fetch(`/api/products?search=${encodeURIComponent(searchQuery.trim())}&limit=6`)
+        const res = await fetch(`/api/products?search=${encodeURIComponent(searchQuery.trim())}&limit=6&fields=search`)
         if (!res.ok) throw new Error('Failed to fetch')
         const data = parseSearchProducts(await res.json())
         if (!ignore) {
