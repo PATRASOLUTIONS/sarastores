@@ -45,8 +45,22 @@ The canvas displays the selected top 30/60/100 reported pages. All reported publ
 
 ## Verification
 
-`npm run test:page-flow` runs isolated GA4 request/response fixtures with no Google or database calls. Tests cover numeric property IDs, independent readonly credentials, current metadata validation, compatibility, filters, pagination, page details, correct distinct-user semantics, referrer sanitization, provider failures, caching, date ranges and full-admin guards. `npx tsc --noEmit --incremental false` checks TypeScript. Build and lint are deliberately skipped at the owner's request.
+Local verification on 2026-11-10 loaded both `.env.local` and `.env` through
+Next.js's environment loader. The configured reporting credentials successfully
+read property `530847951`. Google returned a valid empty dimensionless summary
+without metric headers; the parser now accepts this specific empty API response
+instead of returning `GA4_RESPONSE_INVALID`, while retaining header validation
+for populated reports. An isolated regression covers the response for graph and
+page-detail summaries.
 
-Live GA4 access remains unverified until the configured reporting principal grants analytics.readonly and successfully reads the intended property. Test statistics are confined to test fixtures/browser-intercepted local QA and never used by the production page.
+The property's standard hostname report returned no rows for the last 30 days,
+and its realtime report returned zero active users at the time of the check.
+Data-stream metadata returned HTTP 403, so the relationship between this
+reporting property and tracking ID `G-WPZC537DQY` remains unverified. These reads
+did not change credentials, Google configuration, consent, or customer data.
+
+`npm run test:page-flow` runs isolated GA4 request/response fixtures with no Google or database calls. Tests cover numeric property IDs, independent readonly credentials, current metadata validation, compatibility, filters, pagination, page details, correct distinct-user semantics, referrer sanitization, provider failures, caching, date ranges and full-admin guards. All 21 checks and `npx tsc --noEmit` passed for the empty-report fix. The production build passed through `scripts/seo/build-check.mjs` with synthetic database fixtures and its TypeScript/lint gates enabled; existing lint warnings remain.
+
+Reporting access to property `530847951` was verified by the read-only checks above; matching it to the storefront data stream remains unverified. Test statistics are confined to test fixtures/browser-intercepted local QA and never used by the production page.
 
 Local browser QA verified the actual missing-configuration state and isolated, intercepted aggregate fixtures on desktop/mobile. Counts appear above each circle; node details, remote pagination controls, search/device filters, layout controls and CSV/PNG/SVG downloads passed with no browser errors. The fixture run blocks external requests and all mutating app API calls. These checks do not establish live GA4 access or mobile-network latency.
