@@ -193,7 +193,7 @@ test("promotion measurement emits nothing without analytics consent", () => {
   let granted = false, requests = 0
   const browser = { dataLayer: [], location: { pathname: "/product/phone" } }
   const { track } = sourceLoader({ "@/lib/consent-client": { hasConsent: () => granted } }, { context: {
-    window: browser, Blob, navigator: { sendBeacon: () => { requests++; return true } },
+    window: browser, document: { referrer: "" }, Blob, navigator: { sendBeacon: () => { requests++; return true } },
   } }).load("lib/analytics.ts")
   track("view_promotion", { promotion_id: "box" })
   assert.equal(browser.dataLayer.length, 0)
@@ -204,9 +204,10 @@ test("promotion measurement emits nothing without analytics consent", () => {
   assert.equal(requests, 1)
 })
 
-test("marketing setup distinguishes missing, duplicated and unverified tags and never leaks values", () => {
+test("marketing setup selects one Google installation and reports missing or unverified tags without leaking values", () => {
   const report = marketingReadiness({ NEXT_PUBLIC_GTM_ID: "GTM-ABC", NEXT_PUBLIC_GA_ID: "G-ABC", GOOGLE_MERCHANT_CLIENT_SECRET: "private-fixture-value" })
-  assert.equal(report.checks.find(row => row.area === "GA4 / GTM").status, "duplicate_tag_configuration")
+  assert.equal(report.checks.find(row => row.area === "GA4 / GTM").status, "configured_unverified")
+  assert.equal(report.checks.find(row => row.area === "GA4 / GTM").mode, "direct")
   assert.doesNotMatch(JSON.stringify(report), /private-fixture-value|GTM-ABC|G-ABC/)
   assert.equal(marketingReadiness({ NEXT_PUBLIC_GTM_ID: "GTM-ABC" }).checks.find(row => row.area === "GA4 / GTM").status, "configured_unverified")
 })

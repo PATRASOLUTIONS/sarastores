@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:performance": "node --test tests/catalogue-listing-performance.test.mjs tests/catalogue-listing-client.test.mjs tests/pwa-cache.test.mjs tests/seo-server-pages.test.mjs tests/seo-public-data-cache.test.mjs tests/homepage-performance.test.mjs tests/image-optimization.test.mjs tests/route-guards.test.mjs",
+    "benchmark:listing": "node scripts/benchmark-catalogue-listing.mjs",
     "test:page-flow": "node --test tests/page-flow.test.mjs tests/route-guards.test.mjs",
     "test:customer-flow": "node --test tests/customer-flow.test.mjs tests/route-guards.test.mjs",
     "test:promotions": "node --test tests/storefront-promotions.test.mjs tests/product-presentation.test.mjs tests/gift-promotions.test.mjs tests/diwali-online.test.mjs tests/seo-public-promotions.test.mjs tests/route-guards.test.mjs",

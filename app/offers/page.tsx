@@ -8,6 +8,6 @@ export const generateMetadata = pageMetadata({
   description: "Explore savings, coupon offers and available payment options on electronics and appliances. Bank and EMI eligibility is confirmed at checkout.",
 })
 
-export default function OffersPage() {
-  return <ProductsPage />
+export default function OffersPage({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  return <ProductsPage offersPage searchParams={searchParams} />
 }

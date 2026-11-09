@@ -50,7 +50,7 @@ export const FLOW_COLORS = { blue:'#3b82f6', purple:'#8b5cf6', orange:'#f59e0b',
 export const FLOW_EVENT_STAGES: Record<string, StageId[]> = {
   page_view: ['visitor'], browse_products: ['browse'], view_item: ['product'], add_to_cart: ['cart'],
   login: ['login'], sign_up: ['login'], guest_checkout: ['guest_checkout'], cart_confirmed: ['cart_confirmed'],
-  begin_checkout: ['checkout'], address_completed: ['address'], add_payment_info: ['payment'],
+  checkout_started: ['checkout'], begin_checkout: ['checkout'], address_completed: ['address'], add_payment_info: ['payment'],
   login_failed: ['login_failed'], payment_failed: ['payment_failed'], payment_retried: ['payment_retried'],
 }
 export interface FlowFilters {

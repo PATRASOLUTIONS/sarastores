@@ -91,6 +91,16 @@ export async function getHomepageHeroProducts() {
 // current prices and stock directly from the database.
 export const getPublicPageProducts = cache(readPublicPageProducts)
 
+/** Server-only listing index input. Specification facts never travel in page-card DTOs. */
+export async function getPublicListingIndexProducts() {
+  const projection:Record<string,unknown>={...listingProjection(),specifications:1,technical_details:1}
+  delete projection['technical_details.Title'];delete projection['technical_details.First Image']
+  const records=await (await getCollection('products')).find(await publicCatalogueFilter(),{projection,batchSize:100,maxTimeMS:8000}).sort({_id:1}).toArray()
+  return productListingListResponseSchema.parse(records.map(record=>({
+    ...publicFields(normalizeId(record)),specifications:JSON.parse(JSON.stringify(record.specifications || {})),
+  })))
+}
+
 export const getPublicPageCategories = cache(async () => {
   const records = await (await getCollection("categories")).find({ isEnabled: { $ne: false } }).toArray()
   return catalogCategoryListResponseSchema.parse(normalizeId(records))

@@ -1,142 +1,71 @@
-// Service Worker for caching API responses and static assets
-// Uses Cache API with stale-while-revalidate strategy
-
-const CACHE_NAME = 'app-cache-v4'
-const API_CACHE_NAME = 'api-cache-v4'
-
-// Static assets to pre-cache on install
-const PRECACHE_ASSETS = [
-  '/sara-logo.png',
-]
-
-// API routes to cache with stale-while-revalidate
-const CACHEABLE_API_PATTERNS = [
-  /\/api\/products/,
-  /\/api\/categories/,
-  /\/api\/home-components/,
-  /\/api\/settings/,
-]
-
-// Max age for API cache entries (5 minutes)
-const API_CACHE_MAX_AGE = 5 * 60 * 1000
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
-  )
-})
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME && key !== API_CACHE_NAME)
-          .map(key => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  )
-})
-
-self.addEventListener('fetch', (event) => {
-  const { request } = event
-  const url = new URL(request.url)
-
-  // Only handle GET requests
-  if (request.method !== 'GET') return
-
-  // Bypass cross-origin requests entirely. Caching/serving cross-origin
-  // resources (images from external CDNs) via the service worker can lead
-  // to opaque responses, CORS issues, or the worker returning its own
-  // offline fallback (503). Let the browser handle cross-origin fetches
-  // directly to avoid accidental blocking of external images (eg.
-  // m.media-amazon.com).
-  if (url.origin !== self.location.origin) {
-    return
-  }
-
-  // Handle API requests with stale-while-revalidate
-  if (CACHEABLE_API_PATTERNS.some(pattern => pattern.test(url.pathname))) {
-    event.respondWith(staleWhileRevalidate(request))
-    return
-  }
-
-  // Handle static assets (images, fonts, CSS, JS) with cache-first
-  if (isStaticAsset(url.pathname)) {
-    event.respondWith(cacheFirst(request))
-    return
-  }
-})
-
-// Stale-while-revalidate: return cached immediately, update in background
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(API_CACHE_NAME)
-  const cachedResponse = await cache.match(request)
-
-  // Fetch fresh data in background
-  const fetchPromise = fetch(request)
-    .then(networkResponse => {
-      if (networkResponse.ok) {
-        // Clone before caching since response can only be consumed once
-        const responseToCache = networkResponse.clone()
-        // Add timestamp header for TTL checking
-        const headers = new Headers(responseToCache.headers)
-        headers.set('sw-cache-timestamp', Date.now().toString())
-
-        responseToCache.blob().then(blob => {
-          const cachedResp = new Response(blob, {
-            status: responseToCache.status,
-            statusText: responseToCache.statusText,
-            headers: headers,
-          })
-          cache.put(request, cachedResp)
-        })
-      }
-      return networkResponse
-    })
-    .catch(() => cachedResponse) // Offline fallback
-
-  // Return cached response immediately if available
-  if (cachedResponse) {
-    // Check if cache is still relatively fresh
-    const timestamp = cachedResponse.headers.get('sw-cache-timestamp')
-    if (timestamp) {
-      const age = Date.now() - parseInt(timestamp)
-      if (age < API_CACHE_MAX_AGE) {
-        // Fresh enough — still revalidate in background
-        fetchPromise.catch(() => {})
-        return cachedResponse
-      }
-    }
-    // Stale but return it, network will update
-    fetchPromise.catch(() => {})
-    return cachedResponse
-  }
-
-  // No cache — must wait for network
-  return fetchPromise
+// Sara-owned cache only. Never cache navigations, customer/admin APIs or payment data.
+const STATIC_CACHE = 'sara-static-v5'
+const PUBLIC_CACHE = 'sara-public-v5'
+const API_PATHS = new Set(['/api/products/listing', '/api/categories', '/api/home-components'])
+const FIXED_ASSETS = new Set(['/sara-logo.png', '/icons/icon-192.png', '/icons/icon-512.png'])
+const OWNED_CACHE = /^(app-cache-v[0-9]+|api-cache-v[0-9]+|sara-static-v[0-9]+|sara-public-v[0-9]+)$/
+self.addEventListener('install', event => event.waitUntil(self.skipWaiting()))
+self.addEventListener('activate', event => event.waitUntil(
+  caches.keys().then(keys => Promise.all(keys.filter(key => OWNED_CACHE.test(key) && ![STATIC_CACHE, PUBLIC_CACHE].includes(key))
+    .map(key => caches.delete(key)))).then(() => self.clients.claim())
+))
+function cacheTtl(response, api) {
+  const control = response.headers.get('cache-control') || ''
+  const vary = response.headers.get('vary') || ''
+  if (!response.ok || response.status !== 200 || response.type === 'opaque' || response.headers.has('set-cookie') ||
+      /(?:private|no-store|no-cache)/i.test(control) || /(?:\*|cookie|authorization)/i.test(vary)) return 0
+  const seconds = Number(control.match(/(?:^|,)\s*max-age\s*=\s*"?(\d+)/i)?.[1] || 0)
+  if (api && !/(?:^|,)\s*public(?:,|$)/i.test(control)) return 0
+  const age = Math.max(0, Number(response.headers.get('age')) || 0)
+  return Math.min(Math.max(0, seconds - age) * 1000, api ? 300000 : 86400000)
 }
-
-// Cache-first for static assets
-async function cacheFirst(request) {
-  const cache = await caches.open(CACHE_NAME)
-  const cachedResponse = await cache.match(request)
-  if (cachedResponse) return cachedResponse
-
+function fresh(response) {
+  const stored = Number(response.headers.get('sara-cached-at'))
+  const ttl = Number(response.headers.get('sara-cache-ttl'))
+  return stored > 0 && ttl > 0 && Date.now() >= stored && Date.now() - stored < ttl
+}
+async function put(cache, request, response, ttl, maxEntries) {
+  const headers = new Headers(response.headers)
+  headers.set('sara-cached-at', String(Date.now()))
+  headers.set('sara-cache-ttl', String(ttl))
+  const bytes = await response.clone().arrayBuffer()
+  if (bytes.byteLength > 2000000) { await cache.delete(request); return }
+  const copy = new Response(bytes, {status: response.status, statusText: response.statusText, headers})
+  await cache.put(request, copy)
+  const keys = await cache.keys()
+  await Promise.all(keys.slice(0, Math.max(0, keys.length - maxEntries)).map(key => cache.delete(key)))
+}
+async function serve(event, api) {
+  const request = event.request
+  let cache, cached
   try {
-    const networkResponse = await fetch(request)
-    if (networkResponse.ok) {
-      cache.put(request, networkResponse.clone())
-    }
-    return networkResponse
-  } catch {
-    return new Response('Offline', { status: 503 })
+    cache = await caches.open(api ? PUBLIC_CACHE : STATIC_CACHE)
+    cached = await cache.match(request)
+  } catch { /* Storage can be disabled; normal network access must still work. */ }
+  if (!api && cached && fresh(cached)) return cached
+  const network = fetch(request).then(async response => {
+    const ttl = cacheTtl(response, api)
+    try {
+      if (cache && ttl && (!response.url || new URL(response.url).origin === self.location.origin)) {
+        await put(cache, request, response, ttl, api ? 60 : 100)
+      } else if (cache) await cache.delete(request)
+    } catch { /* Cache quota/failures must never turn a good network response into an error. */ }
+    return response
+  })
+  event.waitUntil(network.then(() => {}, () => {}))
+  if (cached && fresh(cached)) return cached
+  if (cached) { try { await cache.delete(request) } catch { /* Discard expired data even if deletion fails. */ } }
+  try { return await network }
+  catch { return new Response('Offline: this resource needs a current network response.', {status: 503, headers: {'Content-Type': 'text/plain', 'Cache-Control': 'no-store'}}) }
+}
+self.addEventListener('fetch', event => {
+  const request = event.request
+  if (request.method !== 'GET' || request.mode === 'navigate' || ['no-store','reload','no-cache'].includes(request.cache) || request.headers.has('authorization') || request.headers.has('range')) return
+  const url = new URL(request.url)
+  if (url.origin !== self.location.origin) return
+  if (API_PATHS.has(url.pathname)) {
+    if (['fields','include_inactive','userId','token'].some(key => url.searchParams.has(key))) return
+    event.respondWith(serve(event, true));return
   }
-}
-
-function isStaticAsset(pathname) {
-  return /\.(js|css|png|jpg|jpeg|gif|svg|webp|woff|woff2|ttf|eot|ico)$/i.test(pathname) ||
-    pathname.startsWith('/_next/static/')
-}
+  if (!url.search && (url.pathname.startsWith('/_next/static/') || FIXED_ASSETS.has(url.pathname))) event.respondWith(serve(event, false))
+})

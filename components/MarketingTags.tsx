@@ -1,5 +1,7 @@
 import Script from "next/script"
 import ConsentGate from "@/components/ConsentGate"
+import GoogleAnalyticsTag from "@/components/GoogleAnalyticsTag"
+import { googleTagMode } from "@/lib/google-tag-mode"
 
 /**
  * Third-party measurement tags.
@@ -9,8 +11,9 @@ import ConsentGate from "@/components/ConsentGate"
  * the full GA4 e-commerce event set to `window.dataLayer`, so nothing else has
  * to change when a container is connected here.
  *
- * Set NEXT_PUBLIC_GTM_ID *or* NEXT_PUBLIC_GA_ID, never both — configure GA4
- * inside the container when using GTM, otherwise every event is counted twice.
+ * A configured GA4 ID defaults to direct Google-tag installation. Explicitly
+ * select NEXT_PUBLIC_GOOGLE_TAG_MODE=gtm to use a published container instead.
+ * Only one Google installation is mounted, even if both IDs are configured.
  * GA4 and Clarity require analytics consent; Meta requires advertising consent.
  * A configurable GTM container conservatively requires both categories.
  *
@@ -20,12 +23,14 @@ import ConsentGate from "@/components/ConsentGate"
 export default function MarketingTags() {
   const gtmId = process.env.NEXT_PUBLIC_GTM_ID
   const gaId = process.env.NEXT_PUBLIC_GA_ID
+  const googleMode = googleTagMode({ NEXT_PUBLIC_GA_ID: gaId, NEXT_PUBLIC_GTM_ID: gtmId,
+    NEXT_PUBLIC_GOOGLE_TAG_MODE: process.env.NEXT_PUBLIC_GOOGLE_TAG_MODE })
   const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID
   const clarityId = process.env.NEXT_PUBLIC_CLARITY_ID
 
   return (
     <>
-      {gtmId ? (
+      {googleMode === "gtm" && gtmId ? (
         <ConsentGate category="analytics">
           <ConsentGate category="advertising">
           <Script id="gtm-init" strategy="afterInteractive">
@@ -42,23 +47,16 @@ export default function MarketingTags() {
           </noscript>
           </ConsentGate>
         </ConsentGate>
-      ) : gaId ? (
+      ) : googleMode === "direct" && gaId ? (
         <ConsentGate category="analytics">
-          <Script
-            id="ga4-src"
-            strategy="afterInteractive"
-            src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-          />
-          <Script id="ga4-init" strategy="afterInteractive">
-            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=gtag;gtag('js',new Date());gtag('config','${gaId}',{send_page_view:true,currency:'INR'});`}
-          </Script>
+          <GoogleAnalyticsTag measurementId={gaId} />
         </ConsentGate>
       ) : null}
 
       {metaPixelId ? (
         <ConsentGate category="advertising">
           <Script id="meta-pixel" strategy="afterInteractive">
-            {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${metaPixelId}');fbq('track','PageView');`}
+            {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${metaPixelId}');fbq('track','PageView');window.dispatchEvent(new Event('sara:meta-ready'));`}
           </Script>
           <noscript>
             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -1,3 +1,4 @@
+import { pwaRegistrationScript } from "@/lib/pwa-registration"
 
 
 import type React from "react"
@@ -177,31 +178,8 @@ export default async function RootLayout({
         <ReportWebVitals />
         <MarketingTags />
         <ConsentBanner />
-        {/* Service Worker: disabled by default because stale workers in
-            production can keep serving broken cached images or stale route
-            responses after deploys. Re-enable only when explicitly opted in. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              `
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then(function(regs) {
-                  regs.forEach(function(reg) { reg.unregister(); });
-                }).catch(function() {});
-              }
-              if (window.caches && caches.keys) {
-                caches.keys().then(function(keys) {
-                  keys.forEach(function(k) { caches.delete(k); });
-                }).catch(function() {});
-              }
-              if (${enablePwaServiceWorker ? "true" : "false"}) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function() {});
-                });
-              }
-            `,
-          }}
-        />
+        {/* Keep the enabled worker/cache across loads; cleanup is Sara-scoped. */}
+        <script dangerouslySetInnerHTML={{ __html: pwaRegistrationScript(enablePwaServiceWorker) }} />
       </body>
     </html>
   )

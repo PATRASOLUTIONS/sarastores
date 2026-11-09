@@ -59,7 +59,7 @@ test('fixed homepage header starts no content requests and retains customer and 
   for (const timer of f.timers) timer()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(f.requests.length, 1)
-  assert.equal(f.requests[0].url, '/api/products?search=iphone&limit=6')
+  assert.equal(f.requests[0].url, '/api/products?search=iphone&limit=6&fields=search')
 })
 
 test('fixed desktop and mobile brand navigation render immediately without loading catalogue brands', () => {

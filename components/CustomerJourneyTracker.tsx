@@ -9,15 +9,17 @@ export default function CustomerJourneyTracker() {
   const path = usePathname(), { user,isLoading } = useAuth(), last = useRef('')
   useEffect(()=>{
     const record = () => {
-      if (!path || isLoading || /^\/(admin|dashboard|vendor|api)(\/|$)/.test(path) || !hasConsent('analytics')) return
-      const key = `${path}:${user?.id || 'guest'}`
-      if(last.current === key)return
-      last.current=key
+      if (!hasConsent('analytics')) { last.current=''; return }
+      if (!path || isLoading || /^\/(admin|dashboard|vendor|api)(\/|$)/.test(path)) return
+      // An authentication refresh on the same page is not another page visit.
+      if(last.current === path)return
+      last.current=path
       track('page_view')
       if(/^\/(products|categories|category|brands|brand|search)(\/|$)/.test(path))track('browse_products')
       if(path === '/checkout') {
         if(!user)track('guest_checkout')
-        track('begin_checkout')
+        // The commerce event with real items/value comes from checkout validation.
+        track('checkout_started')
       }
     }
     record();window.addEventListener(CONSENT_CHANGE_EVENT,record)

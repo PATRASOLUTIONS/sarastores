@@ -411,8 +411,8 @@ test("skipped Excel download preserves identifier zeros, original quantities and
   const result = XLSX.read(XLSX.write(workbook, { type: "array", bookType: "xlsx" }), { type: "array" })
   const sheet = result.Sheets["Skipped Rows"]
   assert.deepEqual(XLSX.utils.sheet_to_json(sheet), [
-    { "Item No.": "00123", "Store Code": "007", Quantity: 9, Reason: "Unknown Store Code" },
-    { "Item No.": "=UNKNOWN", "Store Code": "008", Quantity: 0, Reason: "Unknown Item No." },
+    { CODE: "00123", WhsCode: "007", Total: 9, Reason: "Unknown Store Code" },
+    { CODE: "=UNKNOWN", WhsCode: "008", Total: 0, Reason: "Unknown Item No." },
   ])
   assert.equal(sheet.A3.t, "s"); assert.equal(sheet.A3.f, undefined)
 })
