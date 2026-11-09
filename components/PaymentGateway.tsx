@@ -8,10 +8,11 @@ import { RazorpayOrderResponseSchema, RazorpayVerificationResponseSchema, type R
 import { HostedCheckoutResponseSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
 import { paymentRecoveryStorageAvailable, readCheckoutRecovery, saveCheckoutRecovery, readHostedCheckout, saveHostedCheckout, type CheckoutRecovery } from "@/lib/checkout-recovery"
 import { prepareCheckoutAttempt, clearCheckoutAttempt } from "@/lib/checkout-attempt"
+import { track } from '@/lib/analytics'
 
 declare global {
   interface Window {
-    Razorpay: new (options: RazorpayCheckoutOptions) => { open: () => void }
+    Razorpay: new (options: RazorpayCheckoutOptions) => { open: () => void; on?: (event:string,callback:()=>void)=>void }
   }
 }
 
@@ -115,6 +116,7 @@ export default function PaymentGateway({
   }, [paymentMethod, provider])
 
   const handleHostedPayment = async () => {
+    track('add_payment_info', { payment_type:provider })
     try {
       if (!provider || provider === "razorpay" || !getHostedOrderData) throw new Error("Payment gateway is unavailable")
       // Prove that this tab can retain its capability before creating a payment.
@@ -320,6 +322,8 @@ export default function PaymentGateway({
       }
 
       const rzp = new window.Razorpay(options)
+      track('add_payment_info', { payment_type:'razorpay' })
+      rzp.on?.('payment.failed',()=>track('payment_failed',{ payment_type:'razorpay' }))
       rzp.open()
     } catch (error) {
       console.error("Payment error:", error)

@@ -710,7 +710,7 @@ function checkoutOptionsFixture(config, fail = false, deliveryMode = "blocked", 
     "@/hooks/useSubmitLock": { useSubmitLock: () => ({ acquire: () => true, release() {} }) },
     "@/hooks/useStoreStock": { useStoreStock: () => ({ storeIds: new Set(), pickupStoreIds: new Set(), deliveryAvailable: true, availabilityLoading: false, farDistanceKm: 15, loading: false, error: "", retry() {} }) },
     "@/hooks/useNearbyStores": { useNearbyStores: () => ({ stores: [], loading: false, error: "", retry() {}, pincode: "" }) },
-    "@/lib/analytics": { analytics: { beginCheckout() {} }, toAnalyticsItem: item => item },
+    "@/lib/analytics": { analytics: { beginCheckout() {} }, toAnalyticsItem: item => item, track() {} },
     "react-hot-toast": { toast: { error: message => errors.push(message) } },
   }, {
     fetch: async (url, init) => {

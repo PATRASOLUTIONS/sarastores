@@ -3,6 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from "react"
 import { syncConsentWithAccount } from "@/lib/consent-client"
+import { track } from "@/lib/analytics"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
 import { destinationAfterLogin, loginHref, safeReturnPath } from "@/lib/return-path"
@@ -530,6 +531,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!response.ok) {
         toast.error(data.message || data.error || "Login failed")
+        track('login_failed')
         return "rejected"
       }
 
@@ -578,6 +580,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem("loginTime", Date.now().toString())
       localStorage.setItem("lastActivityTime", Date.now().toString())
       setUser(signedIn)
+      if(signedIn.role === 'user') track('login')
 
       const redirectPath = localStorage.getItem("redirectAfterLogin")
       localStorage.removeItem("redirectAfterLogin")
@@ -657,6 +660,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // The registration page navigates after receiving the signed cookie.
       // Hydrate the account on that destination to avoid racing its redirect.
       toast.success("Account created. You're now signed in!")
+      track('sign_up')
 
       return { ok: true, user: data.user as User }
     } catch (error) {

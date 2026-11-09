@@ -9,7 +9,7 @@ import Footer from "@/components/Footer"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/contexts/AuthContext"
-import { analytics, toAnalyticsItem } from "@/lib/analytics"
+import { analytics, toAnalyticsItem, track } from "@/lib/analytics"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { cleanProductName, shortProductTitle } from "@/utils/cleanProductName"
 import PaymentGateway, { type CheckoutPaymentDetails } from "@/components/PaymentGateway"
@@ -541,6 +541,7 @@ export default function CheckoutPage() {
           return
         }
         if (data.status === "failed") {
+          track('payment_failed')
           clearHostedCheckout()
           clearCheckoutAttempt(checkoutOwner)
           setHostedReturn(null)
@@ -1044,6 +1045,7 @@ export default function CheckoutPage() {
       return false
     }
     if (!await validateStep1()) return false
+    track('address_completed')
     const response = await apiFetch("/api/cart/validate", {
       method: "POST", json: { items: cart, couponCode: appliedCoupon?.code || null, redeemPoints,
         declinedGiftPromotions: cartGifts.declinedGiftPromotions,
@@ -1098,6 +1100,7 @@ export default function CheckoutPage() {
     }
     setVerifiedQuote({ context: quoteContext, ...quote.pricing, amount: quote.amount, diwaliGift: quote.diwaliGift })
     setCouponDiscount(quote.pricing.couponDiscount)
+    track('cart_confirmed',{ items:cart.map(item=>toAnalyticsItem(item)),value:quote.amount })
     analytics.beginCheckout(cart.map((i) => toAnalyticsItem(i)))
     return true
     } catch (error) {

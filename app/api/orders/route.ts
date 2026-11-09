@@ -663,10 +663,13 @@ async function createOrder(request: NextRequest) {
     const guestAccessToken = isGuest ? checkoutIntent && typeof checkoutCapability === "string"
       ? hashCheckoutToken(`guest-order:${checkoutIntent._id}:${checkoutCapability}`) : createGuestAccessToken() : null
 
+    const { consentedVisitor } = await import('@/lib/customer-flow-tracking')
+    const journeyVisitorId = consentedVisitor(request.cookies.get('dpdp_tracking_consent')?.value)
     const newOrder = {
       orderId,
       userId,
       isGuest,
+      ...(journeyVisitorId ? { journeyVisitorId } : {}),
       ...(guestAccessToken
         ? { guestAccessTokenHash: hashGuestAccessToken(guestAccessToken) }
         : {}),

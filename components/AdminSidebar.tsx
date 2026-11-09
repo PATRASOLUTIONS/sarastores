@@ -100,6 +100,8 @@ const MENU_SECTIONS: MenuSection[] = [
     title: "Customers",
     items: [
       { name: "Customers", path: "/admin/customers", icon: <Users className="h-5 w-5" />, fullAdminOnly: true },
+      { name: "Customer Flow", path: "/admin/customer-flow", icon: <Users className="h-5 w-5" />, fullAdminOnly: true },
+      { name: "Page Flow", path: "/admin/page-flow", icon: <LayoutGrid className="h-5 w-5" />, fullAdminOnly: true },
       { name: "Leads", path: "/admin/leads", icon: <UserPlus className="h-5 w-5" /> },
       { name: "Complaints", path: "/admin/complaints", icon: <MessageSquare className="h-5 w-5" /> },
       { name: "Contact Inquiries", path: "/admin/contact-inquiries", icon: <Contact2 className="h-5 w-5" /> },

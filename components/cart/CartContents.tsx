@@ -1,4 +1,5 @@
 "use client"
+import { track,toAnalyticsItem } from '@/lib/analytics'
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
@@ -209,6 +210,7 @@ export default function CartContents({ embedded = false }: { embedded?: boolean 
       return
     }
     if (unavailable) { toast.error("Remove unavailable items or reduce their quantity before checkout."); return }
+    track('cart_confirmed',{ items:cart.map(item=>toAnalyticsItem(item)) })
     router.push("/checkout")
   }
   const rail = suggestions.filter((product) => !cart.some((item) => item.id === product.id)).slice(0, 6)

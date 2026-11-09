@@ -1,4 +1,6 @@
 import crypto from "node:crypto"
+import { cookies } from 'next/headers'
+import { consentedVisitor } from '@/lib/customer-flow-tracking'
 import { type ClientSession, ObjectId } from "mongodb"
 import { z } from "zod"
 import { getCollection } from "@/lib/db-service"
@@ -89,6 +91,8 @@ export async function quoteCheckout(
 export interface CheckoutIntent {
   _id: string
   userId: string | null
+  journeyVisitorId?: string
+  journeyProductIds?: string[]
   tokenHash: string
   fingerprint: string
   amount: number
@@ -114,9 +118,12 @@ export async function createCheckoutIntent(
   extra: { ttlMs?: number; store?: CheckoutIntent["store"] } = {},
 ): Promise<string> {
   const token = crypto.randomBytes(32).toString("base64url")
+  let journeyVisitorId: string | null = null
+  try { journeyVisitorId = consentedVisitor((await cookies()).get('dpdp_tracking_consent')?.value) } catch { /* Background reconciliation has no browser request. */ }
   const collection = await getCollection<CheckoutIntent>("checkout_intents")
   await collection.insertOne({
     _id: orderId, userId, tokenHash: hashCheckoutToken(token), fingerprint: quote.fingerprint,
+    ...(journeyVisitorId ? { journeyVisitorId } : {}),
     amount: Math.round(quote.amount * 100), currency: "INR", method, status: "created",
     createdAt: new Date(), expiresAt: new Date(Date.now() + (extra.ttlMs ?? 60 * 60 * 1000)),
     ...(extra.store ? { store: extra.store } : {}),

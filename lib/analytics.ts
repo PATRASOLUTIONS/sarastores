@@ -55,6 +55,8 @@ export function toAnalyticsItem(raw: AnalyticsProductInput, quantity?: number): 
   }
 }
 
+let previousPaymentFailed = false
+
 function itemsValue(items: AnalyticsItem[]): number {
   return items.reduce((sum, i) => sum + toNumber(i.price) * (i.quantity || 1), 0)
 }
@@ -68,6 +70,11 @@ export function track(event: string, params: Record<string, unknown> = {}): void
    * undecided visitor counts as a refusal.
    */
   if (!hasConsent("analytics")) return
+  if(event === 'payment_failed') previousPaymentFailed = true
+  if(event === 'add_payment_info' && previousPaymentFailed) {
+    previousPaymentFailed = false
+    track('payment_retried',params)
+  }
 
   const payload = { event, ...params }
 
@@ -85,6 +92,7 @@ export function track(event: string, params: Record<string, unknown> = {}): void
       event,
       params,
       page: window.location.pathname,
+      referrer: document.referrer,
       ts: Date.now(),
     })
     const queued = navigator.sendBeacon?.("/api/events", new Blob([body], { type: "application/json" })) ?? false
