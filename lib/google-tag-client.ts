@@ -27,7 +27,7 @@ export function initializeGoogleTag(id: string): boolean {
   if (window.saraGoogleTagId === id) return true
   window.dataLayer = window.dataLayer || []
   if (typeof window.gtag !== "function") {
-    window.gtag = function () { window.dataLayer!.push(arguments) }
+    window.gtag = function (...args: unknown[]) { window.dataLayer!.push(args) }
   }
   // The gtag API supports setup commands as well as event commands.
   const gtag = window.gtag as (...args: unknown[]) => void
