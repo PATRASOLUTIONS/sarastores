@@ -1,30 +1,23 @@
-import { catalogueBrand } from "@/lib/product-metadata-sheet"
 import { connectToDatabase } from "@/lib/mongodb"
 import { publicCatalogueFilter } from "@/lib/public-catalogue"
 import { getProductCommerceAttributes } from "@/lib/product-attributes"
-import { cleanProductName, cleanProductDescription } from "@/utils/cleanProductName"
 import type { ProductFeedDocument } from "@/lib/seo-product"
+import { merchantOfferId, merchantPreviewItem } from "@/lib/google-merchant-products"
+import { getConfiguredSiteOrigin } from "@/lib/site-origin"
 
 /**
  * Google Merchant Center product feed (RSS 2.0 + the `g:` namespace).
  *
  * Generating the feed is local; submitting it requires a Merchant Center
  * account and domain verification — see docs/brd/PENDING-EXTERNAL-INTEGRATIONS.md
- * (EXT-01). Items without a GTIN fall back to brand + MPN, and items with
- * neither are marked `identifier_exists = no` so Google still accepts them.
+ * (EXT-01). Only validated products are exported. Missing identifiers are
+ * never asserted nonexistent, and internal SKUs are never exported as MPNs.
  */
 
-export const revalidate = 3600
+export const revalidate = 300
 
 // Merchant Center rejects feeds over 150k items; well above the current catalogue.
 const MAX_ITEMS = 20000
-
-function getOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  )
-}
 
 function escapeXml(text: string): string {
   return String(text)
@@ -35,21 +28,14 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;")
 }
 
-function absoluteUrl(value: unknown, origin: string): string | null {
-  if (typeof value !== "string" || !value.trim()) return null
-  const url = value.trim()
-  if (url.startsWith("http://") || url.startsWith("https://")) return url
-  if (url.startsWith("data:")) return null
-  return `${origin}${url.startsWith("/") ? "" : "/"}${url}`
-}
-
 function tag(name: string, value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return ""
   return `      <${name}>${escapeXml(String(value))}</${name}>\n`
 }
 
 export async function GET() {
-  const origin = getOrigin()
+  const origin = getConfiguredSiteOrigin()
+  if (!origin?.startsWith("https://")) return new Response("Configure the public HTTPS site origin before using this feed", { status: 503, headers: { "Cache-Control": "no-store" } })
   let products: ProductFeedDocument[] = []
 
   try {
@@ -61,6 +47,8 @@ export async function GET() {
         {
           projection: {
             name: 1,
+            active: 1, disabled: 1, enabled: 1, isActive: 1, deleted: 1, isDeleted: 1, deletedAt: 1, discontinued: 1, status: 1, inStock: 1,
+            quantity: 1, condition: 1, identifierExists: 1, originalPrice: 1,
             slug: 1,
             description: 1,
             price: 1,
@@ -73,15 +61,14 @@ export async function GET() {
             manufacturerName: 1,
             manufacturer_name: 1,
             manufacturer: 1,
-            "raw.Brand": 1,
-            "raw.Division": 1,
-            "raw.Manufacturer Name": 1,
-            "raw.Manufacturer": 1,
+            raw: 1, rawData: 1, source: 1,
             category: 1,
             stock: 1,
             sku: 1,
             gtin: 1,
+            GTIN: 1, ean: 1, EAN: 1, upc: 1, UPC: 1, barcode: 1, "EAN Number": 1,
             mpn: 1,
+            MPN: 1, partNumber: 1, part_number: 1, "Manufacturer Part Number": 1,
             modelNumber: 1,
             weightKg: 1,
             warranty: 1,
@@ -89,86 +76,77 @@ export async function GET() {
             hsnCode: 1,
             seoTitle: 1,
             seoDescription: 1,
+            seo_description: 1, metaDescription: 1, meta_description: 1,
             free_delivery: 1,
             updatedAt: 1,
           },
         },
       )
       .sort({ updatedAt: -1 })
-      .limit(MAX_ITEMS)
+      .limit(MAX_ITEMS + 1)
       .toArray()
+    if (products.length > MAX_ITEMS) throw new Error("Catalogue exceeds the verified export limit")
   } catch (error) {
-    console.error("[Merchant feed] Product catalogue unavailable:", error)
+    console.error("[Merchant feed] Product catalogue unavailable", { type: error instanceof Error ? error.name : "Error" })
     return new Response("Product feed is temporarily unavailable", { status: 503, headers: { "Cache-Control": "no-store" } })
   }
 
+  const offerCounts = new Map<string, number>()
+  for (const product of products) {
+    const offerId = merchantOfferId(product)
+    offerCounts.set(offerId, (offerCounts.get(offerId) || 0) + 1)
+  }
   const items = products
     .map((product) => {
-      const price = Number(product.price)
-      if (!Number.isFinite(price) || price <= 0) return null
+      const preview = merchantPreviewItem(product, origin, "IN", true)
+      if (!preview.input || (offerCounts.get(preview.offerId) || 0) > 1) return null
+      const fields = preview.input.productAttributes
+      const price = preview.price
 
-      const slug = product.slug || product._id?.toString()
-      if (!slug) return null
-
-      const imageUrl =
-        absoluteUrl(product.image, origin) ??
-        absoluteUrl(Array.isArray(product.images) ? product.images[0] : null, origin)
-      if (!imageUrl) return null
+      const imageUrl = fields.imageLink
 
       const attributes = getProductCommerceAttributes(product)
-      const title = cleanProductName(product.name) || "Product"
-      const description =
-        attributes.seoDescription ||
-        cleanProductDescription(product.description || "")?.slice(0, 5000) ||
-        `Buy ${title} online at Sara Electronics.`
+      const title = fields.title
+      const description = fields.description
 
-      const mrp = Number(product.mrp)
-      const hasSalePrice = Number.isFinite(mrp) && mrp > price
+      const additionalImages = fields.additionalImageLinks
 
-      const additionalImages = (Array.isArray(product.images) ? product.images : [])
-        .map((image: unknown) => absoluteUrl(image, origin))
-        .filter((image: string | null): image is string => !!image && image !== imageUrl)
-        .slice(0, 10)
-
-      const brand = catalogueBrand(product)
-      const hasIdentifier = !!(attributes.gtin || (brand && attributes.mpn))
+      const brand = fields.brand
 
       return (
         `    <item>\n` +
-        tag("g:id", product.sku || slug) +
+        tag("g:id", preview.offerId) +
         tag("g:title", title.slice(0, 150)) +
         tag("g:description", description) +
-        tag("g:link", `${origin}/product/${slug}`) +
+        tag("g:link", fields.link) +
         tag("g:image_link", imageUrl) +
         additionalImages.map((image: string) => tag("g:additional_image_link", image)).join("") +
-        tag("g:availability", Number(product.stock) > 0 ? "in_stock" : "out_of_stock") +
+        tag("g:availability", fields.availability === "IN_STOCK" ? "in_stock" : "out_of_stock") +
         tag("g:condition", "new") +
-        // Merchant Center requires `price` to be the strike-through value when
-        // `sale_price` is present, so only send both when there is a real MRP.
-        tag("g:price", `${(hasSalePrice ? mrp : price).toFixed(2)} INR`) +
-        (hasSalePrice ? tag("g:sale_price", `${price.toFixed(2)} INR`) : "") +
+        // Match the actual selling price used by the page, checkout and API.
+        tag("g:price", `${price.toFixed(2)} INR`) +
         tag("g:brand", brand) +
-        tag("g:gtin", attributes.gtin) +
-        tag("g:mpn", attributes.mpn || product.sku) +
-        tag("g:identifier_exists", hasIdentifier ? "yes" : "no") +
+        tag("g:gtin", fields.gtins?.[0]) +
+        tag("g:mpn", fields.mpn) +
+        tag("g:identifier_exists", fields.identifierExists ? "yes" : "no") +
         tag("g:product_type", product.category) +
         tag("g:shipping_weight", attributes.weightKg ? `${attributes.weightKg} kg` : null) +
-        (attributes.freeDelivery
-          ? `      <g:shipping>\n        <g:country>IN</g:country>\n        <g:price>0.00 INR</g:price>\n      </g:shipping>\n`
-          : "") +
-        tag("g:tax_category", attributes.hsnCode) +
-        tag("g:product_detail", attributes.warrantyText ? `Warranty:${attributes.warrantyText}` : null) +
+        // Shipping/returns come from the reviewed Merchant account settings.
+        (attributes.warrantyText ? `      <g:product_detail>\n${tag("g:section_name", "Warranty")}${tag("g:attribute_name", "Manufacturer warranty")}${tag("g:attribute_value", attributes.warrantyText)}      </g:product_detail>\n` : "") +
         `    </item>`
       )
     })
     .filter(Boolean)
     .join("\n")
 
+  // An empty successful feed can delete an existing catalogue at Google.
+  if (!items) return new Response("No verified Merchant-ready products are available. Review catalogue identifiers and product facts before submitting.", { status: 503, headers: { "Cache-Control": "no-store" } })
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
   <channel>
     <title>Sara Electronics — Product Feed</title>
-    <link>${origin}</link>
+  <link>${escapeXml(origin)}</link>
     <description>Google Merchant Center product feed for Sara Electronics.</description>
 ${items}
   </channel>
@@ -177,7 +155,7 @@ ${items}
   return new Response(xml, {
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
     },
   })
 }

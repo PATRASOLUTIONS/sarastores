@@ -12,6 +12,7 @@ export function formatProductName(value: string): string {
   return value.trim().replace(/\s+/g, " ").replace(/[a-z0-9]+(?:[.-][a-z0-9]+)*/gi, token => {
     const lower = token.toLowerCase()
     if (spelling[lower]) return spelling[lower]
+    if (units[lower]) return units[lower]
     const measurement = lower.match(/^(\d+(?:\.\d+)?)(gb|tb|mb|hz|mah|w|v|mp|kg|l|mm|cm)$/)
     if (measurement) return measurement[1] + units[measurement[2]]
     if (/\d/.test(token)) return token.toUpperCase()

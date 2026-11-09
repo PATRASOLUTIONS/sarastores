@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { withRateLimit } from "@/lib/rate-limit"
+import { consentedVisitor, trafficSource } from "@/lib/customer-flow-tracking"
 
 export const dynamic = "force-dynamic"
 
@@ -10,11 +11,15 @@ const ALLOWED_EVENTS = new Set([
   "begin_checkout", "add_payment_info", "purchase",
   "search", "generate_lead", "sign_up", "login",
   "view_promotion", "select_promotion",
+  "page_view", "browse_products", "guest_checkout", "cart_confirmed", "address_completed",
+  "login_failed", "payment_failed", "payment_retried",
 ])
 
 /** Funnel event sink. Public by design, so it is rate limited and allow-listed. */
 export const POST = withRateLimit(async function POST(request: NextRequest) {
   try {
+    const visitorId = consentedVisitor(request.cookies.get('dpdp_tracking_consent')?.value)
+    if (!visitorId) return NextResponse.json({ ok: true, tracked: false })
     const body = await request.json().catch(() => null)
     const event = String(body?.event || "")
     if (!ALLOWED_EVENTS.has(event)) {
@@ -41,6 +46,13 @@ export const POST = withRateLimit(async function POST(request: NextRequest) {
     }
     // Cap the stored payload without corrupting it — oversized params are dropped.
     const params = JSON.stringify(safeParams).length > 8000 ? {} : safeParams
+    const productIds = Array.isArray(rawParams.items) ? [...new Set(rawParams.items.slice(0,100).flatMap((item: unknown) => {
+      if (!item || typeof item !== 'object') return []
+      const id = (item as Record<string, unknown>).item_id
+      return typeof id === 'string' && id.length <= 200 ? [id] : []
+    }))] : []
+    const ua = request.headers.get('user-agent') || ''
+    const device = /iPad|Tablet/i.test(ua) ? 'Tablet' : /Mobile|Android|iPhone/i.test(ua) ? 'Mobile' : 'Desktop'
 
     const events = await getCollection("analytics_events")
     await events.insertOne({
@@ -48,8 +60,13 @@ export const POST = withRateLimit(async function POST(request: NextRequest) {
       params,
       page: String(body?.page || "").slice(0, 300),
       userId: session?.user?.id || null,
-      referer: request.headers.get("referer")?.slice(0, 300) || null,
+      visitorId,
+      productIds,
+      device,
+      trafficSource: trafficSource(typeof body?.referrer === 'string' ? body.referrer.slice(0,500) : request.headers.get('referer'),request.nextUrl.origin),
+      // Store only the source category, never query strings or full referrer URLs.
       createdAt: new Date(),
+      timestamp: new Date(), // Existing DPDP retention index uses timestamp.
     })
 
     return NextResponse.json({ ok: true })

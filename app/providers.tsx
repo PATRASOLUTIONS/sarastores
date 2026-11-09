@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Suspense } from "react"
 import dynamic from "next/dynamic"
 import LoginReturnTracker from "@/components/LoginReturnTracker"
+import CustomerJourneyTracker from "@/components/CustomerJourneyTracker"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { CartUIProvider } from "@/contexts/CartUIContext"
@@ -28,6 +29,7 @@ export function Providers({ children }: ProvidersProps) {
         <AuthProvider>
           <Suspense fallback={null}>
             <LoginReturnTracker />
+            <CustomerJourneyTracker />
           </Suspense>
           <AntiInspect />
           <CartProvider>

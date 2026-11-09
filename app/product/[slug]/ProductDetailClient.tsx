@@ -4,6 +4,8 @@ import SiteImage from "@/components/SiteImage"
 import { optimizedImageUrl } from "@/lib/image-sources.mjs"
 
 import { catalogueBrand } from "@/lib/product-metadata-sheet"
+import { analytics, toAnalyticsItem } from '@/lib/analytics'
+import { CONSENT_CHANGE_EVENT } from '@/lib/consent-client'
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -258,6 +260,12 @@ export default function ProductDetailPage({ initialProduct }: { initialProduct?:
   const { data: settings } = useSettingsData()
 
   const [product, setProduct] = useState<Product | null>(initialProduct || null)
+  useEffect(()=>{
+    if(!product)return
+    const record = ()=>analytics.viewItem(toAnalyticsItem(product))
+    record();window.addEventListener(CONSENT_CHANGE_EVENT,record)
+    return ()=>window.removeEventListener(CONSENT_CHANGE_EVENT,record)
+  },[product])
   const [catalogue, setCatalogue] = useState<CatalogProduct[]>([])
   const [variants, setVariants] = useState<CatalogProduct[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(true)

@@ -179,8 +179,8 @@ export function getProductCommerceAttributes(input: unknown): ProductCommerceAtt
   const gstRate = firstNumber(product, ["gstRate", "gst_rate", "GST", "gst", "taxRate"])
 
   return {
-    gtin: firstString(product, ["gtin", "GTIN", "ean", "EAN", "upc", "UPC", "barcode"]),
-    mpn: firstString(product, ["mpn", "MPN", "partNumber", "part_number"]),
+    gtin: firstString(product, ["gtin", "GTIN", "ean", "EAN", "upc", "UPC", "barcode", "EAN Number"]),
+    mpn: firstString(product, ["mpn", "MPN", "partNumber", "part_number", "Manufacturer Part Number"]),
     modelNumber: firstString(product, [
       "modelNumber",
       "model_number",

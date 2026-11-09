@@ -1,5 +1,7 @@
 # Bulk scraper and price imports
 
+For the one-time Merchant enrichment workflow, use **Merchant product enrichment** in `/admin/scraper`. It fetches details for existing item numbers and skips completed enrichment records on repeat uploads. It stores source evidence separately from the live catalogue. See [the Merchant scraper guide](../integrations/merchant-scraper/README.md) for the new Excel template, field verification and exports. The new-product importer below is a separate workflow.
+
 ## Scraper (`/admin/scraper`)
 
 Choose **Download Excel template**, replace the sample row, then **Upload Excel**.

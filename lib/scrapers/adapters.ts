@@ -16,6 +16,7 @@ import {
   type JsonLdNode,
 } from "./http"
 import { emptyProduct, ScraperError, type ScrapedProduct } from "./types"
+import { enrichMerchantFacts } from "./merchant-facts"
 
 interface PaiProduct {
   title?: unknown
@@ -244,7 +245,8 @@ export async function scrapePai(url: string): Promise<ScrapedProduct> {
     .slice(0, 8)
 
   if (!product.sap.name) throw new ScraperError("Product name not found", 422)
-  return product
+  if (typeof api?.upc === "string") product.technicalDetails.UPC ||= api.upc
+  return enrichMerchantFacts(product, html)
 }
 
 /* ------------------------------------------------------------------ *
@@ -346,7 +348,7 @@ export async function scrapeLg(url: string): Promise<ScrapedProduct> {
       "LG serves regional redirects — make sure the link starts with lg.com/in/.",
     )
   }
-  return product
+  return enrichMerchantFacts(product, html)
 }
 
 /* ------------------------------------------------------------------ *
@@ -557,7 +559,7 @@ export async function scrapeFlipkart(url: string): Promise<ScrapedProduct> {
   if (!product.sap.name) {
     throw new ScraperError("Product name not found", 422, "Flipkart may have served a bot check — retry in a minute.")
   }
-  return product
+  return enrichMerchantFacts(product, html)
 }
 
 /* ------------------------------------------------------------------ *
@@ -644,7 +646,7 @@ export async function scrapeReliance(url: string): Promise<ScrapedProduct> {
   product.manufacturerImages = [...new Set(labels)]
 
   if (!product.sap.name) throw new ScraperError("Product name not found", 422)
-  return product
+  return enrichMerchantFacts(product, html)
 }
 
 /* ------------------------------------------------------------------ *
@@ -744,7 +746,7 @@ export async function scrapeVijaySales(url: string): Promise<ScrapedProduct> {
   }
   product.technicalDetails = specs
 
-  return product
+  return enrichMerchantFacts(product, html)
 }
 
 /* ------------------------------------------------------------------ *
@@ -835,7 +837,7 @@ export async function scrapeBosch(url: string): Promise<ScrapedProduct> {
   }
 
   if (!product.sap.name) throw new ScraperError("Product name not found", 422)
-  return product
+  return enrichMerchantFacts(product, html)
 }
 
 /** Re-exported so the API route can enumerate what a source produced. */

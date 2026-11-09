@@ -18,6 +18,7 @@ import {
 import { useCart } from "@/hooks/useCart"
 import { cartLineKey } from "@/lib/cart-line"
 import { cartLimitError } from "@/lib/cart-limits"
+import { track, toAnalyticsItem } from '@/lib/analytics'
 import { useCartUI } from "@/contexts/CartUIContext"
 import { useSettingsData } from "@/hooks/useSettingsData"
 import { toast } from "react-hot-toast"
@@ -86,6 +87,7 @@ export default function CartSidebar() {
     const error = cartLimitError(cart)
     if (error) { toast.error(error); return }
     closeCart()
+    track('cart_confirmed',{ items:cart.map(item=>toAnalyticsItem(item)) })
     router.push("/checkout")
   }
 

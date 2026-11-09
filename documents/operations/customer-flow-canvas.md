@@ -1,0 +1,33 @@
+# Customer flow canvas
+
+Open `/admin/customer-flow` (Customers → Customer Flow). Full administrators only. Thirty 44px circular nodes show customer counts above the icon and the cohort percentage below the label. Click a circle to open its real customer table. Click a customer name to open the recorded chronological timeline.
+
+## Data and definitions
+
+MongoDB aggregation reads `analytics_events`, `orders`, `checkout_intents`, `carts` and allowlisted contact fields from `users`. No payment-provider calls, seed statistics, customer-profile rebuilds or commerce mutations occur when viewing the canvas. The separate `payments` collection was empty during the initial read-only inspection.
+
+Counts represent distinct account IDs and consented browser identities active at each recorded milestone in the selected range. They cannot identify physical people across devices. Anonymous events without stable identity and guest orders without a consented journey identity are excluded and counted in Data coverage. A browser linked to exactly one account is merged with that account. Shared browsers linked to several accounts retain anonymous browsing as a separate identity; no account gets another account's anonymous history.
+
+Later order states do not reconstruct earlier milestones. Only explicit order status history and recorded current status snapshots are used. A generic `completed` order is not treated as physical delivery. Payment success requires server verification with a timestamp. Browser-reported failures/retries have a distinct evidence label; they are not proof of provider settlement. Guest checkout orders created after this change can link to their consented browser; no old guest identities are fabricated or linked by name/email/IP.
+
+Exit and abandonment are inferred when the latest qualifying milestone is a browsing, product, cart or checkout stage and is at least 24 hours old as of the date-range end. They measure silence in recorded activity, not proven exits. Saved account carts are current snapshots, not historical cart versions. Cart amount is browser-reported; order amount is from the server order. Products viewed counts distinct recorded product IDs. Unknown first visits, devices and traffic sources remain unknown. Percentages use all identifiable active customer identities as the denominator. Edge counts deduplicate consecutive recorded milestone pairs per customer, rather than inventing complete paths between every milestone.
+
+Date presets follow IST. Custom ranges accept up to 366 days. Advanced product/source/gateway/order-status filters use exact stored values. Customer type, device and commerce filters apply to the cohort's latest available metadata within the range. Guest-stage cohorts can include now-registered accounts that browsed as a guest. Search supports literal names, email, phone, customer IDs and order IDs; sorting and pagination run in MongoDB. Detail timelines include recorded history before the selected start date, through the end date, paged chronologically.
+
+## Privacy and controls
+
+Optional route/product/login/payment telemetry is gated by existing analytics consent in both the client and event sink. Browser identity is HMAC-pseudonymised with the existing session secret; it never establishes authentication. Account identity always comes from the verified server session. Referrer query strings and raw browser identity are not persisted by the new sink. `timestamp` is also written to match the existing analytics retention index. Customer APIs return private/no-store responses and allowlist fields; passwords, session credentials, guest order capabilities, addresses and payment secrets are never returned by this feature.
+
+Layouts (positions and viewport only) save locally on the admin device. No customer records are stored in browser storage. CSV exports contain the entire filtered cohort, paged in batches of 100; values are escaped against spreadsheet formula injection. Export fails if the matching total changes during retrieval. Concurrent updates can still reorder rows without changing the total; refresh/export during a quiet period for a stable snapshot. Graph SVG export embeds the styled HTML/SVG canvas; PNG export captures all nodes, including those outside the current viewport. Browser/font restrictions can cause an export error, shown on screen.
+
+## Query indexes and verification
+
+`node --env-file=.env.local scripts/customer-flow-inspect.mjs` prints only schema field names/types and index definitions. `scripts/customer-flow-indexes.mjs` defaults to read-only preview; `--apply` creates additive, non-unique query indexes without changing customer documents. Missing source date, visitor/account lookup and cart account indexes were created during implementation. Both scripts avoid printing configuration values or customer records.
+
+Source matches precede unions; graph counts/edge cohorts aggregate in MongoDB. Customer tables use a count/rows facet, stable ID tie-breaking, bounded pages and contact/first-visit lookups. Database requests have execution limits and surface failures instead of showing invented zero totals. Detail queries page timeline output; exceptionally large account histories may hit the execution limit.
+
+Run `node --test tests/customer-flow.test.mjs tests/route-guards.test.mjs` for isolated aggregation, consent, access and export regressions. The fixtures use Mingo to execute actual aggregation pipelines, never the application database. Payment/auth regression suites verify optional tracking does not affect commerce. Local visual checks and read-only live-query measurements are kept under ignored `.seo-local/`, not published with customer data.
+
+Build and lint are intentionally skipped at the owner's request. Local development compilation and explicit TypeScript checks remain available.
+
+Implementation verification (2026-11-08): 23 flow/cart/access/chrome regressions and 43 auth/consent regressions passed. The payment suite has two price-change fixture failures also reproduced against the unchanged checkout baseline; its other tests passed. Read-only warm graph queries took approximately 0.75–0.9 seconds and paginated tables 0.3–0.5 seconds. Local authenticated browser checks covered all 30 circles, the real customer drawer and timeline, node dragging, canvas controls, CSV/PNG/SVG exports and the fitted mobile viewport. Mobile fitting shows the entire graph; zoom to read individual stages. Layout reset preserves the current customer counts. These checks do not establish physical cellular-network performance or production cold-start latency.
