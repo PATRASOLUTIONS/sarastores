@@ -1,0 +1,197 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sara Stores · Recovery templates</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f5f7f8;color:#132d32;font:15px/1.55 system-ui,sans-serif}main{max-width:1260px;margin:auto;padding:42px 28px}.eyebrow{font-size:12px;letter-spacing:2px;color:#387c70;font-weight:750}h1{font-size:clamp(28px,4vw,46px);line-height:1.12;letter-spacing:-1.5px;margin:12px 0}p{max-width:850px;color:#526568}.pill{display:inline-block;border:1px solid #b8d2c9;border-radius:20px;padding:5px 12px;font-size:12px;background:#eaf4ed}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:25px 0}button,.toolbar a,.actions a{font:inherit;font-size:13px;padding:9px 15px;border-radius:8px;border:1px solid #c5d5d0;background:white;color:#173e35;text-decoration:none;cursor:pointer}button.active{background:#174f43;color:white;border-color:#174f43}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}article{padding:17px;background:white;border:1px solid #e0e7e5;border-radius:16px}.stage{display:flex;justify-content:space-between;gap:8px;margin-bottom:14px;font-size:12px;color:#526568}.stage strong{color:#174f43}.chat{border:1px solid #d3ded7;border-radius:12px;overflow:hidden}.chat-head{display:flex;gap:10px;align-items:center;background:#075e54;color:white;padding:12px}.chat-head small{display:block;font-size:10px;color:#c6e5dd}.avatar{background:#e8f5ed;color:#075e54;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;font-weight:800}.wall{background:#ece6dc;padding:14px 10px;min-height:550px}.bubble{background:#fff;border-radius:0 10px 10px 10px;padding:12px;box-shadow:0 1px 2px #0001}.message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.6}.time{display:block;text-align:right;font-size:10px;color:#72807a}.time span{color:#269ebd}code{display:block;margin:13px 0;font-size:11px;overflow-wrap:anywhere;color:#46615a}.actions{display:flex;gap:7px;flex-wrap:wrap}.actions button,.actions a{font-size:11px;padding:7px 10px}.note{padding:18px 20px;border:1px solid #d7e4dd;background:#ecf4ee;border-radius:12px;margin-top:24px;color:#355b49}table{width:100%;border-collapse:collapse;margin-top:14px;background:white;font-size:13px}td,th{text-align:left;padding:12px;border-bottom:1px solid #e1e8e4}th{background:#eaf0ed}.status{min-height:22px;font-size:12px;color:#286250;margin:8px 0}footer{margin-top:24px;color:#637370;font-size:12px}@media(max-width:1000px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){main{padding:24px 14px}.grid{grid-template-columns:1fr}.wall{min-height:0}}
+</style></head><body><main><div class="eyebrow">SARA STORES / CUSTOMER RECOVERY</div><h1>A helpful reminder.<br>A clear path back to purchase.</h1><span class="pill">6 English Marketing templates · Draft</span><p>Three cart reminders and three checkout reminders. A current price, a useful next step and a way to stop reminders in every message. This preview uses a fictional customer and example links.</p><div class="toolbar"><button class="active" data-filter="all">All 6</button><button data-filter="cart">Cart abandonment</button><button data-filter="payment">Payment failure</button><button id="mode">Show variables</button><a href="template-definitions.json" download>All template definitions</a><a href="askeva-send-examples.json" download>Askeva example data</a></div><div class="status" role="status" id="status"></div><div class="grid"><article data-flow="cart"><div class="stage"><span>Cart abandonment · 1/3</span><strong>1 hours</strong></div><div class="chat"><div class="chat-head"><div class="avatar">S</div><div><b>Sara Stores</b><small>WhatsApp template preview</small></div></div><div class="wall"><div class="bubble"><div class="message example"><strong>SARA STORES · Your cart, ready when you are</strong>
+
+Hi Asha,
+
+<strong>TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER</strong>
+
+<strong>Current price: ₹16,499 per item</strong>
+
+You added TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER to your cart. Would you like to complete your purchase?
+
+Review the product and current availability before checkout.
+
+Review product and buy:
+https://sara.example.com/products/example-product?utm_source=sara_recovery&amp;utm_medium=reminder&amp;utm_campaign=cart_1 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY
+
+Already ordered? You are all set.
+Reply here if you need help choosing or completing checkout.</div><div class="message variables" hidden>*SARA STORES · Your cart, ready when you are*
+
+Hi {{1}},
+
+*{{2}}*
+
+*Current price: {{3}} per item*
+
+{{4}}
+
+{{5}}
+
+Review product and buy:
+{{6}}
+
+Already ordered? You are all set.
+Reply here if you need help choosing or completing checkout.</div><span class="time">11:00 <span>✓✓</span></span></div></div></div><code>sara_cart_recovery_1</code><div class="actions"><button data-copy="sara_cart_recovery_1">Copy template body</button><a href="sara_cart_recovery_1.json" download>Download JSON</a></div></article><article data-flow="cart"><div class="stage"><span>Cart abandonment · 2/3</span><strong>24 hours</strong></div><div class="chat"><div class="chat-head"><div class="avatar">S</div><div><b>Sara Stores</b><small>WhatsApp template preview</small></div></div><div class="wall"><div class="bubble"><div class="message example"><strong>SARA STORES · Your price and available offers</strong>
+
+Hi Asha,
+
+Still considering TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER? Here is the latest price and the available offer information.
+
+<strong>Current price: ₹16,499 per item</strong>
+
+No additional verified offer is available right now. You can review the current price before deciding.
+
+No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout.
+
+Review product and offers:
+https://sara.example.com/products/example-product?utm_source=sara_recovery&amp;utm_medium=reminder&amp;utm_campaign=cart_2 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY
+
+Already ordered? You are all set.
+Reply here if you need help choosing or completing checkout.</div><div class="message variables" hidden>*SARA STORES · Your price and available offers*
+
+Hi {{1}},
+
+Still considering {{2}}? Here is the latest price and the available offer information.
+
+*Current price: {{3}} per item*
+
+{{4}}
+
+{{5}}
+
+Review product and offers:
+{{6}}
+
+Already ordered? You are all set.
+Reply here if you need help choosing or completing checkout.</div><span class="time">11:00 <span>✓✓</span></span></div></div></div><code>sara_cart_recovery_2</code><div class="actions"><button data-copy="sara_cart_recovery_2">Copy template body</button><a href="sara_cart_recovery_2.json" download>Download JSON</a></div></article><article data-flow="cart"><div class="stage"><span>Cart abandonment · 3/3</span><strong>48 hours</strong></div><div class="chat"><div class="chat-head"><div class="avatar">S</div><div><b>Sara Stores</b><small>WhatsApp template preview</small></div></div><div class="wall"><div class="bubble"><div class="message example"><strong>SARA STORES · One last reminder</strong>
+
+Hi Asha,
+
+This is our final reminder about TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER. If it is still on your list, review the latest price before deciding.
+
+<strong>Current price: ₹16,499 per item</strong>
+
+No additional verified offer is available right now. You can review the current price before deciding.
+
+No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout.
+
+Review product and buy:
+https://sara.example.com/products/example-product?utm_source=sara_recovery&amp;utm_medium=reminder&amp;utm_campaign=cart_3 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY
+
+Already ordered? You are all set.
+Reply here if you need help choosing or completing checkout.</div><div class="message variables" hidden>*SARA STORES · One last reminder*
+
+Hi {{1}},
+
+This is our final reminder about {{2}}. If it is still on your list, review the latest price before deciding.
+
+*Current price: {{3}} per item*
+
+{{4}}
+
+{{5}}
+
+Review product and buy:
+{{6}}
+
+Already ordered? You are all set.
+Reply here if you need help choosing or completing checkout.</div><span class="time">11:00 <span>✓✓</span></span></div></div></div><code>sara_cart_recovery_3</code><div class="actions"><button data-copy="sara_cart_recovery_3">Copy template body</button><a href="sara_cart_recovery_3.json" download>Download JSON</a></div></article><article data-flow="payment"><div class="stage"><span>Payment failure · 1/3</span><strong>2 minutes</strong></div><div class="chat"><div class="chat-head"><div class="avatar">S</div><div><b>Sara Stores</b><small>WhatsApp template preview</small></div></div><div class="wall"><div class="bubble"><div class="message example"><strong>SARA STORES · Need a hand with checkout?</strong>
+
+Hi Asha,
+
+<strong>TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER</strong>
+
+<strong>Current price: ₹16,499 per item</strong>
+
+Your checkout for TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER did not complete. If you still want it, review your order and choose an available payment method.
+
+If money was deducted or payment is still pending, check your order status or contact Sara before trying again.
+
+Review checkout:
+https://sara.example.com/products/example-product?utm_source=sara_recovery&amp;utm_medium=reminder&amp;utm_campaign=payment_1 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY
+
+If money was deducted or payment is pending, check your order status or contact us before paying again.
+Reply here if you need help choosing or completing checkout.</div><div class="message variables" hidden>*SARA STORES · Need a hand with checkout?*
+
+Hi {{1}},
+
+*{{2}}*
+
+*Current price: {{3}} per item*
+
+{{4}}
+
+{{5}}
+
+Review checkout:
+{{6}}
+
+If money was deducted or payment is pending, check your order status or contact us before paying again.
+Reply here if you need help choosing or completing checkout.</div><span class="time">11:00 <span>✓✓</span></span></div></div></div><code>sara_payment_recovery_1</code><div class="actions"><button data-copy="sara_payment_recovery_1">Copy template body</button><a href="sara_payment_recovery_1.json" download>Download JSON</a></div></article><article data-flow="payment"><div class="stage"><span>Payment failure · 2/3</span><strong>24 hours</strong></div><div class="chat"><div class="chat-head"><div class="avatar">S</div><div><b>Sara Stores</b><small>WhatsApp template preview</small></div></div><div class="wall"><div class="bubble"><div class="message example"><strong>SARA STORES · Review your checkout options</strong>
+
+Hi Asha,
+
+Still interested in TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER? Check the current price and available offers before continuing.
+
+<strong>Current price: ₹16,499 per item</strong>
+
+No additional verified offer is available right now. You can review the current price before deciding.
+
+No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout.
+
+Review checkout and offers:
+https://sara.example.com/products/example-product?utm_source=sara_recovery&amp;utm_medium=reminder&amp;utm_campaign=payment_2 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY
+
+If money was deducted or payment is pending, check your order status or contact us before paying again.
+Reply here if you need help choosing or completing checkout.</div><div class="message variables" hidden>*SARA STORES · Review your checkout options*
+
+Hi {{1}},
+
+Still interested in {{2}}? Check the current price and available offers before continuing.
+
+*Current price: {{3}} per item*
+
+{{4}}
+
+{{5}}
+
+Review checkout and offers:
+{{6}}
+
+If money was deducted or payment is pending, check your order status or contact us before paying again.
+Reply here if you need help choosing or completing checkout.</div><span class="time">11:00 <span>✓✓</span></span></div></div></div><code>sara_payment_recovery_2</code><div class="actions"><button data-copy="sara_payment_recovery_2">Copy template body</button><a href="sara_payment_recovery_2.json" download>Download JSON</a></div></article><article data-flow="payment"><div class="stage"><span>Payment failure · 3/3</span><strong>48 hours</strong></div><div class="chat"><div class="chat-head"><div class="avatar">S</div><div><b>Sara Stores</b><small>WhatsApp template preview</small></div></div><div class="wall"><div class="bubble"><div class="message example"><strong>SARA STORES · Your final checkout reminder</strong>
+
+Hi Asha,
+
+This is our final reminder about your TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER purchase. If you still want it, review your checkout options below.
+
+<strong>Current price: ₹16,499 per item</strong>
+
+No additional verified offer is available right now. You can review the current price before deciding.
+
+No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout.
+
+Review checkout:
+https://sara.example.com/products/example-product?utm_source=sara_recovery&amp;utm_medium=reminder&amp;utm_campaign=payment_3 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY
+
+If money was deducted or payment is pending, check your order status or contact us before paying again.
+Reply here if you need help choosing or completing checkout.</div><div class="message variables" hidden>*SARA STORES · Your final checkout reminder*
+
+Hi {{1}},
+
+This is our final reminder about your {{2}} purchase. If you still want it, review your checkout options below.
+
+*Current price: {{3}} per item*
+
+{{4}}
+
+{{5}}
+
+Review checkout:
+{{6}}
+
+If money was deducted or payment is pending, check your order status or contact us before paying again.
+Reply here if you need help choosing or completing checkout.</div><span class="time">11:00 <span>✓✓</span></span></div></div></div><code>sara_payment_recovery_3</code><div class="actions"><button data-copy="sara_payment_recovery_3">Copy template body</button><a href="sara_payment_recovery_3.json" download>Download JSON</a></div></article></div><div class="note"><b>Before submitting:</b> category Marketing, language English (en), body only, six positional variables. The app currently sends body components; these designs use text links. The tinted chat frame is a preview, not a configurable WhatsApp background.</div><h2>Data mapped to each message</h2><table><thead><tr><th>Variable</th><th>App data</th></tr></thead><tbody><tr><td>{{1}}</td><td>Customer first name</td></tr><tr><td>{{2}}</td><td>Current catalogue product name</td></tr><tr><td>{{3}}</td><td>Current server-quoted INR unit price</td></tr><tr><td>{{4}}</td><td>First touch: contextual reminder; later touches: verified offer information</td></tr><tr><td>{{5}}</td><td>First touch: safety/availability; later touches: confirmed deadline or no-deadline wording</td></tr><tr><td>{{6}}</td><td>Tracked product URL followed by signed unsubscribe URL</td></tr></tbody></table><footer>Timing begins at cart activity or the failed payment. Quiet hours and minimum gaps can defer delivery. New matching orders stop reminders. Offer deadlines appear only when verified. Template approval and messaging opt-in are required. No provider submission or customer send has occurred.</footer></main><script>
+const templates=[{"name":"sara_cart_recovery_1","text":"*SARA STORES · Your cart, ready when you are*\n\nHi {{1}},\n\n*{{2}}*\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview product and buy:\n{{6}}\n\nAlready ordered? You are all set.\nReply here if you need help choosing or completing checkout."},{"name":"sara_cart_recovery_2","text":"*SARA STORES · Your price and available offers*\n\nHi {{1}},\n\nStill considering {{2}}? Here is the latest price and the available offer information.\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview product and offers:\n{{6}}\n\nAlready ordered? You are all set.\nReply here if you need help choosing or completing checkout."},{"name":"sara_cart_recovery_3","text":"*SARA STORES · One last reminder*\n\nHi {{1}},\n\nThis is our final reminder about {{2}}. If it is still on your list, review the latest price before deciding.\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview product and buy:\n{{6}}\n\nAlready ordered? You are all set.\nReply here if you need help choosing or completing checkout."},{"name":"sara_payment_recovery_1","text":"*SARA STORES · Need a hand with checkout?*\n\nHi {{1}},\n\n*{{2}}*\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview checkout:\n{{6}}\n\nIf money was deducted or payment is pending, check your order status or contact us before paying again.\nReply here if you need help choosing or completing checkout."},{"name":"sara_payment_recovery_2","text":"*SARA STORES · Review your checkout options*\n\nHi {{1}},\n\nStill interested in {{2}}? Check the current price and available offers before continuing.\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview checkout and offers:\n{{6}}\n\nIf money was deducted or payment is pending, check your order status or contact us before paying again.\nReply here if you need help choosing or completing checkout."},{"name":"sara_payment_recovery_3","text":"*SARA STORES · Your final checkout reminder*\n\nHi {{1}},\n\nThis is our final reminder about your {{2}} purchase. If you still want it, review your checkout options below.\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview checkout:\n{{6}}\n\nIf money was deducted or payment is pending, check your order status or contact us before paying again.\nReply here if you need help choosing or completing checkout."}];let variables=false;document.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b===button));document.querySelectorAll('article').forEach(card=>card.hidden=button.dataset.filter!=='all'&&card.dataset.flow!==button.dataset.filter)});document.querySelector('#mode').onclick=()=>{variables=!variables;document.querySelectorAll('.example').forEach(el=>el.hidden=variables);document.querySelectorAll('.variables').forEach(el=>el.hidden=!variables);document.querySelector('#mode').textContent=variables?'Show sample data':'Show variables'};document.querySelectorAll('[data-copy]').forEach(button=>button.onclick=async()=>{const text=templates.find(t=>t.name===button.dataset.copy).text;try{await navigator.clipboard.writeText(text);document.querySelector('#status').textContent='Copied '+button.dataset.copy}catch{document.querySelector('#status').textContent='Clipboard unavailable. Open the downloaded JSON and copy components[0].text.'}});
+</script></body></html>

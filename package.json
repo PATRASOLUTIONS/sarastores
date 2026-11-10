@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:recovery": "node --test tests/recovery-automation.test.mjs tests/recovery-payment-data.test.mjs tests/recovery-razorpay.test.mjs tests/recovery-checkout-intent.test.mjs tests/customer-flow.test.mjs tests/route-guards.test.mjs",
     "test:performance": "node --test tests/catalogue-listing-performance.test.mjs tests/catalogue-listing-client.test.mjs tests/pwa-cache.test.mjs tests/seo-server-pages.test.mjs tests/seo-public-data-cache.test.mjs tests/homepage-performance.test.mjs tests/image-optimization.test.mjs tests/route-guards.test.mjs",
     "benchmark:listing": "node scripts/benchmark-catalogue-listing.mjs",
     "test:page-flow": "node --test tests/page-flow.test.mjs tests/route-guards.test.mjs",

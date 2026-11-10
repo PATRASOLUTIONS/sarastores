@@ -11,7 +11,8 @@ import {
   type ReactNode,
 } from "react"
 import { useAuth } from "@/contexts/AuthContext"
-import { analytics, toAnalyticsItem } from "@/lib/analytics"
+import { analytics, track, toAnalyticsItem } from "@/lib/analytics"
+import { CONSENT_CHANGE_EVENT,hasConsent } from '@/lib/consent-client'
 import { toast } from "react-hot-toast"
 import { cartLimitError } from "@/lib/cart-limits"
 import { CHECKOUT_CART_INTENT, CHECKOUT_CART_SELECTION_ID, mergeCheckoutCart } from "@/lib/checkout-cart"
@@ -161,6 +162,18 @@ export function CartProviderInner({ children }: { children: ReactNode }) {
   const cartRef = useRef(cart)
   cartRef.current = cart
   const [isLoading, setIsLoading] = useState(true)
+  const snapshotKey=useRef('')
+  useEffect(()=>{
+    const send=()=>{
+      if(isLoading || !hasConsent('analytics') || /^\/(admin|dashboard|vendor|recovery)(\/|$)/.test(pathname || ''))return
+      const key=JSON.stringify([userId,cart.map(item=>[cartLineKey(item),item.quantity])])
+      if(snapshotKey.current===key)return
+      snapshotKey.current=key
+      track('cart_snapshot',{items:cart.filter(item=>!isSaraCare(item)).map(item=>toAnalyticsItem(item))})
+    }
+    const timer=setTimeout(send,500);window.addEventListener(CONSENT_CHANGE_EVENT,send)
+    return()=>{clearTimeout(timer);window.removeEventListener(CONSENT_CHANGE_EVENT,send)}
+  },[cart,isLoading,userId,pathname])
   const [saraCareOffers, setSaraCareOffers] = useState<SaraCareOffer[]>([])
   const [saraCareError, setSaraCareError] = useState("")
   const [careQuotedKey, setCareQuotedKey] = useState("")

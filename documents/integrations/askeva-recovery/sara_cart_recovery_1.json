@@ -1,0 +1,23 @@
+{
+  "name": "sara_cart_recovery_1",
+  "language": "en",
+  "category": "MARKETING",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "*SARA STORES · Your cart, ready when you are*\n\nHi {{1}},\n\n*{{2}}*\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview product and buy:\n{{6}}\n\nAlready ordered? You are all set.\nReply here if you need help choosing or completing checkout.",
+      "example": {
+        "body_text": [
+          [
+            "Asha",
+            "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER",
+            "₹16,499",
+            "You added TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER to your cart. Would you like to complete your purchase?",
+            "Review the product and current availability before checkout.",
+            "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=cart_1 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+          ]
+        ]
+      }
+    }
+  ]
+}

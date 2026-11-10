@@ -1,4 +1,6 @@
+"use client"
 import Script from "next/script"
+import { usePathname } from 'next/navigation'
 import ConsentGate from "@/components/ConsentGate"
 import GoogleAnalyticsTag from "@/components/GoogleAnalyticsTag"
 import { googleTagMode } from "@/lib/google-tag-mode"
@@ -21,6 +23,9 @@ import { googleTagMode } from "@/lib/google-tag-mode"
  * A missing host fails silently in production only; dev has no CSP.
  */
 export default function MarketingTags() {
+  const pathname=usePathname()
+  // Opt-out URLs carry a signed capability. Do not load trackers on these pages.
+  if(/^\/(admin|dashboard|vendor|account|recovery)(\/|$)/.test(pathname || ''))return null
   const gtmId = process.env.NEXT_PUBLIC_GTM_ID
   const gaId = process.env.NEXT_PUBLIC_GA_ID
   const googleMode = googleTagMode({ NEXT_PUBLIC_GA_ID: gaId, NEXT_PUBLIC_GTM_ID: gtmId,

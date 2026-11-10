@@ -10,7 +10,7 @@ export default function CustomerJourneyTracker() {
   useEffect(()=>{
     const record = () => {
       if (!hasConsent('analytics')) { last.current=''; return }
-      if (!path || isLoading || /^\/(admin|dashboard|vendor|api)(\/|$)/.test(path)) return
+      if (!path || isLoading || /^\/(admin|dashboard|vendor|api|recovery)(\/|$)/.test(path)) return
       // An authentication refresh on the same page is not another page visit.
       if(last.current === path)return
       last.current=path

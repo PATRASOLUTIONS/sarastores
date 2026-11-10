@@ -63,12 +63,13 @@ function itemsValue(items: AnalyticsItem[]): number {
   return items.reduce((sum, i) => sum + toNumber(i.price) * (i.quantity || 1), 0)
 }
 
-export function track(event: string, params: Record<string, unknown> = {}): void {
+export function track(event: string, params: Record<string, unknown> = {}, firstParty?: { checkoutContext: Record<string, unknown>; recoveryConsent?:{email:boolean;whatsapp:boolean;version:string} }): void {
   if (typeof window === "undefined") return
+  const privateEvent=['checkout_contact','cart_snapshot'].includes(event)
 
   // Advertising and analytics decisions are independent. The pixel mapper
   // accepts only approved commerce fields and enforces advertising consent.
-  try { trackMetaCommerce(event, params) }
+  try { if(!privateEvent)trackMetaCommerce(event, params) }
   catch { console.warn("[Analytics] Pixel dispatch failed") }
 
   /**
@@ -85,11 +86,13 @@ export function track(event: string, params: Record<string, unknown> = {}): void
   const payload = { event, ...params }
 
   try {
+    if(!privateEvent) {
     window.dataLayer = window.dataLayer || []
     window.dataLayer.push(payload)
     // Direct mode queues genuine events even before the Google script loads.
     // GTM mode receives only the data-layer event above.
     sendGoogleTagEvent(event, params)
+    }
   } catch (error) {
     console.warn("[Analytics] Tag dispatch failed", error)
   }
@@ -101,6 +104,9 @@ export function track(event: string, params: Record<string, unknown> = {}): void
       page: window.location.pathname,
       referrer: document.referrer,
       ts: Date.now(),
+      // Checkout contact details belong only to Sara's private journey record.
+      // They are never included in params, dataLayer, Google or Meta events.
+      ...(firstParty ? { checkoutContext: firstParty.checkoutContext, ...(firstParty.recoveryConsent?{recoveryConsent:firstParty.recoveryConsent}:{}) } : {}),
     })
     const queued = navigator.sendBeacon?.("/api/events", new Blob([body], { type: "application/json" })) ?? false
     if (!queued) {

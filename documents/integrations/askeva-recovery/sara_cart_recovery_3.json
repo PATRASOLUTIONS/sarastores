@@ -1,0 +1,23 @@
+{
+  "name": "sara_cart_recovery_3",
+  "language": "en",
+  "category": "MARKETING",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "*SARA STORES · One last reminder*\n\nHi {{1}},\n\nThis is our final reminder about {{2}}. If it is still on your list, review the latest price before deciding.\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview product and buy:\n{{6}}\n\nAlready ordered? You are all set.\nReply here if you need help choosing or completing checkout.",
+      "example": {
+        "body_text": [
+          [
+            "Asha",
+            "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER",
+            "₹16,499",
+            "No additional verified offer is available right now. You can review the current price before deciding.",
+            "No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout.",
+            "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=cart_3 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+          ]
+        ]
+      }
+    }
+  ]
+}

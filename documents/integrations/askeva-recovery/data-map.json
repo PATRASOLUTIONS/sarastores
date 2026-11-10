@@ -1,0 +1,53 @@
+{
+  "status": "DRAFT_NOT_SUBMITTED",
+  "category": "MARKETING",
+  "language": "en",
+  "sampleData": "Synthetic customer and example.com links. Product and price are illustrative, not a current catalogue quote.",
+  "parameterMap": {
+    "1": "Customer first name",
+    "2": "Current catalogue product name",
+    "3": "Current server-quoted INR unit price",
+    "4": "First touch: contextual reminder; later touches: verified offer information",
+    "5": "First touch: safety/availability; later touches: confirmed deadline or no-deadline wording",
+    "6": "Tracked product URL followed by signed unsubscribe URL"
+  },
+  "templates": [
+    {
+      "name": "sara_cart_recovery_1",
+      "flow": "cart",
+      "step": 1,
+      "delayMinutes": 60
+    },
+    {
+      "name": "sara_cart_recovery_2",
+      "flow": "cart",
+      "step": 2,
+      "delayMinutes": 1440
+    },
+    {
+      "name": "sara_cart_recovery_3",
+      "flow": "cart",
+      "step": 3,
+      "delayMinutes": 2880
+    },
+    {
+      "name": "sara_payment_recovery_1",
+      "flow": "payment",
+      "step": 1,
+      "delayMinutes": 2
+    },
+    {
+      "name": "sara_payment_recovery_2",
+      "flow": "payment",
+      "step": 2,
+      "delayMinutes": 1440
+    },
+    {
+      "name": "sara_payment_recovery_3",
+      "flow": "payment",
+      "step": 3,
+      "delayMinutes": 2880
+    }
+  ],
+  "sendInstructions": "Send one payload to configured ASKEVA_API_URL with Authorization: Bearer <ASKEVA_API_KEY>, only after template approval and consent/eligibility checks. This package performs no submission or delivery."
+}

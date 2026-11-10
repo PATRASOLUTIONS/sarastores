@@ -54,6 +54,7 @@ import { OrderConfirmationSchema, type OrderConfirmation } from "@/lib/order-con
 import { PaymentConfigurationSchema, HostedPaymentStatusSchema, PAYMENT_PROVIDER_LABELS, type PaymentProvider } from "@/types/payment-gateways"
 import { ArrowRight, CreditCard, Truck, Shield, CheckCircle, MapPin, Phone, Mail, Trash2, Heart, Store, Home, Headphones, Tag } from "lucide-react"
 import { toast } from "react-hot-toast"
+import { RECOVERY_NOTICE_VERSION } from '@/lib/recovery-policy'
 
 const CHECKOUT_TRACKER = ["Address", "Delivery", "Payment", "Review & Place Order"]
 const accountProfileSchema = z.object({
@@ -112,6 +113,29 @@ export default function CheckoutPage() {
 
   // Form data
   const [customerData, setCustomerData] = useState(EMPTY_CUSTOMER)
+  const [recoveryEmail,setRecoveryEmail]=useState(false),[recoveryWhatsapp,setRecoveryWhatsapp]=useState(false)
+  const recoveryChoice=useRef('')
+  function chooseRecovery(channel:'email'|'whatsapp',value:boolean){
+    const email=channel==='email'?value:recoveryEmail,whatsapp=channel==='whatsapp'?value:recoveryWhatsapp
+    if(channel==='email')setRecoveryEmail(value);else setRecoveryWhatsapp(value)
+    const contact=CheckoutContactSchema.safeParse(customerData)
+    if(contact.success){
+      recoveryChoice.current=JSON.stringify([contact.data,email,whatsapp])
+      track('checkout_contact',{}, {checkoutContext:{...customerData,zipCode:customerData.pincode},recoveryConsent:{email,whatsapp,version:RECOVERY_NOTICE_VERSION}})
+    }
+  }
+  useEffect(()=>{
+    const contact=CheckoutContactSchema.safeParse(customerData)
+    if(!contact.success || (!recoveryEmail && !recoveryWhatsapp && !recoveryChoice.current))return
+    const key=JSON.stringify([contact.data,recoveryEmail,recoveryWhatsapp])
+    if(recoveryChoice.current===key)return
+    const timer=setTimeout(()=>{
+      recoveryChoice.current=key
+      track('checkout_contact',{}, {checkoutContext:{...customerData,zipCode:customerData.pincode},
+        recoveryConsent:{email:recoveryEmail,whatsapp:recoveryWhatsapp,version:RECOVERY_NOTICE_VERSION}})
+    },600)
+    return()=>clearTimeout(timer)
+  },[customerData,recoveryEmail,recoveryWhatsapp])
   const [customerErrors, setCustomerErrors] = useState<Record<string, string>>({})
   const editedCustomerFields = useRef(new Set<string>())
   const accountId = user?.id
@@ -1045,7 +1069,10 @@ export default function CheckoutPage() {
       return false
     }
     if (!await validateStep1()) return false
-    track('address_completed')
+    track('address_completed', { items: cart.map(item=>toAnalyticsItem(item)) }, { checkoutContext: isPickup ? {
+      firstName: customerData.firstName, lastName: customerData.lastName,
+      email: customerData.email, phone: customerData.phone,
+    } : { ...customerData, zipCode: customerData.pincode } })
     const response = await apiFetch("/api/cart/validate", {
       method: "POST", json: { items: cart, couponCode: appliedCoupon?.code || null, redeemPoints,
         declinedGiftPromotions: cartGifts.declinedGiftPromotions,
@@ -1711,6 +1738,12 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
+                  <fieldset className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <legend className="px-1 font-medium">Optional checkout reminders</legend>
+                    <p className="mb-3 text-xs text-slate-600">Send me up to three reminders about this cart or an unfinished payment, including current prices and eligible offers. I can stop reminders at any time.</p>
+                    <label className="mr-5 inline-flex items-center gap-2"><input type="checkbox" checked={recoveryEmail} onChange={e=>chooseRecovery('email',e.target.checked)}/>Email</label>
+                    <label className="inline-flex items-center gap-2"><input type="checkbox" checked={recoveryWhatsapp} onChange={e=>chooseRecovery('whatsapp',e.target.checked)}/>WhatsApp</label>
+                  </fieldset>
                   {(!isPickup || !user) && (
                   <div className="mt-6">
                     <h3 className="text-lg font-medium mb-4 flex items-center">

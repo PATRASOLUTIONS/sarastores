@@ -23,7 +23,7 @@ function updateConsent() {
 
 /** Queue configuration before loading gtag.js, and configure the property once. */
 export function initializeGoogleTag(id: string): boolean {
-  if (typeof window === "undefined" || !hasConsent("analytics") || !/^G-[A-Z0-9]+$/.test(id)) return false
+  if (typeof window === "undefined" || /^\/(admin|dashboard|vendor|account|recovery)(\/|$)/.test(window.location?.pathname || '') || !hasConsent("analytics") || !/^G-[A-Z0-9]+$/.test(id)) return false
   if (window.saraGoogleTagId === id) return true
   window.dataLayer = window.dataLayer || []
   if (typeof window.gtag !== "function") {

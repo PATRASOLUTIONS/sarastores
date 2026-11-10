@@ -129,6 +129,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/recovery-automation",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/product-email-automation",
       "schedule": "0 6 * * *"
     },

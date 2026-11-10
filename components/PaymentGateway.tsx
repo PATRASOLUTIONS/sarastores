@@ -116,7 +116,9 @@ export default function PaymentGateway({
   }, [paymentMethod, provider])
 
   const handleHostedPayment = async () => {
-    track('add_payment_info', { payment_type:provider })
+    track('add_payment_info', { payment_type:provider }, orderDetails?.customer ? {
+      checkoutContext: { ...orderDetails.customer, zipCode: orderDetails.customer.pincode || orderDetails.customer.zipCode },
+    } : undefined)
     try {
       if (!provider || provider === "razorpay" || !getHostedOrderData) throw new Error("Payment gateway is unavailable")
       // Prove that this tab can retain its capability before creating a payment.
@@ -322,7 +324,9 @@ export default function PaymentGateway({
       }
 
       const rzp = new window.Razorpay(options)
-      track('add_payment_info', { payment_type:'razorpay' })
+      track('add_payment_info', { payment_type:'razorpay' }, orderDetails?.customer ? {
+        checkoutContext: { ...orderDetails.customer, zipCode: orderDetails.customer.pincode || orderDetails.customer.zipCode },
+      } : undefined)
       rzp.on?.('payment.failed',()=>track('payment_failed',{ payment_type:'razorpay' }))
       rzp.open()
     } catch (error) {
