@@ -32,7 +32,7 @@ export type RecoveryPreview={
   failureAt?:string;failureReference?:string;failureSource?:string;failureProductName?:string;failureAmount?:number|null;failureGateway?:string;failureReason?:string;
 }
 export type RecoveryDashboard={settings:RecoverySettings;queue:RecoveryPreview[];history:{id:string;name:string;flow:RecoveryFlow;step:number;channel:RecoveryChannel;status:string;createdAt:string;subject:string}[];
-  readiness:{email:boolean;whatsapp:boolean;cron:boolean;origin:boolean};generatedAt:string;truncated:boolean;page?:number;
+  readiness:{email:boolean;whatsapp:boolean;whatsappConfigured:boolean;whatsappEnabled:boolean;whatsappMissing:string[];cron:boolean;origin:boolean};generatedAt:string;truncated:boolean;page?:number;
   razorpay?:{status:'connected'|'not_configured'|'error';message:string;fetchedAt:string|null;hasMore:boolean;scanned?:number;failed?:number}}
 export const RECOVERY_MAX_TOUCHES=3
 export const RECOVERY_WINDOW_MS=14*86400000

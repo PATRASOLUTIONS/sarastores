@@ -27,7 +27,10 @@ export function initializeGoogleTag(id: string): boolean {
   if (window.saraGoogleTagId === id) return true
   window.dataLayer = window.dataLayer || []
   if (typeof window.gtag !== "function") {
-    window.gtag = function (...args: unknown[]) { window.dataLayer!.push(args) }
+    // Google's command parser recognizes Arguments objects. Plain arrays are
+    // ignored, leaving consent and config unapplied even when the script loads.
+    // valueOf preserves the native Arguments object instead of copying it.
+    window.gtag = function () { window.dataLayer!.push(arguments.valueOf()) }
   }
   // The gtag API supports setup commands as well as event commands.
   const gtag = window.gtag as (...args: unknown[]) => void
