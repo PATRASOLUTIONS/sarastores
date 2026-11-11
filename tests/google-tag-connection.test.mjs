@@ -25,6 +25,17 @@ test('Google configuration and events remain absent before analytics consent',()
  const f=client();assert.equal(f.api.initializeGoogleTag(env.NEXT_PUBLIC_GA_ID),false)
  f.api.sendGoogleTagEvent('add_to_cart',{value:100});assert.equal(f.window.dataLayer,undefined)
 })
+test('Google commands use Arguments objects recognized by the Google tag parser',()=>{
+ const f=client();f.consent(true)
+ f.api.sendGoogleTagEvent('view_item',{items:[{item_id:'synthetic-product'}]})
+ assert.ok(f.window.dataLayer.length>0)
+ for(const entry of f.window.dataLayer){
+   assert.equal(Object.prototype.toString.call(entry),'[object Arguments]')
+   assert.equal(Array.isArray(entry),false)
+ }
+ assert.equal(commands(f.window).find(call=>call[0]==='config')[1],env.NEXT_PUBLIC_GA_ID)
+})
+
 test('initialization queues Google config once, preserves early ecommerce events and avoids duplicate manual page views',()=>{
  const f=client();f.consent(true)
  f.api.sendGoogleTagEvent('page_view',{})

@@ -31,8 +31,11 @@ function origin():string {
   try { const url=new URL(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || '');return ['https:','http:'].includes(url.protocol)?url.origin:'' } catch {return ''}
 }
 export function recoveryReadiness() {
+  const whatsappMissing=['ASKEVA_API_KEY','ASKEVA_API_URL'].filter(k=>!process.env[k]?.trim())
+  const whatsappConfigured=whatsappMissing.length===0
+  const whatsappEnabled=process.env.WHATSAPP_CAMPAIGNS_ENABLED==='true'
   return {email:['SMTP_HOST','SMTP_USER','SMTP_PASS','EMAIL_FROM'].every(k=>!!process.env[k]?.trim()),
-    whatsapp:process.env.WHATSAPP_CAMPAIGNS_ENABLED==='true' && ['ASKEVA_API_KEY','ASKEVA_API_URL'].every(k=>!!process.env[k]?.trim()),
+    whatsapp:whatsappEnabled && whatsappConfigured,whatsappConfigured,whatsappEnabled,whatsappMissing,
     cron:(process.env.CRON_SECRET || '').length>=16,origin:!!origin() && secret().length>=16}
 }
 export function recoveryUnsubscribeToken(identity:string,now=new Date()):string {

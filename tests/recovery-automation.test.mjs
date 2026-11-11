@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 const base=new Date('2026-11-10T05:30:00Z') // 11:00 IST
 const ago=(minutes)=>new Date(+base-minutes*60000)
-function fixture(){
+function fixture(env={}){
   let emailCalls=0,waCalls=0,orderReads=0,unknown=false,race=false,price=10000,indexWrites=0,blocked=false,promotionBenefits=[],orderAtRead=Infinity,gatewayHook=null
   const offerSessions=[]
   const sentEmails=[]
@@ -46,12 +46,51 @@ function fixture(){
         return {success:true,data:{messages:[{id:'fixture'}]}}
       },
     },
-  },{env:{NEXT_PUBLIC_SITE_URL:'https://sara.example.com',SMTP_HOST:'fixture',SMTP_USER:'fixture',SMTP_PASS:'fixture',EMAIL_FROM:'sara@example.com',CRON_SECRET:'isolated-cron-secret',WHATSAPP_CAMPAIGNS_ENABLED:'true',ASKEVA_API_KEY:'fixture',ASKEVA_API_URL:'https://fixture.invalid'}})
+  },{env:{NEXT_PUBLIC_SITE_URL:'https://sara.example.com',SMTP_HOST:'fixture',SMTP_USER:'fixture',SMTP_PASS:'fixture',EMAIL_FROM:'sara@example.com',CRON_SECRET:'isolated-cron-secret',WHATSAPP_CAMPAIGNS_ENABLED:'true',ASKEVA_API_KEY:'fixture',ASKEVA_API_URL:'https://fixture.invalid',...env}})
   const policy=loader.load('lib/recovery-policy.ts'),engine=loader.load('lib/recovery-automation.ts'),settings=structuredClone(policy.RECOVERY_DEFAULTS)
   settings.channels=['email'];settings.cart.enabled=true;settings.payment.enabled=true
   db.recovery_settings.push({_id:'settings',settings})
   return {engine,policy,db,row,settings,offerSessions,sentEmails,storedFailures,gatewayFailures,set orderAtRead(value){orderAtRead=value},set gatewayHook(value){gatewayHook=value},get gatewayChecks(){return gatewayChecks},set gatewayResolved(v){gatewayResolved=v},set gatewayResolveAt(v){gatewayResolveAt=v},get indexWrites(){return indexWrites},get calls(){return emailCalls+waCalls},get emailCalls(){return emailCalls},get waCalls(){return waCalls},set unknown(v){unknown=v},set race(v){race=v},set price(v){price=v},set blocked(v){blocked=v},set promotionBenefits(v){promotionBenefits=v}}
 }
+
+test('recovery distinguishes saved Askeva credentials from disabled campaigns without exposing values',()=>{
+  const disabled=fixture({WHATSAPP_CAMPAIGNS_ENABLED:'false'}).engine.recoveryReadiness()
+  assert.equal(disabled.whatsappConfigured,true)
+  assert.equal(disabled.whatsappEnabled,false)
+  assert.equal(disabled.whatsapp,false)
+  assert.deepEqual([...disabled.whatsappMissing],[])
+  const missing=fixture({ASKEVA_API_KEY:' '}).engine.recoveryReadiness()
+  assert.equal(missing.whatsappConfigured,false)
+  assert.equal(missing.whatsappEnabled,true)
+  assert.equal(missing.whatsapp,false)
+  assert.deepEqual([...missing.whatsappMissing],['ASKEVA_API_KEY'])
+  assert.equal(fixture().engine.recoveryReadiness().whatsapp,true)
+})
+
+test('disabled WhatsApp campaigns do not send even with approved templates and customer consent',async()=>{
+  const f=fixture({WHATSAPP_CAMPAIGNS_ENABLED:'false'})
+  f.settings.channels=['whatsapp']
+  for(const flow of ['cart','payment'])for(const step of f.settings[flow].steps)step.templateApproved=true
+  await f.engine.runRecoveryAutomation({dryRun:false,now:base})
+  assert.equal(f.waCalls,0)
+})
+
+test('recovery page explains configured Askeva with campaigns disabled',()=>{
+  const f=fixture({WHATSAPP_CAMPAIGNS_ENABLED:'false'})
+  const data={queue:[],history:[],settings:f.settings,readiness:f.engine.recoveryReadiness(),generatedAt:base.toISOString(),truncated:false}
+  let state=0
+  const loader=sourceLoader({
+    react:{...React,useEffect(){},useCallback:fn=>fn,useState:value=>[state++===0?data:value,()=>{}]},
+    './recovery-automation.css':{},
+    '@/lib/api-client':{apiFetch:()=>{throw new Error('Rendering must not contact the server')}},
+  })
+  const component=loader.load('app/admin/recovery-automation/recovery-automation.tsx').default
+  const html=renderToStaticMarkup(React.createElement(component))
+  assert.match(html,/Campaigns disabled/)
+  assert.match(html,/AskEva credentials are configured/)
+  assert.match(html,/WHATSAPP_CAMPAIGNS_ENABLED=true/)
+  assert.match(html,/verify each approved English six-parameter template/)
+})
 
 test('cart queue fetches account email and mobile by ObjectId, string ID or legacy ID without granting messaging permission',async()=>{
   for(const account of [
