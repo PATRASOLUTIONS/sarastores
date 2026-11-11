@@ -27,6 +27,8 @@ The former `.env.production.local` contained zero active assignments. The local 
 
 ## Gateway reference
 
+Recovery reporting optionally uses the server-only `RAZORPAY_RECOVERY_KEY_ID` and `RAZORPAY_RECOVERY_KEY_SECRET` pair. Configure both with live account credentials to display live payment failures while local checkout retains its test keys. Empty placeholders are present in `.env.local`; enter credentials locally and restart the development server. When both are blank, reporting falls back to `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`; supplying only one recovery credential causes an explicit configuration error. Configure these variables separately in the hosted server environment for the live admin page. Never paste credential values into chat, documentation or the names-only inventory.
+
 These are reference placeholders, not credentials or a command to overwrite local settings. Choose enabled gateways to match your actual merchant accounts:
 
 ```dotenv

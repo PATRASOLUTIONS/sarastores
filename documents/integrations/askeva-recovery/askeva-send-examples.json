@@ -1,0 +1,260 @@
+[
+  {
+    "to": "REPLACE_WITH_91_AND_CONSENTED_CUSTOMER_MOBILE",
+    "type": "template",
+    "sender": "REPLACE_WITH_ASKEVA_SENDER_NUMBER",
+    "template": {
+      "name": "sara_cart_recovery_1",
+      "language": {
+        "policy": "deterministic",
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Asha"
+            },
+            {
+              "type": "text",
+              "text": "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER"
+            },
+            {
+              "type": "text",
+              "text": "₹16,499"
+            },
+            {
+              "type": "text",
+              "text": "You added TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER to your cart. Would you like to complete your purchase?"
+            },
+            {
+              "type": "text",
+              "text": "Review the product and current availability before checkout."
+            },
+            {
+              "type": "text",
+              "text": "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=cart_1 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "to": "REPLACE_WITH_91_AND_CONSENTED_CUSTOMER_MOBILE",
+    "type": "template",
+    "sender": "REPLACE_WITH_ASKEVA_SENDER_NUMBER",
+    "template": {
+      "name": "sara_cart_recovery_2",
+      "language": {
+        "policy": "deterministic",
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Asha"
+            },
+            {
+              "type": "text",
+              "text": "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER"
+            },
+            {
+              "type": "text",
+              "text": "₹16,499"
+            },
+            {
+              "type": "text",
+              "text": "No additional verified offer is available right now. You can review the current price before deciding."
+            },
+            {
+              "type": "text",
+              "text": "No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout."
+            },
+            {
+              "type": "text",
+              "text": "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=cart_2 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "to": "REPLACE_WITH_91_AND_CONSENTED_CUSTOMER_MOBILE",
+    "type": "template",
+    "sender": "REPLACE_WITH_ASKEVA_SENDER_NUMBER",
+    "template": {
+      "name": "sara_cart_recovery_3",
+      "language": {
+        "policy": "deterministic",
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Asha"
+            },
+            {
+              "type": "text",
+              "text": "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER"
+            },
+            {
+              "type": "text",
+              "text": "₹16,499"
+            },
+            {
+              "type": "text",
+              "text": "No additional verified offer is available right now. You can review the current price before deciding."
+            },
+            {
+              "type": "text",
+              "text": "No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout."
+            },
+            {
+              "type": "text",
+              "text": "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=cart_3 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "to": "REPLACE_WITH_91_AND_CONSENTED_CUSTOMER_MOBILE",
+    "type": "template",
+    "sender": "REPLACE_WITH_ASKEVA_SENDER_NUMBER",
+    "template": {
+      "name": "sara_payment_recovery_1",
+      "language": {
+        "policy": "deterministic",
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Asha"
+            },
+            {
+              "type": "text",
+              "text": "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER"
+            },
+            {
+              "type": "text",
+              "text": "₹16,499"
+            },
+            {
+              "type": "text",
+              "text": "Your checkout for TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER did not complete. If you still want it, review your order and choose an available payment method."
+            },
+            {
+              "type": "text",
+              "text": "If money was deducted or payment is still pending, check your order status or contact Sara before trying again."
+            },
+            {
+              "type": "text",
+              "text": "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=payment_1 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "to": "REPLACE_WITH_91_AND_CONSENTED_CUSTOMER_MOBILE",
+    "type": "template",
+    "sender": "REPLACE_WITH_ASKEVA_SENDER_NUMBER",
+    "template": {
+      "name": "sara_payment_recovery_2",
+      "language": {
+        "policy": "deterministic",
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Asha"
+            },
+            {
+              "type": "text",
+              "text": "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER"
+            },
+            {
+              "type": "text",
+              "text": "₹16,499"
+            },
+            {
+              "type": "text",
+              "text": "No additional verified offer is available right now. You can review the current price before deciding."
+            },
+            {
+              "type": "text",
+              "text": "No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout."
+            },
+            {
+              "type": "text",
+              "text": "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=payment_2 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "to": "REPLACE_WITH_91_AND_CONSENTED_CUSTOMER_MOBILE",
+    "type": "template",
+    "sender": "REPLACE_WITH_ASKEVA_SENDER_NUMBER",
+    "template": {
+      "name": "sara_payment_recovery_3",
+      "language": {
+        "policy": "deterministic",
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "body",
+          "parameters": [
+            {
+              "type": "text",
+              "text": "Asha"
+            },
+            {
+              "type": "text",
+              "text": "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER"
+            },
+            {
+              "type": "text",
+              "text": "₹16,499"
+            },
+            {
+              "type": "text",
+              "text": "No additional verified offer is available right now. You can review the current price before deciding."
+            },
+            {
+              "type": "text",
+              "text": "No confirmed offer deadline is available. Prices and availability can change; the final price and eligibility are checked at checkout."
+            },
+            {
+              "type": "text",
+              "text": "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=payment_3 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

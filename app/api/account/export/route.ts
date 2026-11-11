@@ -62,6 +62,7 @@ const BY_USER_ID: Array<{ collection: string; label: string }> = [
   { collection: "complaints", label: "Complaints and grievances you raised" },
   { collection: "customer_profiles", label: "Marketing profile derived from your activity" },
   { collection: "customer_events", label: "Activity and messaging log" },
+  { collection: "recovery_deliveries", label: "Cart and payment reminder delivery history" },
   { collection: "recently_viewed", label: "Recently viewed products" },
   { collection: "device_tokens", label: "Registered devices for push notifications" },
   { collection: "external_orders", label: "Orders placed through a partner storefront" },

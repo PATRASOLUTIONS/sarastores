@@ -50,9 +50,10 @@ const compactLayout: Record<string,[number,number]> = {
   cart_abandoned:[720,360],login_failed:[900,-240],checkout_abandoned:[1080,360],payment_failed:[720,-170],
   payment_retried:[1080,-170],payment_pending:[540,360],cancelled:[360,360],delivery_failed:[-180,360],returned:[180,540],refunded:[360,540],
 }
-const columns: [keyof FlowCustomer,string][] = [['name','Customer Name'],['email','Email'],['phone','Phone'],['id','Customer ID'],['kind','Guest / Registered'],['lastActivity','Last Activity'],['currentStage','Current Journey Stage'],['productsViewed','Products Viewed'],['cartValue','Cart Value'],['orderId','Order ID'],['orderAmount','Order Amount'],['paymentStatus','Payment Status'],['orderStatus','Order Status'],['device','Device'],['trafficSource','Traffic Source'],['firstVisit','First Visit']]
+const columns: [keyof FlowCustomer,string][] = [['name','Customer Name'],['email','Email'],['phone','Phone'],['address','Address'],['city','City'],['state','State'],['pincode','Pincode'],['country','Country'],['contactSource','Contact Details Source'],['productIds','Product IDs'],['id','Customer ID'],['kind','Guest / Registered'],['lastActivity','Last Activity'],['currentStage','Current Journey Stage'],['productsViewed','Products Viewed'],['cartValue','Cart Value'],['paymentGateway','Payment Gateway'],['paymentAmount','Payment Initiated Amount'],['paymentReference','Payment Reference'],['orderId','Order ID'],['orderAmount','Order Amount'],['paymentStatus','Payment Status'],['orderStatus','Order Status'],['device','Device'],['trafficSource','Traffic Source'],['firstVisit','First Visit']]
 function cell(row:FlowCustomer,key:keyof FlowCustomer) {
-  if (key === 'cartValue' || key === 'orderAmount') return money(row[key])
+  if (key === 'cartValue' || key === 'orderAmount' || key === 'paymentAmount') return money(row[key])
+  if (key === 'productIds') return row.productIds?.length ? row.productIds.join(', ') : '—'
   if (key === 'lastActivity' || key === 'firstVisit') return stamp(row[key])
   if (key === 'currentStage') return stageName(row[key])
   return row[key] == null || row[key] === '' ? '—' : String(row[key])
@@ -155,7 +156,7 @@ function Canvas() {
       else {localStorage.removeItem('sara.customer-flow.layout.v1');setNodes(current=>current.map(node=>({...node,position:initial.find(n=>n.id===node.id)?.position || node.position})));setTimeout(()=>fitView({padding:0.12,duration:500}),50);setNotice('Default layout restored.')}
     }catch{setNotice('Browser storage is unavailable.')}
   }
-  return <div ref={root} className="customer-flow-app" style={{zIndex:60}}>
+  return <div ref={root} className="customer-flow-app" style={{zIndex:60}} data-clarity-mask="true">
     <header className="flow-header"><div className="flow-brand"><Link href="/admin/dashboard" aria-label="Back to admin"><Icons.ArrowLeft size={18}/></Link><span className="flow-brand-mark"><Icons.Waypoints size={20}/></span><div><h1>Customer flow</h1><p>SARA STORES <span>·</span> Journey intelligence</p></div></div>
       <div className="flow-header-actions"><Link href="/admin/page-flow" className="text-xs text-blue-600">Page Flow</Link><span className="flow-live"><i/>{loading?'Updating…':'Live records'}</span><button title="Refresh data" aria-label="Refresh data" onClick={()=>{setFilters(f=>preset==='Custom'?f:{...f,...dateRange(preset)});setRefresh(v=>v+1)}}><Icons.RefreshCw size={17}/></button><button title="Full screen" aria-label="Full screen" onClick={()=>{(document.fullscreenElement?document.exitFullscreen():root.current?.requestFullscreen())?.catch(()=>setNotice('Full screen is unavailable in this browser.'))}}><Icons.Maximize size={17}/></button><button onClick={()=>setCoverage(v=>!v)}><Icons.Info size={16}/><span>Data coverage</span></button></div>
     </header>

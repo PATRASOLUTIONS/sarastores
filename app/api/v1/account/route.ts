@@ -31,6 +31,7 @@ const PURGE_BY_USER_ID = [
   "customer_profiles",
   COLLECTION_UNSUBSCRIBE_TOKENS,
   "customer_events",
+  "recovery_deliveries",
   "device_tokens",
   "recently_viewed",
   "leads",

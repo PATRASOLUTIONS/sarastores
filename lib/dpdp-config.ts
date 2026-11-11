@@ -164,6 +164,18 @@ export type RetentionRule = {
 
 export const RETENTION_SCHEDULE: RetentionRule[] = [
   {
+    collection: "recovery_deliveries",
+    label: "Cart and payment recovery delivery history",
+    retention: "90 days", days:90, timestampField:"createdAt",
+    basis: "Consent-based purchase reminders. Minimal delivery history prevents duplicates and supports delivery review.",
+  },
+  {
+    collection: "recovery_suppressions",
+    label: "Recovery opt-out preferences",
+    retention: "While recovery messaging operates", days:null,
+    basis: "A hashed contact identifier is retained to honour your opt-out without storing your email or phone.",
+  },
+  {
     collection: "orders",
     label: "Order and invoice records",
     retention: "72 months from the date of invoice",

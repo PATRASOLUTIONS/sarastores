@@ -14,9 +14,31 @@ Exit and abandonment are inferred when the latest qualifying milestone is a brow
 
 Date presets follow IST. Custom ranges accept up to 366 days. Advanced product/source/gateway/order-status filters use exact stored values. Customer type, device and commerce filters apply to the cohort's latest available metadata within the range. Guest-stage cohorts can include now-registered accounts that browsed as a guest. Search supports literal names, email, phone, customer IDs and order IDs; sorting and pagination run in MongoDB. Detail timelines include recorded history before the selected start date, through the end date, paged chronologically.
 
+Search Console clicks and GA4 users are separate aggregate measurements, not
+Customer Flow records. A search click cannot supply a customer name or contact
+details. Visitors appear here through consented first-party events; identifiable
+cart, order and checkout-intent records supply commerce milestones. The event
+sink now accepts `checkout_started`, matching the existing route tracker.
+
+The stage tables, customer profiles and CSV exports include entered checkout
+name, email, phone, address, city, state, pincode and country when available,
+alongside product IDs, payment gateway, payment-intent reference and amount.
+Payment-intent amounts are converted from paise to rupees. Contact source labels
+distinguish account profiles, entered checkout details and order checkout data.
+These fields do not verify the customer's identity. Addresses come from recorded
+checkout input or order shipping details, not an assumed default address.
+Search also covers address, city, pincode, payment reference and product IDs.
+
 ## Privacy and controls
 
-Optional route/product/login/payment telemetry is gated by existing analytics consent in both the client and event sink. Browser identity is HMAC-pseudonymised with the existing session secret; it never establishes authentication. Account identity always comes from the verified server session. Referrer query strings and raw browser identity are not persisted by the new sink. `timestamp` is also written to match the existing analytics retention index. Customer APIs return private/no-store responses and allowlist fields; passwords, session credentials, guest order capabilities, addresses and payment secrets are never returned by this feature.
+Optional route/product/login/payment telemetry is gated by existing analytics consent in both the client and event sink. Browser identity is HMAC-pseudonymised with the existing session secret; it never establishes authentication. Account identity always comes from the verified server session. Referrer query strings and raw browser identity are not persisted by the new sink. `timestamp` is also written to match the existing analytics retention index. Customer APIs return private/no-store responses and allowlist fields; passwords, session credentials, guest order capabilities and payment secrets are never returned by this feature.
+
+Private checkout context is validated with the existing checkout contact/address
+schemas and accepted only for `address_completed` and `add_payment_info`. It is
+stored separately from generic event parameters and is never sent to GA4, GTM,
+Meta or dataLayer. Address/checkout details become available for newly recorded,
+consented milestones. Missing historical guest details are not reconstructed.
+Viewing this change reads existing records; it performs no migration or backfill.
 
 Layouts (positions and viewport only) save locally on the admin device. No customer records are stored in browser storage. CSV exports contain the entire filtered cohort, paged in batches of 100; values are escaped against spreadsheet formula injection. Export fails if the matching total changes during retrieval. Concurrent updates can still reorder rows without changing the total; refresh/export during a quiet period for a stable snapshot. Graph SVG export embeds the styled HTML/SVG canvas; PNG export captures all nodes, including those outside the current viewport. Browser/font restrictions can cause an export error, shown on screen.
 
@@ -28,6 +50,12 @@ Source matches precede unions; graph counts/edge cohorts aggregate in MongoDB. C
 
 Run `node --test tests/customer-flow.test.mjs tests/route-guards.test.mjs` for isolated aggregation, consent, access and export regressions. The fixtures use Mingo to execute actual aggregation pipelines, never the application database. Payment/auth regression suites verify optional tracking does not affect commerce. Local visual checks and read-only live-query measurements are kept under ignored `.seo-local/`, not published with customer data.
 
-Build and lint are intentionally skipped at the owner's request. Local development compilation and explicit TypeScript checks remain available.
+The 2026-11-10 checkout-detail change passed 29 combined customer-flow,
+route-tracker, Google-tag, Meta and access-guard checks, all 93 payment-gateway
+and store-payment regressions, plus `npx tsc --noEmit`.
+Production verification passed through `scripts/seo/build-check.mjs` with synthetic
+database fixtures and its TypeScript/lint gates enabled; existing lint warnings
+remain. Earlier implementation checks
+below skipped production build/lint at the owner's request.
 
 Implementation verification (2026-11-08): 23 flow/cart/access/chrome regressions and 43 auth/consent regressions passed. The payment suite has two price-change fixture failures also reproduced against the unchanged checkout baseline; its other tests passed. Read-only warm graph queries took approximately 0.75–0.9 seconds and paginated tables 0.3–0.5 seconds. Local authenticated browser checks covered all 30 circles, the real customer drawer and timeline, node dragging, canvas controls, CSV/PNG/SVG exports and the fitted mobile viewport. Mobile fitting shows the entire graph; zoom to read individual stages. Layout reset preserves the current customer counts. These checks do not establish physical cellular-network performance or production cold-start latency.

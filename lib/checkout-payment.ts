@@ -93,6 +93,7 @@ export interface CheckoutIntent {
   userId: string | null
   journeyVisitorId?: string
   journeyProductIds?: string[]
+  journeyItems?: {id:string;name:string;quantity:number}[]
   tokenHash: string
   fingerprint: string
   amount: number
@@ -113,7 +114,7 @@ export interface CheckoutIntent {
 export async function createCheckoutIntent(
   orderId: string,
   userId: string | null,
-  quote: { amount: number; fingerprint: string },
+  quote: { amount: number; fingerprint: string; pricing?:Pick<PricingSuccess,'items'> },
   method: CheckoutIntent["method"] = "razorpay",
   extra: { ttlMs?: number; store?: CheckoutIntent["store"] } = {},
 ): Promise<string> {
@@ -124,6 +125,8 @@ export async function createCheckoutIntent(
   await collection.insertOne({
     _id: orderId, userId, tokenHash: hashCheckoutToken(token), fingerprint: quote.fingerprint,
     ...(journeyVisitorId ? { journeyVisitorId } : {}),
+    ...(quote.pricing ? {journeyProductIds:[...new Set(quote.pricing.items.map(item=>item.id))],
+      journeyItems:quote.pricing.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity}))} : {}),
     amount: Math.round(quote.amount * 100), currency: "INR", method, status: "created",
     createdAt: new Date(), expiresAt: new Date(Date.now() + (extra.ttlMs ?? 60 * 60 * 1000)),
     ...(extra.store ? { store: extra.store } : {}),

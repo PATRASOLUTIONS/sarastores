@@ -39,6 +39,36 @@ test('node table matches its count, uses safe account fields, and preserves orig
   assert.equal(table.rows[0].productsViewed,1);assert.equal(table.rows[0].cartValue,500)
   assert.ok(table.rows[0].firstVisit);assert.equal('password' in table.rows[0],false);assert.equal('resetPasswordToken' in table.rows[0],false)
 })
+
+test('guest checkout and payment tables expose entered contact/address plus safe server payment details',async()=>{
+  const {db,lib,q}=fixture()
+  db.analytics_events.push({event:'address_completed',visitorId:'browser2',userId:null,createdAt:at(3),
+    checkoutContext:{name:'Grace Shopper',email:'grace@example.test',phone:'9876543210',address:'12 Sample Street',city:'Bengaluru',state:'Karnataka',pincode:'560001',country:'India'}})
+  db.checkout_intents.push({_id:'payment-fixture',journeyVisitorId:'browser2',journeyProductIds:['p2'],createdAt:at(2),amount:123450,method:'razorpay',status:'created',tokenHash:'never-export',fingerprint:'never-export'})
+  for(const stage of ['address','payment']) {
+    const result=await lib.getCustomerFlow({...q,mode:'table',stage})
+    const row=result.rows.find(r=>r.id==='v:browser2')
+    assert.equal(row.name,'Grace Shopper');assert.equal(row.email,'grace@example.test');assert.equal(row.phone,'9876543210')
+    assert.equal(row.address,'12 Sample Street');assert.equal(row.pincode,'560001');assert.equal(row.contactSource,'Entered checkout details')
+    assert.equal(row.paymentAmount,1234.5);assert.equal(row.paymentGateway,'razorpay');assert.equal(row.paymentReference,'payment-fixture')
+    assert.ok(row.productIds.includes('p2'));assert.equal(JSON.stringify(row).includes('never-export'),false)
+  }
+  const detail=await lib.getCustomerFlow({...q,mode:'detail',id:'v:browser2'})
+  assert.equal(detail.customer.city,'Bengaluru');assert.equal(detail.customer.paymentStatus,'created')
+  assert.equal((await lib.getCustomerFlow({...q,mode:'table',stage:'address',search:'560001'})).total,1)
+})
+
+test('order shipping details backfill historical contact fields without exporting unrelated order data',async()=>{
+  const {db,lib,q}=fixture()
+  db.orders.push({_id:'order-fixture',userId:'account1',createdAt:at(2),status:'processing',total:250,
+    customer:{name:'Order Recipient',email:'recipient@example.test',phone:'9876543210',address:'Old billing address'},
+    shippingAddress:{street:'45 Delivery Street',city:'Mysuru',state:'Karnataka',zip:'570001',country:'India'},
+    items:[{id:'p1'}],paymentMethod:'razorpay',paymentDetails:{checkoutToken:'never-export'}})
+  const table=await lib.getCustomerFlow({...q,mode:'table',stage:'order'})
+  assert.equal(table.rows[0].name,'Order Recipient');assert.equal(table.rows[0].address,'45 Delivery Street')
+  assert.equal(table.rows[0].city,'Mysuru');assert.equal(table.rows[0].pincode,'570001')
+  assert.equal(table.rows[0].contactSource,'Order checkout details');assert.equal(JSON.stringify(table).includes('never-export'),false)
+})
 test('shared browser histories are not attributed to either signed-in account',async()=>{
   const {db,lib,q}=fixture()
   db.analytics_events.push({event:'login',visitorId:'browser1',userId:'account2',createdAt:at(2)})
@@ -97,6 +127,33 @@ test('event sink requires consent, derives account identity from session and kee
   await route.POST(new NextRequest('http://localhost/api/events',options));assert.equal(docs.length,1)
   assert.equal(docs[0].userId,'trusted-account');assert.match(docs[0].visitorId,/^[a-f0-9]{64}$/)
   assert.equal(docs[0].productIds[0],'p1');assert.equal(docs[0].trafficSource,'Google');assert.equal('referer' in docs[0],false);assert.ok(docs[0].timestamp)
+})
+
+test('checkout entry is accepted and validated private contact snapshots are limited to checkout milestones',async()=>{
+  const docs=[]
+  const loader=sourceLoader({'@/lib/auth':{getSession:async()=>null},'@/lib/db-service':{getCollection:async()=>({insertOne:async d=>docs.push(d)})},'@/lib/rate-limit':{withRateLimit:f=>f}})
+  const route=loader.load('app/api/events/route.ts'),version=loader.load('lib/dpdp-config.ts').PRIVACY_NOTICE_VERSION
+  const customer={firstName:'Grace',lastName:'Shopper',email:'grace@example.com',phone:'9876543210',address:'12 Sample Street',city:'Bengaluru',state:'Karnataka',zipCode:'560001',country:'India',userId:'forged',checkoutToken:'never-export'}
+  const send=event=>route.POST(new NextRequest('http://localhost/api/events',{method:'POST',headers:{'Content-Type':'application/json',Cookie:`dpdp_tracking_consent=${encodeURIComponent(JSON.stringify({analytics:true,version,anonymousId:'fixture-browser-12345'}))}`},body:JSON.stringify({event,checkoutContext:customer})}))
+  assert.equal((await send('checkout_started')).status,200);assert.equal(docs[0].checkoutContext,undefined)
+  assert.equal((await send('address_completed')).status,200);assert.equal(docs[1].checkoutContext.name,'Grace Shopper')
+  assert.equal(docs[1].checkoutContext.pincode,'560001');assert.equal(docs[1].userId,null)
+  assert.equal(JSON.stringify(docs).includes('never-export'),false);assert.deepEqual(Object.keys(docs[1].params),[])
+})
+
+test('checkout contact is sent only to the first-party sink and never to Google, Meta or dataLayer',async()=>{
+  const sent=[],google=[],meta=[],window={location:{pathname:'/checkout'}}
+  let allowed=true
+  const loader=sourceLoader({
+    '@/lib/consent-client':{hasConsent:()=>allowed},
+    '@/lib/meta-commerce':{trackMetaCommerce:(event,params)=>meta.push({event,params})},
+    '@/lib/google-tag-client':{sendGoogleTagEvent:(event,params)=>google.push({event,params})},
+  },{context:{window,document:{referrer:''},Blob,navigator:{sendBeacon:(_url,blob)=>{sent.push(blob);return true}}}})
+  const {track}=loader.load('lib/analytics.ts'),checkoutContext={firstName:'Grace',email:'grace@example.test',address:'12 Sample Street'}
+  track('address_completed',{}, {checkoutContext})
+  const body=JSON.parse(await sent[0].text());assert.equal(body.checkoutContext.email,'grace@example.test')
+  for(const value of [google,meta,window.dataLayer])assert.equal(JSON.stringify(value).includes('grace@example.test'),false)
+  allowed=false;track('address_completed',{}, {checkoutContext});assert.equal(sent.length,1)
 })
 test('CSV cells neutralise spreadsheet formulas',()=>{
   const {csvCell}=sourceLoader().load('lib/customer-flow.ts')

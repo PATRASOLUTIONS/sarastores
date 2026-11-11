@@ -3,6 +3,8 @@ import { getCollection } from "@/lib/db-service"
 import { getSession } from "@/lib/auth"
 import { withRateLimit } from "@/lib/rate-limit"
 import { consentedVisitor, trafficSource } from "@/lib/customer-flow-tracking"
+import { CheckoutContactSchema, GuestCheckoutCustomerSchema } from "@/lib/validation"
+import { recoveryConsentSchema } from '@/lib/recovery-policy'
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +13,7 @@ const ALLOWED_EVENTS = new Set([
   "begin_checkout", "add_payment_info", "purchase",
   "search", "generate_lead", "sign_up", "login",
   "view_promotion", "select_promotion",
-  "page_view", "browse_products", "guest_checkout", "cart_confirmed", "address_completed",
+  "page_view", "browse_products", "guest_checkout", "checkout_started", "checkout_contact", "cart_snapshot", "cart_confirmed", "address_completed",
   "login_failed", "payment_failed", "payment_retried",
 ])
 
@@ -27,6 +29,15 @@ export const POST = withRateLimit(async function POST(request: NextRequest) {
     }
 
     const session = await getSession()
+    const context = ['address_completed','add_payment_info','checkout_contact'].includes(event)
+      ? GuestCheckoutCustomerSchema.or(CheckoutContactSchema).safeParse(body?.checkoutContext) : null
+    const checkoutContext = context?.success ? {
+      name: `${context.data.firstName} ${context.data.lastName}`,
+      email: context.data.email, phone: context.data.phone,
+      ...('address' in context.data ? { address: context.data.address, city: context.data.city,
+        state: context.data.state, pincode: context.data.zipCode, country: context.data.country } : {}),
+    } : null
+    const recoveryConsent=checkoutContext && event==='checkout_contact'?recoveryConsentSchema.safeParse(body?.recoveryConsent):null
     const rawParams = body?.params && typeof body.params === "object" && !Array.isArray(body.params)
       ? (body.params as Record<string, unknown>)
       : {}
@@ -64,6 +75,8 @@ export const POST = withRateLimit(async function POST(request: NextRequest) {
       productIds,
       device,
       trafficSource: trafficSource(typeof body?.referrer === 'string' ? body.referrer.slice(0,500) : request.headers.get('referer'),request.nextUrl.origin),
+      ...(checkoutContext ? { checkoutContext } : {}),
+      ...(recoveryConsent?.success?{recoveryConsent:{...recoveryConsent.data,acceptedAt:new Date(),source:'Checkout recovery opt-in'}}:{}),
       // Store only the source category, never query strings or full referrer URLs.
       createdAt: new Date(),
       timestamp: new Date(), // Existing DPDP retention index uses timestamp.

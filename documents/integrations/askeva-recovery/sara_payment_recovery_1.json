@@ -1,0 +1,23 @@
+{
+  "name": "sara_payment_recovery_1",
+  "language": "en",
+  "category": "MARKETING",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "*SARA STORES · Need a hand with checkout?*\n\nHi {{1}},\n\n*{{2}}*\n\n*Current price: {{3}} per item*\n\n{{4}}\n\n{{5}}\n\nReview checkout:\n{{6}}\n\nIf money was deducted or payment is pending, check your order status or contact us before paying again.\nReply here if you need help choosing or completing checkout.",
+      "example": {
+        "body_text": [
+          [
+            "Asha",
+            "TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER",
+            "₹16,499",
+            "Your checkout for TECNO POVA 7 5G (8GB+256GB) MAGIC SILVER did not complete. If you still want it, review your order and choose an available payment method.",
+            "If money was deducted or payment is still pending, check your order status or contact Sara before trying again.",
+            "https://sara.example.com/products/example-product?utm_source=sara_recovery&utm_medium=reminder&utm_campaign=payment_1 Stop reminders: https://sara.example.com/recovery/unsubscribe?token=EXAMPLE_ONLY"
+          ]
+        ]
+      }
+    }
+  ]
+}
