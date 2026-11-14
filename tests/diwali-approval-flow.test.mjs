@@ -105,6 +105,112 @@ test('approval preserves customer WhatsApp opt-out', async () => {
   assert.equal(f.records.get('diwali_messages').length, 0)
 })
 
+test('approving a rejected registration requires a reason and retains both decisions in exports and audit', async () => {
+  const f = fixture({ consent: false })
+  await f.service.actOnClaim(admin, 'claim', { action: 'reject', version: 0, note: 'Invoice could not be verified' })
+  const action = { ...approval, version: 1, note: '' }
+  await assert.rejects(f.service.actOnClaim(admin, 'claim', action), /reason/)
+  await assert.rejects(f.service.actOnClaim(staff('f'), 'claim', { ...action, note: 'Store confirmed invoice' }), /permission/)
+  const result = await f.service.actOnClaim(staff('v'), 'claim', { ...action, note: 'Store confirmed invoice' })
+  assert.equal(result.status, 'approved')
+  assert.equal(result.fulfilment, 'pending')
+  assert.equal(result.rejectionReason, 'Invoice could not be verified')
+  assert.equal(result.verificationNote, 'Store confirmed invoice')
+  assert.equal(result.version, 2)
+  const log = f.records.get('diwali_audit').find(row => row.action === 'approve')
+  assert.equal(log.before.status, 'rejected')
+  assert.equal(log.before.rejectionReason, 'Invoice could not be verified')
+  assert.equal(log.input.note, 'Store confirmed invoice')
+  const csv = await f.service.exportClaims(admin)
+  assert.match(csv, /"verificationNote","rejectionReason"/)
+  assert.match(csv, /Invoice could not be verified/)
+  assert.match(csv, /Store confirmed invoice/)
+  await assert.rejects(f.service.actOnClaim(admin, 'claim', { ...action, note: 'Stale approval' }), /updated/)
+})
+
+test('reapproval after packing releases no extra stock and sends no duplicate approval notification', async () => {
+  const f = fixture()
+  await f.service.actOnClaim(admin, 'claim', approval)
+  await f.service.actOnClaim(admin, 'claim', { action: 'pack', version: 1 })
+  await f.service.actOnClaim(admin, 'claim', { action: 'reject', version: 2, note: 'Invoice review needed' })
+  const before = structuredClone(f.records.get('diwali_stock'))
+  const result = await f.service.actOnClaim(admin, 'claim', { ...approval, version: 3, note: 'Invoice confirmed by store' })
+  assert.equal(result.fulfilment, 'pending')
+  assert.deepEqual(f.records.get('diwali_stock'), before)
+  assert.equal(f.records.get('diwali_messages').filter(row => row.event === 'approved').length, 1)
+  assert.equal(f.calls.length, 1)
+})
+
+test('reapproval preserves dispatched gifts and prevents changing a shipped gift slab', async () => {
+  const f = fixture({ status: 'rejected', stage: 'rejected', consent: false })
+  Object.assign(f.records.get('diwali_claims')[0], { previousFulfilment: 'dispatched', verifiedValue: 26000, rejectionReason: 'Review delivery' })
+  await assert.rejects(f.service.actOnClaim(admin, 'claim', { ...approval, verifiedValue: 50001, note: 'Verified invoice' }), /dispatched gift/)
+  const result = await f.service.actOnClaim(admin, 'claim', { ...approval, note: 'Verified invoice' })
+  assert.equal(result.fulfilment, 'dispatched')
+  assert.equal(result.rejectionReason, 'Review delivery')
+})
+
+test('reapproval rolls back when audit recording fails', async () => {
+  const f = fixture({ status: 'rejected', consent: false })
+  f.failAudit()
+  await assert.rejects(f.service.actOnClaim(admin, 'claim', { ...approval, note: 'Verified invoice' }), /audit failure/)
+  assert.equal(f.records.get('diwali_claims')[0].status, 'rejected')
+  assert.equal(f.records.get('diwali_claims')[0].version, 0)
+})
+
+test('rejected registration approval form requires and submits the reversal reason', async () => {
+  const state = [], calls = []
+  let index = 0
+  const claim = { id: 'claim', reference: 'FIXTURE-CLAIM', status: 'rejected', fulfilment: 'rejected', enteredValue: 26000, storeCode: 'A', city: 'Fixture city', version: 3, rejectionReason: 'Invoice unclear' }
+  state[0] = sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG
+  state[1] = { role: 'verifier' }
+  state[6] = claim
+  const loader = sourceLoader({
+    react: { useRef: initial => ({ current: initial }), useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
+    'next/navigation': { useRouter: () => ({}) },
+    '@/lib/api-client': { apiFetch: async (url, options) => { calls.push({ url, options }); return Response.json(options.method === 'POST' ? { status: 'approved' } : { claim: { ...claim, status: 'approved' }, history: [] }) } },
+  })
+  const Component = loader.load('components/diwali/AdminGift.tsx').default
+  const render = () => { index = 0; const nodes = []; function visit(node) { if (Array.isArray(node)) return node.forEach(visit); if (!node?.props) return; nodes.push(node); visit(node.props.children) } visit(Component({ section: 'detail', claimId: 'claim' })); return nodes }
+  let nodes = render()
+  const approve = () => nodes.find(node => node.type === 'button' && node.props.children === 'Approve rejected registration')
+  assert.equal(approve().props.disabled, true)
+  nodes.find(node => node.type === 'input' && node.props.type === 'number').props.onChange({ target: { value: '26000' } })
+  nodes.find(node => node.type === 'input' && node.props.type === 'date').props.onChange({ target: { value: '2026-11-05' } })
+  nodes.find(node => node.type === 'textarea').props.onChange({ target: { value: 'Store verified original invoice' } })
+  nodes = render()
+  assert.equal(approve().props.disabled, false)
+  await approve().props.onClick()
+  const payload = calls.find(call => call.options.method === 'POST').options.json
+  assert.equal(payload.action, 'approve')
+  assert.equal(payload.note, 'Store verified original invoice')
+  assert.equal(payload.version, 3)
+})
+
+test('reports display both decision reasons and reload the rows when filters are applied', async () => {
+  const state = [], calls = []
+  let index = 0
+  const report = { totals: { registrations: 1, verifiedValue: 26000 }, gifts: [], fulfilment: [], stores: [], messages: [], stock: [], approvalRate: null, slaCompliance: null, whatsappSuccessRate: null }
+  state[0] = sourceLoader().load('lib/diwali/schemas.ts').DEFAULT_CONFIG
+  state[1] = { role: 'superadmin' }
+  state[2] = report
+  state[3] = [{ id: 'claim', reference: 'FIXTURE-CLAIM', status: 'approved', enteredValue: 26000, verificationNote: 'Invoice confirmed', rejectionReason: 'Invoice previously unclear' }]
+  state[4] = 1
+  const loader = sourceLoader({
+    react: { useRef: initial => ({ current: initial }), useEffect() {}, useState(initial) { const current = index++; if (!(current in state)) state[current] = initial; return [state[current], value => { state[current] = typeof value === 'function' ? value(state[current]) : value }] } },
+    'next/navigation': { useRouter: () => ({}) },
+    '@/lib/api-client': { apiFetch: async url => { calls.push(url); return Response.json(url.includes('/reports') ? report : { items: [], total: 0 }) } },
+  })
+  const nodes = []
+  function visit(node) { if (Array.isArray(node)) return node.forEach(visit); if (!node?.props) return; nodes.push(node); visit(node.props.children) }
+  visit(loader.load('components/diwali/AdminGift.tsx').default({ section: 'reports' }))
+  for (const text of ['Approval reason', 'Rejection reason', 'Invoice confirmed', 'Invoice previously unclear']) assert.ok(nodes.some(node => node.props.children === text))
+  nodes.find(node => node.type === 'form').props.onSubmit({ preventDefault() {} })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(calls.some(url => url.includes('/reports?')))
+  assert.ok(calls.some(url => url.includes('/registrations?page=1')))
+})
+
 test('downloaded Excel report identifies the approver by name and account ID', async () => {
   const f = fixture({ consent: false })
   await f.service.actOnClaim(admin, 'claim', f.loader.load('lib/diwali/schemas.ts').ActionSchema.parse(approval))
