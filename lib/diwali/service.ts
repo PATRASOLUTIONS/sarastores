@@ -242,7 +242,7 @@ export async function listClaims(user: User, params: URLSearchParams) {
   }
   await audit(undefined, user.id, 'list', 'campaign', { page, returned: rows.length })
   return { items: rows.map(row => {
-    if (access.role === 'management') return { id: row._id, reference: row.reference, status: row.status, fulfilment: row.fulfilment, storeCode: row.storeCode, city: row.city, enteredValue: row.enteredValue, verifiedValue: row.verifiedValue, giftCode: row.giftCode, dueAt: row.dueAt, createdAt: row.createdAt, version: row.version, source: row.source, orderId: row.orderId, paymentState: row.paymentState, orderStatus: row.orderStatus }
+    if (access.role === 'management') return { id: row._id, reference: row.reference, status: row.status, fulfilment: row.fulfilment, storeCode: row.storeCode, city: row.city, enteredValue: row.enteredValue, verifiedValue: row.verifiedValue, giftCode: row.giftCode, dueAt: row.dueAt, createdAt: row.createdAt, version: row.version, source: row.source, orderId: row.orderId, paymentState: row.paymentState, orderStatus: row.orderStatus, verificationNote: row.verificationNote, rejectionReason: row.rejectionReason }
     return normalizeId(row)
   }), total, page }
 }
@@ -290,6 +290,8 @@ export async function getClaim(user: User, id: string) {
 }
 export async function enqueue(session: ClientSession, claim: Claim, event: 'registered' | 'approved' | 'dispatch') {
   if (!claim.whatsappConsent) return
+  // Reversing a rejection must not recreate an existing notification event.
+  if (await (await getCollection<StringRecord>(COLLECTIONS.messages)).findOne({ eventKey: `${claim._id}:${event}` }, { session })) return
   const language = claim.language.toUpperCase(), template = process.env[`DIWALI_${event.toUpperCase()}_TEMPLATE_${language}`]
   const gift = GIFTS.find(item => item.code === claim.giftCode)
   const giftLabel = claim.language === 'kn' ? gift?.kannada : gift?.label
@@ -334,14 +336,19 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
         Object.assign(patch, { status: 'rejected', fulfilment: 'rejected', previousFulfilment: claim.fulfilment, rejectionReason: action.note, rejectedBy: user.id, rejectedAt: patch.updatedAt })
         await (await getCollection<StringRecord>(COLLECTIONS.messages)).updateMany({ claimId: id, status: { $in: ['queued', 'ready'] } }, { $set: { status: 'suppressed', failure: 'Claim rejected during fulfilment' } }, { session })
       } else {
-        if (claim.status !== 'pending') throw new DiwaliError('This claim has already been reviewed', 409)
+        const reapproval = action.action === 'approve' && claim.status === 'rejected'
+        if (claim.status !== 'pending' && !reapproval) throw new DiwaliError('This claim has already been reviewed', 409)
         if (action.action === 'approve') {
+          if (reapproval && action.note.trim().length < 3) throw new DiwaliError('Enter a reason for approving this rejected registration')
           if (!config.rulesConfirmed || !config.calendarConfirmed) throw new DiwaliError('Campaign rules and working-day calendar must be confirmed first', 409)
           if (action.invoiceDate < config.campaignStart || action.invoiceDate > config.campaignEnd) throw new DiwaliError('Invoice is outside the eligible purchase dates')
           const onlineStore = claim.source === 'online' && action.storeCode === ONLINE_STORE
           if ((!onlineStore && !config.stores.some(store => store.code === action.storeCode)) || action.storeCode !== claim.storeCode || access.stores.length && !access.stores.includes(action.storeCode)) throw new DiwaliError('Invoice store must match the registered store; request an audited correction if incorrect')
           const gift = giftForRupees(action.verifiedValue)
           if (!gift) throw new DiwaliError('Invoice is ineligible')
+          const shipped = reapproval && (claim.previousFulfilment === 'dispatched' || claim.dispatchedAt)
+          if (shipped && (gift.code !== claim.giftCode || action.verifiedValue !== claim.verifiedValue)) throw new DiwaliError('A dispatched gift cannot change its verified value or gift slab', 409)
+          Object.assign(patch, { fulfilment: shipped ? 'dispatched' : 'pending', exception: null, previousFulfilment: null })
           Object.assign(patch, { status: 'approved', verifiedValue: action.verifiedValue, invoiceDate: action.invoiceDate, giftCode: gift.code, approvedAt: patch.updatedAt, approvedBy: user.id, approvedByName: user.name || user.email || user.id, dueAt: deliveryDueAt(patch.updatedAt, config.workingDays, config.holidays), calendar: { workingDays: config.workingDays, holidays: config.holidays }, verificationNote: action.note })
         } else Object.assign(patch, { status: 'rejected', rejectionReason: action.note, rejectedBy: user.id, rejectedAt: patch.updatedAt })
       }
@@ -370,7 +377,7 @@ export async function actOnClaim(user: User, id: string, action: ClaimAction) {
     const result = await collection.updateOne({ _id: id, version: action.version }, { $set: patch, $inc: { version: 1 } }, { session })
     if (!result.modifiedCount) throw new DiwaliError('Claim changed; refresh and try again', 409)
     const updated = { ...claim, ...patch, version: claim.version + 1 } as Claim
-    await audit(session, user.id, action.action, id, { before: { invoice: claim.invoice, storeCode: claim.storeCode, status: claim.status, fulfilment: claim.fulfilment, verifiedValue: claim.verifiedValue, version: claim.version }, after: patch, input: action })
+    await audit(session, user.id, action.action, id, { before: { invoice: claim.invoice, storeCode: claim.storeCode, status: claim.status, fulfilment: claim.fulfilment, verifiedValue: claim.verifiedValue, verificationNote: claim.verificationNote, rejectionReason: claim.rejectionReason, version: claim.version }, after: patch, input: action })
     if (action.action === 'approve') await enqueue(session, updated, 'approved')
     if (action.action === 'dispatch') await enqueue(session, updated, 'dispatch')
     return updated
@@ -432,7 +439,7 @@ export async function exportClaims(user: User, params = new URLSearchParams()) {
     }
   }
   for (const row of rows) row.approvedByName ||= approvers.get(String(row.approvedBy)) || row.approvedBy || ''
-  const fields = ['reference', 'source', 'orderId', 'referralStoreCode', 'referralStoreName', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'approvedByName', 'approvedBy', 'approvedAt', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
+  const fields = ['reference', 'source', 'orderId', 'referralStoreCode', 'referralStoreName', 'name', 'mobile', 'address', 'city', 'district', 'state', 'pincode', 'storeCode', 'invoice', 'enteredValue', 'verifiedValue', 'status', 'verificationNote', 'rejectionReason', 'rejectedBy', 'rejectedAt', 'approvedByName', 'approvedBy', 'approvedAt', 'giftCode', 'fulfilment', 'courier', 'awb', 'dueAt', 'deliveredAt']
   await audit(undefined, user.id, 'export', 'campaign', { count: rows.length })
   return [fields.map(safeCsv).join(','), ...rows.map(row => fields.map(field => safeCsv(row[field] instanceof Date ? row[field].toISOString() : row[field])).join(','))].join('\r\n')
 }
